@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+    /* Prevents horizontal scroll on 360px devices. */
+    overflow-x: hidden;
+  }
+
+  /* Brutalist focus: a hard double ring. Legible on paper and on ink. */
+  *:focus-visible {
+    @apply outline-none;
+    box-shadow:
+      0 0 0 3px #ffffff,
+      0 0 0 6px #000000;
+  }
+
+  h1 {
+    @apply font-display;
+  }
+
+  /* 16px minimum stops iOS Safari from zooming the viewport on focus. */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  ::selection {
+    background: #000000;
+    color: #ffffff;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
