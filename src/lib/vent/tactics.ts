@@ -24,6 +24,12 @@ export interface Tactic {
   fits: (ctx: TacticContext) => boolean;
   /** Higher wins among eligible tactics. */
   weight: (ctx: TacticContext) => number;
+  /**
+   * The same move, phrased for a room rather than one person. A Keeper opens
+   * a circle with this, so the intention and the private session draw on one
+   * library instead of drifting into two.
+   */
+  hold?: string;
 }
 
 export interface TacticContext extends Classification {
@@ -252,22 +258,59 @@ const TACTICS: Tactic[] = [
 
 /** One tailored coping move per real-world pressure, only when detected. */
 export const REAL_WORLD_TACTIC: Record<Exclude<RealWorldTag, null>, Tactic> = {
-  economy: mk("rw_economy", "Fuel up three times this month — name one thing they can still control today, down to ten naira."),
-  japa: mk("rw_japa", "Japa fear — three things they'd miss, three they'd gain. Written, not felt."),
-  ai_job: mk("rw_ai_job", "List three things they do that AI cannot do. Three, not one."),
-  social: mk("rw_social", "Instagram is a highlight reel — one account to mute today."),
-  family: mk("rw_family", "Firstborn pressure — one boundary, ten words, to the person who needs to hear it."),
-  lonely: mk("rw_lonely", "Opposite action — outside the door for 30 seconds. Loneliness lies about how long that takes."),
-  traffic: mk("rw_traffic", "Traffic doesn't define them — one thing they can do inside the danfo."),
-  climate: mk("rw_climate", "Cold water on the face for ten seconds. Heat makes everything feel worse than it is."),
-  health: mk("rw_health", "Name the fear precisely — 'I'm scared of X' — then the one call they've been avoiding."),
+  economy: mk(
+    "rw_economy",
+    "Fuel up three times this month — name one thing they can still control today, down to ten naira.",
+    "Hold one thing you can control today, down to ten naira. Not the whole market.",
+  ),
+  japa: mk(
+    "rw_japa",
+    "Japa fear — three things they'd miss, three they'd gain. Written, not felt.",
+    "Hold both lists tonight — three you'd miss, three you'd gain. Not one side.",
+  ),
+  ai_job: mk(
+    "rw_ai_job",
+    "List three things they do that AI cannot do. Three, not one.",
+    "Hold three things you do that a machine cannot. Three, not one.",
+  ),
+  social: mk(
+    "rw_social",
+    "Instagram is a highlight reel — one account to mute today.",
+    "Hold your eyes today. One account, muted. That is the whole task.",
+  ),
+  family: mk(
+    "rw_family",
+    "Firstborn pressure — one boundary, ten words, to the person who needs to hear it.",
+    "Hold one line — ten words — for the person who needs to hear it.",
+  ),
+  lonely: mk(
+    "rw_lonely",
+    "Opposite action — outside the door for 30 seconds. Loneliness lies about how long that takes.",
+    "Hold thirty seconds outside the door. Loneliness lies about how long that is.",
+  ),
+  traffic: mk(
+    "rw_traffic",
+    "Traffic doesn't define them — one thing they can do inside the danfo.",
+    "Hold one thing that is yours inside the danfo. The road does not get to name you.",
+  ),
+  climate: mk(
+    "rw_climate",
+    "Cold water on the face for ten seconds. Heat makes everything feel worse than it is.",
+    "Hold ten seconds of cold water on the face. The heat is making it louder than it is.",
+  ),
+  health: mk(
+    "rw_health",
+    "Name the fear precisely — 'I'm scared of X' — then the one call they've been avoiding.",
+    "Hold the fear by its exact name tonight. Then the one call you have been avoiding.",
+  ),
 };
 
-function mk(id: string, instruction: string): Tactic {
+function mk(id: string, instruction: string, hold: string): Tactic {
   return {
     id,
     family: "narrative",
     instruction,
+    hold,
     fits: () => true,
     // Beats every general tactic — a real-world pressure deserves its own tool.
     weight: () => 95,

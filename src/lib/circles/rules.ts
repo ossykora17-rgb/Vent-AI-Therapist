@@ -1,3 +1,5 @@
+import { REAL_WORLD_TACTIC } from "@/lib/vent/tactics";
+
 /**
  * Circle governance, enforced on the server.
  *
@@ -103,23 +105,35 @@ export function roleForSeat(seatIndex: number): CircleRole {
   return seatIndex <= 3 ? "sharer" : "witness";
 }
 
-/** Opening line the Keeper reads. Drawn from the tag, never invented. */
+const OPENING: Record<string, string> = {
+  economy: "Today we hold the money choke.",
+  japa: "Today we hold leaving, and being left.",
+  ai_job: "Today we hold the fear that the work goes away.",
+  social: "Today we hold the comparing.",
+  family: "Today we hold what the family expects.",
+  lonely: "Today we hold being on your own with it.",
+  traffic: "Today we hold the hours the road takes.",
+  climate: "Today we hold the heat and what it wears down.",
+  health: "Today we hold the body and the waiting.",
+};
+
+/**
+ * What the Keeper reads at minute three. The second sentence is the tactic
+ * library's own tool for that pressure, in its room-facing phrasing — so the
+ * open is drawn from the same place as a private session's, rather than a
+ * second table that drifts away from it. Selected, never generated.
+ */
 export function keeperIntention(tag: string | null): string {
-  const lines: Record<string, string> = {
-    economy: "Today we hold the money choke. No fixing. Just what it costs you.",
-    japa: "Today we hold leaving, and being left. No fixing.",
-    ai_job: "Today we hold the fear that the work goes away. No fixing.",
-    social: "Today we hold the comparing. No fixing.",
-    family: "Today we hold what the family expects. No fixing.",
-    lonely: "Today we hold being on your own with it. No fixing.",
-    traffic: "Today we hold the hours the road takes. No fixing.",
-    climate: "Today we hold the heat and what it wears down. No fixing.",
-    health: "Today we hold the body and the waiting. No fixing.",
-  };
-  return (
-    lines[tag ?? ""] ??
-    "Today we hold whatever is heaviest. No fixing, no advice. Just say it."
-  );
+  const opening = OPENING[tag ?? ""] ?? "Today we hold whatever is heaviest.";
+
+  const tool =
+    tag && tag in REAL_WORLD_TACTIC
+      ? REAL_WORLD_TACTIC[tag as keyof typeof REAL_WORLD_TACTIC].hold
+      : null;
+
+  return tool
+    ? `${opening} ${tool} No fixing, no advice — just say it.`
+    : `${opening} No fixing, no advice — just say it.`;
 }
 
 export function isExpired(createdAt: string, now = Date.now()): boolean {
@@ -140,10 +154,10 @@ export function phaseFor(msRemaining: number): CirclePhase {
 }
 
 export const PHASE_LABEL: Record<CirclePhase, string> = {
-  breathe: "Breathing together",
-  intention: "Keeper sets the intention",
-  shares: "Shares",
-  reflect: "Keeper reflects the pattern",
+  breathe: "Breathing",
+  intention: "Opening",
+  shares: "Sharing",
+  reflect: "Reflection",
   close: "Closing",
 };
 

@@ -172,7 +172,11 @@ Confidentiality is a deletion policy, not a promise. Nothing is recorded,
 every word is swept after 24 hours, and closing a circle deletes its
 transcript immediately. Only members can read a room; a non-member gets 403.
 
-At the 38-minute mark the Keeper stops holding time and says the one thing it
+The Keeper speaks exactly twice, and both lines are selected rather than
+generated. At minute three it reads the intention — the second sentence is
+the tactic library's own tool for that tag, in room-facing phrasing, so the
+open and a private session draw on one library instead of two that drift
+apart. At the 38-minute mark it stops holding time and says the one thing it
 is for: the pattern the room actually voiced — *"I heard chest 3 times, tight
 3 times, small 2 times."* Counted from the real shares, written once, no model
 call. It cannot invent a pattern nobody said.

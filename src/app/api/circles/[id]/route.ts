@@ -9,6 +9,10 @@ import {
 
 export const dynamic = "force-dynamic";
 
+/** Authorship, so each Keeper line is written at most once. */
+const KEEPER_OPEN = "keeper:open";
+const KEEPER_REFLECT = "keeper:reflect";
+
 type Params = { params: { id: string } };
 
 /** The room: who is in it, what role you hold, how long is left. */
@@ -26,23 +30,39 @@ export async function GET(request: Request, { params }: Params) {
   const msRemaining = Math.max(0, new Date(circle.ends_at).getTime() - Date.now());
   const phase = phaseFor(msRemaining);
 
-  // At the 38-minute mark the Keeper stops holding time and says the one
-  // thing it is for: the pattern the room actually voiced. Written once,
-  // counted from real shares, never generated.
-  if (phase === "reflect" || phase === "close") {
+  // The Keeper speaks exactly twice, and each line is selected rather than
+  // generated: the tag's own tool at minute three, the room's own counted
+  // words at thirty-eight. The two are guarded separately by author, so one
+  // never suppresses the other and the four-second poll cannot duplicate either.
+  if (phase !== "breathe" && members.length > 0) {
     const said = await store.listCircleMessages(params.id);
-    if (!said.some((m) => m.kind === "keeper_prompt")) {
-      const reflection = keeperReflection(
-        said.filter((m) => m.kind === "share").map((m) => m.content),
-      );
-      if (reflection) {
-        await store.addCircleMessage({
-          circle_id: params.id,
-          anon_id: "keeper",
-          content: reflection,
-          kind: "keeper_prompt",
-          flagged: false,
-        });
+
+    const spokeOpening = said.some((m) => m.anon_id === KEEPER_OPEN);
+    if (!spokeOpening) {
+      await store.addCircleMessage({
+        circle_id: params.id,
+        anon_id: KEEPER_OPEN,
+        content: keeperIntention(circle.tag),
+        kind: "keeper_prompt",
+        flagged: false,
+      });
+    }
+
+    if (phase === "reflect" || phase === "close") {
+      const spokeReflection = said.some((m) => m.anon_id === KEEPER_REFLECT);
+      if (!spokeReflection) {
+        const reflection = keeperReflection(
+          said.filter((m) => m.kind === "share").map((m) => m.content),
+        );
+        if (reflection) {
+          await store.addCircleMessage({
+            circle_id: params.id,
+            anon_id: KEEPER_REFLECT,
+            content: reflection,
+            kind: "keeper_prompt",
+            flagged: false,
+          });
+        }
       }
     }
   }
