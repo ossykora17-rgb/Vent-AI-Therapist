@@ -4,6 +4,7 @@ import { getStore } from "@/lib/store";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { tensionDrop, tensionNow } from "@/lib/vent/chairs";
 import { logPreference } from "@/lib/rlhf/log";
+import { presenceOf, shouldTouch } from "@/lib/circles/presence";
 import {
   MAX_SEATS, PHASE_LABEL, keeperIntention, keeperReflection,
   phaseFor, roleForSeat,
@@ -19,15 +20,17 @@ type Params = { params: { id: string } };
 
 /** The room: who is in it, what role you hold, how long is left. */
 export async function GET(request: Request, { params }: Params) {
-  const anonId = new URL(request.url).searchParams.get("anonId") ?? "";
+  const query = new URL(request.url).searchParams;
+  const anonId = query.get("anonId") ?? "";
+  const typing = query.get("typing") === "1";
   const store = getStore();
   if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
 
   const circle = await store.getCircle(params.id);
   if (!circle) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const members = await store.listMembers(params.id);
-  const me = members.find((m) => m.anon_id === anonId) ?? null;
+  let members = await store.listMembers(params.id);
+  let me = members.find((m) => m.anon_id === anonId) ?? null;
 
   const msRemaining = Math.max(0, new Date(circle.ends_at).getTime() - Date.now());
   const phase = phaseFor(msRemaining);
@@ -46,6 +49,15 @@ export async function GET(request: Request, { params }: Params) {
       { error: "not_found", closed: true },
       { status: 404, headers: { "cache-control": "no-store" } },
     );
+  }
+
+  // The poll is the heartbeat. It already happens every four seconds, so
+  // presence costs one write and no new endpoint — and the write is skipped
+  // when the last one is still fresh and nothing changed.
+  if (me && shouldTouch(me, typing)) {
+    await store.touchMember(params.id, anonId, typing);
+    members = await store.listMembers(params.id);
+    me = members.find((m) => m.anon_id === anonId) ?? null;
   }
 
   // The Keeper speaks exactly twice, and each line is selected rather than
@@ -94,6 +106,9 @@ export async function GET(request: Request, { params }: Params) {
       members: members.map((m) => ({ role: m.role, joined_at: m.joined_at })),
       seats: members.length,
       maxSeats: MAX_SEATS,
+      // Who is actually behind the chairs. Counts and dots, never names —
+      // a circle has seats, and that is the whole point of it.
+      ...presenceOf(members, anonId),
       role: me?.role ?? null,
       joined: Boolean(me),
       intention: keeperIntention(circle.tag),

@@ -27,6 +27,8 @@ const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/
 const { selectMemory } = await app("src/lib/vent/memory.ts");
 const { checkMessage, keeperIntention, keeperReflection, roleForSeat } =
   await app("src/lib/circles/rules.ts");
+const { PRESENCE_WINDOW_MS, TYPING_WINDOW_MS, isPresent, isTyping, presenceOf, shouldTouch } =
+  await app("src/lib/circles/presence.ts");
 
 const BASE = (process.argv[2] || "").replace(/\/$/, "");
 
@@ -258,6 +260,37 @@ check("9  Circle governance protects people without breaking a promise", () => {
     ok(keeperIntention(tag).includes(REAL_WORLD_TACTIC[tag].hold),
       `the ${tag} circle opens with the ${tag} tool`);
   }
+
+  // Presence: derived from timestamps, so it can only ever be a little stale.
+  const now = Date.UTC(2026, 7, 1, 12, 0, 0);
+  const at = (msAgo) => new Date(now - msAgo).toISOString();
+  ok(isPresent(at(4_000), now), "somebody who polled 4s ago is here");
+  ok(!isPresent(at(PRESENCE_WINDOW_MS + 1), now), "somebody gone longer than the window is not");
+  ok(!isPresent(null, now), "and a seat that never polled is never lit");
+
+  const room = presenceOf(
+    [
+      { anon_id: "a", last_seen_at: at(1_000), typing_until: new Date(now + 5_000).toISOString() },
+      { anon_id: "b", last_seen_at: at(2_000), typing_until: null },
+      { anon_id: "c", last_seen_at: at(60_000), typing_until: new Date(now + 5_000).toISOString() },
+    ],
+    "b",
+    now,
+  );
+  is(room.present, 2, "two of the three seats have a person behind them");
+  is(room.typingOthers, 1, "one other person is writing — the one who left cannot be");
+  is(room.seatsPresent.join(","), "true,true,false", "and the dots line up with the seats");
+  is(presenceOf([{ anon_id: "a", last_seen_at: at(1_000), typing_until: new Date(now + 5_000).toISOString() }], "a", now).typingOthers,
+    0, "you are never told that you are writing");
+
+  ok(!isTyping(at(1_000), now), "a typing window that has passed is not typing");
+  ok(isTyping(new Date(now + TYPING_WINDOW_MS).toISOString(), now), "and one still open is");
+
+  const fresh = { anon_id: "a", last_seen_at: at(500), typing_until: null };
+  ok(!shouldTouch(fresh, false, now), "a fresh heartbeat is not rewritten every poll");
+  ok(shouldTouch(fresh, true, now), "but starting to type is written immediately");
+  ok(shouldTouch({ anon_id: "a", last_seen_at: at(9_000), typing_until: null }, false, now),
+    "and a stale one is refreshed");
 });
 
 // ── 10. the data pipeline is itself measured ───────────────────────────────
@@ -309,6 +342,30 @@ check("10 The pipelines filter, dedup, reweight and score preferences", () => {
     "and a Keeper whose room barely came down loses its opening line");
   ok(!negatives.some((n) => n.domain === "family" && /keeper/.test(n.reason)),
     "while a 45-point family circle is scored as the win it was");
+
+  // ── the heartbeat, over a throwaway copy so it can write its state file ──
+  const watched = path.join(out, "store");
+  fs.cpSync(path.join(ROOT, "scripts/fixtures"), watched, { recursive: true });
+  const beat = execFileSync(process.execPath, ["scripts/heartbeat-data.mjs"], {
+    cwd: ROOT, encoding: "utf8", env: { ...process.env, VENT_DATA_DIR: watched },
+  });
+  ok(/\[advice_in_reply\][\s\S]*skill: data-quality/.test(beat),
+    "it finds the reply that gives advice and routes it to the data skill");
+  ok(/\[keeper_losing\] economy[\s\S]*skill: circles-quality/.test(beat),
+    "and the room that never came down, to the circles skill");
+  ok(/held \(gate not passed\)/.test(beat),
+    "state does not advance until a gate says it may");
+
+  const looped = JSON.parse(fs.readFileSync(path.join(watched, "loop-state.json"), "utf8"));
+  is(looped.keeper_low_rating.join(","), "economy", "the losing tag is recorded for next time");
+  ok(looped.dirty_vents.length > 0, "and so is the dirty vent");
+
+  // Second beat, same store: the findings are stable, and it still sleeps
+  // rather than advancing on its own.
+  const again = execFileSync(process.execPath, ["scripts/heartbeat-data.mjs"], {
+    cwd: ROOT, encoding: "utf8", env: { ...process.env, VENT_DATA_DIR: watched },
+  });
+  ok(/findings      2/.test(again), "a second beat finds the same two, not new ones");
 
   fs.rmSync(out, { recursive: true, force: true });
 });

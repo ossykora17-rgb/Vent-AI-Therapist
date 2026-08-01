@@ -11,7 +11,9 @@
     "verify": "node --experimental-strip-types scripts/tactics.test.mts",
     "eval": "node scripts/eval.mjs",
     "data": "node scripts/data-pipeline.mjs",
-    "rlhf": "node scripts/rlhf-pipeline.mjs"
+    "rlhf": "node scripts/rlhf-pipeline.mjs",
+    "heartbeat": "node scripts/heartbeat-data.mjs",
+    "gate": "node scripts/heartbeat-data.mjs --gate"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

@@ -185,6 +185,72 @@ vents and never belongs in a repository.
 so both pipelines can be exercised end to end without touching anybody's
 words. It is what eval check 10 runs against.
 
+## The loop
+
+One automation, one state file, one objective gate. That is the whole thing;
+everything else is decoration.
+
+```bash
+npm run heartbeat    # what changed, what is dirty, who should fix it
+npm run gate         # selector + eval + pipeline + live-verify, then decide
+```
+
+**The automation** (`scripts/heartbeat-data.mjs`) compares the store against
+`.data/loop-state.json` and either names a specific task or goes back to
+sleep. Sleeping is the common case and it stays free — one file read, no
+tokens. An automation that always finds work is not an automation, it is a
+cron job burning budget.
+
+It applies the four-condition test **per finding**, not per project:
+
+| Finding | Repeats | Verifiable | Bounded | → |
+| --- | --- | --- | --- | --- |
+| A reply that gives advice | yes | `checkMessage` | one prompt | `data-quality` |
+| A vent with no tactic | yes | selector always returns one | one route | `data-quality` |
+| A tag whose room never comes down | yes | the drop, over ≥2 circles | one library line | `circles-quality` |
+| Whether the tone reads warm | yes | **no** | no | a person reads it |
+
+That last row is the point. Warmth is taste and no gate measures it, so the
+heartbeat names it and hands it back. The `icon.svg` route collision was a
+one-off and never came back; `thought_record`'s warmth was a judgment call.
+Neither belonged in a loop, and both were fixed by hand.
+
+**The skills** are `.claude/skills/data-quality/` and
+`.claude/skills/circles-quality/` — persistent context, not a prompt. They
+carry the invariants an agent would otherwise have to be told every time: that
+circle transcripts are never training data, that the two Keeper guards must
+stay separate or the 38-minute reflection dies silently, that `META` patterns
+must point at the assistant.
+
+**The gate** is objective and it decides the merge, not a summary. It runs the
+selector tests, the eval suite, both pipelines, and `live-verify` when
+something is serving on :3001 — and it **skips** live checks rather than
+failing them when nothing is up, because a gate that fails for the wrong
+reason is a gate people learn to ignore. The state file only advances when the
+gate passes; a loop that marks work done on a red gate stops finding it.
+
+**Isolation** is `git worktree`, so a failed attempt never touches the branch
+you ship from:
+
+```bash
+git worktree add -b loop/data-quality ../mindweave-data-loop
+cd ../mindweave-data-loop && npm run gate     # no npm install needed
+```
+
+The gate has zero dependencies, so a worktree is ~1 MB and runs the whole
+suite with no `node_modules` at all. Only `npm run build` and the live checks
+need an install.
+
+`.github/workflows/heartbeat.yml` is the other half: every push plus 06:00
+WAT daily. It cannot see `.data/` — that store is local and ephemeral by
+design — so it runs the half of the gate that needs no data, over the fixture,
+and says so rather than showing a green tick for nothing.
+
+What the loop does **not** do is call a model. It finds the work, names the
+skill that knows how to do it, and states the gate that decides whether the
+result may be merged. The agent is the thing in the middle, driven by a person
+or a scheduler — not by a script pretending to be one.
+
 ## Data and privacy
 
 RLS is on with **no public policies** — the browser-facing anon key can read
@@ -254,6 +320,26 @@ place that knows Tight edge reads 78 — it used to be four places.
 Choosing the word you drop seals the circle: the number, the drop and the two
 words go to the preference log, and nothing else does. Not a line of what
 anybody said. It is the only thing that leaves a room.
+
+### Presence
+
+The room used to show `3/6` and nothing else, so five people reading in
+silence and an empty room rendered identically. In a text circle the fear is
+not being judged — it is speaking into a void — and a seat count answers the
+wrong question, because it counts chairs.
+
+Presence is **derived from two timestamps, never stored as a boolean**: an
+"online" flag lies the moment a phone dies mid-session and needs a cleanup job
+to un-lie. A dot is lit if that seat polled within 12 seconds — three missed
+beats of the 4-second poll the room was already making. Typing rides the same
+poll: the composer having text appends `&typing=1`, the server sets
+`typing_until` 8 seconds out, and there is no keystroke endpoint, no debounce
+timer and not one extra request. The write is skipped when the last heartbeat
+is under 2.5 seconds old and nothing changed.
+
+Counts and dots. Never who, never a name — and you are never told that *you*
+are writing. Polling is the honest ceiling; Supabase Realtime is already in
+the stack and replaces it with no new dependency when the room count earns it.
 
 The Keeper speaks exactly twice, and both lines are selected rather than
 generated. It waits for a second person first — the creator is a member, so

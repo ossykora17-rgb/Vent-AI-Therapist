@@ -29,6 +29,9 @@ interface RoomState {
   phaseLabel: string;
   pressureSeeded: number | null;
   msRemaining: number;
+  present: number;
+  typingOthers: number;
+  seatsPresent: boolean[];
 }
 
 const WORDS = ["Guilt", "Proof", "Anger", "Hope", "Silence", "Tiredness"];
@@ -56,11 +59,21 @@ export function CircleRoom({ id }: { id: string }) {
   const [carry, setCarry] = React.useState<string | null>(null);
   const [dropped, setDropped] = React.useState<string | null>(null);
   const endRef = React.useRef<HTMLDivElement>(null);
+  /**
+   * Read by the poll, not by the render. Putting the draft in `load`'s deps
+   * would tear down and rebuild the four-second interval on every keystroke.
+   */
+  const draftRef = React.useRef("");
+  React.useEffect(() => { draftRef.current = draft; }, [draft]);
 
   const me = React.useMemo(() => (typeof window === "undefined" ? "" : anonId()), []);
 
   const load = React.useCallback(async () => {
-    const r = await fetch(`/api/circles/${id}?anonId=${encodeURIComponent(me)}`);
+    // The heartbeat that was already running now carries two more bits: I am
+    // here, and there is text in my box. No new endpoint, no debounce timer,
+    // no extra request per keystroke.
+    const typing = draftRef.current.trim().length > 0 ? "&typing=1" : "";
+    const r = await fetch(`/api/circles/${id}?anonId=${encodeURIComponent(me)}${typing}`);
     if (r.status === 404) { setNotFound(true); return; }
     const d: RoomState = await r.json();
     setState(d);
@@ -162,9 +175,24 @@ export function CircleRoom({ id }: { id: string }) {
       <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/80 backdrop-blur-glass">
         <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
           <div className="min-w-0">
-            <p className="label-mono leading-none">
-              {state?.phaseLabel ?? "Circle"} · {state?.seats ?? 0}/
-              {state?.maxSeats ?? 6} · {mins} min
+            <p className="label-mono flex items-center gap-2 leading-none">
+              <span>{state?.phaseLabel ?? "Circle"}</span>
+              <span aria-hidden="true" className="flex items-center gap-1">
+                {Array.from({ length: state?.maxSeats ?? 6 }, (_, i) => (
+                  <span
+                    key={i}
+                    className={cn(
+                      "block h-[7px] w-[7px] rounded-full border transition-colors duration-500",
+                      i < (state?.seats ?? 0)
+                        ? state?.seatsPresent?.[i]
+                          ? "border-ink bg-ink"
+                          : "border-line/40 bg-line/20"
+                        : "border-line/25",
+                    )}
+                  />
+                ))}
+              </span>
+              <span>{state?.present ?? 0} here · {mins} min</span>
             </p>
             <h1 className="truncate font-display text-xl font-bold tracking-[-0.02em]">
               {state?.circle.tag ?? "Anything"}
@@ -382,7 +410,24 @@ export function CircleRoom({ id }: { id: string }) {
 
             {messages.length === 0 && (
               <p className="mt-4 text-center text-sm text-ash">
-                Nobody has spoken yet. Someone goes first.
+                {(state.present ?? 1) > 1
+                  ? `Nobody has spoken yet. ${state.present} people are here, waiting with you.`
+                  : "Nobody has spoken yet. Someone goes first."}
+              </p>
+            )}
+
+            {/* The whole point of #5: silence with somebody in it reads
+                differently from silence on its own. */}
+            {state.typingOthers > 0 && (
+              <p aria-live="polite" className="mt-4 flex items-center gap-2 text-sm text-ash">
+                <span aria-hidden="true" className="flex gap-1">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ash [animation-delay:0ms]" />
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ash [animation-delay:200ms]" />
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ash [animation-delay:400ms]" />
+                </span>
+                {state.typingOthers === 1
+                  ? "Someone is writing."
+                  : `${state.typingOthers} people are writing.`}
               </p>
             )}
             <div ref={endRef} />

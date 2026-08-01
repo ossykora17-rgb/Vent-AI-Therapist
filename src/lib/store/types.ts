@@ -55,6 +55,10 @@ export interface CircleMemberRow {
   role: "keeper" | "sharer" | "witness";
   /** Their own chair reading, so the closing drop is measured from theirs. */
   pressure_seeded: number | null;
+  /** Last poll. Presence is derived from this, never stored as a boolean. */
+  last_seen_at: string | null;
+  /** Set a few seconds ahead while there is text in their box. */
+  typing_until: string | null;
   joined_at: string;
 }
 
@@ -93,7 +97,9 @@ export interface Store {
   closeCircle(id: string): Promise<void>;
 
   listMembers(circleId: string): Promise<CircleMemberRow[]>;
-  addMember(m: Omit<CircleMemberRow, "id" | "joined_at">): Promise<void>;
+  addMember(m: Omit<CircleMemberRow, "id" | "joined_at" | "last_seen_at" | "typing_until">): Promise<void>;
+  /** "I am still here", and optionally "and I am writing". */
+  touchMember(circleId: string, anonId: string, typing: boolean): Promise<void>;
 
   /** Anything past the TTL is dropped rather than returned. */
   listCircleMessages(circleId: string): Promise<CircleMessageRow[]>;

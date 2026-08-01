@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isExpired, MAX_SEATS, TRANSCRIPT_TTL_MS } from "@/lib/circles/rules";
+import { TYPING_WINDOW_MS } from "@/lib/circles/presence";
 import type {
   CircleMemberRow, CircleMessageRow, CircleRow,
   NewVent, ProfilePatch, Store, VentRow,
@@ -140,12 +141,30 @@ export class SupabaseStore implements Store {
     return (data ?? []) as unknown as CircleMemberRow[];
   }
 
-  async addMember(m: Omit<CircleMemberRow, "id" | "joined_at">): Promise<void> {
+  async addMember(
+    m: Omit<CircleMemberRow, "id" | "joined_at" | "last_seen_at" | "typing_until">,
+  ): Promise<void> {
     const existing = await this.listMembers(m.circle_id);
     if (existing.length >= MAX_SEATS) return;
     if (existing.some((x) => x.anon_id === m.anon_id)) return;
-    const { error } = await this.db.from("circle_members").insert(m);
+    const { error } = await this.db
+      .from("circle_members")
+      .insert({ ...m, last_seen_at: new Date().toISOString() });
     if (error) console.error("[store] addMember failed", error);
+  }
+
+  async touchMember(circleId: string, anonId: string, typing: boolean): Promise<void> {
+    const now = Date.now();
+    const { error } = await this.db
+      .from("circle_members")
+      .update({
+        last_seen_at: new Date(now).toISOString(),
+        typing_until: typing ? new Date(now + TYPING_WINDOW_MS).toISOString() : null,
+      })
+      .eq("circle_id", circleId)
+      .eq("anon_id", anonId);
+    // A missed heartbeat costs one grey dot for a few seconds, never a 500.
+    if (error) console.error("[store] touchMember failed", error);
   }
 
   async listCircleMessages(circleId: string): Promise<CircleMessageRow[]> {

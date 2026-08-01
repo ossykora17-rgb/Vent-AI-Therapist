@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { isExpired, MAX_SEATS } from "@/lib/circles/rules";
+import { TYPING_WINDOW_MS } from "@/lib/circles/presence";
 import type {
   CircleMemberRow, CircleMessageRow, CircleRow,
   NewVent, ProfilePatch, Store, VentRow,
@@ -206,17 +207,36 @@ export class FileStore implements Store {
       .sort((a, b) => a.joined_at.localeCompare(b.joined_at));
   }
 
-  async addMember(m: Omit<CircleMemberRow, "id" | "joined_at">): Promise<void> {
+  async addMember(
+    m: Omit<CircleMemberRow, "id" | "joined_at" | "last_seen_at" | "typing_until">,
+  ): Promise<void> {
     await this.write((db) => {
       const seats = db.circleMembers.filter((x) => x.circle_id === m.circle_id);
       if (seats.length >= MAX_SEATS) return;
       if (seats.some((x) => x.anon_id === m.anon_id)) return;
+      const now = new Date().toISOString();
       db.circleMembers.push({
         ...m,
         pressure_seeded: m.pressure_seeded ?? null,
+        // Taking a seat is itself proof of presence — the dot lights up
+        // before the first poll rather than a beat after it.
+        last_seen_at: now,
+        typing_until: null,
         id: randomUUID(),
-        joined_at: new Date().toISOString(),
+        joined_at: now,
       });
+    });
+  }
+
+  async touchMember(circleId: string, anonId: string, typing: boolean): Promise<void> {
+    await this.write((db) => {
+      const m = db.circleMembers.find(
+        (x) => x.circle_id === circleId && x.anon_id === anonId,
+      );
+      if (!m) return;
+      const now = Date.now();
+      m.last_seen_at = new Date(now).toISOString();
+      m.typing_until = typing ? new Date(now + TYPING_WINDOW_MS).toISOString() : null;
     });
   }
 

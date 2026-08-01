@@ -1,0 +1,65 @@
+name: heartbeat
+
+# The other half of the loop. The local heartbeat watches the store and finds
+# work; this one watches the branch and holds the gate — every push, plus
+# once a day at 06:00 WAT (05:00 UTC), which is when someone would look.
+#
+# It cannot see `.data/` — that store is local and ephemeral by design — so it
+# runs the half of the gate that needs no data: the selector guarantees, the
+# eval suite against the fixture, and a real build. Saying that plainly beats
+# a green tick that silently checked nothing.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # The gate itself has zero dependencies. Only the build needs these.
+      - run: npm ci
+
+      - name: Selector guarantees
+        run: npm run verify
+
+      - name: Eval suite
+        run: npm run eval
+
+      - name: Data pipeline over the fixture
+        env:
+          VENT_DATA_DIR: scripts/fixtures
+          VENT_OUT_DIR: ${{ runner.temp }}/data
+        run: node scripts/data-pipeline.mjs
+
+      - name: Preference pipeline over the fixture
+        env:
+          VENT_DATA_DIR: scripts/fixtures
+          VENT_OUT_DIR: ${{ runner.temp }}/data
+        run: node scripts/rlhf-pipeline.mjs
+
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run build
+
+      - name: Live checks against the built app
+        run: |
+          VENT_LOCAL_STORE=1 npx next start -p 3001 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3001/api/health >/dev/null && break
+            sleep 1
+          done
+          node scripts/eval.mjs http://localhost:3001
+          node scripts/live-verify.mjs http://localhost:3001
