@@ -78,11 +78,14 @@ Verify a running instance — local or deployed — with:
 node scripts/live-verify.mjs http://localhost:3001
 ```
 
-**The file store is for development only.** `getStore()` refuses to pick it in
-production unless `VENT_LOCAL_STORE=1` is set explicitly, because serverless
-filesystems are per-instance and ephemeral: it would appear to work and then
-lose sessions at random. Unconfigured production keeps the honest "nothing is
-being saved" behaviour instead.
+**The file store is for development only.** It is selected automatically in
+development, and in production *only* when `VENT_LOCAL_STORE=1` is set —
+because serverless filesystems are per-instance and ephemeral, so it would
+appear to work and then lose sessions at random.
+
+A production build with no Supabase and no flag reports
+`{"storage": "none", "persisting": false}` and still answers every request; it
+just tells you plainly that nothing is being kept.
 
 ### Against Supabase instead
 
