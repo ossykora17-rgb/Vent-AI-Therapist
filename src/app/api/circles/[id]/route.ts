@@ -6,6 +6,7 @@ import { tensionDrop, tensionNow } from "@/lib/vent/chairs";
 import { logPreference } from "@/lib/rlhf/log";
 import { presenceOf, shouldTouch } from "@/lib/circles/presence";
 import { economyContext } from "@/lib/external/sources";
+import { isLivekitConfigured } from "@/lib/env";
 import {
   MAX_SEATS, PHASE_LABEL, economyFact, keeperIntention, keeperReflection,
   phaseFor, roleForSeat,
@@ -127,6 +128,8 @@ export async function GET(request: Request, { params }: Params) {
       // show a joiner somebody else's starting point.
       pressureSeeded: me?.pressure_seeded ?? null,
       msRemaining,
+      // No keys, no button. The room never offers a door that opens onto 501.
+      voice: isLivekitConfigured,
       storage: store.kind,
     },
     { headers: { "cache-control": "no-store" } },

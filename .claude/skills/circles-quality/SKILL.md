@@ -106,6 +106,25 @@ to un-lie.
 Polling is the honest ceiling here. Supabase Realtime is already in the stack
 and replaces it with no new dependency when the room count makes it worth it.
 
+## Voice
+
+`src/lib/voice/livekit.ts` mints the token with `node:crypto` — no SDK on the
+server. `src/components/circle-voice.tsx` is the only file that imports
+`livekit-client`, and it does so **inside the join handler**; a static import
+would put 508 KB into every room's first load. Keep it that way.
+
+Audio only, permanently: the grant is `canPublishSources: ["microphone"]`, so
+a stray `setCameraEnabled` in the client would be refused by the SFU rather
+than quietly shipping video to five strangers.
+
+Identity is `seat-N`, derived server-side from join order. A client that could
+name its own seat could name somebody else's, so the request carries only the
+`anonId` and the route looks up the index.
+
+Muting *other people* needs `livekit-server-sdk` (`RoomServiceClient`) — a
+second dependency, not yet taken. The Keeper's `roomAdmin` grant is already in
+the token, so that work is a route away when it is wanted.
+
 ## Scoring a Keeper
 
 `npm run rlhf` scores each tag on the **drop**, not the mood: somebody leaving

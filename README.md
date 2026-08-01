@@ -26,12 +26,15 @@ emergency **199**.
 branch `claude/nextjs-app-init-deploy-yb4qlo`. Framework detection and build
 settings need no changes.
 
-**2. Apply the migrations** in the Supabase SQL editor, in order. Both are
+**2. Apply the migrations** in the Supabase SQL editor, in order. All five are
 re-runnable, so applying twice is safe:
 
 ```
-supabase/migrations/0001_init.sql          -- accounts, sessions, billing
-supabase/migrations/0002_truth_anchor.sql  -- vent_users, vents, vent_feedback
+supabase/migrations/0001_init.sql               -- accounts, sessions, billing
+supabase/migrations/0002_truth_anchor.sql       -- vent_users, vents, vent_feedback
+supabase/migrations/0003_circles.sql            -- circles, members, messages
+supabase/migrations/0004_circle_member_pressure.sql  -- each seat's own chair
+supabase/migrations/0005_circle_presence.sql    -- last_seen_at, typing_until
 ```
 
 **3. Set four environment variables** (Production + Preview):
@@ -94,7 +97,7 @@ cp .env.example .env.local     # fill in the Supabase keys
 npm run dev -- -p 3001
 ```
 
-Apply both migrations first (see Deploy). `storage` then reports `supabase`.
+Apply all five migrations first (see Deploy). `storage` then reports `supabase`.
 
 ## How a message is handled
 
@@ -137,7 +140,7 @@ the suite passes while the product regresses.
 
 ```bash
 npm run data     # store → data/sft.jsonl + data/eval.jsonl
-npm run eval     # 10 checks, no server; pass a URL for 4 more
+npm run eval     # 11 checks, no server; pass a URL for the live room
 npm run rlhf     # ratings → data/dpo.jsonl, and what is losing
 ```
 
@@ -157,12 +160,12 @@ deletion — circles are counted, never quoted), and **a reply the circle rules
 would refuse is not a reply worth training on**, so `checkMessage` runs over
 every candidate completion as a quality filter.
 
-**`npm run eval`** is MMLU for this product: ten checks, every one of them a
+**`npm run eval`** is MMLU for this product: eleven checks, every one of them a
 bug actually shipped here. The date answered as therapy. "It's the same thing
 every week" heard as an insult and answered with an apology. A worksheet where
-a sentence belonged. A witness who could never speak. 100 assertions, about a
-second, no tokens. Give it a base URL and it adds four live room checks —
-including the one that found the bug in this commit, where a Keeper's early
+a sentence belonged. A witness who could never speak. 121 assertions, about a
+second, no tokens. Give it a base URL and it adds the live room checks — 12
+and 131 — including the one that found a real bug, where a Keeper's early
 close deleted the transcript but the room kept answering `200`.
 
 **`npm run rlhf`** rebuilds preferences from what people actually did. A
@@ -235,20 +238,33 @@ deployment sets that variable, and the recorded classifier keys on content —
 a fixture that returned one canned score for every sentence would block a
 whole room and hide the bug rather than catch it.
 
-## Voice — Phase 1, half built
+## Voice — Phase 1
 
-A LiveKit access token is a JWT signed HS256, and Node has HMAC in the
-standard library, so `POST /api/circles/[id]/voice` mints one with **no
-dependency**. It is seat-scoped: the identity is `seat-4`, never the
-`anon_id`; the room name derives from the circle id so a token cannot be
-replayed elsewhere; the grant is microphone-only with `roomAdmin` for the
-Keeper alone; and it expires with the circle rather than sitting in a browser.
+Audio only. Six anonymous people on camera is a different product and a
+harder promise; a voice is what ends the void without asking anybody to be
+seen. There is no camera call anywhere in `src/components/circle-voice.tsx`,
+and the token grant is `canPublishSources: ["microphone"]`, so the client
+could not publish video even if a future edit tried to.
 
-What is **not** built is the browser half. WebRTC against an SFU needs
-`livekit-client`, and there is no zero-dependency path to it. This file ends
-at that boundary on purpose — it is one dependency and a decision, not
-something to improvise past. Without keys the route answers `501`: not broken,
-not built yet.
+**The server half needs no dependency.** A LiveKit access token is a JWT
+signed HS256, and Node has HMAC in the standard library, so
+`POST /api/circles/[id]/voice` mints one with `node:crypto`. It is
+seat-scoped: the identity is `seat-4`, never the `anon_id`; the room name
+derives from the circle id so a token cannot be replayed into another circle;
+`roomAdmin` is the Keeper's alone; and it expires with the circle rather than
+sitting in a browser. A non-member gets `403`, and with no keys the route
+answers `501` — not broken, not built.
+
+**The browser half is the one dependency**: `livekit-client`, 13 MB on disk
+and 13 packages in the lockfile. Most sessions are text, so it is imported
+*inside the join handler* and nowhere else. Verified in Chromium: the 508 KB
+chunk is absent from the eleven files a room loads, and arrives only after
+somebody clicks **Join voice**. The room page's own bundle went from 5.45 kB
+to 7.07 kB.
+
+Speaking is the presence signal that matters here. The dots in the header
+prove somebody is in the room; a lit ring on a seat proves somebody is
+talking, and that is the thing a poll cannot fake.
 
 ## The loop
 

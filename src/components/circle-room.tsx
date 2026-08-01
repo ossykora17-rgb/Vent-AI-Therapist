@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { anonId } from "@/lib/anon";
 import { CHAIRS, tensionDrop, tensionForChair, tensionNow } from "@/lib/vent/chairs";
+import { CircleVoice } from "@/components/circle-voice";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ interface RoomState {
   present: number;
   typingOthers: number;
   seatsPresent: boolean[];
+  voice: boolean;
 }
 
 const WORDS = ["Guilt", "Proof", "Anger", "Hope", "Silence", "Tiredness"];
@@ -197,7 +199,7 @@ export function CircleRoom({ id }: { id: string }) {
       <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/80 backdrop-blur-glass">
         <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
           <div className="min-w-0">
-            <p className="label-mono flex items-center gap-2 leading-none">
+            <p className="label-mono flex flex-wrap items-center gap-x-2 gap-y-1 leading-none">
               <span>{state?.phaseLabel ?? "Circle"}</span>
               <span aria-hidden="true" className="flex items-center gap-1">
                 {Array.from({ length: state?.maxSeats ?? 6 }, (_, i) => (
@@ -214,7 +216,7 @@ export function CircleRoom({ id }: { id: string }) {
                   />
                 ))}
               </span>
-              <span>{state?.present ?? 0} here · {mins} min</span>
+              <span className="whitespace-nowrap">{state?.present ?? 0} here · {mins} min</span>
             </p>
             <h1 className="truncate font-display text-xl font-bold tracking-[-0.02em]">
               {state?.circle.tag ?? "Anything"}
@@ -304,10 +306,23 @@ export function CircleRoom({ id }: { id: string }) {
 
         {state?.joined && (
           <>
+            {/*
+              The Keeper has not spoken yet, and this panel used to print its
+              intention anyway — a line attributed to somebody who is still
+              waiting for a second person. The server-side guard was right and
+              the screen was quietly overriding it. Say what is actually true
+              at each moment instead.
+            */}
             <p className="glass p-4 text-[15px] leading-[1.6]">
-              <span className="label-mono">Keeper</span>
+              <span className="label-mono">
+                {state.seats < 2 ? "Waiting" : state.phase === "breathe" ? "Breathing" : "Keeper"}
+              </span>
               <br />
-              {state.intention}
+              {state.seats < 2
+                ? "You are the first one here. The circle opens when somebody else sits down."
+                : state.phase === "breathe"
+                  ? "Three minutes before anybody speaks. In through the nose, longer on the way out."
+                  : state.intention}
             </p>
 
             <ol className="mt-4 space-y-3">
@@ -439,6 +454,10 @@ export function CircleRoom({ id }: { id: string }) {
                 )}
               </div>
             )}
+
+            {/* Voice sits above the transcript, below the intention: it is a
+                way of being in this room, not a feature bolted to the side. */}
+            <CircleVoice circleId={id} anonId={me} enabled={Boolean(state.voice)} />
 
             {messages.length === 0 && (
               <p className="mt-4 text-center text-sm text-ash">
