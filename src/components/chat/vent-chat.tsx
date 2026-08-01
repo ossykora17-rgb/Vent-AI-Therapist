@@ -1,8 +1,13 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/ui/toast";
+import { FeedbackFab } from "@/components/feedback-fab";
+import { Onboarding, hasOnboarded, type OnboardingResult } from "@/components/onboarding";
+import { Breathing, Journaling, ToolRow, shouldOfferBreathing } from "@/components/tools";
+import { anonId, queueVent } from "@/lib/anon";
 import { cn } from "@/lib/utils";
 
 type Body = "head" | "throat" | "chest";
@@ -26,21 +31,6 @@ interface VentResponse {
   persisted?: boolean;
 }
 
-const ANON_KEY = "mw-anon-id";
-
-function anonId(): string {
-  try {
-    const existing = localStorage.getItem(ANON_KEY);
-    if (existing) return existing;
-    const fresh = crypto.randomUUID();
-    localStorage.setItem(ANON_KEY, fresh);
-    return fresh;
-  } catch {
-    // Private mode: a session-only id still lets the API work.
-    return crypto.randomUUID();
-  }
-}
-
 export function VentChat() {
   const { toast } = useToast();
   const [lines, setLines] = React.useState<Line[]>([]);
@@ -56,6 +46,21 @@ export function VentChat() {
   const [gated, setGated] = React.useState(false);
   const [memoryCount, setMemoryCount] = React.useState(0);
   const [persisted, setPersisted] = React.useState<boolean | null>(null);
+  const [tag, setTag] = React.useState<string | null>(null);
+  const [tool, setTool] = React.useState<"breathing" | "journaling" | null>(null);
+  const [showOnboarding, setShowOnboarding] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!hasOnboarded()) setShowOnboarding(true);
+  }, []);
+
+  function completeOnboarding(r: OnboardingResult) {
+    setShowOnboarding(false);
+    // The chair is their opening tension reading — the drop is measured from it.
+    setPressure(r.tension);
+    setTensionBefore(r.tension);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
 
   const nextId = React.useRef(0);
   const endRef = React.useRef<HTMLDivElement>(null);
@@ -114,10 +119,26 @@ export function VentChat() {
         setAskMood(true);
       }
 
+      setTag(data.realWorldTag ?? null);
       if (typeof data.memoryUsed === "number") setMemoryCount(data.memoryUsed);
       if (typeof data.persisted === "boolean") setPersisted(data.persisted);
     } catch {
-      toast("Network dipped. Say that again.", "error");
+      // Offline: hold it locally rather than losing what they just said.
+      queueVent({
+        message,
+        pressure,
+        bodyTapped: body,
+        queuedAt: new Date().toISOString(),
+      });
+      setLines((l) => [
+        ...l,
+        {
+          id: nextId.current++,
+          speaker: "vent",
+          text: "You're offline — your truth still saved locally. It goes up the moment you're back.",
+        },
+      ]);
+      toast("Saved offline.", "info");
     } finally {
       setThinking(false);
       requestAnimationFrame(() => inputRef.current?.focus());
@@ -137,6 +158,9 @@ export function VentChat() {
 
   return (
     <div className="flex min-h-dvh flex-col">
+      {showOnboarding && <Onboarding onDone={completeOnboarding} />}
+      <FeedbackFab />
+
       <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/80 backdrop-blur-glass">
         <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
           <div className="min-w-0">
@@ -145,7 +169,15 @@ export function VentChat() {
               VENT
             </h1>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <Link
+              href="/history"
+              className="flex h-11 items-center rounded-full border border-line/10 px-4 text-sm"
+            >
+              History
+            </Link>
+            <ThemeToggle />
+          </div>
         </div>
 
         {memoryCount > 0 && (
@@ -250,6 +282,29 @@ export function VentChat() {
               ))}
             </div>
           </div>
+        )}
+
+        {/* Tools appear only when the moment calls for them. */}
+        {!thinking && !gated && lines.length > 0 && tool === null && (
+          <ToolRow
+            showBreathing={shouldOfferBreathing(tag, pressure, body)}
+            tag={tag}
+            onBreathe={() => setTool("breathing")}
+            onJournal={() => setTool("journaling")}
+          />
+        )}
+
+        {tool === "breathing" && <Breathing onClose={() => setTool(null)} />}
+
+        {tool === "journaling" && tag && (
+          <Journaling
+            tag={tag}
+            onClose={() => setTool(null)}
+            onSubmit={(text) => {
+              setTool(null);
+              void send(text);
+            }}
+          />
         )}
 
         {drop !== null && drop > 0 && (

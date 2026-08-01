@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import { ToastProvider } from "@/components/ui/toast";
 import { THEME_SCRIPT } from "@/components/theme-toggle";
+import { ServiceWorkerRegistrar } from "@/components/sw-register";
 import "./globals.css";
 
 const inter = Inter({
@@ -63,7 +64,10 @@ export default function RootLayout({
         >
           Skip to content
         </a>
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <ServiceWorkerRegistrar />
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );

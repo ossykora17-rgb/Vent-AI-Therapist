@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Offline · Mind Weave Vent</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0; min-height: 100dvh; display: grid; place-items: center;
+    padding: 24px; text-align: center;
+    background: #FEFCF8; color: #1A1A1A;
+    font: 16px/1.6 Inter, system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) { body { background: #121212; color: #FEFCF8; } }
+  .mono { font: 12px/1 ui-monospace, monospace; letter-spacing: .1em;
+          text-transform: uppercase; color: #8B7E74; }
+  h1 { font: 700 32px/1.1 Georgia, serif; letter-spacing: -.02em; margin: 12px 0 8px; }
+  p { max-width: 34ch; margin: 0 auto; color: #8B7E74; }
+  a { display: inline-block; margin-top: 24px; min-height: 48px; line-height: 48px;
+      padding: 0 24px; border-radius: 18px; background: #C9A86A; color: #1A1A1A;
+      font-weight: 600; text-decoration: none; }
+</style>
+</head>
+<body>
+  <main>
+    <p class="mono">Mind Weave</p>
+    <h1>You&rsquo;re offline</h1>
+    <p>Your truth is still saved locally. It goes up the moment you&rsquo;re back.</p>
+    <a href="/chat">Try again</a>
+  </main>
+</body>
+</html>

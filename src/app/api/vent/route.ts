@@ -7,6 +7,7 @@ import { answerFactual, groundNow } from "@/lib/vent/grounding";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
 import { buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
+import { buildFlavour } from "@/lib/flavour/profile";
 
 export const dynamic = "force-dynamic";
 
@@ -143,12 +144,21 @@ export async function POST(request: Request) {
 
   // ── 4. A real vent. The only path that spends tokens. ───────────────────
   const tactic = selectTactic(ctx);
+
+  // Flavour is read from everything they have ever said here — pure local
+  // heuristics, so personalising the delivery costs nothing.
+  const flavour = buildFlavour([
+    ...history.map((h) => h.user_message),
+    input.message,
+  ]);
+
   const systemPrompt = buildSystemPrompt({
     grounding,
     classification,
     tactic,
     ctx,
     memory: history,
+    flavour,
   });
 
   let reply: string;
@@ -205,6 +215,12 @@ export async function POST(request: Request) {
       realWorldTag: classification.realWorldTag,
       language: classification.language,
       grounding: { date: grounding.date, time: grounding.time },
+      flavour: {
+        name: flavour.name,
+        temperament: flavour.temperament.value,
+        occupation: flavour.occupation.value,
+        hobby: flavour.hobby.value,
+      },
       memoryUsed: history.length,
       tokensSpent,
       persisted: Boolean(userId),
@@ -242,6 +258,48 @@ export async function GET(request: Request) {
 
   return NextResponse.json(
     { vents: data ?? [], persisted: true },
+    { headers: { "cache-control": "no-store" } },
+  );
+}
+
+/**
+ * Deletes one vent, or everything for this anon_id. "Delete anytime" has to
+ * be a button, not a promise on a privacy page.
+ */
+export async function DELETE(request: Request) {
+  const url = new URL(request.url);
+  const anonId = url.searchParams.get("anonId");
+  const ventId = url.searchParams.get("id");
+
+  if (!anonId || anonId.length < 8) {
+    return NextResponse.json({ error: "Invalid anonId" }, { status: 422 });
+  }
+
+  const supabase = createAdminClient();
+  if (!supabase) return NextResponse.json({ deleted: 0, persisted: false });
+
+  const { data: user } = await supabase
+    .from("vent_users")
+    .select("id")
+    .eq("anon_id", anonId)
+    .maybeSingle();
+
+  if (!user) return NextResponse.json({ deleted: 0, persisted: true });
+
+  // Always scoped by user_id, so an id from another user deletes nothing.
+  const query = supabase.from("vents").delete().eq("user_id", user.id);
+  const { error } = ventId ? await query.eq("id", ventId) : await query;
+
+  if (error) {
+    console.error("[vent] delete failed", error);
+    return NextResponse.json({ error: "delete_failed" }, { status: 500 });
+  }
+
+  // Clearing everything means clearing the person too.
+  if (!ventId) await supabase.from("vent_users").delete().eq("id", user.id);
+
+  return NextResponse.json(
+    { deleted: ventId ? 1 : "all", persisted: true },
     { headers: { "cache-control": "no-store" } },
   );
 }

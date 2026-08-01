@@ -1,6 +1,35 @@
 import { groundingBlock, type Grounding } from "./grounding";
 import type { Classification } from "./intent";
 import type { Tactic, TacticContext } from "./tactics";
+import type { FlavourProfile } from "@/lib/flavour/types";
+import {
+  HOBBY_LABEL,
+  OCCUPATION_LABEL,
+  TEMPERAMENT_LABEL,
+} from "@/lib/flavour/types";
+
+/**
+ * Three lines, no more. Flavour tunes how the chosen tactic is delivered —
+ * it never chooses the tactic. Anything the detector isn't sure about is left
+ * out entirely rather than guessed at out loud.
+ */
+export function flavourBlock(f: FlavourProfile | null): string | null {
+  if (!f) return null;
+
+  const known: string[] = [`temperament ${TEMPERAMENT_LABEL[f.temperament.value]}`];
+  if (f.occupation.value !== "unknown") {
+    known.push(`occupation ${OCCUPATION_LABEL[f.occupation.value]}`);
+  }
+  if (f.hobby.value !== "unknown") {
+    known.push(`hobby ${HOBBY_LABEL[f.hobby.value]}`);
+  }
+
+  return [
+    `FLAVOUR — ${known.join(", ")}.`,
+    `Match their pace: ${f.voice.pace}; sentences ${f.voice.sentenceLength}; ${f.voice.challenge}.`,
+    `Draw any analogy from ${f.analogySource}, and ${f.regulation}.`,
+  ].join("\n");
+}
 
 export interface MemoryRow {
   user_message: string;
@@ -64,6 +93,7 @@ export interface BuildPromptArgs {
   tactic: Tactic;
   ctx: TacticContext;
   memory: MemoryRow[];
+  flavour?: FlavourProfile | null;
 }
 
 export function buildSystemPrompt({
@@ -72,6 +102,7 @@ export function buildSystemPrompt({
   tactic,
   ctx,
   memory,
+  flavour = null,
 }: BuildPromptArgs): string {
   const state = [
     ctx.body && `They said it sits in the ${ctx.body}.`,
@@ -90,6 +121,8 @@ export function buildSystemPrompt({
     groundingBlock(grounding),
     "",
     VOICE,
+    "",
+    flavourBlock(flavour),
     "",
     `THIS TURN — the move to make (express it in your own voice, do not quote it):\n${tactic.instruction}`,
     "",
