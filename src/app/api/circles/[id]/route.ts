@@ -30,11 +30,26 @@ export async function GET(request: Request, { params }: Params) {
   const msRemaining = Math.max(0, new Date(circle.ends_at).getTime() - Date.now());
   const phase = phaseFor(msRemaining);
 
+  // Time up means over, not merely un-postable. Until this ran, the row still
+  // said "waiting" and every word stayed readable to members for another 24
+  // hours — so "what's said here stays here" quietly meant "for a day". Now
+  // the clock ending is what deletes the transcript.
+  if (msRemaining === 0 && circle.status !== "closed") {
+    await store.closeCircle(params.id);
+    return NextResponse.json(
+      { error: "not_found", closed: true },
+      { status: 404, headers: { "cache-control": "no-store" } },
+    );
+  }
+
   // The Keeper speaks exactly twice, and each line is selected rather than
   // generated: the tag's own tool at minute three, the room's own counted
   // words at thirty-eight. The two are guarded separately by author, so one
   // never suppresses the other and the four-second poll cannot duplicate either.
-  if (phase !== "breathe" && members.length > 0) {
+  // Two people, minimum. The creator is a member, so members.length > 0 was
+  // true the instant a circle opened — the Keeper read the intention aloud to
+  // an empty room, to itself.
+  if (phase !== "breathe" && members.length > 1) {
     const said = await store.listCircleMessages(params.id);
 
     const spokeOpening = said.some((m) => m.anon_id === KEEPER_OPEN);
@@ -78,6 +93,9 @@ export async function GET(request: Request, { params }: Params) {
       intention: keeperIntention(circle.tag),
       phase,
       phaseLabel: PHASE_LABEL[phase],
+      // Their chair, not the room's. Falling back to the circle's seed would
+      // show a joiner somebody else's starting point.
+      pressureSeeded: me?.pressure_seeded ?? null,
       msRemaining,
       storage: store.kind,
     },
@@ -89,6 +107,8 @@ const joinSchema = z.object({
   anonId: z.string().min(8).max(64),
   /** Pre-join mood check. Crisis blocks the seat, by design. */
   intent: z.string().max(2000).optional(),
+  /** Their own chair, so the closing drop is measured from where they sat. */
+  pressure: z.number().min(0).max(100).nullish(),
   consent: z.literal(true),
 });
 
@@ -108,7 +128,7 @@ export async function POST(request: Request, { params }: Params) {
       { status: 422 },
     );
   }
-  const { anonId, intent } = parsed.data;
+  const { anonId, intent, pressure } = parsed.data;
 
   if (intent && classify(intent).intent === "crisis") {
     return NextResponse.json(
@@ -136,7 +156,12 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   const role = roleForSeat(members.length);
-  await store.addMember({ circle_id: params.id, anon_id: anonId, role });
+  await store.addMember({
+    circle_id: params.id,
+    anon_id: anonId,
+    role,
+    pressure_seeded: pressure != null ? Math.round(pressure) : null,
+  });
 
   return NextResponse.json(
     { role, seats: members.length + 1, storage: store.kind },

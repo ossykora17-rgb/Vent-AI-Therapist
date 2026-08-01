@@ -155,6 +155,13 @@ row. Rate limits: 10 vents/minute, 100/day, 5 feedback ratings/hour.
 Six seats, forty-five minutes, text only. **Peer support, not therapy, not
 affiliated with AA.**
 
+Whoever opens the circle holds it; everyone else shares. There is no third
+rank. There used to be — seats five and six joined as witnesses who could
+only reflect, and the refusal read *"Your turn comes."* It never came, because
+roles were fixed at join and nothing rotated them. A circle must not promise
+what it cannot give, so the seat rule is gone. What stops anyone dominating is
+the one-line cap on a reflection, and that applies to every seat equally.
+
 Three rules, and they are enforced on the server rather than in the UI,
 because a greyed-out button is bypassed with one curl:
 
@@ -168,12 +175,25 @@ Crisis is refused at the door and again inside the room: the message is not
 stored, the person gets the Nigerian line and 199, and a route out to a
 private vent. A circle cannot hold a crisis.
 
-Confidentiality is a deletion policy, not a promise. Nothing is recorded,
-every word is swept after 24 hours, and closing a circle deletes its
-transcript immediately. Only members can read a room; a non-member gets 403.
+Confidentiality is a deletion policy, not a promise. Closing a circle deletes
+its transcript, and the clock running out **is** a close: the row flips to
+`closed` and every word goes with it on the first read after time is up. It
+did not used to — the row still said `waiting` and members could keep reading
+for another day, so *"what's said here stays here"* quietly meant *"for a
+day."* The 24-hour sweep is now the backstop for rooms nobody reopens, not the
+policy. Only members can read a room; a non-member gets 403.
+
+The last two minutes measure something. Rate how you feel 1–10 and the Closing
+shows the drop from the pressure you seeded when you took your chair — **your**
+chair, not the room's, since falling back to the circle's seed would show a
+joiner somebody else's starting point. Then one word to carry and one to drop.
+Nothing is written to a model; it is the arithmetic of two numbers you gave.
 
 The Keeper speaks exactly twice, and both lines are selected rather than
-generated. At minute three it reads the intention — the second sentence is
+generated. It waits for a second person first — the creator is a member, so
+"is anybody here" was true the instant a circle opened, and the Keeper read the
+intention aloud to an empty room, to itself. At minute three it reads the
+intention — the second sentence is
 the tactic library's own tool for that tag, in room-facing phrasing, so the
 open and a private session draw on one library instead of two that drift
 apart. At the 38-minute mark it stops holding time and says the one thing it
@@ -181,9 +201,9 @@ is for: the pattern the room actually voiced — *"I heard chest 3 times, tight
 3 times, small 2 times."* Counted from the real shares, written once, no model
 call. It cannot invent a pattern nobody said.
 
-Apply `supabase/migrations/0003_circles.sql` for the cloud path — it is
-re-runnable like the others. Locally, circles live in the same
-`.data/vent.json` and survive restarts.
+Apply `supabase/migrations/0003_circles.sql` and `0004_circle_member_pressure.sql`
+for the cloud path — both are re-runnable like the others. Locally, circles
+live in the same `.data/vent.json` and survive restarts.
 
 ## Offline
 

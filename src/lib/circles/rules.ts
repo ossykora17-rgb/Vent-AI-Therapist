@@ -51,11 +51,13 @@ export interface RuleVerdict {
   reason?: string;
 }
 
-export function checkMessage(
-  content: string,
-  kind: MessageKind,
-  role: CircleRole,
-): RuleVerdict {
+/**
+ * Purely content-based. There is no seat parameter any more: the rules that
+ * protect people — no advice, no cross-talk, a reflection is one line — apply
+ * to everyone in the room identically, and the one rule that did depend on a
+ * seat was the one making a promise it could not keep.
+ */
+export function checkMessage(content: string, kind: MessageKind): RuleVerdict {
   const text = content.trim();
 
   if (text.length === 0) return { ok: false, reason: "Nothing to say yet." };
@@ -91,18 +93,21 @@ export function checkMessage(
     };
   }
 
-  // Only the seat rule remains: whoever is witnessing this round waits to share.
-  if (kind === "share" && role === "witness") {
-    return { ok: false, reason: "You're witnessing this round. Your turn comes." };
-  }
-
+  // No seat rule. There was one — later arrivals were witnesses who could
+  // never share — and it refused them with "Your turn comes." The turn never
+  // came, because roles were fixed at join. A circle must not promise what it
+  // cannot give. Everyone can share; the one-line cap on a reflection is what
+  // actually stops anyone dominating, and it applies to every seat equally.
   return { ok: true };
 }
 
-/** Roles rotate by seat: first in keeps, then sharers, later arrivals witness. */
+/**
+ * Whoever opens the circle holds it. Everyone else shares. "Witness" survives
+ * as a way of speaking — a one-line reflection anybody can choose — not as a
+ * seat that locks someone out of their own turn.
+ */
 export function roleForSeat(seatIndex: number): CircleRole {
-  if (seatIndex === 0) return "keeper";
-  return seatIndex <= 3 ? "sharer" : "witness";
+  return seatIndex === 0 ? "keeper" : "sharer";
 }
 
 const OPENING: Record<string, string> = {

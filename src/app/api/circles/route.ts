@@ -83,6 +83,7 @@ export async function POST(request: Request) {
     circle_id: circle.id,
     anon_id: input.anonId,
     role: roleForSeat(0),
+    pressure_seeded: input.pressure != null ? Math.round(input.pressure) : null,
   });
 
   return NextResponse.json(

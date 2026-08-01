@@ -53,6 +53,8 @@ export interface CircleMemberRow {
   circle_id: string;
   anon_id: string;
   role: "keeper" | "sharer" | "witness";
+  /** Their own chair reading, so the closing drop is measured from theirs. */
+  pressure_seeded: number | null;
   joined_at: string;
 }
 

@@ -26,8 +26,17 @@ interface RoomState {
   intention: string;
   phase: string;
   phaseLabel: string;
+  pressureSeeded: number | null;
   msRemaining: number;
 }
+
+const CHAIRS = [
+  ["tight_edge", "Tight edge", 78],
+  ["sunk", "Sunk in", 62],
+  ["half_off", "Half off", 55],
+] as const;
+
+const WORDS = ["Guilt", "Proof", "Anger", "Hope", "Silence", "Tiredness"];
 
 const AGREEMENT = [
   "No advice. No fixing. No cross-talk.",
@@ -46,6 +55,11 @@ export function CircleRoom({ id }: { id: string }) {
   const [consented, setConsented] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [notFound, setNotFound] = React.useState(false);
+  const [chair, setChair] = React.useState<string>("sunk");
+  const [reflecting, setReflecting] = React.useState(false);
+  const [mood, setMood] = React.useState<number | null>(null);
+  const [carry, setCarry] = React.useState<string | null>(null);
+  const [dropped, setDropped] = React.useState<string | null>(null);
   const endRef = React.useRef<HTMLDivElement>(null);
 
   const me = React.useMemo(() => (typeof window === "undefined" ? "" : anonId()), []);
@@ -77,7 +91,11 @@ export function CircleRoom({ id }: { id: string }) {
       const r = await fetch(`/api/circles/${id}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ anonId: me, consent: true }),
+        body: JSON.stringify({
+          anonId: me,
+          consent: true,
+          pressure: CHAIRS.find(([v]) => v === chair)?.[2] ?? 62,
+        }),
       });
       const d = await r.json();
       if (r.status === 409 && d.error === "crisis") { setCrisis(true); return; }
@@ -94,7 +112,7 @@ export function CircleRoom({ id }: { id: string }) {
     setBusy(true);
     setRuleError(null);
     try {
-      const kind = state.role === "witness" ? "witness" : "share";
+      const kind = reflecting ? "witness" : "share";
       const r = await fetch(`/api/circles/${id}/messages`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -105,6 +123,7 @@ export function CircleRoom({ id }: { id: string }) {
       if (r.status === 422 && d.error === "rule") { setRuleError(d.message); return; }
       if (!r.ok) { toast("Couldn't send that.", "error"); return; }
       setDraft("");
+      setReflecting(false);
       await load();
     } finally {
       setBusy(false);
@@ -182,6 +201,24 @@ export function CircleRoom({ id }: { id: string }) {
                 </li>
               ))}
             </ul>
+            <p className="label-mono mb-2 mt-5">Which chair are you today?</p>
+            <div className="flex flex-wrap gap-2">
+              {CHAIRS.map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setChair(v)}
+                  aria-pressed={chair === v}
+                  className={cn(
+                    "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
+                    chair === v ? "border-gold bg-gold text-ink" : "border-line/15",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             <label className="mt-4 flex min-h-[44px] items-center gap-3 text-sm">
               <input
                 type="checkbox"
@@ -230,6 +267,105 @@ export function CircleRoom({ id }: { id: string }) {
                 </li>
               ))}
             </ol>
+            {state.phase === "close" && (
+              <div className="glass mt-4 animate-slide-up border-gold/50 p-4">
+                <p className="label-mono mb-3">Closing — where did you land?</p>
+
+                {mood === null ? (
+                  <>
+                    <p className="text-[15px] leading-[1.6]">
+                      You just heard your own word said back to you. Rate where
+                      you are now, 1–10.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setMood(n)}
+                          aria-label={`Feeling ${n} out of 10`}
+                          className="h-11 w-11 rounded-full border border-line/15 text-sm font-semibold transition-colors duration-300 hover:bg-gold hover:text-ink"
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {state.pressureSeeded !== null && (
+                      <>
+                        <p className="text-[15px] leading-[1.6]">
+                          Down{" "}
+                          <span className="font-semibold">
+                            {Math.max(0, state.pressureSeeded - (10 - mood) * 10)} points
+                          </span>{" "}
+                          since you sat down.
+                        </p>
+                        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-line/10">
+                          <div
+                            className="h-full rounded-full bg-gold transition-[width] duration-1000 ease-out"
+                            style={{ width: `${100 - (10 - mood) * 10}%` }}
+                          />
+                        </div>
+                        <p className="label-mono mt-2">
+                          Earlier {state.pressureSeeded} · Now {(10 - mood) * 10}
+                        </p>
+                      </>
+                    )}
+
+                    <p className="label-mono mt-5">
+                      You&apos;re leaving. What do you carry?
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {WORDS.map((w) => (
+                        <button
+                          key={`c-${w}`}
+                          type="button"
+                          onClick={() => setCarry(w)}
+                          aria-pressed={carry === w}
+                          className={cn(
+                            "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
+                            carry === w ? "border-gold bg-gold text-ink" : "border-line/15",
+                          )}
+                        >
+                          {w}
+                        </button>
+                      ))}
+                    </div>
+
+                    <p className="label-mono mt-4">And what do you drop?</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {WORDS.filter((w) => w !== carry).map((w) => (
+                        <button
+                          key={`d-${w}`}
+                          type="button"
+                          onClick={() => {
+                            setDropped(w);
+                            toast("Sealed. Nothing here is kept.", "success");
+                          }}
+                          aria-pressed={dropped === w}
+                          className={cn(
+                            "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
+                            dropped === w ? "border-gold bg-gold text-ink" : "border-line/15",
+                          )}
+                        >
+                          {w}
+                        </button>
+                      ))}
+                    </div>
+
+                    {dropped && (
+                      <p className="mt-4 text-[15px] leading-[1.6]">
+                        You carry {carry ?? "what you came with"}. You drop{" "}
+                        {dropped}. The words in this room go with it.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
             {messages.length === 0 && (
               <p className="mt-4 text-center text-sm text-ash">
                 Nobody has spoken yet. Someone goes first.
@@ -248,9 +384,34 @@ export function CircleRoom({ id }: { id: string }) {
                 {ruleError}
               </p>
             )}
+            <div className="mb-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setReflecting(false)}
+                aria-pressed={!reflecting}
+                className={cn(
+                  "min-h-[44px] flex-1 rounded-card border text-sm transition-colors duration-300",
+                  !reflecting ? "border-gold bg-gold/15" : "border-line/15",
+                )}
+              >
+                Share
+              </button>
+              <button
+                type="button"
+                onClick={() => setReflecting(true)}
+                aria-pressed={reflecting}
+                className={cn(
+                  "min-h-[44px] flex-1 rounded-card border text-sm transition-colors duration-300",
+                  reflecting ? "border-gold bg-gold/15" : "border-line/15",
+                )}
+              >
+                Reflect one line
+              </button>
+            </div>
+
             <div className="flex items-end gap-2">
               <label htmlFor="circle-input" className="sr-only">
-                {state.role === "witness" ? "Reflect one line" : "Your share"}
+                {reflecting ? "Reflect one line" : "Your share"}
               </label>
               <textarea
                 id="circle-input"
@@ -261,11 +422,9 @@ export function CircleRoom({ id }: { id: string }) {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
                 }}
                 placeholder={
-                  state.role === "witness"
-                    ? "One line — what you heard."
-                    : "Say the heaviest part."
+                  reflecting ? "One line — what you heard." : "Say the heaviest part."
                 }
-                maxLength={state.role === "witness" ? 140 : 900}
+                maxLength={reflecting ? 140 : 900}
                 className="max-h-32 min-h-[48px] flex-1 resize-none rounded-card border border-line/15 bg-card/60 px-4 py-3 leading-[1.6] placeholder:text-ash"
               />
               <button
@@ -279,8 +438,8 @@ export function CircleRoom({ id }: { id: string }) {
               </button>
             </div>
             <p className="mt-2 text-[12px] leading-relaxed text-ash">
-              {state.role === "witness"
-                ? "You reflect one line. No fixing, no advice."
+              {reflecting
+                ? "One line only. What you heard — not what you'd do."
                 : "No advice, no you-statements. Speak to the circle."}
             </p>
           </div>

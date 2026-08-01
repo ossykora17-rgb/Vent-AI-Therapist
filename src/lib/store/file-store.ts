@@ -211,7 +211,12 @@ export class FileStore implements Store {
       const seats = db.circleMembers.filter((x) => x.circle_id === m.circle_id);
       if (seats.length >= MAX_SEATS) return;
       if (seats.some((x) => x.anon_id === m.anon_id)) return;
-      db.circleMembers.push({ ...m, id: randomUUID(), joined_at: new Date().toISOString() });
+      db.circleMembers.push({
+        ...m,
+        pressure_seeded: m.pressure_seeded ?? null,
+        id: randomUUID(),
+        joined_at: new Date().toISOString(),
+      });
     });
   }
 

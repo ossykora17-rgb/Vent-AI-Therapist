@@ -89,7 +89,7 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   // ── Governance, enforced here so curl cannot walk around the UI. ────────
-  const verdict = checkMessage(content, kind, me.role);
+  const verdict = checkMessage(content, kind);
   if (!verdict.ok) {
     return NextResponse.json(
       { error: "rule", message: verdict.reason },
