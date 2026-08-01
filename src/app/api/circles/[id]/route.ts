@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore } from "@/lib/store";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
-import { MAX_SEATS, keeperIntention, roleForSeat } from "@/lib/circles/rules";
+import {
+  MAX_SEATS, PHASE_LABEL, keeperIntention, keeperReflection,
+  phaseFor, roleForSeat,
+} from "@/lib/circles/rules";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +23,30 @@ export async function GET(request: Request, { params }: Params) {
   const members = await store.listMembers(params.id);
   const me = members.find((m) => m.anon_id === anonId) ?? null;
 
+  const msRemaining = Math.max(0, new Date(circle.ends_at).getTime() - Date.now());
+  const phase = phaseFor(msRemaining);
+
+  // At the 38-minute mark the Keeper stops holding time and says the one
+  // thing it is for: the pattern the room actually voiced. Written once,
+  // counted from real shares, never generated.
+  if (phase === "reflect" || phase === "close") {
+    const said = await store.listCircleMessages(params.id);
+    if (!said.some((m) => m.kind === "keeper_prompt")) {
+      const reflection = keeperReflection(
+        said.filter((m) => m.kind === "share").map((m) => m.content),
+      );
+      if (reflection) {
+        await store.addCircleMessage({
+          circle_id: params.id,
+          anon_id: "keeper",
+          content: reflection,
+          kind: "keeper_prompt",
+          flagged: false,
+        });
+      }
+    }
+  }
+
   return NextResponse.json(
     {
       circle,
@@ -29,7 +56,9 @@ export async function GET(request: Request, { params }: Params) {
       role: me?.role ?? null,
       joined: Boolean(me),
       intention: keeperIntention(circle.tag),
-      msRemaining: Math.max(0, new Date(circle.ends_at).getTime() - Date.now()),
+      phase,
+      phaseLabel: PHASE_LABEL[phase],
+      msRemaining,
       storage: store.kind,
     },
     { headers: { "cache-control": "no-store" } },

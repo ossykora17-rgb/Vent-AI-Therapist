@@ -172,6 +172,11 @@ Confidentiality is a deletion policy, not a promise. Nothing is recorded,
 every word is swept after 24 hours, and closing a circle deletes its
 transcript immediately. Only members can read a room; a non-member gets 403.
 
+At the 38-minute mark the Keeper stops holding time and says the one thing it
+is for: the pattern the room actually voiced — *"I heard chest 3 times, tight
+3 times, small 2 times."* Counted from the real shares, written once, no model
+call. It cannot invent a pattern nobody said.
+
 Apply `supabase/migrations/0003_circles.sql` for the cloud path — it is
 re-runnable like the others. Locally, circles live in the same
 `.data/vent.json` and survive restarts.

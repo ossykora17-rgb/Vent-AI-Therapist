@@ -88,8 +88,11 @@ const TACTICS: Tactic[] = [
   {
     id: "thought_record",
     family: "cognitive",
+    // Same CBT bones, none of the worksheet. "Evidence for / evidence
+    // against" is a clipboard talking; ask what has actually held up and what
+    // they already survived, then hand them one smaller true sentence.
     instruction:
-      "Three columns, fast: the thought, evidence for, evidence against, then one smaller alternative thought.",
+      "Take the exact sentence they just said to themselves and hold it up. Ask what has actually happened so far that backs it, and what they have already survived that says otherwise. Then give them one smaller, truer sentence to carry instead of the big one. Never say 'evidence for and against' — that is a clipboard talking.",
     fits: has(CATASTROPHE),
     weight: () => 78,
   },
@@ -105,7 +108,7 @@ const TACTICS: Tactic[] = [
     id: "decatastrophize",
     family: "cognitive",
     instruction:
-      "Scale it: if the worst happens, 1–10 how bad — and would they still be standing?",
+      "Put a number on it: if the worst actually lands, one to ten, how bad — and are they still standing at the end of that sentence? Ask it plainly, not as an exercise.",
     fits: has(CATASTROPHE),
     weight: () => 68,
   },

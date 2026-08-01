@@ -24,6 +24,8 @@ interface RoomState {
   role: "keeper" | "sharer" | "witness" | null;
   joined: boolean;
   intention: string;
+  phase: string;
+  phaseLabel: string;
   msRemaining: number;
 }
 
@@ -129,7 +131,8 @@ export function CircleRoom({ id }: { id: string }) {
         <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
           <div className="min-w-0">
             <p className="label-mono leading-none">
-              Circle · {state?.seats ?? 0}/{state?.maxSeats ?? 6} · {mins} min
+              {state?.phaseLabel ?? "Circle"} · {state?.seats ?? 0}/
+              {state?.maxSeats ?? 6} · {mins} min
             </p>
             <h1 className="truncate font-display text-xl font-bold tracking-[-0.02em]">
               {state?.circle.tag ?? "Anything"}
@@ -209,9 +212,18 @@ export function CircleRoom({ id }: { id: string }) {
 
             <ol className="mt-4 space-y-3">
               {messages.map((m) => (
-                <li key={m.id} className={cn("glass p-4", m.kind === "witness" && "border-gold/30")}>
+                <li
+                  key={m.id}
+                  className={cn(
+                    "glass p-4",
+                    m.kind === "witness" && "border-gold/30",
+                    m.kind === "keeper_prompt" && "border-gold/60 bg-gold/5",
+                  )}
+                >
                   <p className="label-mono mb-1">
-                    {m.mine ? "You" : `Seat ${m.seat}`} · {m.role}
+                    {m.kind === "keeper_prompt"
+                      ? "Keeper · pattern"
+                      : `${m.mine ? "You" : `Seat ${m.seat}`} · ${m.role}`}
                     {m.kind === "witness" && " · heard"}
                   </p>
                   <p className="text-[15px] leading-[1.6]">{m.content}</p>

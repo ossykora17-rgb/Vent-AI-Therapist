@@ -125,3 +125,56 @@ export function keeperIntention(tag: string | null): string {
 export function isExpired(createdAt: string, now = Date.now()): boolean {
   return now - new Date(createdAt).getTime() > TRANSCRIPT_TTL_MS;
 }
+
+/** The shape of the 45 minutes. Minute markers, from the end. */
+export type CirclePhase = "breathe" | "intention" | "shares" | "reflect" | "close";
+
+export function phaseFor(msRemaining: number): CirclePhase {
+  const elapsed = CIRCLE_MINUTES * 60_000 - msRemaining;
+  const min = elapsed / 60_000;
+  if (min < 3) return "breathe";
+  if (min < 8) return "intention";
+  if (min < 38) return "shares";
+  if (min < 43) return "reflect";
+  return "close";
+}
+
+export const PHASE_LABEL: Record<CirclePhase, string> = {
+  breathe: "Breathing together",
+  intention: "Keeper sets the intention",
+  shares: "Shares",
+  reflect: "Keeper reflects the pattern",
+  close: "Closing",
+};
+
+/** Words worth counting back. Body first — that is what people miss saying. */
+const PATTERN_WORDS = [
+  "chest", "throat", "head", "belly", "stomach", "shoulders",
+  "tight", "choke", "heavy", "small", "tired", "stuck", "alone",
+  "shame", "angry", "scared", "numb", "guilt",
+];
+
+/**
+ * The Keeper's one real move: DeepSearch, run over what the room actually
+ * said. Counted, not generated — no model call, and it cannot invent a
+ * pattern that nobody voiced.
+ */
+export function keeperReflection(contents: string[]): string | null {
+  if (contents.length === 0) return null;
+
+  const text = contents.join(" \n ").toLowerCase();
+  const counts = PATTERN_WORDS.map((w) => [
+    w,
+    (text.match(new RegExp(`\\b${w}\\b`, "g")) ?? []).length,
+  ] as const)
+    .filter(([, n]) => n >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
+
+  if (counts.length === 0) {
+    return `${contents.length} ${contents.length === 1 ? "person" : "people"} spoke. Nobody fixed anybody. That is the whole job — sit with what you heard.`;
+  }
+
+  const heard = counts.map(([w, n]) => `${w} ${n} times`).join(", ");
+  return `I heard ${heard}. Same room, same word, different lives. Nothing to fix — just notice you are not the only one carrying it.`;
+}
