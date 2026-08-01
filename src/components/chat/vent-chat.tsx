@@ -1,298 +1,365 @@
 "use client";
 
 import * as React from "react";
-import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
-import type { FlavourProfile } from "@/lib/flavour/types";
-import {
-  HOBBY_LABEL,
-  OCCUPATION_LABEL,
-  TEMPERAMENT_LABEL,
-} from "@/lib/flavour/types";
-import type { RitualStage, TrinityNote } from "@/lib/trinity";
+
+type Body = "head" | "throat" | "chest";
 
 interface Line {
   id: number;
   speaker: "you" | "vent";
   text: string;
-  /** The one gold question. */
-  surgical?: boolean;
-  tool?: boolean;
+  crisis?: boolean;
 }
 
 interface VentResponse {
-  lines: string[];
-  surgicalQuestion?: string;
-  tool?: string;
-  notes: TrinityNote[];
-  critic: { score: number; verdict: string; reason: string };
-  typingDelayMs: number;
-  flavour: FlavourProfile;
-  memory: string[];
-  nextStage: RitualStage | null;
+  intent: "vent" | "factual" | "greeting" | "meta" | "crisis";
+  reply: string;
+  tactic?: string | null;
+  realWorldTag?: string | null;
+  grounding?: { date: string; time: string };
+  crisis?: { nigeria: string; emergency: string };
+  memoryUsed?: number;
+  tokensSpent?: boolean;
+  persisted?: boolean;
 }
 
-const STAGES: RitualStage[] = ["vent", "see", "dig", "tool", "seal"];
+const ANON_KEY = "mw-anon-id";
 
-/** 8am, before they have said anything. VENT speaks first. */
-function proactiveOpener(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Morning. What do we need to clear today so you can perform?";
-  if (hour < 18) return "Midday check. What's still sitting on your chest?";
-  return "Before the day closes — what did you carry today that you didn't put down?";
+function anonId(): string {
+  try {
+    const existing = localStorage.getItem(ANON_KEY);
+    if (existing) return existing;
+    const fresh = crypto.randomUUID();
+    localStorage.setItem(ANON_KEY, fresh);
+    return fresh;
+  } catch {
+    // Private mode: a session-only id still lets the API work.
+    return crypto.randomUUID();
+  }
 }
 
 export function VentChat() {
   const { toast } = useToast();
-  const [lines, setLines] = React.useState<Line[]>([
-    { id: 0, speaker: "vent", text: proactiveOpener() },
-  ]);
-  const [userMessages, setUserMessages] = React.useState<string[]>([]);
-  const [stage, setStage] = React.useState<RitualStage>("vent");
+  const [lines, setLines] = React.useState<Line[]>([]);
   const [draft, setDraft] = React.useState("");
-  const [typing, setTyping] = React.useState(false);
-  const [flavour, setFlavour] = React.useState<FlavourProfile | null>(null);
-  const [memory, setMemory] = React.useState<string[]>([]);
-  const [notes, setNotes] = React.useState<TrinityNote[]>([]);
-  const [critic, setCritic] = React.useState<VentResponse["critic"] | null>(null);
-  const [sealed, setSealed] = React.useState(false);
+  const [thinking, setThinking] = React.useState(false);
+  const [pressure, setPressure] = React.useState(50);
+  const [body, setBody] = React.useState<Body | null>(null);
+  const [mood, setMood] = React.useState<number | null>(null);
+  const [askMood, setAskMood] = React.useState(false);
+  const [tensionBefore, setTensionBefore] = React.useState<number | null>(null);
+  const [tensionAfter, setTensionAfter] = React.useState<number | null>(null);
+  const [crisis, setCrisis] = React.useState<VentResponse["crisis"] | null>(null);
+  const [gated, setGated] = React.useState(false);
+  const [memoryCount, setMemoryCount] = React.useState(0);
+  const [persisted, setPersisted] = React.useState<boolean | null>(null);
 
-  const nextId = React.useRef(1);
+  const nextId = React.useRef(0);
   const endRef = React.useRef<HTMLDivElement>(null);
+  const inputRef = React.useRef<HTMLTextAreaElement>(null);
 
   React.useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [lines, typing]);
+  }, [lines, thinking, askMood]);
 
-  async function send() {
-    const text = draft.trim();
-    if (!text || typing) return;
+  async function send(text: string) {
+    const message = text.trim();
+    if (!message || thinking || gated) return;
 
-    const history = [...userMessages, text];
-    setLines((l) => [...l, { id: nextId.current++, speaker: "you", text }]);
-    setUserMessages(history);
+    setLines((l) => [...l, { id: nextId.current++, speaker: "you", text: message }]);
     setDraft("");
-    setTyping(true);
+    setThinking(true);
+    setAskMood(false);
 
     try {
       const res = await fetch("/api/vent", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ userMessages: history, stage }),
+        body: JSON.stringify({
+          anonId: anonId(),
+          message,
+          pressure,
+          bodyTapped: body,
+          mood,
+        }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: VentResponse = await res.json();
 
-      setFlavour(data.flavour);
-      setMemory(data.memory);
-      setNotes(data.notes);
-      setCritic(data.critic);
+      const data: VentResponse & { error?: string } = await res.json();
 
-      // Human texture: hold the typing indicator, then double-text the lines
-      // one at a time rather than dumping a wall.
-      await wait(data.typingDelayMs);
-      setTyping(false);
-
-      for (let i = 0; i < data.lines.length; i++) {
-        if (i > 0) await wait(700);
-        const line = data.lines[i];
-        setLines((l) => [...l, { id: nextId.current++, speaker: "vent", text: line }]);
+      if (res.status === 429) {
+        toast(data.reply ?? "Slow down small.", "info");
+        return;
       }
-      if (data.surgicalQuestion) {
-        await wait(900);
-        setLines((l) => [
-          ...l,
-          {
-            id: nextId.current++,
-            speaker: "vent",
-            text: data.surgicalQuestion!,
-            surgical: true,
-          },
-        ]);
-      }
-      if (data.tool) {
-        await wait(700);
-        setLines((l) => [
-          ...l,
-          { id: nextId.current++, speaker: "vent", text: data.tool!, tool: true },
-        ]);
+      if (!res.ok && !data.reply) throw new Error(data.error ?? `HTTP ${res.status}`);
+
+      setLines((l) => [
+        ...l,
+        {
+          id: nextId.current++,
+          speaker: "vent",
+          text: data.reply,
+          crisis: data.intent === "crisis",
+        },
+      ]);
+
+      if (data.intent === "crisis") {
+        setCrisis(data.crisis ?? { nigeria: "0806 210 6493", emergency: "199" });
+        setGated(true);
+      } else if (data.intent === "vent") {
+        // Only a real vent earns the mood check — greetings don't.
+        if (tensionBefore === null) setTensionBefore(pressure);
+        setAskMood(true);
       }
 
-      if (data.nextStage) setStage(data.nextStage);
+      if (typeof data.memoryUsed === "number") setMemoryCount(data.memoryUsed);
+      if (typeof data.persisted === "boolean") setPersisted(data.persisted);
     } catch {
-      setTyping(false);
       toast("Network dipped. Say that again.", "error");
+    } finally {
+      setThinking(false);
+      requestAnimationFrame(() => inputRef.current?.focus());
     }
   }
 
-  function seal() {
-    setSealed(true);
-    toast("Sealed. See you tomorrow.", "success");
+  function submitMood(value: number) {
+    setMood(value);
+    setAskMood(false);
+    // Mood 1–10 read as tension 0–100, inverted: feeling better = less tension.
+    setTensionAfter(Math.round((10 - value) * 10));
+    toast("Saved. That's the anchor.", "success");
   }
 
+  const drop =
+    tensionBefore !== null && tensionAfter !== null ? tensionBefore - tensionAfter : null;
+
   return (
-    <div className="flex min-h-dvh flex-col bg-paper">
-      {/* Ritual progress — five hard blocks, no bar, no percentage. */}
-      <header className="sticky top-0 z-30 border-b-3 border-ink bg-paper">
-        <div className="mx-auto flex max-w-2xl items-center gap-1 px-4 py-3">
-          {STAGES.map((s) => {
-            const done = STAGES.indexOf(s) < STAGES.indexOf(stage);
-            const now = s === stage;
-            return (
-              <span
-                key={s}
-                aria-current={now ? "step" : undefined}
-                className={cn(
-                  "flex-1 border-3 border-ink py-1 text-center text-[10px] font-bold uppercase tracking-widest",
-                  now && "bg-ink text-paper",
-                  done && "bg-ash text-ink",
-                  !now && !done && "text-ash",
-                )}
-              >
-                {s}
-              </span>
-            );
-          })}
+    <div className="flex min-h-dvh flex-col">
+      <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/80 backdrop-blur-glass">
+        <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
+          <div className="min-w-0">
+            <p className="label-mono leading-none">Mind Weave</p>
+            <h1 className="truncate font-display text-2xl font-bold leading-tight tracking-[-0.02em]">
+              VENT
+            </h1>
+          </div>
+          <ThemeToggle />
         </div>
 
-        {/* Memory pill — proof it remembers vibe, not just facts. */}
-        {memory.length > 0 && (
-          <div className="mx-auto max-w-2xl px-4 pb-3">
-            <p className="border-3 border-ink px-3 py-2 text-xs leading-relaxed">
-              <span className="font-bold uppercase tracking-widest">
-                Remembers ·{" "}
-              </span>
-              {memory.join(" ")}
+        {memoryCount > 0 && (
+          <div className="mx-auto max-w-[640px] px-4 pb-3">
+            <p className="label-mono">
+              Remembers · {memoryCount} earlier{" "}
+              {memoryCount === 1 ? "carve" : "carves"}
+              {persisted === false && " · not saved yet"}
             </p>
           </div>
         )}
       </header>
 
-      {/* The transcript. No bubbles. NAME: text. */}
-      <main id="main" className="mx-auto w-full max-w-2xl flex-1 px-4 py-6">
-        <ol className="space-y-5">
+      <main id="main" className="mx-auto w-full max-w-[640px] flex-1 px-4 py-6">
+        {lines.length === 0 && !thinking && (
+          <div className="glass p-6 text-center">
+            <p className="font-display text-xl font-bold tracking-[-0.01em]">
+              Come in. Say small. Hear plenty.
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-ash">
+              Nobody reads this but you and the machine. Carve your truth.
+            </p>
+          </div>
+        )}
+
+        <ol className="space-y-4">
           {lines.map((line) => (
-            <li key={line.id} className="text-[15px] leading-relaxed">
-              <span
+            <li key={line.id}>
+              <div
                 className={cn(
-                  "mr-2 select-none font-bold uppercase tracking-widest",
-                  line.speaker === "you" ? "text-ash" : "text-ink",
+                  "glass animate-slide-up p-4",
+                  line.speaker === "you" && "border-gold/30 bg-card/50",
+                  line.crisis && "border-gold/60",
                 )}
               >
-                {line.speaker === "you" ? "YOU:" : "VENT:"}
-              </span>
-              <span
-                className={cn(
-                  line.surgical &&
-                    "bg-gold px-1 py-[2px] font-bold decoration-clone",
-                  line.tool && "border-l-3 border-ink pl-2 font-bold",
-                )}
-              >
-                {line.text}
-              </span>
+                <p className="label-mono mb-2">
+                  {line.speaker === "you" ? "You" : "Vent"}
+                </p>
+                <p className="text-[16px] leading-[1.6]">{line.text}</p>
+              </div>
             </li>
           ))}
 
-          {typing && (
-            <li className="text-[15px]">
-              <span className="mr-2 font-bold uppercase tracking-widest">
-                VENT:
-              </span>
-              <span aria-live="polite" className="inline-flex gap-1 align-middle">
-                <Dot delay="0ms" />
-                <Dot delay="200ms" />
-                <Dot delay="400ms" />
-              </span>
+          {thinking && (
+            <li>
+              <div className="glass p-4">
+                <p className="label-mono mb-2">Vent</p>
+                <p aria-live="polite" className="text-sm text-ash">
+                  Thinking<span className="animate-pulse">…</span>
+                </p>
+              </div>
             </li>
           )}
         </ol>
+
+        {/* Crisis gate — soft, never alarming, and it stops the session. */}
+        {crisis && (
+          <div className="glass mt-4 border-gold/60 p-4">
+            <p className="label-mono mb-3">You are not alone</p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <a
+                href={`tel:${crisis.nigeria.replace(/\s/g, "")}`}
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-ink"
+              >
+                Call {crisis.nigeria}
+              </a>
+              <a
+                href={`tel:${crisis.emergency}`}
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-card border border-line/20 px-4 text-sm font-semibold"
+              >
+                Emergency {crisis.emergency}
+              </a>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setGated(false);
+                setCrisis(null);
+              }}
+              className="mt-3 min-h-[44px] w-full text-sm text-ash underline underline-offset-4"
+            >
+              I am safe now — continue venting
+            </button>
+          </div>
+        )}
+
+        {/* Mood check, asked inside the flow rather than as a popup. */}
+        {askMood && (
+          <div className="glass mt-4 animate-slide-up p-4">
+            <p className="label-mono mb-3">How are you feeling now? 1–10</p>
+            <div className="flex flex-wrap gap-2">
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => submitMood(n)}
+                  aria-label={`Feeling ${n} out of 10`}
+                  className="h-11 w-11 rounded-full border border-line/15 text-sm font-semibold transition-colors duration-300 hover:bg-gold hover:text-ink"
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {drop !== null && drop > 0 && (
+          <div className="glass mt-4 animate-slide-up p-4">
+            <p className="label-mono mb-2">Tension</p>
+            <p className="text-sm leading-relaxed">
+              How your stress is dropping —{" "}
+              <span className="font-semibold">down {drop} points</span> since
+              check-in.
+            </p>
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-line/10">
+              <div
+                className="h-full rounded-full bg-gold transition-[width] duration-1000 ease-out"
+                style={{ width: `${100 - (tensionAfter ?? 0)}%` }}
+              />
+            </div>
+            <p className="label-mono mt-2">
+              Earlier {tensionBefore} · Now {tensionAfter} · −{drop}
+            </p>
+          </div>
+        )}
+
         <div ref={endRef} />
       </main>
 
-      {/* Composer + seal */}
-      <footer className="sticky bottom-0 border-t-3 border-ink bg-paper">
-        <div className="mx-auto max-w-2xl px-4 py-3">
-          {stage === "seal" && !sealed ? (
-            <Button variant="seal" size="lg" fullWidth onClick={seal}>
-              Seal it
-            </Button>
-          ) : sealed ? (
-            <p className="py-3 text-center text-xs font-bold uppercase tracking-widest">
-              Sealed. Come back tomorrow.
-            </p>
-          ) : (
-            <div className="flex items-end gap-2">
-              <label htmlFor="vent-input" className="sr-only">
-                Say it
-              </label>
-              <textarea
-                id="vent-input"
-                rows={1}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    void send();
-                  }
-                }}
-                placeholder="Say it."
-                className="max-h-32 min-h-[48px] flex-1 resize-none border-3 border-ink bg-paper px-3 py-3 placeholder:text-ash"
-              />
-              <Button
-                onClick={() => void send()}
-                loading={typing}
-                disabled={!draft.trim()}
-                aria-label="Send"
+      <footer className="sticky bottom-0 border-t border-line/10 bg-paper/85 backdrop-blur-glass">
+        <div className="mx-auto max-w-[640px] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
+          {/* Where it sits + how tight. Both feed the tactic choice. */}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            {(["head", "throat", "chest"] as const).map((b) => (
+              <button
+                key={b}
+                type="button"
+                onClick={() => setBody(body === b ? null : b)}
+                aria-pressed={body === b}
+                className={cn(
+                  "min-h-[44px] rounded-full border px-4 text-xs font-mono uppercase tracking-[0.1em] transition-colors duration-300",
+                  body === b
+                    ? "border-gold bg-gold text-ink"
+                    : "border-line/15 text-ash",
+                )}
               >
-                Send
-              </Button>
-            </div>
-          )}
+                {b}
+              </button>
+            ))}
+            <label className="ml-auto flex min-w-[140px] flex-1 items-center gap-2">
+              <span className="label-mono shrink-0">
+                {pressure > 66 ? "Tight" : pressure > 33 ? "Mid" : "Loose"}
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={pressure}
+                onChange={(e) => setPressure(Number(e.target.value))}
+                aria-label="Pressure, 0 loose to 100 tight"
+                className="h-2 w-full accent-gold"
+              />
+            </label>
+          </div>
 
-          {/* The Trinity debated — the user may look, but never has to. */}
-          {notes.length > 0 && (
-            <details className="mt-3">
-              <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-widest text-ash">
-                Under the hood
-              </summary>
-              <div className="mt-2 space-y-1 border-3 border-ash p-3 text-[11px] leading-relaxed">
-                {flavour && (
-                  <p className="font-bold uppercase tracking-widest">
-                    {flavour.name} · {TEMPERAMENT_LABEL[flavour.temperament.value]}{" "}
-                    × {OCCUPATION_LABEL[flavour.occupation.value]} ×{" "}
-                    {HOBBY_LABEL[flavour.hobby.value]}
-                  </p>
-                )}
-                {notes.map((n) => (
-                  <p key={n.agent}>
-                    <span className="font-bold uppercase">{n.agent}</span>{" "}
-                    <span className="text-ash">[{n.model}]</span> {n.note}
-                  </p>
-                ))}
-                {critic && (
-                  <p>
-                    <span className="font-bold uppercase">critic</span>{" "}
-                    {critic.score}/10 — {critic.reason}
-                  </p>
-                )}
-              </div>
-            </details>
-          )}
+          <div className="flex items-end gap-2">
+            <label htmlFor="vent-input" className="sr-only">
+              Carve your truth
+            </label>
+            <textarea
+              id="vent-input"
+              ref={inputRef}
+              rows={1}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (
+                  (e.key === "Enter" && !e.shiftKey) ||
+                  (e.key === "Enter" && (e.metaKey || e.ctrlKey))
+                ) {
+                  e.preventDefault();
+                  void send(draft);
+                }
+                if (e.key === "Escape") setDraft("");
+              }}
+              placeholder="Carve your truth…"
+              disabled={gated}
+              className="max-h-32 min-h-[48px] flex-1 resize-none rounded-card border border-line/15 bg-card/60 px-4 py-3 leading-[1.6] shadow-glass-sm backdrop-blur-glass placeholder:text-ash disabled:opacity-50"
+            />
+            <button
+              type="button"
+              onClick={() => void send(draft)}
+              disabled={!draft.trim() || thinking || gated}
+              aria-label="Send"
+              className="flex h-12 min-w-[64px] items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-ink transition-opacity duration-300 disabled:opacity-40"
+            >
+              {thinking ? "…" : "Send"}
+            </button>
+          </div>
+
+          <p className="mt-3 text-[12px] leading-relaxed text-ash">
+            Mind Weave is not a licensed therapist. VENT is for emotional
+            support only, not medical advice. In crisis, call Nigeria{" "}
+            <a href="tel:08062106493" className="underline underline-offset-2">
+              0806 210 6493
+            </a>{" "}
+            or emergency{" "}
+            <a href="tel:199" className="underline underline-offset-2">
+              199
+            </a>
+            .
+          </p>
         </div>
       </footer>
     </div>
   );
 }
-
-function Dot({ delay }: { delay: string }) {
-  return (
-    <span
-      className="inline-block h-2 w-2 bg-ink motion-safe:animate-blink"
-      style={{ animationDuration: "1.2s", animationDelay: delay }}
-    />
-  );
-}
-
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));

@@ -1,61 +1,78 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Totem } from "@/components/totem";
-import { getUser } from "@/lib/supabase/server";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { isSupabaseConfigured } from "@/lib/env";
 
-/**
- * The Shrine. Not a landing page — a threshold. Black, one totem, one door.
- * No chat list, no feature grid, no scroll.
- */
-export default async function ShrinePage() {
-  const user = await getUser();
-
+export default function LandingPage() {
   return (
-    <main
-      id="main"
-      className="flex min-h-dvh flex-col items-center justify-between bg-ink px-6 py-10 text-paper"
-    >
-      <div aria-hidden="true" className="h-2" />
+    <div className="flex min-h-dvh flex-col">
+      <header className="mx-auto flex h-16 w-full max-w-[640px] items-center justify-between px-4">
+        <p className="label-mono">Mind Weave</p>
+        <ThemeToggle />
+      </header>
 
-      <div className="flex flex-col items-center text-center">
-        <Totem />
-
-        <h1 className="mt-10 text-[clamp(3rem,18vw,5rem)] font-black leading-none tracking-tighter">
+      <main
+        id="main"
+        className="mx-auto flex w-full max-w-[640px] flex-1 flex-col justify-center px-4 py-10"
+      >
+        <h1 className="font-display text-[clamp(3.5rem,18vw,4.5rem)] font-bold leading-[0.95] tracking-[-0.02em]">
           VENT
         </h1>
-
-        <p className="mt-5 max-w-[280px] text-sm leading-relaxed text-ash sm:max-w-sm sm:text-base">
-          Say the thing you cannot say anywhere else. Nobody is listening but
-          the totem, and the totem does not flinch.
+        <p className="mt-3 font-display text-xl italic text-ash">
+          Carve your truth.
         </p>
 
-        <div className="mt-10 w-full max-w-[280px]">
-          <Link href="/chat" className="block">
-            <Button variant="seal" size="lg" fullWidth>
-              {user ? "Return to shrine" : "Enter shrine"}
-            </Button>
-          </Link>
+        <p className="mt-6 max-w-[46ch] text-[16px] leading-[1.6] text-ash">
+          Somewhere to put the thing you can&apos;t say out loud yet. It knows
+          what day it is, it remembers what you said last time, and it will not
+          tell you to drop your shoulders three times in a row.
+        </p>
 
-          <Link href={user ? "/dashboard" : "/login"} className="mt-3 block">
-            <Button variant="inverse" size="lg" fullWidth>
-              {user ? "My account" : "I have been here"}
-            </Button>
-          </Link>
+        <Link
+          href="/chat"
+          className="mt-8 flex min-h-[52px] w-full max-w-[280px] items-center justify-center rounded-card bg-gold px-6 text-[15px] font-semibold text-ink shadow-glass transition-opacity duration-300 hover:opacity-90"
+        >
+          Come in
+        </Link>
+
+        <p className="label-mono mt-3">Free · No account · Nothing to install</p>
+
+        <div className="mt-10 grid gap-3 sm:grid-cols-3">
+          {[
+            ["Grounded", "It knows the real date, time and place — like you do."],
+            ["Remembers", "Your exact words come back, not a summary of them."],
+            ["Critical", "Warm, but it will call a TED talk a TED talk."],
+          ].map(([title, body]) => (
+            <div key={title} className="glass p-4">
+              <p className="label-mono mb-2">{title}</p>
+              <p className="text-sm leading-[1.6]">{body}</p>
+            </div>
+          ))}
         </div>
-      </div>
 
-      <footer className="w-full max-w-md text-center">
         {!isSupabaseConfigured && (
-          <p className="mb-4 border-3 border-paper p-3 text-[11px] font-bold uppercase leading-relaxed tracking-widest">
-            Setup pending — Supabase keys not set on this deployment
+          <p className="glass mt-6 p-4 text-sm leading-relaxed">
+            <span className="label-mono">Setup pending</span>
+            <br />
+            Supabase keys aren&apos;t set on this deployment, so sessions
+            won&apos;t persist between visits yet. Everything else works.
           </p>
         )}
-        <p className="text-[11px] leading-relaxed text-ash">
-          Vent is not a doctor, a therapist, or a crisis line. If you are in
-          danger, call your local emergency number.
+      </main>
+
+      <footer className="mx-auto w-full max-w-[640px] px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
+        <p className="text-[12px] leading-relaxed text-ash">
+          Mind Weave is not a licensed therapist. VENT is for emotional support
+          only, not medical advice. In crisis, call Nigeria{" "}
+          <a href="tel:08062106493" className="underline underline-offset-2">
+            0806 210 6493
+          </a>{" "}
+          or emergency{" "}
+          <a href="tel:199" className="underline underline-offset-2">
+            199
+          </a>
+          .
         </p>
       </footer>
-    </main>
+    </div>
   );
 }

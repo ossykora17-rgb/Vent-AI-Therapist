@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import { ToastProvider } from "@/components/ui/toast";
+import { THEME_SCRIPT } from "@/components/theme-toggle";
 import "./globals.css";
 
 const inter = Inter({
@@ -18,16 +19,16 @@ const playfair = Playfair_Display({
 
 export const metadata: Metadata = {
   title: {
-    default: "Vent — Say it out loud.",
-    template: "%s · Vent",
+    default: "Mind Weave Vent — Truth Anchor — Calm AI Therapy Grounded in Reality",
+    template: "%s · Mind Weave Vent",
   },
   description:
-    "A private, judgement-free place to say what you can't say anywhere else. Encrypted, yours alone, available at 3am.",
-  applicationName: "Vent",
+    "Autonomous AI therapy grounded in real time. Vent, track mood, breathe, journal. Light and dark mode. Nigeria support 0806 210 6493.",
+  applicationName: "Mind Weave Vent",
+  manifest: "/manifest.webmanifest",
   openGraph: {
-    title: "Vent — Say it out loud.",
-    description:
-      "A private, judgement-free place to say what you can't say anywhere else.",
+    title: "Mind Weave Vent — Truth Anchor",
+    description: "Carve your truth. Calm AI support, grounded in reality.",
     type: "website",
   },
   robots: { index: true, follow: true },
@@ -36,18 +37,29 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#000000",
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FEFCF8" },
+    { media: "(prefers-color-scheme: dark)", color: "#121212" },
+  ],
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${playfair.variable}`}
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="min-h-dvh">
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[100] focus:border-3 focus:border-ink focus:bg-paper focus:px-3 focus:py-2 focus:text-sm focus:font-bold focus:uppercase"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[100] focus:rounded-card focus:border focus:border-line/10 focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:font-bold"
         >
           Skip to content
         </a>
