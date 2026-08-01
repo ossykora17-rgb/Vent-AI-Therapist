@@ -96,7 +96,15 @@ export async function POST(request: Request) {
         );
       }
 
-      const rows = (await store.recentVents(userId, MEMORY_TURNS)).reverse();
+      // Asking the date is not a vent. Greetings, factual questions and meta
+      // replies were eating slots in a six-turn memory window, so pull a
+      // wider slice and keep only the turns that actually said something.
+      const recent = await store.recentVents(userId, MEMORY_TURNS * 4);
+      const rows = recent
+        .filter((r) => r.intent_type === "vent")
+        .slice(0, MEMORY_TURNS)
+        .reverse();
+
       history = rows as unknown as MemoryRow[];
       recentTactics = rows
         .map((r) => r.tactic_used)

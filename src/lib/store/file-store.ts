@@ -2,7 +2,11 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { NewVent, ProfilePatch, Store, VentRow } from "./types";
+import { isExpired, MAX_SEATS } from "@/lib/circles/rules";
+import type {
+  CircleMemberRow, CircleMessageRow, CircleRow,
+  NewVent, ProfilePatch, Store, VentRow,
+} from "./types";
 
 /**
  * Local development backend. A single JSON file, no dependency, no daemon.
@@ -36,9 +40,15 @@ interface Db {
   users: UserRow[];
   vents: VentRow[];
   feedback: FeedbackRow[];
+  circles: CircleRow[];
+  circleMembers: CircleMemberRow[];
+  circleMessages: CircleMessageRow[];
 }
 
-const EMPTY: Db = { users: [], vents: [], feedback: [] };
+const EMPTY: Db = {
+  users: [], vents: [], feedback: [],
+  circles: [], circleMembers: [], circleMessages: [],
+};
 
 export class FileStore implements Store {
   readonly kind = "file" as const;
@@ -54,7 +64,9 @@ export class FileStore implements Store {
   private read(): Db {
     if (this.cache) return this.cache;
     try {
-      this.cache = JSON.parse(fs.readFileSync(this.file, "utf8")) as Db;
+      const raw = JSON.parse(fs.readFileSync(this.file, "utf8")) as Partial<Db>;
+      // A file written before circles existed is missing those arrays.
+      this.cache = { ...structuredClone(EMPTY), ...raw };
     } catch {
       this.cache = structuredClone(EMPTY);
     }
@@ -152,6 +164,73 @@ export class FileStore implements Store {
     await this.write((db) => {
       db.vents = db.vents.filter((v) => v.user_id !== userId);
       db.users = db.users.filter((u) => u.id !== userId);
+    });
+  }
+
+  // ── Circles ─────────────────────────────────────────────────────────────
+
+  async listOpenCircles() {
+    const db = this.read();
+    const now = Date.now();
+    return db.circles
+      .filter((c) => c.status !== "closed" && new Date(c.ends_at).getTime() > now)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
+      .map((c) => ({
+        ...c,
+        seats: db.circleMembers.filter((m) => m.circle_id === c.id).length,
+      }));
+  }
+
+  async getCircle(id: string): Promise<CircleRow | null> {
+    return this.read().circles.find((c) => c.id === id) ?? null;
+  }
+
+  async createCircle(c: Omit<CircleRow, "id" | "created_at">): Promise<CircleRow> {
+    const row: CircleRow = { ...c, id: randomUUID(), created_at: new Date().toISOString() };
+    await this.write((db) => { db.circles.push(row); });
+    return row;
+  }
+
+  async closeCircle(id: string): Promise<void> {
+    await this.write((db) => {
+      const c = db.circles.find((x) => x.id === id);
+      if (c) c.status = "closed";
+      // Closing ends confidentiality's only real guarantee: the words go.
+      db.circleMessages = db.circleMessages.filter((m) => m.circle_id !== id);
+    });
+  }
+
+  async listMembers(circleId: string): Promise<CircleMemberRow[]> {
+    return this.read()
+      .circleMembers.filter((m) => m.circle_id === circleId)
+      .sort((a, b) => a.joined_at.localeCompare(b.joined_at));
+  }
+
+  async addMember(m: Omit<CircleMemberRow, "id" | "joined_at">): Promise<void> {
+    await this.write((db) => {
+      const seats = db.circleMembers.filter((x) => x.circle_id === m.circle_id);
+      if (seats.length >= MAX_SEATS) return;
+      if (seats.some((x) => x.anon_id === m.anon_id)) return;
+      db.circleMembers.push({ ...m, id: randomUUID(), joined_at: new Date().toISOString() });
+    });
+  }
+
+  async listCircleMessages(circleId: string): Promise<CircleMessageRow[]> {
+    const now = Date.now();
+    const live = this.read()
+      .circleMessages.filter((m) => m.circle_id === circleId && !isExpired(m.created_at, now));
+    // Lazy TTL: expired words are dropped on the next read, no cron needed.
+    if (live.length !== this.read().circleMessages.filter((m) => m.circle_id === circleId).length) {
+      await this.write((db) => {
+        db.circleMessages = db.circleMessages.filter((m) => !isExpired(m.created_at, now));
+      });
+    }
+    return live.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
+  async addCircleMessage(m: Omit<CircleMessageRow, "id" | "created_at">): Promise<void> {
+    await this.write((db) => {
+      db.circleMessages.push({ ...m, id: randomUUID(), created_at: new Date().toISOString() });
     });
   }
 

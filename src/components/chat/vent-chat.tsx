@@ -171,8 +171,14 @@ export function VentChat() {
           </div>
           <div className="flex items-center gap-2">
             <Link
-              href="/history"
+              href="/circles"
               className="flex h-11 items-center rounded-full border border-line/10 px-4 text-sm"
+            >
+              Circles
+            </Link>
+            <Link
+              href="/history"
+              className="hidden h-11 items-center rounded-full border border-line/10 px-4 text-sm sm:flex"
             >
               History
             </Link>

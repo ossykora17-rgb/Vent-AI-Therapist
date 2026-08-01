@@ -146,6 +146,35 @@ row. Rate limits: 10 vents/minute, 100/day, 5 feedback ratings/hour.
 | `POST /api/profile` | Save onboarding (chair, object) |
 | `POST /api/feedback` | 1–5 rating plus optional note |
 | `GET /api/health` | Which integrations are wired, and is the DB reachable |
+| `GET`·`POST /api/circles` | Open circles with seat counts / open one |
+| `GET`·`POST`·`DELETE /api/circles/[id]` | Room state / take a seat / Keeper ends it |
+| `GET`·`POST /api/circles/[id]/messages` | Read the room / speak in it |
+
+## Circles — peer support, Phase 0
+
+Six seats, forty-five minutes, text only. **Peer support, not therapy, not
+affiliated with AA.**
+
+Three rules, and they are enforced on the server rather than in the UI,
+because a greyed-out button is bypassed with one curl:
+
+- **No advice.** "You should", "have you tried", "if I were you" and their
+  relatives are refused before the message is stored, whatever your seat.
+- **No cross-talk.** Speak to the circle, not at a person.
+- **A witness reflects one line.** 140 characters. Reflecting is open to every
+  seat — it is a way of speaking, not a rank.
+
+Crisis is refused at the door and again inside the room: the message is not
+stored, the person gets the Nigerian line and 199, and a route out to a
+private vent. A circle cannot hold a crisis.
+
+Confidentiality is a deletion policy, not a promise. Nothing is recorded,
+every word is swept after 24 hours, and closing a circle deletes its
+transcript immediately. Only members can read a room; a non-member gets 403.
+
+Apply `supabase/migrations/0003_circles.sql` for the cloud path — it is
+re-runnable like the others. Locally, circles live in the same
+`.data/vent.json` and survive restarts.
 
 ## Offline
 

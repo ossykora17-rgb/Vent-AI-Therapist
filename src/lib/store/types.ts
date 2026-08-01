@@ -35,6 +35,37 @@ export interface ProfilePatch {
   onboardingDone?: boolean;
 }
 
+export interface CircleRow {
+  id: string;
+  creator_anon_id: string;
+  tag: string | null;
+  chair_picked: string | null;
+  pressure_seeded: number | null;
+  flavour: string | null;
+  status: "waiting" | "live" | "closed";
+  starts_at: string;
+  ends_at: string;
+  created_at: string;
+}
+
+export interface CircleMemberRow {
+  id: string;
+  circle_id: string;
+  anon_id: string;
+  role: "keeper" | "sharer" | "witness";
+  joined_at: string;
+}
+
+export interface CircleMessageRow {
+  id: string;
+  circle_id: string;
+  anon_id: string;
+  content: string;
+  kind: "share" | "witness" | "keeper_prompt" | "guardian";
+  flagged: boolean;
+  created_at: string;
+}
+
 export interface Store {
   /** Which backend answered — surfaced in /api/health so it is never a guess. */
   readonly kind: "supabase" | "file";
@@ -52,6 +83,19 @@ export interface Store {
   insertVent(vent: NewVent): Promise<void>;
   deleteVent(userId: string, ventId: string): Promise<void>;
   deleteAll(userId: string): Promise<void>;
+
+  // ── Circles ─────────────────────────────────────────────────────────────
+  listOpenCircles(): Promise<Array<CircleRow & { seats: number }>>;
+  getCircle(id: string): Promise<CircleRow | null>;
+  createCircle(c: Omit<CircleRow, "id" | "created_at">): Promise<CircleRow>;
+  closeCircle(id: string): Promise<void>;
+
+  listMembers(circleId: string): Promise<CircleMemberRow[]>;
+  addMember(m: Omit<CircleMemberRow, "id" | "joined_at">): Promise<void>;
+
+  /** Anything past the TTL is dropped rather than returned. */
+  listCircleMessages(circleId: string): Promise<CircleMessageRow[]>;
+  addCircleMessage(m: Omit<CircleMessageRow, "id" | "created_at">): Promise<void>;
 
   countFeedbackSince(anonId: string, since: Date): Promise<number>;
   insertFeedback(input: {
