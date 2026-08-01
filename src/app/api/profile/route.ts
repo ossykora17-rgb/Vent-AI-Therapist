@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getStore } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ const schema = z.object({
   onboardingDone: z.boolean().optional(),
 });
 
-/** Saves what the onboarding learned. Degrades silently without Supabase. */
+/** Saves what the onboarding learned. Degrades silently without a store. */
 export async function POST(request: Request) {
   let json: unknown;
   try {
@@ -28,23 +28,17 @@ export async function POST(request: Request) {
   }
   const { anonId, chairPicked, objectPicked, onboardingDone } = parsed.data;
 
-  const supabase = createAdminClient();
-  if (!supabase) return NextResponse.json({ persisted: false });
+  const store = getStore();
+  if (!store) return NextResponse.json({ persisted: false, storage: "none" });
 
-  const { error } = await supabase.from("vent_users").upsert(
-    {
-      anon_id: anonId,
-      ...(chairPicked ? { chair_picked: chairPicked } : {}),
-      ...(objectPicked ? { object_picked: objectPicked } : {}),
-      ...(onboardingDone !== undefined ? { onboarding_done: onboardingDone } : {}),
-      last_seen_at: new Date().toISOString(),
-    },
-    { onConflict: "anon_id" },
+  const userId = await store.ensureUser(anonId, {
+    chairPicked: chairPicked ?? undefined,
+    objectPicked: objectPicked ?? undefined,
+    onboardingDone,
+  });
+
+  return NextResponse.json(
+    { persisted: Boolean(userId), storage: store.kind },
+    { headers: { "cache-control": "no-store" } },
   );
-
-  if (error) {
-    console.error("[profile] upsert failed", error);
-    return NextResponse.json({ error: "save_failed" }, { status: 500 });
-  }
-  return NextResponse.json({ persisted: true }, { headers: { "cache-control": "no-store" } });
 }

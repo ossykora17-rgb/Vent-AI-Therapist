@@ -54,8 +54,11 @@ async function main() {
 
   // 0 — is it even up, and which keys are wired?
   const health = await json(await fetch(`${BASE}/api/health`), "/api/health");
-  console.log("health:", JSON.stringify(health.services), "db:", health.database, "\n");
-  const hasDb = health.services?.supabase === true;
+  console.log("health:", JSON.stringify(health.services),
+    "| storage:", health.storage ?? "unknown", "| persisting:", health.persisting, "\n");
+  // Ask whether anything is persisting, not whether it happens to be Supabase —
+  // the local file store makes these checks meaningful with no account at all.
+  const hasDb = health.persisting === true;
   const hasAi = health.services?.anthropic === true;
 
   // 1 — the date bug, and it must be free.
@@ -126,7 +129,7 @@ async function main() {
     const ok = hasDb ? Boolean(first) && need.every((k) => k in first) : null;
     record(7, "Export complete", ok,
       hasDb ? `${d.vents?.length ?? 0} rows, fields ${first ? need.filter((k) => k in first).length : 0}/5`
-            : "no Supabase configured — nothing persisted");
+            : "no store configured — nothing persisted");
   }
 
   // 8 — needs eyes and a viewport.
@@ -151,22 +154,28 @@ async function main() {
   // 9b — the rate limiter. Greetings cost nothing and hit the same guard.
   {
     if (!hasDb) {
-      record("9b", "Rate limit 10/min", null, "needs Supabase — limiter counts persisted rows");
+      record("9b", "Rate limit 10/min", null, "no store — the limiter counts persisted rows");
     } else {
+      // The checks above already spent requests inside the same minute, so
+      // report the cumulative position — otherwise "429 on probe #2" reads
+      // like the limiter firing far too early.
+      const before = await fetch(`${BASE}/api/history?anonId=${ANON}`)
+        .then((r) => r.json()).then((d) => d.vents?.length ?? 0);
       let tripped = 0;
       for (let i = 0; i < 13; i++) {
         const r = await vent("hi");
         if (r.status === 429) { tripped = i + 1; break; }
       }
       record("9b", "Rate limit 10/min", tripped > 0 && tripped <= 13,
-        tripped ? `429 on request #${tripped}` : "never tripped in 13 requests");
+        tripped ? `429 on probe #${tripped} — request ${before + tripped} in the window (limit 10/min)`
+                : "never tripped in 13 requests");
     }
   }
 
   // 9c — feedback limiter, 5 an hour.
   {
     if (!hasDb) {
-      record("9c", "Feedback limit 5/hr", null, "needs Supabase");
+      record("9c", "Feedback limit 5/hr", null, "no store configured");
     } else {
       let tripped = 0;
       for (let i = 0; i < 7; i++) {
@@ -179,7 +188,7 @@ async function main() {
 
   // 10 — degradation, read straight off health.
   record(10, "Keys / degradation", true,
-    `supabase=${hasDb} anthropic=${hasAi} db=${health.database} — no 500s on any path above`);
+    `storage=${health.storage} persisting=${hasDb} anthropic=${hasAi} — no 500s on any path above`);
 
   // ── table ────────────────────────────────────────────────────────────────
   const mark = (p) => (p === null ? "MANUAL" : p ? "PASS" : "FAIL");

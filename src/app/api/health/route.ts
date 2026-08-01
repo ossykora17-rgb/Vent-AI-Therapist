@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getStore } from "@/lib/store";
 import {
   isAnthropicConfigured,
   isPaystackConfigured,
@@ -29,6 +30,8 @@ export async function GET() {
     }
   }
 
+  const store = getStore();
+
   const services = {
     supabase: isSupabaseConfigured,
     anthropic: isAnthropicConfigured,
@@ -39,6 +42,8 @@ export async function GET() {
     {
       status: database === "unreachable" ? "degraded" : "ok",
       database,
+      storage: store?.kind ?? "none",
+      persisting: Boolean(store),
       services,
       commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
       timestamp: new Date().toISOString(),

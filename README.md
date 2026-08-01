@@ -51,13 +51,47 @@ back on.
 vent is saved and told so rather than answered; no Supabase means the session
 works but nothing persists. Neither path 500s.
 
-## Local development
+## Run it locally — no Vercel, no Supabase, no account
 
 ```bash
 npm ci
-cp .env.example .env.local     # fill in what you have
-npm run dev -- -p 3001         # http://localhost:3001
+npm run local          # http://localhost:3001
 ```
+
+That is the whole setup. With no `NEXT_PUBLIC_SUPABASE_URL` set, the app falls
+back to a **local JSON store** at `.data/vent.json` — no Docker, no daemon, no
+extra dependency. Everything works: onboarding, memory across turns, history,
+filter and search, export, delete, rate limits. The file survives restarts.
+
+Add `ANTHROPIC_API_KEY` to `.env.local` if you want real replies; without it a
+vent is saved and told so rather than answered. Nothing 500s either way.
+
+`GET /api/health` reports which backend answered:
+
+```json
+{ "storage": "file", "persisting": true, "services": { "supabase": false } }
+```
+
+Verify a running instance — local or deployed — with:
+
+```bash
+node scripts/live-verify.mjs http://localhost:3001
+```
+
+**The file store is for development only.** `getStore()` refuses to pick it in
+production unless `VENT_LOCAL_STORE=1` is set explicitly, because serverless
+filesystems are per-instance and ephemeral: it would appear to work and then
+lose sessions at random. Unconfigured production keeps the honest "nothing is
+being saved" behaviour instead.
+
+### Against Supabase instead
+
+```bash
+cp .env.example .env.local     # fill in the Supabase keys
+npm run dev -- -p 3001
+```
+
+Apply both migrations first (see Deploy). `storage` then reports `supabase`.
 
 ## How a message is handled
 

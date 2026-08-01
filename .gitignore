@@ -144,3 +144,6 @@ vite.config.ts.timestamp-*
 
 # Vercel
 .vercel
+
+# Local file-backed store (npm run dev without Supabase)
+.data/

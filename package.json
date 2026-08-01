@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "local": "VENT_LOCAL_STORE=1 next dev -p 3001",
+    "verify": "node --experimental-strip-types scripts/tactics.test.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

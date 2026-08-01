@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getStore, type Store, type VentRow } from "@/lib/store";
 import { env, isAnthropicConfigured } from "@/lib/env";
 import { answerFactual, groundNow } from "@/lib/vent/grounding";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
@@ -17,6 +17,8 @@ const MAX_TOKENS = 220;
 
 const RATE_PER_MINUTE = 10;
 const RATE_PER_DAY = 100;
+const HISTORY_LIMIT = 100;
+const MEMORY_TURNS = 6;
 
 const bodySchema = z.object({
   anonId: z.string().min(8).max(64),
@@ -27,6 +29,8 @@ const bodySchema = z.object({
   duality: z.number().min(0).max(100).nullish(),
   mood: z.number().int().min(1).max(10).nullish(),
 });
+
+type Input = z.infer<typeof bodySchema>;
 
 export async function POST(request: Request) {
   let json: unknown;
@@ -44,22 +48,16 @@ export async function POST(request: Request) {
 
   const grounding = groundNow();
   const classification = classify(input.message);
-  const supabase = createAdminClient();
+  const store = getStore();
 
   // ── 1. CRISIS. Checked before anything else, never sent to a model. ──────
   if (classification.intent === "crisis") {
-    if (supabase) {
-      const userId = await ensureUser(supabase, input.anonId, input.chairPicked);
+    if (store) {
+      const userId = await store.ensureUser(input.anonId, {
+        chairPicked: input.chairPicked ?? undefined,
+      });
       if (userId) {
-        await supabase.from("vents").insert({
-          user_id: userId,
-          user_message: input.message,
-          ai_reply: CRISIS_RESPONSE,
-          intent_type: "crisis",
-          safety_flagged: true,
-          language: classification.language,
-          real_date_used: grounding.iso,
-        });
+        await persist(store, userId, input, classification, CRISIS_RESPONSE, null, grounding.iso, true);
       }
     }
     return NextResponse.json(
@@ -67,7 +65,8 @@ export async function POST(request: Request) {
         intent: "crisis",
         reply: CRISIS_RESPONSE,
         crisis: { ...CRISIS_LINES, gated: true },
-        persisted: Boolean(supabase),
+        persisted: Boolean(store),
+        storage: store?.kind ?? "none",
       },
       { headers: { "cache-control": "no-store" } },
     );
@@ -78,32 +77,29 @@ export async function POST(request: Request) {
   let history: MemoryRow[] = [];
   let recentTactics: string[] = [];
 
-  if (supabase) {
-    userId = await ensureUser(supabase, input.anonId, input.chairPicked);
+  if (store) {
+    userId = await store.ensureUser(input.anonId, {
+      chairPicked: input.chairPicked ?? undefined,
+    });
 
     if (userId) {
-      const limited = await isRateLimited(supabase, userId);
-      if (limited) {
+      const now = Date.now();
+      const [inMinute, inDay] = await Promise.all([
+        store.countVentsSince(userId, new Date(now - 60_000)),
+        store.countVentsSince(userId, new Date(now - 86_400_000)),
+      ]);
+
+      if (inMinute >= RATE_PER_MINUTE || inDay >= RATE_PER_DAY) {
         return NextResponse.json(
           { error: "rate_limited", reply: "Small small — breathe. Try again in a minute." },
           { status: 429, headers: { "cache-control": "no-store" } },
         );
       }
 
-      // One round trip covers both memory and the tactic no-repeat window.
-      const { data } = await supabase
-        .from("vents")
-        .select(
-          "user_message, ai_reply, created_at, body_tapped, chair_picked, mood_score, tactic_used",
-        )
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(6);
-
-      const rows = (data ?? []).reverse();
-      history = rows as MemoryRow[];
+      const rows = (await store.recentVents(userId, MEMORY_TURNS)).reverse();
+      history = rows as unknown as MemoryRow[];
       recentTactics = rows
-        .map((r) => (r as { tactic_used: string | null }).tactic_used)
+        .map((r) => r.tactic_used)
         .filter((t): t is string => Boolean(t));
     }
   }
@@ -127,7 +123,9 @@ export async function POST(request: Request) {
     factual ?? localReply(classification.intent, grounding, classification.language);
 
   if (local) {
-    await persist(supabase, userId, input, classification, local, null, grounding.iso);
+    if (store && userId) {
+      await persist(store, userId, input, classification, local, null, grounding.iso);
+    }
     return NextResponse.json(
       {
         intent: classification.intent,
@@ -137,6 +135,7 @@ export async function POST(request: Request) {
         grounding: { date: grounding.date, time: grounding.time },
         tokensSpent: false,
         persisted: Boolean(userId),
+        storage: store?.kind ?? "none",
       },
       { headers: { "cache-control": "no-store" } },
     );
@@ -145,7 +144,7 @@ export async function POST(request: Request) {
   // ── 4. A real vent. The only path that spends tokens. ───────────────────
   const tactic = selectTactic(ctx);
 
-  // Flavour is read from everything they have ever said here — pure local
+  // Flavour is read from everything they have said here — pure local
   // heuristics, so personalising the delivery costs nothing.
   const flavour = buildFlavour([
     ...history.map((h) => h.user_message),
@@ -204,7 +203,9 @@ export async function POST(request: Request) {
     }
   }
 
-  await persist(supabase, userId, input, classification, reply, tactic.id, grounding.iso);
+  if (store && userId) {
+    await persist(store, userId, input, classification, reply, tactic.id, grounding.iso);
+  }
 
   return NextResponse.json(
     {
@@ -224,6 +225,7 @@ export async function POST(request: Request) {
       memoryUsed: history.length,
       tokensSpent,
       persisted: Boolean(userId),
+      storage: store?.kind ?? "none",
     },
     { headers: { "cache-control": "no-store" } },
   );
@@ -236,30 +238,20 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid anonId" }, { status: 422 });
   }
 
-  const supabase = createAdminClient();
-  if (!supabase) return NextResponse.json({ vents: [], persisted: false });
+  const store = getStore();
+  if (!store) return NextResponse.json({ vents: [], persisted: false, storage: "none" });
 
-  const { data: user } = await supabase
-    .from("vent_users")
-    .select("id")
-    .eq("anon_id", anonId)
-    .maybeSingle();
-
-  if (!user) return NextResponse.json({ vents: [], persisted: true });
-
-  const { data } = await supabase
-    .from("vents")
-    // Everything the user gave us comes back out — export is real ownership,
-    // not a summary of what we felt like sharing.
-    .select(
-      "id, user_message, ai_reply, mood_score, tension_before, tension_after, language, duality_value, pressure_value, chair_picked, tactic_used, intent_type, real_world_tag, real_date_used, body_tapped, created_at",
-    )
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(100);
+  const userId = await store.findUserId(anonId);
+  if (!userId) {
+    return NextResponse.json({ vents: [], persisted: true, storage: store.kind });
+  }
 
   return NextResponse.json(
-    { vents: data ?? [], persisted: true },
+    {
+      vents: await store.listVents(userId, HISTORY_LIMIT),
+      persisted: true,
+      storage: store.kind,
+    },
     { headers: { "cache-control": "no-store" } },
   );
 }
@@ -277,95 +269,38 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Invalid anonId" }, { status: 422 });
   }
 
-  const supabase = createAdminClient();
-  if (!supabase) return NextResponse.json({ deleted: 0, persisted: false });
+  const store = getStore();
+  if (!store) return NextResponse.json({ deleted: 0, persisted: false, storage: "none" });
 
-  const { data: user } = await supabase
-    .from("vent_users")
-    .select("id")
-    .eq("anon_id", anonId)
-    .maybeSingle();
+  const userId = await store.findUserId(anonId);
+  if (!userId) return NextResponse.json({ deleted: 0, persisted: true, storage: store.kind });
 
-  if (!user) return NextResponse.json({ deleted: 0, persisted: true });
-
-  // Always scoped by user_id, so an id from another user deletes nothing.
-  const query = supabase.from("vents").delete().eq("user_id", user.id);
-  const { error } = ventId ? await query.eq("id", ventId) : await query;
-
-  if (error) {
-    console.error("[vent] delete failed", error);
-    return NextResponse.json({ error: "delete_failed" }, { status: 500 });
-  }
-
-  // Clearing everything means clearing the person too.
-  if (!ventId) await supabase.from("vent_users").delete().eq("id", user.id);
+  if (ventId) await store.deleteVent(userId, ventId);
+  else await store.deleteAll(userId);
 
   return NextResponse.json(
-    { deleted: ventId ? 1 : "all", persisted: true },
+    { deleted: ventId ? 1 : "all", persisted: true, storage: store.kind },
     { headers: { "cache-control": "no-store" } },
   );
 }
 
-type Admin = NonNullable<ReturnType<typeof createAdminClient>>;
-
-async function ensureUser(
-  supabase: Admin,
-  anonId: string,
-  chairPicked: string | null | undefined,
-): Promise<string | null> {
-  const { data, error } = await supabase
-    .from("vent_users")
-    .upsert(
-      {
-        anon_id: anonId,
-        ...(chairPicked ? { chair_picked: chairPicked } : {}),
-        last_seen_at: new Date().toISOString(),
-      },
-      { onConflict: "anon_id" },
-    )
-    .select("id")
-    .single();
-
-  if (error) {
-    console.error("[vent] ensureUser failed", error);
-    return null;
-  }
-  return data.id;
-}
-
-async function isRateLimited(supabase: Admin, userId: string): Promise<boolean> {
-  const now = Date.now();
-  const [minute, day] = await Promise.all([
-    supabase.rpc("vent_rate_count", {
-      p_user_id: userId,
-      p_since: new Date(now - 60_000).toISOString(),
-    }),
-    supabase.rpc("vent_rate_count", {
-      p_user_id: userId,
-      p_since: new Date(now - 86_400_000).toISOString(),
-    }),
-  ]);
-
-  return (minute.data ?? 0) >= RATE_PER_MINUTE || (day.data ?? 0) >= RATE_PER_DAY;
-}
-
 async function persist(
-  supabase: Admin | null,
-  userId: string | null,
-  input: z.infer<typeof bodySchema>,
+  store: Store,
+  userId: string,
+  input: Input,
   classification: ReturnType<typeof classify>,
   reply: string,
   tacticId: string | null,
   isoDate: string,
+  safetyFlagged = false,
 ) {
-  if (!supabase || !userId) return;
-
-  const { error } = await supabase.from("vents").insert({
+  await store.insertVent({
     user_id: userId,
     user_message: input.message,
     ai_reply: reply,
     mood_score: input.mood ?? null,
     tension_before: input.pressure != null ? Math.round(input.pressure) : null,
+    tension_after: null,
     language: classification.language,
     duality_value: input.duality ?? null,
     body_tapped: input.bodyTapped ?? classification.body,
@@ -375,7 +310,9 @@ async function persist(
     intent_type: classification.intent,
     real_world_tag: classification.realWorldTag,
     real_date_used: isoDate,
-  });
-
-  if (error) console.error("[vent] persist failed", error);
+    safety_flagged: safetyFlagged,
+  } satisfies Parameters<Store["insertVent"]>[0] as Parameters<Store["insertVent"]>[0]);
 }
+
+// The `id` and `created_at` columns are generated by whichever store answers.
+export type { VentRow };
