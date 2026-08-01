@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=missing_code`);
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   if (!supabase) {
     return NextResponse.redirect(`${origin}/login?error=not_configured`);
   }

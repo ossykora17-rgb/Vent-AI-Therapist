@@ -1,7 +1,12 @@
 import type { NextRequest } from "next/server";
+/*
+ * Named `proxy` since Next 16 — the `middleware` file convention is
+ * deprecated. Same job: refresh the Supabase auth cookie before a protected
+ * route renders, and stay off the hot path for static assets.
+ */
 import { updateSession } from "@/lib/supabase/middleware";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   return updateSession(request);
 }
 

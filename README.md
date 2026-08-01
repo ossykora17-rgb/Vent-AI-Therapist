@@ -14,7 +14,7 @@ emergency **199**.
 
 | Layer    | Choice                                  |
 | -------- | --------------------------------------- |
-| Frontend | Next.js 14 (App Router) + TypeScript    |
+| Frontend | Next.js 16 (App Router) + React 19 + TypeScript |
 | Styling  | Tailwind, CSS-variable tokens           |
 | DB       | Supabase (Postgres), RLS deny-by-default |
 | AI       | Anthropic (`@anthropic-ai/sdk`)         |
@@ -165,7 +165,7 @@ bug actually shipped here. The date answered as therapy. "It's the same thing
 every week" heard as an insult and answered with an apology. A worksheet where
 a sentence belonged. A witness who could never speak. 121 assertions, about a
 second, no tokens. Give it a base URL and it adds the live room checks — 12
-and 131 — including the one that found a real bug, where a Keeper's early
+and 136 — including the one that found a real bug, where a Keeper's early
 close deleted the transcript but the room kept answering `200`.
 
 **`npm run rlhf`** rebuilds preferences from what people actually did. A
@@ -187,6 +187,33 @@ vents and never belongs in a repository.
 `scripts/fixtures/` is a synthetic store — invented vents, invented ratings —
 so both pipelines can be exercised end to end without touching anybody's
 words. It is what eval check 10 runs against.
+
+## Dependencies, and why each one is here
+
+Six runtime packages and two for voice. Everything else — the data pipeline,
+the eval suite, the preference pipeline, the heartbeat, the file store, the
+LiveKit token — is Node's standard library, which is why the gate runs in a
+fresh worktree with no `npm install` at all.
+
+| Package | Why |
+| --- | --- |
+| `next`, `react`, `react-dom` | the app |
+| `@supabase/ssr`, `@supabase/supabase-js` | the cloud store, when configured |
+| `@anthropic-ai/sdk` | the only thing that spends tokens |
+| `zod` | every request body is parsed, never trusted |
+| `clsx`, `tailwind-merge` | class composition |
+| `server-only` | a compile error if a secret ever imports into a client bundle |
+| `livekit-client` | Phase 1 voice, loaded lazily inside the join handler |
+| `livekit-server-sdk` | the Keeper's mute, in exactly one route |
+
+`npm audit` reports four high advisories, all in transitive build tooling —
+`postcss` and `sharp` inside Next, and `brace-expansion` under a dev-only
+`glob`. None has a path from user input in this app: no untrusted CSS is
+processed, no user-supplied image reaches the optimizer. The two advisories
+that *did* match this app's shape — SSRF in rewrites, and unauthenticated
+disclosure of internal Server Function endpoints, which mattered because
+`src/app/auth/actions.ts` is a server action — are what the Next 16 upgrade
+cleared.
 
 ## The outside world
 

@@ -12,22 +12,44 @@ var d=s?s==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;
 document.documentElement.classList.toggle('dark',d);
 }catch(e){}})();`;
 
-export function ThemeToggle() {
-  const [dark, setDark] = React.useState(false);
+/**
+ * `<html class="dark">` is the source of truth — the script above already set
+ * it before first paint, so the button reads the DOM rather than keeping a
+ * second copy of the answer in state. `useSyncExternalStore` is exactly this
+ * shape: a snapshot from outside React, a server snapshot for the render that
+ * has no DOM, and a subscription for when it changes.
+ *
+ * This used to be `useState(false)` plus a mount effect, which meant the icon
+ * rendered as the sun for one frame on a dark phone before correcting itself.
+ */
+const themeListeners = new Set<() => void>();
 
-  React.useEffect(() => {
-    setDark(document.documentElement.classList.contains("dark"));
-  }, []);
+function subscribe(onChange: () => void) {
+  themeListeners.add(onChange);
+  return () => themeListeners.delete(onChange);
+}
+
+const isDark = () => document.documentElement.classList.contains("dark");
+
+export function ThemeToggle() {
+  const dark = React.useSyncExternalStore(
+    subscribe,
+    isDark,
+    // Server render: the class is not knowable, and light is the default the
+    // stylesheet assumes. The script corrects it before anybody sees a frame.
+    () => false,
+  );
 
   function toggle() {
     const next = !dark;
-    setDark(next);
     document.documentElement.classList.toggle("dark", next);
     try {
       localStorage.setItem("mw-theme", next ? "dark" : "light");
     } catch {
       // Private mode — the toggle still works for this session.
     }
+    // One store, many buttons: every toggle on the page stays in step.
+    themeListeners.forEach((notify) => notify());
   }
 
   return (

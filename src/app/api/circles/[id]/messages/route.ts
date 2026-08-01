@@ -8,20 +8,25 @@ import { guardianVerdict } from "@/lib/external/guardian";
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+/**
+ * Next 15 made route params a promise — the request store is resolved rather
+ * than ambient — so every handler awaits its own id before using it.
+ */
+type Params = { params: Promise<{ id: string }> };
 
 /** Only members read the room, and only inside the 24h window. */
 export async function GET(request: Request, { params }: Params) {
+  const { id } = await params;
   const anonId = new URL(request.url).searchParams.get("anonId") ?? "";
   const store = getStore();
   if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
 
-  const members = await store.listMembers(params.id);
+  const members = await store.listMembers(id);
   if (!members.some((m) => m.anon_id === anonId)) {
     return NextResponse.json({ error: "not_a_member" }, { status: 403 });
   }
 
-  const messages = await store.listCircleMessages(params.id);
+  const messages = await store.listCircleMessages(id);
 
   // Seat number, not identity. Nobody carries a name between circles.
   const seatOf = new Map(members.map((m, i) => [m.anon_id, i + 1]));
@@ -50,6 +55,7 @@ const postSchema = z.object({
 });
 
 export async function POST(request: Request, { params }: Params) {
+  const { id } = await params;
   let json: unknown;
   try {
     json = await request.json();
@@ -66,13 +72,13 @@ export async function POST(request: Request, { params }: Params) {
   const store = getStore();
   if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
 
-  const circle = await store.getCircle(params.id);
+  const circle = await store.getCircle(id);
   if (!circle) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (circle.status === "closed" || new Date(circle.ends_at).getTime() < Date.now()) {
     return NextResponse.json({ error: "closed" }, { status: 410 });
   }
 
-  const members = await store.listMembers(params.id);
+  const members = await store.listMembers(id);
   const me = members.find((m) => m.anon_id === anonId);
   if (!me) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
 
@@ -113,7 +119,7 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   await store.addCircleMessage({
-    circle_id: params.id,
+    circle_id: id,
     anon_id: anonId,
     content,
     kind,

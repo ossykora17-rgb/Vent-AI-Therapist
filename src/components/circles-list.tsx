@@ -41,6 +41,13 @@ export function CirclesList() {
   const [tag, setTag] = React.useState<string>("economy");
   const [chair, setChair] = React.useState<string>("tight_edge");
   const [busy, setBusy] = React.useState(false);
+  /**
+   * The clock, held in state rather than read during render. `Date.now()`
+   * inside the map made render impure: the server rendered one number, the
+   * client hydrated a different one, and the countdown then sat frozen until
+   * the next poll happened to repaint it. Now it ticks with the poll.
+   */
+  const [now, setNow] = React.useState(0);
 
   const load = React.useCallback(async () => {
     try {
@@ -56,8 +63,14 @@ export function CirclesList() {
 
   React.useEffect(() => {
     void load();
+    // The client's clock, read once here rather than during render, so the
+    // first paint after hydration already has a real countdown.
+    setNow(Date.now());
     // Polling, not sockets — Phase 0 is proving the room is wanted at all.
-    const t = window.setInterval(load, 10_000);
+    const t = window.setInterval(() => {
+      void load();
+      setNow(Date.now());
+    }, 10_000);
     return () => window.clearInterval(t);
   }, [load]);
 
@@ -200,7 +213,9 @@ export function CirclesList() {
 
         <ol className="mt-4 space-y-3">
           {circles.map((c) => {
-            const mins = Math.max(0, Math.round((new Date(c.ends_at).getTime() - Date.now()) / 60000));
+            const mins = now === 0
+              ? null
+              : Math.max(0, Math.round((new Date(c.ends_at).getTime() - now) / 60000));
             return (
               <li key={c.id}>
                 <Link href={`/circles/${c.id}`} className="glass block p-4">
@@ -210,7 +225,7 @@ export function CirclesList() {
                       {TAGS.find(([v]) => v === c.tag)?.[1] ?? "Anything"}
                     </span>
                     <span className="label-mono ml-auto">
-                      {c.seats}/6 · {mins} min left
+                      {c.seats}/6 · {mins ?? "—"} min left
                     </span>
                   </div>
                   <p className="mt-2 text-[15px] leading-[1.6]">

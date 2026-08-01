@@ -7,7 +7,11 @@ import { roomNameFor } from "@/lib/voice/livekit";
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+/**
+ * Next 15 made route params a promise — the request store is resolved rather
+ * than ambient — so every handler awaits its own id before using it.
+ */
+type Params = { params: Promise<{ id: string }> };
 
 const schema = z.object({
   anonId: z.string().min(8).max(64),
@@ -34,6 +38,7 @@ const schema = z.object({
  *   away without saying so — a quiet mute would be the worst lie in here.
  */
 export async function POST(request: Request, { params }: Params) {
+  const { id } = await params;
   if (!isLivekitConfigured) {
     return NextResponse.json({ error: "voice_not_configured" }, { status: 501 });
   }
@@ -52,7 +57,7 @@ export async function POST(request: Request, { params }: Params) {
   const store = getStore();
   if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
 
-  const members = await store.listMembers(params.id);
+  const members = await store.listMembers(id);
   const meIndex = members.findIndex((m) => m.anon_id === anonId);
   if (meIndex < 0) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
 
@@ -71,7 +76,7 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: "no_such_seat" }, { status: 404 });
   }
 
-  const room = roomNameFor(params.id);
+  const room = roomNameFor(id);
   const identity = `seat-${seat}`;
 
   try {

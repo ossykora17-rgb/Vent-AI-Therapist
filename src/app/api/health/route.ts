@@ -21,7 +21,7 @@ export async function GET() {
 
   if (isSupabaseConfigured) {
     try {
-      const supabase = createClient();
+      const supabase = await createClient();
       // head+count touches the table without transferring rows. RLS means an
       // anonymous caller legitimately gets 0 — we only care that it responds.
       const { error } = await supabase!

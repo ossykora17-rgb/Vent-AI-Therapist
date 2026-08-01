@@ -6,7 +6,11 @@ import { isLivekitConfigured } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: { id: string } };
+/**
+ * Next 15 made route params a promise — the request store is resolved rather
+ * than ambient — so every handler awaits its own id before using it.
+ */
+type Params = { params: Promise<{ id: string }> };
 
 const schema = z.object({ anonId: z.string().min(8).max(64) });
 
@@ -18,6 +22,7 @@ const schema = z.object({ anonId: z.string().min(8).max(64) });
  * 501 rather than 500 when the keys are absent: not broken, not built yet.
  */
 export async function POST(request: Request, { params }: Params) {
+  const { id } = await params;
   if (!isLivekitConfigured) {
     return NextResponse.json(
       {
@@ -41,7 +46,7 @@ export async function POST(request: Request, { params }: Params) {
   const store = getStore();
   if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
 
-  const circle = await store.getCircle(params.id);
+  const circle = await store.getCircle(id);
   if (!circle) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (circle.status === "closed" || new Date(circle.ends_at).getTime() < Date.now()) {
     return NextResponse.json({ error: "closed" }, { status: 410 });
@@ -49,12 +54,12 @@ export async function POST(request: Request, { params }: Params) {
 
   // Members only, and the seat number is derived here rather than sent — a
   // client that could name its own seat could name somebody else's.
-  const members = await store.listMembers(params.id);
+  const members = await store.listMembers(id);
   const index = members.findIndex((m) => m.anon_id === parsed.data.anonId);
   if (index < 0) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
 
   const token = mintVoiceToken({
-    circleId: params.id,
+    circleId: id,
     seat: index + 1,
     keeper: members[index].role === "keeper",
   });

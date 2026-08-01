@@ -19,20 +19,25 @@ export const dynamic = "force-dynamic";
 const KEEPER_OPEN = "keeper:open";
 const KEEPER_REFLECT = "keeper:reflect";
 
-type Params = { params: { id: string } };
+/**
+ * Next 15 made route params a promise — the request store is resolved rather
+ * than ambient — so every handler awaits its own id before using it.
+ */
+type Params = { params: Promise<{ id: string }> };
 
 /** The room: who is in it, what role you hold, how long is left. */
 export async function GET(request: Request, { params }: Params) {
+  const { id } = await params;
   const query = new URL(request.url).searchParams;
   const anonId = query.get("anonId") ?? "";
   const typing = query.get("typing") === "1";
   const store = getStore();
   if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
 
-  const circle = await store.getCircle(params.id);
+  const circle = await store.getCircle(id);
   if (!circle) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  let members = await store.listMembers(params.id);
+  let members = await store.listMembers(id);
   let me = members.find((m) => m.anon_id === anonId) ?? null;
 
   const msRemaining = Math.max(0, new Date(circle.ends_at).getTime() - Date.now());
@@ -48,10 +53,10 @@ export async function GET(request: Request, { params }: Params) {
   // as though it were alive, with the transcript already deleted underneath.
   if (msRemaining === 0 || circle.status === "closed") {
     if (circle.status !== "closed") {
-      await store.closeCircle(params.id);
+      await store.closeCircle(id);
       // The voice room ends with the circle. Six people talking in an SFU
       // room whose transcript was just deleted is not a closed circle.
-      await closeVoiceRoom(params.id);
+      await closeVoiceRoom(id);
     }
     return NextResponse.json(
       { error: "not_found", closed: true },
@@ -63,8 +68,8 @@ export async function GET(request: Request, { params }: Params) {
   // presence costs one write and no new endpoint — and the write is skipped
   // when the last one is still fresh and nothing changed.
   if (me && shouldTouch(me, typing)) {
-    await store.touchMember(params.id, anonId, typing);
-    members = await store.listMembers(params.id);
+    await store.touchMember(id, anonId, typing);
+    members = await store.listMembers(id);
     me = members.find((m) => m.anon_id === anonId) ?? null;
   }
 
@@ -83,12 +88,12 @@ export async function GET(request: Request, { params }: Params) {
   // true the instant a circle opened — the Keeper read the intention aloud to
   // an empty room, to itself.
   if (phase !== "breathe" && members.length > 1) {
-    const said = await store.listCircleMessages(params.id);
+    const said = await store.listCircleMessages(id);
 
     const spokeOpening = said.some((m) => m.anon_id === KEEPER_OPEN);
     if (!spokeOpening) {
       await store.addCircleMessage({
-        circle_id: params.id,
+        circle_id: id,
         anon_id: KEEPER_OPEN,
         content: intention,
         kind: "keeper_prompt",
@@ -104,7 +109,7 @@ export async function GET(request: Request, { params }: Params) {
         );
         if (reflection) {
           await store.addCircleMessage({
-            circle_id: params.id,
+            circle_id: id,
             anon_id: KEEPER_REFLECT,
             content: reflection,
             kind: "keeper_prompt",
@@ -153,6 +158,7 @@ const joinSchema = z.object({
 
 /** Join. Consent is required, crisis is refused, seats are capped at six. */
 export async function POST(request: Request, { params }: Params) {
+  const { id } = await params;
   let json: unknown;
   try {
     json = await request.json();
@@ -179,13 +185,13 @@ export async function POST(request: Request, { params }: Params) {
   const store = getStore();
   if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
 
-  const circle = await store.getCircle(params.id);
+  const circle = await store.getCircle(id);
   if (!circle) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (circle.status === "closed" || new Date(circle.ends_at).getTime() < Date.now()) {
     return NextResponse.json({ error: "closed" }, { status: 410 });
   }
 
-  const members = await store.listMembers(params.id);
+  const members = await store.listMembers(id);
   const existing = members.find((m) => m.anon_id === anonId);
   if (existing) {
     return NextResponse.json({ role: existing.role, seats: members.length, rejoined: true });
@@ -196,7 +202,7 @@ export async function POST(request: Request, { params }: Params) {
 
   const role = roleForSeat(members.length);
   await store.addMember({
-    circle_id: params.id,
+    circle_id: id,
     anon_id: anonId,
     role,
     pressure_seeded: pressure != null ? Math.round(pressure) : null,
@@ -222,6 +228,7 @@ const sealSchema = z.object({
  * The two words and a number, no content, nothing anybody said.
  */
 export async function PATCH(request: Request, { params }: Params) {
+  const { id } = await params;
   let json: unknown;
   try {
     json = await request.json();
@@ -236,17 +243,17 @@ export async function PATCH(request: Request, { params }: Params) {
   const store = getStore();
   if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
 
-  const members = await store.listMembers(params.id);
+  const members = await store.listMembers(id);
   const me = members.find((m) => m.anon_id === anonId);
   if (!me) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
 
-  const circle = await store.getCircle(params.id);
+  const circle = await store.getCircle(id);
   const before = me.pressure_seeded;
 
   await logPreference({
     kind: "circle_close",
     anon_id: anonId,
-    circle_id: params.id,
+    circle_id: id,
     tag: circle?.tag ?? null,
     rating: mood,
     tension_before: before,
@@ -264,17 +271,18 @@ export async function PATCH(request: Request, { params }: Params) {
 
 /** The Keeper may end early. Closing deletes every word said. */
 export async function DELETE(request: Request, { params }: Params) {
+  const { id } = await params;
   const anonId = new URL(request.url).searchParams.get("anonId") ?? "";
   const store = getStore();
   if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
 
-  const members = await store.listMembers(params.id);
+  const members = await store.listMembers(id);
   const me = members.find((m) => m.anon_id === anonId);
   if (!me || me.role !== "keeper") {
     return NextResponse.json({ error: "not_keeper" }, { status: 403 });
   }
 
-  await store.closeCircle(params.id);
-  await closeVoiceRoom(params.id);
+  await store.closeCircle(id);
+  await closeVoiceRoom(id);
   return NextResponse.json({ closed: true }, { headers: { "cache-control": "no-store" } });
 }

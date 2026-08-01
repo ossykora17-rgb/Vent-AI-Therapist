@@ -6,11 +6,14 @@ import type { Database } from "@/lib/supabase/types";
 /**
  * Server client for Server Components, Route Handlers and Server Actions.
  * Returns null when Supabase is unconfigured.
+ *
+ * Async since Next 15: `cookies()` returns a promise now, because the request
+ * store is resolved rather than ambient. Every caller awaits it.
  */
-export function createClient() {
+export async function createClient() {
   if (!isSupabaseConfigured) return null;
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   return createServerClient<Database>(env.supabaseUrl, env.supabaseAnonKey, {
     cookies: {
@@ -33,7 +36,7 @@ export function createClient() {
 
 /** The signed-in user, or null. Never throws. */
 export async function getUser() {
-  const supabase = createClient();
+  const supabase = await createClient();
   if (!supabase) return null;
 
   const {

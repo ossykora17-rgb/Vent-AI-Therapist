@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   if (!supabase) redirect("/login?error=not_configured");
 
   const {

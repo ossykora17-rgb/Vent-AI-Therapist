@@ -63,7 +63,7 @@ export async function signIn(
     return { ok: false, fieldErrors: toFieldErrors(parsed.error) };
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   if (!supabase) return NOT_CONFIGURED;
 
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
@@ -92,7 +92,7 @@ export async function signUp(
     return { ok: false, fieldErrors: toFieldErrors(parsed.error) };
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   if (!supabase) return NOT_CONFIGURED;
 
   const { data, error } = await supabase.auth.signUp({
@@ -121,7 +121,7 @@ export async function signUp(
 }
 
 export async function signOut() {
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase?.auth.signOut();
   revalidatePath("/", "layout");
   redirect("/");
