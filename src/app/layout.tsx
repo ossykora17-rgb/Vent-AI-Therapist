@@ -27,6 +27,13 @@ export const metadata: Metadata = {
     "Autonomous AI therapy grounded in real time. Vent, track mood, breathe, journal. Light and dark mode. Nigeria support 0806 210 6493.",
   applicationName: "Mind Weave Vent",
   manifest: "/manifest.webmanifest",
+  // Declared explicitly rather than via app/icon.svg: the file-based
+  // convention claims /icon.svg and collides with the static file the
+  // manifest already points at, which 500s that route in dev.
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icon.svg" }],
+  },
   openGraph: {
     title: "Mind Weave Vent — Truth Anchor",
     description: "Carve your truth. Calm AI support, grounded in reality.",
