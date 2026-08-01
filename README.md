@@ -165,8 +165,10 @@ bug actually shipped here. The date answered as therapy. "It's the same thing
 every week" heard as an insult and answered with an apology. A worksheet where
 a sentence belonged. A witness who could never speak. 121 assertions, about a
 second, no tokens. Give it a base URL and it adds the live room checks — 12
-and 145 — including the one that found a real bug, where a Keeper's early
-close deleted the transcript but the room kept answering `200`.
+checks, and 142 or 145 assertions depending on whether the instance has voice
+keys, because a few of them assert the token's shape. CI runs it both ways.
+One of those live checks found a real bug: a Keeper's early close deleted the
+transcript while the room kept answering `200`.
 
 **`npm run rlhf`** rebuilds preferences from what people actually did. A
 rating carries no pointer to what it was for, so the pipeline joins it to the
