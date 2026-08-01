@@ -32,11 +32,28 @@ const post = (path, body) =>
 const vent = (message, extra = {}) =>
   post("/api/vent", { anonId: ANON, message, ...extra });
 
+/**
+ * A proxy or captive portal answers with plain text, not JSON, and the raw
+ * "Unexpected token 'H'" that causes tells you nothing. Say what happened.
+ */
+async function json(res, what) {
+  const body = await res.text();
+  try {
+    return JSON.parse(body);
+  } catch {
+    const head = body.slice(0, 120).replace(/\s+/g, " ");
+    throw new Error(
+      `${what} returned ${res.status} and this is not JSON — something between ` +
+        `you and the app answered instead (proxy, VPN, or wrong URL): "${head}"`,
+    );
+  }
+}
+
 async function main() {
   console.log(`Verifying ${BASE}\nanonId: ${ANON}\n`);
 
   // 0 — is it even up, and which keys are wired?
-  const health = await fetch(`${BASE}/api/health`).then((r) => r.json());
+  const health = await json(await fetch(`${BASE}/api/health`), "/api/health");
   console.log("health:", JSON.stringify(health.services), "db:", health.database, "\n");
   const hasDb = health.services?.supabase === true;
   const hasAi = health.services?.anthropic === true;
