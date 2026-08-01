@@ -53,12 +53,19 @@ function sign(payload: Record<string, unknown>, secret: string): string {
   return `${header}.${body}.${signature}`;
 }
 
+/**
+ * One place decides what a circle's room is called. The token mints it and
+ * the mute route resolves it; two spellings would mean a Keeper pressing mute
+ * on a room nobody is in.
+ */
+export const roomNameFor = (circleId: string) => `circle-${circleId}`;
+
 export function mintVoiceToken(grant: VoiceGrant): VoiceToken | null {
   if (!isLivekitConfigured) return null;
 
   const now = Math.floor(Date.now() / 1000);
   const ttl = grant.ttlSeconds ?? CIRCLE_MINUTES * 60 + 300;
-  const room = `circle-${grant.circleId}`;
+  const room = roomNameFor(grant.circleId);
   const identity = `seat-${grant.seat}`;
 
   const token = sign(

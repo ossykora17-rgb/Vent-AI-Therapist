@@ -255,12 +255,45 @@ derives from the circle id so a token cannot be replayed into another circle;
 sitting in a browser. A non-member gets `403`, and with no keys the route
 answers `501` — not broken, not built.
 
-**The browser half is the one dependency**: `livekit-client`, 13 MB on disk
-and 13 packages in the lockfile. Most sessions are text, so it is imported
+**The browser half is the dependency**: `livekit-client`, 13 MB on disk and
+13 packages in the lockfile. Most sessions are text, so it is imported
 *inside the join handler* and nowhere else. Verified in Chromium: the 508 KB
 chunk is absent from the eleven files a room loads, and arrives only after
-somebody clicks **Join voice**. The room page's own bundle went from 5.45 kB
-to 7.07 kB.
+somebody clicks **Join voice**. The room page's own bundle went 5.45 kB →
+7.49 kB across both halves of voice.
+
+### The Keeper's hand on the volume
+
+Every other rule in a circle refuses a *message* — advice, cross-talk, a
+threat — and the person can try again in better words. Voice has no such
+gate: by the time a sentence is wrong it has already been heard. So the
+Keeper gets one control, `POST /api/circles/[id]/voice/mute`, and it is
+bounded on purpose.
+
+**It mutes; it does not remove.** `removeParticipant` exists in
+`livekit-server-sdk` and is deliberately never called — ejecting somebody
+from a room they came to for support is not moderation, it is abandonment.
+It is reversible by the same person in the same request shape.
+
+**It is never silent.** The SFU tells the muted client, the client says so in
+words — *"The Keeper closed your microphone. The room is still here in
+text."* — and the Keeper's own confirmation says *"they were told."* A circle
+whose entire promise is being heard cannot take a voice away quietly; that
+would be the worst lie in the building.
+
+`roomAdmin` is in the Keeper's token, but a token is a claim the client
+holds, so the authority is re-checked against the store on every call:
+
+| Caller | Result |
+| --- | --- |
+| Keeper → another seat | reaches the SFU |
+| Any other member | `403 not_keeper` |
+| Non-member | `403 not_a_member` |
+| Keeper → itself | `422` — "Your own microphone is the Mute button." |
+| Keeper → an empty seat | `404 no_such_seat` |
+
+`livekit-server-sdk` is the second dependency, 2 packages and 2.8 MB, and it
+is imported only in that route — it never reaches a browser bundle.
 
 Speaking is the presence signal that matters here. The dots in the header
 prove somebody is in the room; a lit ring on a seat proves somebody is
@@ -439,9 +472,10 @@ is for: the pattern the room actually voiced — *"I heard chest 3 times, tight
 3 times, small 2 times."* Counted from the real shares, written once, no model
 call. It cannot invent a pattern nobody said.
 
-Apply `supabase/migrations/0003_circles.sql` and `0004_circle_member_pressure.sql`
-for the cloud path — both are re-runnable like the others. Locally, circles
-live in the same `.data/vent.json` and survive restarts.
+Apply `0003_circles.sql`, `0004_circle_member_pressure.sql` and
+`0005_circle_presence.sql` for the cloud path — all re-runnable like the
+others. Locally, circles live in the same `.data/vent.json` and survive
+restarts.
 
 ## Offline
 

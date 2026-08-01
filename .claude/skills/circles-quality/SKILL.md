@@ -121,9 +121,24 @@ Identity is `seat-N`, derived server-side from join order. A client that could
 name its own seat could name somebody else's, so the request carries only the
 `anonId` and the route looks up the index.
 
-Muting *other people* needs `livekit-server-sdk` (`RoomServiceClient`) — a
-second dependency, not yet taken. The Keeper's `roomAdmin` grant is already in
-the token, so that work is a route away when it is wanted.
+Muting other people is `POST /api/circles/[id]/voice/mute`, the only place
+`livekit-server-sdk` is imported. Three rules hold it:
+
+1. **Mute, never remove.** `removeParticipant` is in that SDK and is
+   deliberately never called. Ejecting somebody from a room they came to for
+   support is abandonment, not moderation.
+2. **Never silent.** The SFU raises `TrackMuted` on the muted client and the
+   component says so in words. A quiet mute in a room whose promise is being
+   heard would be the worst lie in the product. If you touch this, keep the
+   notice.
+3. **Authority is re-checked server-side.** `roomAdmin` lives in the Keeper's
+   token, but a token is a claim the client holds — the route reads the role
+   from the store on every call. Non-Keeper 403, non-member 403, self 422,
+   empty seat 404.
+
+Use the SDK's `TrackType` / `TrackSource` enums, never the integers.
+`TrackType.AUDIO` is **0** and `VIDEO` is 1, so a hand-written `=== 1` mutes
+the one thing this room can never publish and leaves the microphone open.
 
 ## Scoring a Keeper
 

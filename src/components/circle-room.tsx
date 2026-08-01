@@ -457,7 +457,12 @@ export function CircleRoom({ id }: { id: string }) {
 
             {/* Voice sits above the transcript, below the intention: it is a
                 way of being in this room, not a feature bolted to the side. */}
-            <CircleVoice circleId={id} anonId={me} enabled={Boolean(state.voice)} />
+            <CircleVoice
+              circleId={id}
+              anonId={me}
+              enabled={Boolean(state.voice)}
+              keeper={state.role === "keeper"}
+            />
 
             {messages.length === 0 && (
               <p className="mt-4 text-center text-sm text-ash">

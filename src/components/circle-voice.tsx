@@ -28,15 +28,19 @@ interface Props {
   anonId: string;
   /** The server says whether voice exists at all. No keys, no button. */
   enabled: boolean;
+  /** Only a Keeper is shown the room's volume. The server checks it again. */
+  keeper: boolean;
 }
 
-export function CircleVoice({ circleId, anonId, enabled }: Props) {
+export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
   const [status, setStatus] = React.useState<Status>("idle");
   const [error, setError] = React.useState<string | null>(null);
   const [muted, setMuted] = React.useState(false);
   const [seat, setSeat] = React.useState<string | null>(null);
   const [voices, setVoices] = React.useState<string[]>([]);
   const [speaking, setSpeaking] = React.useState<string[]>([]);
+  const [notice, setNotice] = React.useState<string | null>(null);
+  const [working, setWorking] = React.useState<string | null>(null);
 
   const roomRef = React.useRef<Room | null>(null);
   const sinkRef = React.useRef<HTMLDivElement>(null);
@@ -98,6 +102,20 @@ export function CircleVoice({ circleId, anonId, enabled }: Props) {
         })
         .on(RoomEvent.ParticipantConnected, () => setVoices(identities(room)))
         .on(RoomEvent.ParticipantDisconnected, () => setVoices(identities(room)))
+        .on(RoomEvent.TrackMuted, (_pub, participant: Participant) => {
+          // Told, never silently silenced. If the Keeper closed your
+          // microphone you find out from the room, not from being ignored.
+          if (participant.identity === grant.identity) {
+            setMuted(true);
+            setNotice("The Keeper closed your microphone. The room is still here in text.");
+          }
+        })
+        .on(RoomEvent.TrackUnmuted, (_pub, participant: Participant) => {
+          if (participant.identity === grant.identity) {
+            setMuted(false);
+            setNotice("Your microphone is open again.");
+          }
+        })
         .on(RoomEvent.Disconnected, () => {
           roomRef.current = null;
           setStatus("idle");
@@ -123,6 +141,33 @@ export function CircleVoice({ circleId, anonId, enabled }: Props) {
       );
       setStatus("error");
       roomRef.current = null;
+    }
+  }
+
+  /**
+   * The Keeper's one control over somebody else's voice. It mutes, it never
+   * removes — ejecting a person from a room they came to for support is not
+   * moderation. And it is the same request to undo.
+   */
+  async function muteSeat(identity: string, next: boolean) {
+    const seat = Number(identity.replace("seat-", ""));
+    setWorking(identity);
+    try {
+      const r = await fetch(`/api/circles/${circleId}/voice/mute`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ anonId, seat, muted: next }),
+      });
+      const d = await r.json();
+      setNotice(
+        r.ok
+          ? `${identity} ${next ? "muted" : "unmuted"}. They were told.`
+          : d.message ?? "That didn't go through.",
+      );
+    } catch {
+      setNotice("That didn't go through.");
+    } finally {
+      setWorking(null);
     }
   }
 
@@ -183,17 +228,30 @@ export function CircleVoice({ circleId, anonId, enabled }: Props) {
             <li
               key={id}
               className={cn(
-                "label-mono rounded-full border px-3 py-1 transition-colors duration-300",
+                "label-mono flex items-center gap-2 rounded-full border px-3 py-1 transition-colors duration-300",
                 speaking.includes(id) ? "border-ink text-ink" : "border-line/15 text-ash",
               )}
             >
-              {id === seat ? `${id} (you)` : id}
-              {speaking.includes(id) ? " · speaking" : ""}
+              <span>
+                {id === seat ? `${id} (you)` : id}
+                {speaking.includes(id) ? " · speaking" : ""}
+              </span>
+              {keeper && id !== seat && (
+                <button
+                  type="button"
+                  onClick={() => muteSeat(id, true)}
+                  disabled={working === id}
+                  className="underline underline-offset-2 disabled:opacity-50"
+                >
+                  {working === id ? "…" : "mute"}
+                </button>
+              )}
             </li>
           ))}
         </ul>
       )}
 
+      {notice && <p className="mt-3 text-sm text-ash" aria-live="polite">{notice}</p>}
       {error && <p className="mt-3 text-sm text-ash">{error}</p>}
 
       {/* Audio elements land here. Hidden, but in the DOM — a detached element
