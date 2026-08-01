@@ -55,12 +55,20 @@ const LOOPABLE = {
     skill: "circles-quality",
     why: "a tag's room is not coming down — the opening line is in the tactic library, so it is fixable",
   },
+  external_stale: {
+    repeats: true, verifiable: true, bounded: true, reproducible: true,
+    skill: "data-quality",
+    why: "a cached upstream reading has aged out — refetch, or the room says nothing at all",
+  },
   tone: {
     repeats: true, verifiable: false, bounded: false, reproducible: true,
     skill: null,
     why: "warmth is taste, and a gate cannot measure it — this is the thing you read yourself",
   },
 };
+
+/** How long each external reading stays true. Mirrors `sources.ts`. */
+const EXTERNAL_TTL = { economy: 60 * 60 * 1000, jobs: 86_400_000, quote: 86_400_000 };
 
 const nowIso = () => new Date().toISOString();
 
@@ -149,6 +157,25 @@ for (const [tag, drops] of byTag) {
   if (score < 4) {
     findings.push({
       kind: "keeper_losing", tag, detail: `mean drop ${(drops.reduce((a, b) => a + b, 0) / drops.length).toFixed(1)} points over ${drops.length} circles (score ${score.toFixed(2)})`,
+      at: nowIso(),
+    });
+  }
+}
+
+/**
+ * The outside world, and whether what we hold of it is still true. Nothing is
+ * ever served past its TTL, so a stale entry is not a wrong number on a
+ * screen — it is a sentence the room is about to stop saying.
+ */
+const external = readJson(path.join(DATA_DIR, "external.json"), {});
+for (const [key, entry] of Object.entries(external)) {
+  const ttl = EXTERNAL_TTL[key];
+  if (!ttl) continue;
+  const age = Date.now() - new Date(entry.fetched_at).getTime();
+  if (age >= ttl) {
+    findings.push({
+      kind: "external_stale", tag: key,
+      detail: `${key} from ${entry.source} is ${Math.round(age / 60000)} min old (ttl ${Math.round(ttl / 60000)} min)`,
       at: nowIso(),
     });
   }

@@ -3,9 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { getStore } from "@/lib/store";
 import {
   isAnthropicConfigured,
+  isLivekitConfigured,
   isPaystackConfigured,
+  isPerspectiveConfigured,
   isSupabaseConfigured,
 } from "@/lib/env";
+import { inventory } from "@/lib/external/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +39,8 @@ export async function GET() {
     supabase: isSupabaseConfigured,
     anthropic: isAnthropicConfigured,
     paystack: isPaystackConfigured,
+    perspective: isPerspectiveConfigured,
+    livekit: isLivekitConfigured,
   };
 
   return NextResponse.json(
@@ -45,6 +50,14 @@ export async function GET() {
       storage: store?.kind ?? "none",
       persisting: Boolean(store),
       services,
+      // What the outside world last told us, and how long ago. Nothing is
+      // served past its TTL, so an old entry here means "we asked and the
+      // answer has expired", never "this is what we are showing people".
+      external: inventory().map((e) => ({
+        key: e.key,
+        source: e.source,
+        ageSeconds: Math.round(e.ageMs / 1000),
+      })),
       commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
       timestamp: new Date().toISOString(),
     },

@@ -185,6 +185,71 @@ vents and never belongs in a repository.
 so both pipelines can be exercised end to end without touching anybody's
 words. It is what eval check 10 runs against.
 
+## The outside world
+
+Four narrow windows, all fetched server-side, all with the same rule: **the
+product never shows a number it did not fetch.** Every failure returns `null`
+and the sentence is simply absent. Silence beats a guess is already how
+flavour works below its confidence floor; this is that rule applied to money.
+
+| Source | Where it lands | Cache | Without it |
+| --- | --- | --- | --- |
+| Perspective | The Guardian, on every circle message | none | local rules still run |
+| exchangerate.host | The Keeper's economy opening | 1 hour | no number in the line |
+| Arbeitnow | `rw_ai_job` — three people currently paying | 1 day | the tactic as it was |
+| stoic-quotes.com | The Closing, after the carry/drop door | 1 day | no quote |
+
+**The Guardian is the one that had to exist.** The keyword list catches "I
+want to die". It does not catch *"you are useless and everybody here knows
+it"*, which is the line that actually ends a circle. Perspective scores the
+paraphrase. Thresholds: threat 0.7, insult 0.8, toxicity 0.8 — a threat
+crosses lowest because it is the thing a room cannot survive, and toxicity
+sits highest because the score is noisy on plain distress. *"I feel
+disgusting"* reads as toxic to a classifier and is exactly what somebody
+should be able to say here; it scores 0.62 and goes through.
+
+It is **fail-open by construction**. An unreachable classifier returns `null`
+and the verdict passes. A network blip silencing a room of people trying to
+speak is a worse failure than one rude line a Keeper can still mute, and every
+message has already passed the crisis check and the no-advice rules, which are
+local, free and never down.
+
+The text goes out; nothing identifying it does — no `anon_id`, no circle id,
+no session. The browser never talks to any of these hosts, which is also why
+there is no CORS problem to work around.
+
+**Counted, not generated.** The economy room opens with:
+
+> Today we hold the money choke. **The dollar is ₦1,605 today — that is the
+> number, not a mood.** Hold one thing you can control today, down to ten
+> naira. Not the whole market. No fixing, no advice — just say it.
+
+The real number lands *before* the move, which is the order a person needs it
+in. With no rate, the middle sentence is absent and the rest is unchanged —
+the Keeper has never guessed a number and this is not where it starts.
+
+`scripts/fixtures/external/` holds recorded upstream **shapes** for the eval
+suite and for networks where these hosts are blocked. Point
+`VENT_EXTERNAL_FIXTURE` at it to run the integrations offline. Nothing in a
+deployment sets that variable, and the recorded classifier keys on content —
+a fixture that returned one canned score for every sentence would block a
+whole room and hide the bug rather than catch it.
+
+## Voice — Phase 1, half built
+
+A LiveKit access token is a JWT signed HS256, and Node has HMAC in the
+standard library, so `POST /api/circles/[id]/voice` mints one with **no
+dependency**. It is seat-scoped: the identity is `seat-4`, never the
+`anon_id`; the room name derives from the circle id so a token cannot be
+replayed elsewhere; the grant is microphone-only with `roomAdmin` for the
+Keeper alone; and it expires with the circle rather than sitting in a browser.
+
+What is **not** built is the browser half. WebRTC against an SFU needs
+`livekit-client`, and there is no zero-dependency path to it. This file ends
+at that boundary on purpose — it is one dependency and a decision, not
+something to improvise past. Without keys the route answers `501`: not broken,
+not built yet.
+
 ## The loop
 
 One automation, one state file, one objective gate. That is the whole thing;
@@ -274,6 +339,11 @@ row. Rate limits: 10 vents/minute, 100/day, 5 feedback ratings/hour.
 | `GET`·`POST /api/circles` | Open circles with seat counts / open one |
 | `GET`·`POST`·`DELETE /api/circles/[id]` | Room state / take a seat / Keeper ends it |
 | `PATCH /api/circles/[id]` | Seal: the closing number and two words, no transcript |
+| `POST /api/circles/[id]/voice` | Seat-scoped LiveKit token (501 until keys exist) |
+| `POST /api/external/guardian/score` | Toxicity / insult / threat on one string |
+| `GET /api/external/economy/context` | Today's USD→NGN, cached an hour |
+| `GET /api/external/jobs/context` | Three real remote jobs, cached a day |
+| `GET /api/external/quote/context` | One Stoic line, for the Closing only |
 | `GET`·`POST /api/circles/[id]/messages` | Read the room / speak in it |
 
 ## Circles — peer support, Phase 0

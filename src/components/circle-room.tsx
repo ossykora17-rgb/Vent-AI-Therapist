@@ -58,6 +58,7 @@ export function CircleRoom({ id }: { id: string }) {
   const [mood, setMood] = React.useState<number | null>(null);
   const [carry, setCarry] = React.useState<string | null>(null);
   const [dropped, setDropped] = React.useState<string | null>(null);
+  const [quote, setQuote] = React.useState<{ text: string; author: string } | null>(null);
   const endRef = React.useRef<HTMLDivElement>(null);
   /**
    * Read by the poll, not by the render. Putting the draft in `load`'s deps
@@ -92,6 +93,22 @@ export function CircleRoom({ id }: { id: string }) {
   React.useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length]);
+
+  /**
+   * One Stoic line, fetched once, and only at the door. A quote in the middle
+   * of a vent is the wellness reflex this product exists to avoid; next to
+   * "what do you carry" it rhymes with the tactic library's own move. If the
+   * fetch fails there is simply no quote — never a stock one.
+   */
+  React.useEffect(() => {
+    if (state?.phase !== "close" || quote) return;
+    let live = true;
+    void fetch("/api/external/quote/context")
+      .then((r) => r.json())
+      .then((d) => { if (live && d.available) setQuote({ text: d.text, author: d.author }); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [state?.phase, quote]);
 
   async function join() {
     setBusy(true);
@@ -146,7 +163,12 @@ export function CircleRoom({ id }: { id: string }) {
       });
       const d = await r.json();
       if (r.status === 409 && d.error === "crisis") { setCrisis(true); return; }
-      if (r.status === 422 && d.error === "rule") { setRuleError(d.message); return; }
+      // A rule refusal and a Guardian refusal read the same to a person: the
+      // line does not go in, and here is why, in words they can act on.
+      if (r.status === 422 && (d.error === "rule" || d.error === "guardian")) {
+        setRuleError(d.message);
+        return;
+      }
       if (!r.ok) { toast("Couldn't send that.", "error"); return; }
       setDraft("");
       setReflecting(false);
@@ -398,10 +420,20 @@ export function CircleRoom({ id }: { id: string }) {
                     </div>
 
                     {dropped && (
-                      <p className="mt-4 text-[15px] leading-[1.6]">
-                        You carry {carry ?? "what you came with"}. You drop{" "}
-                        {dropped}. The words in this room go with it.
-                      </p>
+                      <>
+                        <p className="mt-4 text-[15px] leading-[1.6]">
+                          You carry {carry ?? "what you came with"}. You drop{" "}
+                          {dropped}. The words in this room go with it.
+                        </p>
+                        {quote && (
+                          <figure className="mt-4 border-l-2 border-line/20 pl-3">
+                            <blockquote className="text-[15px] italic leading-[1.6] text-ash">
+                              {quote.text}
+                            </blockquote>
+                            <figcaption className="label-mono mt-1">{quote.author}</figcaption>
+                          </figure>
+                        )}
+                      </>
                     )}
                   </>
                 )}

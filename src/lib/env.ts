@@ -12,6 +12,14 @@ export const env = {
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
   paystackSecretKey: process.env.PAYSTACK_SECRET_KEY ?? "",
+  /** Perspective — the Guardian's second opinion on a message. */
+  perspectiveApiKey: process.env.PERSPECTIVE_API_KEY ?? "",
+  /** Sugra — commodities and market data. Optional; the rate works without it. */
+  sugraApiKey: process.env.SUGRA_API_KEY ?? "",
+  /** LiveKit — Phase 1 voice. Server half only until the client lands. */
+  livekitUrl: process.env.LIVEKIT_URL ?? "",
+  livekitApiKey: process.env.LIVEKIT_API_KEY ?? "",
+  livekitApiSecret: process.env.LIVEKIT_API_SECRET ?? "",
   paystackPublicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY ?? "",
   siteUrl:
     process.env.NEXT_PUBLIC_SITE_URL ||
@@ -24,6 +32,10 @@ export const isSupabaseConfigured = Boolean(
 );
 
 export const isAnthropicConfigured = Boolean(env.anthropicApiKey);
+export const isPerspectiveConfigured = Boolean(env.perspectiveApiKey);
+export const isLivekitConfigured = Boolean(
+  env.livekitUrl && env.livekitApiKey && env.livekitApiSecret,
+);
 export const isPaystackConfigured = Boolean(
   env.paystackSecretKey && env.paystackPublicKey,
 );

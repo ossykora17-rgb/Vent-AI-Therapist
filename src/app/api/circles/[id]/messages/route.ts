@@ -3,6 +3,8 @@ import { z } from "zod";
 import { getStore } from "@/lib/store";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { checkMessage } from "@/lib/circles/rules";
+import { scoreToxicity } from "@/lib/external/sources";
+import { guardianVerdict } from "@/lib/external/guardian";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +95,19 @@ export async function POST(request: Request, { params }: Params) {
   if (!verdict.ok) {
     return NextResponse.json(
       { error: "rule", message: verdict.reason },
+      { status: 422, headers: { "cache-control": "no-store" } },
+    );
+  }
+
+  // ── Guardian, second opinion. The rules above catch the phrasings we know
+  // — "you should", "your fault". They do not catch "you are useless and
+  // everybody here knows it", which is the line that actually ends a room.
+  // Fail-open by construction: an unreachable classifier returns null and
+  // `guardianVerdict` passes, so a network blip can never mute a circle. ───
+  const guardian = guardianVerdict(await scoreToxicity(content));
+  if (guardian.block) {
+    return NextResponse.json(
+      { error: "guardian", message: guardian.message, reason: guardian.reason },
       { status: 422, headers: { "cache-control": "no-store" } },
     );
   }

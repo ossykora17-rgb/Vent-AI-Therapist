@@ -5,8 +5,9 @@ import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { tensionDrop, tensionNow } from "@/lib/vent/chairs";
 import { logPreference } from "@/lib/rlhf/log";
 import { presenceOf, shouldTouch } from "@/lib/circles/presence";
+import { economyContext } from "@/lib/external/sources";
 import {
-  MAX_SEATS, PHASE_LABEL, keeperIntention, keeperReflection,
+  MAX_SEATS, PHASE_LABEL, economyFact, keeperIntention, keeperReflection,
   phaseFor, roleForSeat,
 } from "@/lib/circles/rules";
 
@@ -60,6 +61,13 @@ export async function GET(request: Request, { params }: Params) {
     me = members.find((m) => m.anon_id === anonId) ?? null;
   }
 
+  // One fetched number, and only for the room it belongs to. Cached an hour,
+  // three-second timeout, and `null` when the rate is not known — in which
+  // case the sentence is absent rather than approximated.
+  const rate = circle.tag === "economy" ? await economyContext() : null;
+  const counted = rate ? economyFact(rate.value.usdNgn) : null;
+  const intention = keeperIntention(circle.tag, counted);
+
   // The Keeper speaks exactly twice, and each line is selected rather than
   // generated: the tag's own tool at minute three, the room's own counted
   // words at thirty-eight. The two are guarded separately by author, so one
@@ -75,7 +83,7 @@ export async function GET(request: Request, { params }: Params) {
       await store.addCircleMessage({
         circle_id: params.id,
         anon_id: KEEPER_OPEN,
-        content: keeperIntention(circle.tag),
+        content: intention,
         kind: "keeper_prompt",
         flagged: false,
       });
@@ -111,7 +119,8 @@ export async function GET(request: Request, { params }: Params) {
       ...presenceOf(members, anonId),
       role: me?.role ?? null,
       joined: Boolean(me),
-      intention: keeperIntention(circle.tag),
+      intention,
+      counted,
       phase,
       phaseLabel: PHASE_LABEL[phase],
       // Their chair, not the room's. Falling back to the circle's seed would

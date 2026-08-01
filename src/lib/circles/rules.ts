@@ -123,12 +123,28 @@ const OPENING: Record<string, string> = {
 };
 
 /**
+ * One fetched number, said plainly. Never estimated, never rounded to a
+ * feeling — the caller passes it only when a real rate came back, and passes
+ * nothing at all when it did not.
+ */
+export function economyFact(usdNgn: number): string {
+  return `The dollar is ₦${usdNgn.toLocaleString("en-NG")} today — that is the number, not a mood.`;
+}
+
+/**
  * What the Keeper reads at minute three. The second sentence is the tactic
  * library's own tool for that pressure, in its room-facing phrasing — so the
  * open is drawn from the same place as a private session's, rather than a
  * second table that drifts away from it. Selected, never generated.
+ *
+ * `counted` is an optional fact that was actually fetched — today's rate, and
+ * nothing else. It sits between the opening and the tool because that is the
+ * order a person needs it in: here is the room, here is the real number, here
+ * is the one thing you can still do about it. When the fetch failed the
+ * sentence is simply absent; the Keeper has never once guessed a number and
+ * this is not where it starts.
  */
-export function keeperIntention(tag: string | null): string {
+export function keeperIntention(tag: string | null, counted?: string | null): string {
   const opening = OPENING[tag ?? ""] ?? "Today we hold whatever is heaviest.";
 
   const tool =
@@ -136,9 +152,9 @@ export function keeperIntention(tag: string | null): string {
       ? REAL_WORLD_TACTIC[tag as keyof typeof REAL_WORLD_TACTIC].hold
       : null;
 
-  return tool
-    ? `${opening} ${tool} No fixing, no advice — just say it.`
-    : `${opening} No fixing, no advice — just say it.`;
+  return [opening, counted || null, tool, "No fixing, no advice — just say it."]
+    .filter(Boolean)
+    .join(" ");
 }
 
 export function isExpired(createdAt: string, now = Date.now()): boolean {

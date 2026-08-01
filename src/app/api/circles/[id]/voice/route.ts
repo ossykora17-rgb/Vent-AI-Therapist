@@ -1,0 +1,63 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { getStore } from "@/lib/store";
+import { mintVoiceToken } from "@/lib/voice/livekit";
+import { isLivekitConfigured } from "@/lib/env";
+
+export const dynamic = "force-dynamic";
+
+type Params = { params: { id: string } };
+
+const schema = z.object({ anonId: z.string().min(8).max(64) });
+
+/**
+ * Phase 1 voice, server half. Mints a seat-scoped LiveKit token for a member
+ * of a live circle — and nothing else, because the browser half needs
+ * `livekit-client` and that is a dependency decision, not a detail.
+ *
+ * 501 rather than 500 when the keys are absent: not broken, not built yet.
+ */
+export async function POST(request: Request, { params }: Params) {
+  if (!isLivekitConfigured) {
+    return NextResponse.json(
+      {
+        error: "voice_not_configured",
+        message: "Set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET to open the room's voice.",
+      },
+      { status: 501 },
+    );
+  }
+
+  let json: unknown;
+  try {
+    json = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Malformed body" }, { status: 400 });
+  }
+
+  const parsed = schema.safeParse(json);
+  if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 422 });
+
+  const store = getStore();
+  if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
+
+  const circle = await store.getCircle(params.id);
+  if (!circle) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (circle.status === "closed" || new Date(circle.ends_at).getTime() < Date.now()) {
+    return NextResponse.json({ error: "closed" }, { status: 410 });
+  }
+
+  // Members only, and the seat number is derived here rather than sent — a
+  // client that could name its own seat could name somebody else's.
+  const members = await store.listMembers(params.id);
+  const index = members.findIndex((m) => m.anon_id === parsed.data.anonId);
+  if (index < 0) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
+
+  const token = mintVoiceToken({
+    circleId: params.id,
+    seat: index + 1,
+    keeper: members[index].role === "keeper",
+  });
+
+  return NextResponse.json(token, { headers: { "cache-control": "no-store" } });
+}

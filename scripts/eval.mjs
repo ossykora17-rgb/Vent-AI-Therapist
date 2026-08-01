@@ -1,8 +1,8 @@
 /**
  * Stage 5 — the eval suite. MMLU, but for truth instead of trivia.
  *
- *   node scripts/eval.mjs                          # 10 checks, no server
- *   node scripts/eval.mjs http://localhost:3001    # + 4 live room checks
+ *   node scripts/eval.mjs                          # 11 checks, no server
+ *   node scripts/eval.mjs http://localhost:3001    # + the live room checks
  *
  * A benchmark is only worth anything if it measures the thing that would
  * actually break. Every check below is a bug this product has really shipped:
@@ -25,10 +25,11 @@ const { buildFlavour } = await app("src/lib/flavour/profile.ts");
 const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/vent/chairs.ts");
 const { selectMemory } = await app("src/lib/vent/memory.ts");
-const { checkMessage, keeperIntention, keeperReflection, roleForSeat } =
+const { checkMessage, economyFact, keeperIntention, keeperReflection, roleForSeat } =
   await app("src/lib/circles/rules.ts");
 const { PRESENCE_WINDOW_MS, TYPING_WINDOW_MS, isPresent, isTyping, presenceOf, shouldTouch } =
   await app("src/lib/circles/presence.ts");
+const { guardianVerdict, THRESHOLD } = await app("src/lib/external/guardian.ts");
 
 const BASE = (process.argv[2] || "").replace(/\/$/, "");
 
@@ -370,6 +371,43 @@ check("10 The pipelines filter, dedup, reweight and score preferences", () => {
   fs.rmSync(out, { recursive: true, force: true });
 });
 
+// ── 11. the outside world, and what happens when it is not there ──────────
+check("11 External data is counted, and silent when it is not known", () => {
+  // The Keeper never guesses a number. With no rate, the sentence is absent —
+  // not rounded, not "about", not last week's.
+  const bare = keeperIntention("economy");
+  ok(!/\d/.test(bare.replace("ten naira", "")), "no rate means no number at all", bare);
+  ok(bare.includes(REAL_WORLD_TACTIC.economy.hold), "and the tool is still there");
+
+  const withRate = keeperIntention("economy", economyFact(1605));
+  ok(withRate.includes("₦1,605"), "a fetched rate is said exactly", withRate);
+  ok(withRate.includes(REAL_WORLD_TACTIC.economy.hold),
+    "and it never displaces the thing they can act on");
+  ok(withRate.indexOf("₦1,605") < withRate.indexOf(REAL_WORLD_TACTIC.economy.hold),
+    "the real number lands before the move, which is the order a person needs");
+
+  // The Guardian. Fail-open is the whole design: a classifier that did not
+  // answer must never become a mute button on a room of people trying to talk.
+  is(guardianVerdict(null).block, false, "no score is a pass, never a block");
+  is(guardianVerdict({ toxicity: 0.1, insult: 0.05, threat: 0.01 }).block, false,
+    "an ordinary line goes through");
+
+  const rude = guardianVerdict({ toxicity: 0.93, insult: 0.88, threat: 0.12 });
+  is(rude.block, true, "a personal attack is refused");
+  is(rude.reason, "insult", "and named as what it is");
+  ok(/no fixing, no advice/i.test(rude.message ?? ""), "in the room's own words", rude.message);
+
+  const menace = guardianVerdict({ toxicity: 0.5, insult: 0.2, threat: 0.75 });
+  is(menace.reason, "threat", "a threat crosses on a lower bar than an insult");
+  ok(THRESHOLD.threat < THRESHOLD.toxicity,
+    "because a threat is the thing a room cannot survive");
+
+  // Distress must not read as abuse. This is the failure mode that would
+  // silence exactly the person the product is for.
+  is(guardianVerdict({ toxicity: 0.62, insult: 0.3, threat: 0.02 }).block, false,
+    "'I feel disgusting' scores high and is still allowed to be said");
+});
+
 // ── live: the four things only a running room can prove ────────────────────
 if (BASE) {
   const post = (p, body, method = "POST") =>
@@ -379,7 +417,7 @@ if (BASE) {
       body: JSON.stringify(body),
     });
 
-  await checkAsync("11 A Keeper does not speak to an empty room", async () => {
+  await checkAsync("12 A Keeper does not speak to an empty room", async () => {
     const one = `eval-${Date.now()}-a`;
     const { circle } = await post("/api/circles", {
       anonId: one, tag: "family", chairPicked: "tight_edge", pressure: 78,

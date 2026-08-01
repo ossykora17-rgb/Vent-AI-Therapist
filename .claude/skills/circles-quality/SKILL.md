@@ -75,6 +75,20 @@ as a private session. Choosing the dropped word seals it: the number, the drop
 and the two words go to `.data/rlhf.jsonl` via `PATCH /api/circles/[id]`, and
 **nothing else does** — not one line of what anybody said.
 
+## The Guardian
+
+`checkMessage` catches the phrasings we wrote down. Perspective catches the
+paraphrase — "you are useless and everybody here knows it" — and it is a
+**second** opinion, never the only one. `guardianVerdict(null)` passes, so an
+unreachable classifier can never mute a room; the local rules always ran and
+always will. Thresholds live in `src/lib/external/guardian.ts`: threat 0.7,
+insult 0.8, toxicity 0.8. Toxicity sits highest because the score is noisy on
+plain distress, and "I feel disgusting" must stay sayable here.
+
+If a refusal reads wrong, tune the threshold in that one file and add the
+sentence to `scripts/fixtures/external/perspective.json` so the eval suite
+holds the new line. Never add a keyword list beside `ADVICE` — two lists drift.
+
 ## Presence
 
 `src/lib/circles/presence.ts`. Derived from two timestamps, never stored as an
