@@ -126,6 +126,65 @@ Verify it without installing a test runner:
 node --experimental-strip-types scripts/tactics.test.mts
 ```
 
+## Data, evals, preferences
+
+The interesting part of a language model was never the architecture. It was
+the data pipeline, the evals, and the preference loop — and a product has all
+three whether or not anybody has written them down. These three scripts write
+them down. Zero dependencies, zero model calls, and each one imports the app's
+own modules rather than a second copy of them, because a copy drifts and then
+the suite passes while the product regresses.
+
+```bash
+npm run data     # store → data/sft.jsonl + data/eval.jsonl
+npm run eval     # 10 checks, no server; pass a URL for 4 more
+npm run rlhf     # ratings → data/dpo.jsonl, and what is losing
+```
+
+**`npm run data`** walks the local store the way a pretraining pipeline walks
+a crawl. Extract — the chair, body, pressure, tag and flavour go in as tokens
+(`[CHAIR:tight_edge] [BODY:chest] [PRESSURE:82] [TAG:economy] [MEM:4]`) so the
+structure is structure and the prose stays the person's own words. Dedup —
+exact, then near-dup by Jaccard over the vent *and* its reply, because the
+same sentence answered differently is two data points. Filter — greetings and
+date questions are not vents, and the key-less "I'm running without my model
+key" apology is never a completion. Reweight — economy 40%, japa 30%, family
+20%, expressed as a per-record weight rather than by duplicating rows.
+
+Two lines it does not cross: **circle transcripts are never training data**
+(confidentiality is a deletion policy, and a training set is the opposite of
+deletion — circles are counted, never quoted), and **a reply the circle rules
+would refuse is not a reply worth training on**, so `checkMessage` runs over
+every candidate completion as a quality filter.
+
+**`npm run eval`** is MMLU for this product: ten checks, every one of them a
+bug actually shipped here. The date answered as therapy. "It's the same thing
+every week" heard as an insult and answered with an apology. A worksheet where
+a sentence belonged. A witness who could never speak. 100 assertions, about a
+second, no tokens. Give it a base URL and it adds four live room checks —
+including the one that found the bug in this commit, where a Keeper's early
+close deleted the transcript but the room kept answering `200`.
+
+**`npm run rlhf`** rebuilds preferences from what people actually did. A
+rating carries no pointer to what it was for, so the pipeline joins it to the
+last real reply that person saw and refuses to guess when there isn't one.
+Pairs are built *inside* a domain — comparing across domains would teach it
+that money beats family, which is a topic and not a preference. Any tactic
+averaging below 4.0 over two or more ratings is written out as a negative
+sample, and the Keeper is scored on the drop rather than the mood, because
+somebody leaving a family circle at 7/10 after arriving at 78 points of
+pressure had a good night.
+
+Ratings land in `.data/rlhf.jsonl` — append-only, local-only. Serverless disks
+are thrown away, so writing preference data in production would be collecting
+something guaranteed to be lost; it writes where a disk is real and no-ops
+elsewhere rather than pretending. `data/` is gitignored: it is built from real
+vents and never belongs in a repository.
+
+`scripts/fixtures/` is a synthetic store — invented vents, invented ratings —
+so both pipelines can be exercised end to end without touching anybody's
+words. It is what eval check 10 runs against.
+
 ## Data and privacy
 
 RLS is on with **no public policies** — the browser-facing anon key can read
@@ -148,6 +207,7 @@ row. Rate limits: 10 vents/minute, 100/day, 5 feedback ratings/hour.
 | `GET /api/health` | Which integrations are wired, and is the DB reachable |
 | `GET`·`POST /api/circles` | Open circles with seat counts / open one |
 | `GET`·`POST`·`DELETE /api/circles/[id]` | Room state / take a seat / Keeper ends it |
+| `PATCH /api/circles/[id]` | Seal: the closing number and two words, no transcript |
 | `GET`·`POST /api/circles/[id]/messages` | Read the room / speak in it |
 
 ## Circles — peer support, Phase 0
@@ -187,7 +247,13 @@ The last two minutes measure something. Rate how you feel 1–10 and the Closing
 shows the drop from the pressure you seeded when you took your chair — **your**
 chair, not the room's, since falling back to the circle's seed would show a
 joiner somebody else's starting point. Then one word to carry and one to drop.
-Nothing is written to a model; it is the arithmetic of two numbers you gave.
+Nothing is written to a model; it is the arithmetic of two numbers you gave,
+and the numbers come from `src/lib/vent/chairs.ts`, which is now the only
+place that knows Tight edge reads 78 — it used to be four places.
+
+Choosing the word you drop seals the circle: the number, the drop and the two
+words go to the preference log, and nothing else does. Not a line of what
+anybody said. It is the only thing that leaves a room.
 
 The Keeper speaks exactly twice, and both lines are selected rather than
 generated. It waits for a second person first — the creator is a member, so

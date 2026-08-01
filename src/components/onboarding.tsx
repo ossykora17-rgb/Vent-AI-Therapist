@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { anonId } from "@/lib/anon";
+import { CHAIRS, CHAIR_TENSION, type ChairId } from "@/lib/vent/chairs";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 const DONE_KEY = "mw-onboarded";
 
-type Chair = "tight_edge" | "sunk" | "half_off";
+type Chair = ChairId;
 type Obj =
   | "heavy_stone"
   | "tight_knot"
@@ -20,12 +21,6 @@ type Obj =
   | "empty_bowl"
   | "spinning_top"
   | "cold_block";
-
-const CHAIRS: Array<[Chair, string, string]> = [
-  ["tight_edge", "Tight edge", "Perched. Ready to leave."],
-  ["sunk", "Sunk in", "Heavy. Not moving."],
-  ["half_off", "Half off", "One foot out the door."],
-];
 
 const OBJECTS: Array<[Obj, string]> = [
   ["heavy_stone", "Heavy stone"],
@@ -46,12 +41,6 @@ export interface OnboardingResult {
   /** Chair maps to an opening tension reading, 0–100. */
   tension: number;
 }
-
-const CHAIR_TENSION: Record<Chair, number> = {
-  tight_edge: 78,
-  sunk: 62,
-  half_off: 55,
-};
 
 export function hasOnboarded(): boolean {
   try {
@@ -117,7 +106,7 @@ export function Onboarding({
               In my office, you pick where you sit. Which chair is you today?
             </h2>
             <div className="mt-5 space-y-2">
-              {CHAIRS.map(([value, label, hint]) => (
+              {CHAIRS.map(({ id: value, label, hint }) => (
                 <button
                   key={value}
                   type="button"

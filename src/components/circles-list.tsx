@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { anonId } from "@/lib/anon";
+import { CHAIRS, chairLabel, tensionForChair } from "@/lib/vent/chairs";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -28,12 +29,6 @@ const TAGS = [
   ["traffic", "The road"],
   ["climate", "Heat"],
   ["health", "Health"],
-] as const;
-
-const CHAIRS = [
-  ["tight_edge", "Tight edge", 78],
-  ["sunk", "Sunk in", 62],
-  ["half_off", "Half off", 55],
 ] as const;
 
 export function CirclesList() {
@@ -69,7 +64,7 @@ export function CirclesList() {
   async function create() {
     setBusy(true);
     try {
-      const pressure = CHAIRS.find(([v]) => v === chair)?.[2] ?? 60;
+      const pressure = tensionForChair(chair);
       const res = await fetch("/api/circles", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -167,18 +162,18 @@ export function CirclesList() {
 
             <p className="label-mono mb-2 mt-4">Which chair are you today?</p>
             <div className="flex flex-wrap gap-2">
-              {CHAIRS.map(([v, label]) => (
+              {CHAIRS.map((seat) => (
                 <button
-                  key={v}
+                  key={seat.id}
                   type="button"
-                  onClick={() => setChair(v)}
-                  aria-pressed={chair === v}
+                  onClick={() => setChair(seat.id)}
+                  aria-pressed={chair === seat.id}
                   className={cn(
                     "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
-                    chair === v ? "border-gold bg-gold text-ink" : "border-line/15",
+                    chair === seat.id ? "border-gold bg-gold text-ink" : "border-line/15",
                   )}
                 >
-                  {label}
+                  {seat.label}
                 </button>
               ))}
             </div>
@@ -219,7 +214,7 @@ export function CirclesList() {
                     </span>
                   </div>
                   <p className="mt-2 text-[15px] leading-[1.6]">
-                    {CHAIRS.find(([v]) => v === c.chair_picked)?.[1] ?? "A chair"} ·
+                    {chairLabel(c.chair_picked)} ·
                     pressure {c.pressure_seeded ?? "—"}
                   </p>
                 </Link>

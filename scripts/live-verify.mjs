@@ -113,13 +113,14 @@ async function main() {
     record(4, "Real-world tags own tool", ok, `${got.join(", ")} | hi=${g.intent} free=${!g.tokensSpent}`);
   }
 
-  // 5 — the chair drives the tension maths. Verified in the browser, not here.
+  // 5 — the chair drives the tension maths. Asserted against the real table
+  // in the eval suite now; what is left here is the pixels.
   record(5, "Tension 78->58", null,
-    "manual: clear storage, pick Tight edge, slider must read 78, rate 8, drop must be 58");
+    "npm run eval check 7 asserts 78 -> 20 = 58; manual: 360px, slider reads 78");
 
-  // 6 — selector guarantees run offline.
+  // 6 — selector guarantees run offline, with no server and no tokens.
   record(6, "No-repeat somatic gated", null,
-    "run: node --experimental-strip-types scripts/tactics.test.mts");
+    "npm run eval checks 2+4, or node --experimental-strip-types scripts/tactics.test.mts");
 
   // 7 — export completeness, straight off the live history endpoint.
   {

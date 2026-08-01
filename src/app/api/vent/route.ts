@@ -7,6 +7,7 @@ import { answerFactual, groundNow } from "@/lib/vent/grounding";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
 import { buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
+import { MEMORY_TURNS, memoryFetchSize, selectMemory } from "@/lib/vent/memory";
 import { buildFlavour } from "@/lib/flavour/profile";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,6 @@ const MAX_TOKENS = 220;
 const RATE_PER_MINUTE = 10;
 const RATE_PER_DAY = 100;
 const HISTORY_LIMIT = 100;
-const MEMORY_TURNS = 6;
 
 const bodySchema = z.object({
   anonId: z.string().min(8).max(64),
@@ -96,14 +96,10 @@ export async function POST(request: Request) {
         );
       }
 
-      // Asking the date is not a vent. Greetings, factual questions and meta
-      // replies were eating slots in a six-turn memory window, so pull a
-      // wider slice and keep only the turns that actually said something.
-      const recent = await store.recentVents(userId, MEMORY_TURNS * 4);
-      const rows = recent
-        .filter((r) => r.intent_type === "vent")
-        .slice(0, MEMORY_TURNS)
-        .reverse();
+      // Asking the date is not a vent — `selectMemory` is where that rule
+      // lives, so the eval suite measures the real filter and not a copy.
+      const recent = await store.recentVents(userId, memoryFetchSize(MEMORY_TURNS));
+      const rows = selectMemory(recent, MEMORY_TURNS);
 
       history = rows as unknown as MemoryRow[];
       recentTactics = rows

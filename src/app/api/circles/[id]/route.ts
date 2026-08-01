@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore } from "@/lib/store";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
+import { tensionDrop, tensionNow } from "@/lib/vent/chairs";
+import { logPreference } from "@/lib/rlhf/log";
 import {
   MAX_SEATS, PHASE_LABEL, keeperIntention, keeperReflection,
   phaseFor, roleForSeat,
@@ -34,8 +36,12 @@ export async function GET(request: Request, { params }: Params) {
   // said "waiting" and every word stayed readable to members for another 24
   // hours — so "what's said here stays here" quietly meant "for a day". Now
   // the clock ending is what deletes the transcript.
-  if (msRemaining === 0 && circle.status !== "closed") {
-    await store.closeCircle(params.id);
+  //
+  // And a closed room stays closed however it got there. Ending it early is
+  // the Keeper's move; answering 200 afterwards meant the room kept polling
+  // as though it were alive, with the transcript already deleted underneath.
+  if (msRemaining === 0 || circle.status === "closed") {
+    if (circle.status !== "closed") await store.closeCircle(params.id);
     return NextResponse.json(
       { error: "not_found", closed: true },
       { status: 404, headers: { "cache-control": "no-store" } },
@@ -166,6 +172,60 @@ export async function POST(request: Request, { params }: Params) {
   return NextResponse.json(
     { role, seats: members.length + 1, storage: store.kind },
     { status: 201, headers: { "cache-control": "no-store" } },
+  );
+}
+
+const sealSchema = z.object({
+  anonId: z.string().min(8).max(64),
+  /** 1–10, the same scale the private session closes on. */
+  mood: z.number().int().min(1).max(10),
+  carry: z.string().max(40).nullish(),
+  drop: z.string().max(40).nullish(),
+});
+
+/**
+ * The seal. Not a message and never part of the transcript — it is the only
+ * thing worth keeping out of a circle: whether the room moved anything.
+ * The two words and a number, no content, nothing anybody said.
+ */
+export async function PATCH(request: Request, { params }: Params) {
+  let json: unknown;
+  try {
+    json = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Malformed body" }, { status: 400 });
+  }
+
+  const parsed = sealSchema.safeParse(json);
+  if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 422 });
+  const { anonId, mood, carry, drop } = parsed.data;
+
+  const store = getStore();
+  if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
+
+  const members = await store.listMembers(params.id);
+  const me = members.find((m) => m.anon_id === anonId);
+  if (!me) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
+
+  const circle = await store.getCircle(params.id);
+  const before = me.pressure_seeded;
+
+  await logPreference({
+    kind: "circle_close",
+    anon_id: anonId,
+    circle_id: params.id,
+    tag: circle?.tag ?? null,
+    rating: mood,
+    tension_before: before,
+    tension_after: tensionNow(mood),
+    drop_points: before != null ? tensionDrop(before, mood) : null,
+    word_carried: carry ?? null,
+    word_dropped: drop ?? null,
+  });
+
+  return NextResponse.json(
+    { sealed: true, drop: before != null ? tensionDrop(before, mood) : null },
+    { headers: { "cache-control": "no-store" } },
   );
 }
 

@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { anonId } from "@/lib/anon";
+import { CHAIRS, tensionDrop, tensionForChair, tensionNow } from "@/lib/vent/chairs";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -29,12 +30,6 @@ interface RoomState {
   pressureSeeded: number | null;
   msRemaining: number;
 }
-
-const CHAIRS = [
-  ["tight_edge", "Tight edge", 78],
-  ["sunk", "Sunk in", 62],
-  ["half_off", "Half off", 55],
-] as const;
 
 const WORDS = ["Guilt", "Proof", "Anger", "Hope", "Silence", "Tiredness"];
 
@@ -94,7 +89,7 @@ export function CircleRoom({ id }: { id: string }) {
         body: JSON.stringify({
           anonId: me,
           consent: true,
-          pressure: CHAIRS.find(([v]) => v === chair)?.[2] ?? 62,
+          pressure: tensionForChair(chair),
         }),
       });
       const d = await r.json();
@@ -103,6 +98,24 @@ export function CircleRoom({ id }: { id: string }) {
       await load();
     } finally {
       setBusy(false);
+    }
+  }
+
+  /**
+   * The one thing worth keeping out of a circle: did the room work. The mood
+   * reading, the drop, and the two words — no transcript, nothing anybody
+   * said. Fire-and-forget: a failed preference log must never block a seal.
+   */
+  async function seal(drop: string) {
+    if (mood === null) return;
+    try {
+      await fetch(`/api/circles/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ anonId: me, mood, carry, drop }),
+      });
+    } catch {
+      /* The seal already happened on their screen. */
     }
   }
 
@@ -203,18 +216,18 @@ export function CircleRoom({ id }: { id: string }) {
             </ul>
             <p className="label-mono mb-2 mt-5">Which chair are you today?</p>
             <div className="flex flex-wrap gap-2">
-              {CHAIRS.map(([v, label]) => (
+              {CHAIRS.map((c) => (
                 <button
-                  key={v}
+                  key={c.id}
                   type="button"
-                  onClick={() => setChair(v)}
-                  aria-pressed={chair === v}
+                  onClick={() => setChair(c.id)}
+                  aria-pressed={chair === c.id}
                   className={cn(
                     "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
-                    chair === v ? "border-gold bg-gold text-ink" : "border-line/15",
+                    chair === c.id ? "border-gold bg-gold text-ink" : "border-line/15",
                   )}
                 >
-                  {label}
+                  {c.label}
                 </button>
               ))}
             </div>
@@ -298,18 +311,18 @@ export function CircleRoom({ id }: { id: string }) {
                         <p className="text-[15px] leading-[1.6]">
                           Down{" "}
                           <span className="font-semibold">
-                            {Math.max(0, state.pressureSeeded - (10 - mood) * 10)} points
+                            {tensionDrop(state.pressureSeeded, mood)} points
                           </span>{" "}
                           since you sat down.
                         </p>
                         <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-line/10">
                           <div
                             className="h-full rounded-full bg-gold transition-[width] duration-1000 ease-out"
-                            style={{ width: `${100 - (10 - mood) * 10}%` }}
+                            style={{ width: `${100 - tensionNow(mood)}%` }}
                           />
                         </div>
                         <p className="label-mono mt-2">
-                          Earlier {state.pressureSeeded} · Now {(10 - mood) * 10}
+                          Earlier {state.pressureSeeded} · Now {tensionNow(mood)}
                         </p>
                       </>
                     )}
@@ -342,6 +355,7 @@ export function CircleRoom({ id }: { id: string }) {
                           type="button"
                           onClick={() => {
                             setDropped(w);
+                            void seal(w);
                             toast("Sealed. Nothing here is kept.", "success");
                           }}
                           aria-pressed={dropped === w}

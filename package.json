@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "local": "VENT_LOCAL_STORE=1 next dev -p 3001",
-    "verify": "node --experimental-strip-types scripts/tactics.test.mts"
+    "verify": "node --experimental-strip-types scripts/tactics.test.mts",
+    "eval": "node scripts/eval.mjs",
+    "data": "node scripts/data-pipeline.mjs",
+    "rlhf": "node scripts/rlhf-pipeline.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

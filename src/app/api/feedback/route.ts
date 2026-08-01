@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore } from "@/lib/store";
+import { logPreference } from "@/lib/rlhf/log";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,11 @@ export async function POST(request: Request) {
     rating,
     message: message ?? null,
   });
+
+  // The same rating, into the preference log. The table is the product's
+  // record; the log is training data, and the pipeline pairs it back to the
+  // reply that was on screen when they pressed the number.
+  await logPreference({ kind: "vent_rating", anon_id: anonId, rating, note: message ?? null });
 
   return NextResponse.json(
     { persisted: true, storage: store.kind },

@@ -147,3 +147,6 @@ vite.config.ts.timestamp-*
 
 # Local file-backed store (npm run dev without Supabase)
 .data/
+
+# Derived training data. Built from real vents — never committed.
+/data/
