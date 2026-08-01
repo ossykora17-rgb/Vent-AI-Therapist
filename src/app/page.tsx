@@ -31,19 +31,17 @@ export default async function ShrinePage() {
         </p>
 
         <div className="mt-10 w-full max-w-[280px]">
-          <Link href={user ? "/dashboard" : "/signup"} className="block">
+          <Link href="/chat" className="block">
             <Button variant="seal" size="lg" fullWidth>
               {user ? "Return to shrine" : "Enter shrine"}
             </Button>
           </Link>
 
-          {!user && (
-            <Link href="/login" className="mt-3 block">
-              <Button variant="inverse" size="lg" fullWidth>
-                I have been here
-              </Button>
-            </Link>
-          )}
+          <Link href={user ? "/dashboard" : "/login"} className="mt-3 block">
+            <Button variant="inverse" size="lg" fullWidth>
+              {user ? "My account" : "I have been here"}
+            </Button>
+          </Link>
         </div>
       </div>
 
