@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getStore } from "@/lib/store";
 import { mintVoiceToken } from "@/lib/voice/livekit";
 import { isLivekitConfigured } from "@/lib/env";
+import { sweepIfOver } from "@/lib/circles/sweep";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,7 @@ export async function POST(request: Request, { params }: Params) {
 
   const circle = await store.getCircle(id);
   if (!circle) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  if (circle.status === "closed" || new Date(circle.ends_at).getTime() < Date.now()) {
+  if (await sweepIfOver(store, circle)) {
     return NextResponse.json({ error: "closed" }, { status: 410 });
   }
 
@@ -58,10 +59,27 @@ export async function POST(request: Request, { params }: Params) {
   const index = members.findIndex((m) => m.anon_id === parsed.data.anonId);
   if (index < 0) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
 
+  /**
+   * The token expires with the circle, not fifty minutes from whenever it was
+   * asked for. It used to be the latter, which meant a seat taken at minute
+   * forty-four held a credential good until minute ninety-four — long after
+   * the transcript was deleted and every other surface answered 404.
+   *
+   * That mattered more than an unused credential usually does: deleting a
+   * LiveKit room is not revoking a token, and LiveKit recreates a room on
+   * join, so two people with live tokens could reconvene the voice of a
+   * circle the product had told everyone was over — no Keeper, no phases, no
+   * Guardian, and a third person who left believing it had ended.
+   *
+   * One minute of grace, so a token minted in the last second of a session is
+   * still usable for the walk out rather than being born expired.
+   */
+  const msLeft = new Date(circle.ends_at).getTime() - Date.now();
   const token = mintVoiceToken({
     circleId: id,
     seat: index + 1,
     keeper: members[index].role === "keeper",
+    ttlSeconds: Math.max(60, Math.ceil(msLeft / 1000) + 60),
   });
 
   return NextResponse.json(token, { headers: { "cache-control": "no-store" } });

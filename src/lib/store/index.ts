@@ -4,7 +4,10 @@ import { FileStore } from "./file-store";
 import { SupabaseStore } from "./supabase-store";
 import type { Store } from "./types";
 
-export type { Store, VentRow, NewVent, ProfilePatch } from "./types";
+export type {
+  Store, VentRow, NewVent, ProfilePatch,
+  CircleRow, CircleMemberRow, CircleMessageRow,
+} from "./types";
 
 let cached: Store | null | undefined;
 

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getStore } from "@/lib/store";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { checkMessage } from "@/lib/circles/rules";
+import { sweepIfOver } from "@/lib/circles/sweep";
 import { scoreToxicity } from "@/lib/external/sources";
 import { guardianVerdict } from "@/lib/external/guardian";
 
@@ -20,6 +21,15 @@ export async function GET(request: Request, { params }: Params) {
   const anonId = new URL(request.url).searchParams.get("anonId") ?? "";
   const store = getStore();
   if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
+
+  // Membership is not enough — the clock is the other half of the promise.
+  // Without this a transcript stayed readable to members after the session
+  // ended, for as long as nobody happened to poll the room itself.
+  const circle = await store.getCircle(id);
+  if (!circle) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (await sweepIfOver(store, circle)) {
+    return NextResponse.json({ error: "closed" }, { status: 410 });
+  }
 
   const members = await store.listMembers(id);
   if (!members.some((m) => m.anon_id === anonId)) {
@@ -74,7 +84,7 @@ export async function POST(request: Request, { params }: Params) {
 
   const circle = await store.getCircle(id);
   if (!circle) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  if (circle.status === "closed" || new Date(circle.ends_at).getTime() < Date.now()) {
+  if (await sweepIfOver(store, circle)) {
     return NextResponse.json({ error: "closed" }, { status: 410 });
   }
 

@@ -482,15 +482,48 @@ if (BASE) {
       "and the old unauthenticated shape is refused outright",
     );
 
+    // A voice credential must not outlive the room it was minted for.
+    // It used to be a flat fifty minutes from whenever it was asked for,
+    // which meant a late seat held a key to a circle that no longer existed.
+    const voice = await post(`/api/circles/${circle.id}/voice`, { anonId: two });
+    if (voice.status === 200) {
+      const grant = await voice.json();
+      const claims = JSON.parse(
+        Buffer.from(grant.token.split(".")[1], "base64url").toString(),
+      );
+      const endsAt = Math.floor(new Date(solo.circle.ends_at).getTime() / 1000);
+      const overhang = claims.exp - endsAt;
+      ok(overhang > 0 && overhang <= 120,
+        "the voice token expires with the circle, plus a minute of grace",
+        `${overhang}s past the end`);
+      is(claims.video.roomAdmin, false, "and a sharer's token carries no room authority");
+      is(claims.sub, "seat-2", "identity is the seat, never the anon id");
+    }
+
     // Close means close.
     await fetch(`${BASE}/api/circles/${circle.id}?anonId=${one}`, { method: "DELETE" });
     const gone = await fetch(`${BASE}/api/circles/${circle.id}?anonId=${one}`);
     is(gone.status, 404, "the room is gone");
-    const words = await fetch(`${BASE}/api/circles/${circle.id}/messages?anonId=${one}`)
-      .then((r) => r.json());
-    is(words.messages.length, 0, "and every word went with it");
+    // The transcript is not "empty" after a close — it is refused. Returning
+    // an empty list would still be telling a caller the room exists.
+    const words = await fetch(`${BASE}/api/circles/${circle.id}/messages?anonId=${one}`);
+    is(words.status, 410, "and the transcript is not readable, not merely empty");
     is((await guardian(two, circle.id)).status, 410,
       "a closed room answers nothing, to a member or anybody else");
+
+    // Every surface, not just the ones somebody remembered. Authority does
+    // not outlive the circle it was granted for.
+    const closed = [
+      ["a voice token", await post(`/api/circles/${circle.id}/voice`, { anonId: two })],
+      ["the Keeper's mute", await post(`/api/circles/${circle.id}/voice/mute`, { anonId: one, seat: 2 })],
+      ["reading the transcript", await fetch(`${BASE}/api/circles/${circle.id}/messages?anonId=${two}`)],
+      ["posting a message", await post(`/api/circles/${circle.id}/messages`, { anonId: two, content: "still here?", kind: "share" })],
+      ["taking a seat", await post(`/api/circles/${circle.id}`, { anonId: "latecomer-99999", consent: true, pressure: 55 })],
+      ["sealing", await post(`/api/circles/${circle.id}`, { anonId: two, mood: 8 }, "PATCH")],
+    ];
+    for (const [what, res] of closed) {
+      is(res.status, 410, `${what} is refused once the circle is over`);
+    }
   });
 }
 

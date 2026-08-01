@@ -60,11 +60,22 @@ the person gets 0806 210 6493 and 199, and a route out to a private vent.
 
 ## Close means close
 
-Closing deletes the transcript. Both paths: the Keeper's `DELETE`, and the
-clock running out, which flips the row to `closed` on the next read. A closed
-room answers 404 however it got there — answering 200 left the UI polling a
-room whose words were already gone. The 24-hour TTL is the backstop for rooms
-nobody reopens, not the policy.
+`sweepIfOver(store, circle)` in `src/lib/circles/sweep.ts` is the only copy of
+this question. **Call it from every route that touches a circle**, before
+doing anything else with it. It answers "is this over" and, on the transition,
+deletes the transcript and ends the voice room — once, whichever request
+noticed first.
+
+It exists because the check used to live only in the room `GET`. A circle
+nobody was polling therefore never closed at all: the row stayed `waiting`,
+the transcript stayed readable to members, and the LiveKit room stayed live on
+the SFU indefinitely. Now whoever knocks — a transcript read, a join, a seal,
+a voice token, a mute — is the one who notices.
+
+A closed circle answers 404 from the room itself and **410 from every other
+surface**. Not an empty list: returning `{messages: []}` still tells a caller
+the room is there. The 24-hour TTL is the backstop for rows nobody touches
+again, not the policy.
 
 ## The Closing measures something
 
@@ -120,6 +131,15 @@ than quietly shipping video to five strangers.
 Identity is `seat-N`, derived server-side from join order. A client that could
 name its own seat could name somebody else's, so the request carries only the
 `anonId` and the route looks up the index.
+
+**The token expires with the circle, never on a fixed clock.** The voice route
+passes `ttlSeconds` computed from `ends_at`; `mintVoiceToken`'s 50-minute
+default is a fallback nothing in the app should reach. It was the default once,
+and a seat taken at minute 44 held a credential good until minute 94 — which
+matters because deleting a LiveKit room is not revoking a token, and LiveKit
+recreates a room on join. Two people with live tokens could reconvene the voice
+of a circle the product had told everyone was over. If you touch this, keep the
+lifetime bound to the circle.
 
 Muting other people is `POST /api/circles/[id]/voice/mute`, the only place
 `livekit-server-sdk` is imported. Three rules hold it:

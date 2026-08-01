@@ -165,7 +165,7 @@ bug actually shipped here. The date answered as therapy. "It's the same thing
 every week" heard as an insult and answered with an apology. A worksheet where
 a sentence belonged. A witness who could never speak. 121 assertions, about a
 second, no tokens. Give it a base URL and it adds the live room checks — 12
-and 136 — including the one that found a real bug, where a Keeper's early
+and 145 — including the one that found a real bug, where a Keeper's early
 close deleted the transcript but the room kept answering `200`.
 
 **`npm run rlhf`** rebuilds preferences from what people actually did. A
@@ -278,9 +278,17 @@ signed HS256, and Node has HMAC in the standard library, so
 `POST /api/circles/[id]/voice` mints one with `node:crypto`. It is
 seat-scoped: the identity is `seat-4`, never the `anon_id`; the room name
 derives from the circle id so a token cannot be replayed into another circle;
-`roomAdmin` is the Keeper's alone; and it expires with the circle rather than
-sitting in a browser. A non-member gets `403`, and with no keys the route
-answers `501` — not broken, not built.
+`roomAdmin` is the Keeper's alone. A non-member gets `403`, and with no keys
+the route answers `501` — not broken, not built.
+
+**It expires with the circle**, not on a clock of its own. That distinction
+was a real hole: the lifetime used to be a flat fifty minutes from whenever
+the token was asked for, so a seat taken at minute 44 held a credential good
+until minute 94. Deleting a LiveKit room is not revoking a token and LiveKit
+recreates a room on join, so two people with live tokens could reconvene the
+voice of a circle everyone had been told was over — no Keeper, no phases, no
+Guardian, and somebody who left believing it had ended. A late seat now gets
+**1.9 minutes**, measured.
 
 **The browser half is the dependency**: `livekit-client`, 13 MB on disk and
 13 packages in the lockfile. Most sessions are text, so it is imported
@@ -448,12 +456,19 @@ stored, the person gets the Nigerian line and 199, and a route out to a
 private vent. A circle cannot hold a crisis.
 
 Confidentiality is a deletion policy, not a promise. Closing a circle deletes
-its transcript, and the clock running out **is** a close: the row flips to
-`closed` and every word goes with it on the first read after time is up. It
-did not used to — the row still said `waiting` and members could keep reading
-for another day, so *"what's said here stays here"* quietly meant *"for a
-day."* The 24-hour sweep is now the backstop for rooms nobody reopens, not the
-policy. Only members can read a room; a non-member gets 403.
+its transcript, and the clock running out **is** a close. One predicate —
+`sweepIfOver` — answers "is this over" for every route that touches a circle,
+and on the transition it deletes the transcript and ends the voice room, once,
+whichever request noticed first.
+
+It has to be every route. When the check lived only in the room poll, a circle
+nobody was watching never closed at all: the row stayed `waiting`, the words
+stayed readable, the voice room stayed live. Now whoever knocks is the one who
+notices — a transcript read, a join, a seal, a voice token, a mute. A closed
+circle answers `404` from the room and **`410` from all six other surfaces**,
+never an empty list, because `{messages: []}` still tells a caller the room is
+there. The 24-hour sweep is the backstop for rows nobody touches again, not the
+policy. Only members can read a live room; a non-member gets 403.
 
 The last two minutes measure something. Rate how you feel 1–10 and the Closing
 shows the drop from the pressure you seeded when you took your chair — **your**

@@ -4,6 +4,7 @@ import { RoomServiceClient, TrackSource, TrackType } from "livekit-server-sdk";
 import { getStore } from "@/lib/store";
 import { env, isLivekitConfigured } from "@/lib/env";
 import { roomNameFor } from "@/lib/voice/livekit";
+import { sweepIfOver } from "@/lib/circles/sweep";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,15 @@ export async function POST(request: Request, { params }: Params) {
 
   const store = getStore();
   if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
+
+  // Authority does not outlive the thing it was granted for. Every sibling
+  // route gates on the circle's state; this one did not, so a former Keeper
+  // could still reach for the volume of a session that ended hours ago.
+  const circle = await store.getCircle(id);
+  if (!circle) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (await sweepIfOver(store, circle)) {
+    return NextResponse.json({ error: "closed" }, { status: 410 });
+  }
 
   const members = await store.listMembers(id);
   const meIndex = members.findIndex((m) => m.anon_id === anonId);

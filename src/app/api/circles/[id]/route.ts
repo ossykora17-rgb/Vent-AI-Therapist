@@ -8,6 +8,7 @@ import { presenceOf, shouldTouch } from "@/lib/circles/presence";
 import { economyContext } from "@/lib/external/sources";
 import { isLivekitConfigured } from "@/lib/env";
 import { closeVoiceRoom } from "@/lib/voice/close";
+import { sweepIfOver } from "@/lib/circles/sweep";
 import {
   MAX_SEATS, PHASE_LABEL, economyFact, keeperIntention, keeperReflection,
   phaseFor, roleForSeat,
@@ -51,13 +52,7 @@ export async function GET(request: Request, { params }: Params) {
   // And a closed room stays closed however it got there. Ending it early is
   // the Keeper's move; answering 200 afterwards meant the room kept polling
   // as though it were alive, with the transcript already deleted underneath.
-  if (msRemaining === 0 || circle.status === "closed") {
-    if (circle.status !== "closed") {
-      await store.closeCircle(id);
-      // The voice room ends with the circle. Six people talking in an SFU
-      // room whose transcript was just deleted is not a closed circle.
-      await closeVoiceRoom(id);
-    }
+  if (await sweepIfOver(store, circle)) {
     return NextResponse.json(
       { error: "not_found", closed: true },
       { status: 404, headers: { "cache-control": "no-store" } },
@@ -187,7 +182,9 @@ export async function POST(request: Request, { params }: Params) {
 
   const circle = await store.getCircle(id);
   if (!circle) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  if (circle.status === "closed" || new Date(circle.ends_at).getTime() < Date.now()) {
+  // A circle nobody is polling still ends. Whoever knocks on the door is the
+  // one who notices, and the sweep closes the room and the voice with it.
+  if (await sweepIfOver(store, circle)) {
     return NextResponse.json({ error: "closed" }, { status: 410 });
   }
 
@@ -248,6 +245,9 @@ export async function PATCH(request: Request, { params }: Params) {
   if (!me) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
 
   const circle = await store.getCircle(id);
+  if (circle && (await sweepIfOver(store, circle))) {
+    return NextResponse.json({ error: "closed" }, { status: 410 });
+  }
   const before = me.pressure_seeded;
 
   await logPreference({
