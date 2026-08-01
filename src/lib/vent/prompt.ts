@@ -3,6 +3,7 @@ import type { Classification } from "./intent";
 import type { Tactic, TacticContext } from "./tactics";
 import type { FlavourProfile } from "@/lib/flavour/types";
 import {
+  CONFIDENCE_FLOOR,
   HOBBY_LABEL,
   OCCUPATION_LABEL,
   TEMPERAMENT_LABEL,
@@ -16,13 +17,22 @@ import {
 export function flavourBlock(f: FlavourProfile | null): string | null {
   if (!f) return null;
 
-  const known: string[] = [`temperament ${TEMPERAMENT_LABEL[f.temperament.value]}`];
+  // Temperament always resolves to *something*, so state it only when the
+  // reading is actually confident. Occupation and hobby already omit
+  // themselves when unknown; asserting a thin temperament was the one place
+  // the flavour block guessed out loud.
+  const known: string[] = [];
+  if (f.temperament.confidence >= CONFIDENCE_FLOOR) {
+    known.push(`temperament ${TEMPERAMENT_LABEL[f.temperament.value]}`);
+  }
   if (f.occupation.value !== "unknown") {
     known.push(`occupation ${OCCUPATION_LABEL[f.occupation.value]}`);
   }
   if (f.hobby.value !== "unknown") {
     known.push(`hobby ${HOBBY_LABEL[f.hobby.value]}`);
   }
+
+  if (known.length === 0) return null;
 
   return [
     `FLAVOUR — ${known.join(", ")}.`,

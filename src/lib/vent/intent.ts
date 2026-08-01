@@ -54,14 +54,21 @@ const GREETING = [
   /^(abeg )?how you dey\b/,
 ];
 
+/**
+ * Every one of these must point at the assistant. "It's the same thing every
+ * week" is a person naming their own pattern — the single most valuable thing
+ * they can say — and matching it here routed them to an apology for repeating
+ * ourselves. Bare "same thing" and "same answer" are far too common in
+ * ordinary speech to belong in this list.
+ */
 const META = [
   /\b(chatbot|bot) (shit|nonsense|talk)\b/,
-  /\bsame (tactic|thing|reply|answer)\b/,
-  /\byou keep saying\b/,
-  /\byou dey repeat\b/,
-  /\bare you (even )?(real|listening)\b/,
-  /\bthis is generic\b/,
-  /\bstop (saying|repeating)\b/,
+  /\byou (keep|dey|just keep) (saying|repeating)\b/,
+  /\byou said the same\b/,
+  /\bsame (tactic|script|line) (again|twice)\b/,
+  /\bare you (even )?(real|listening|a bot)\b/,
+  /\b(this|that) is generic\b/,
+  /\bstop (saying|repeating) (that|the same)\b/,
 ];
 
 const REAL_WORLD: Array<[Exclude<RealWorldTag, null>, RegExp]> = [
