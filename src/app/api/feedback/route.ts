@@ -26,6 +26,20 @@ export async function POST(request: Request) {
   const supabase = createAdminClient();
   if (!supabase) return NextResponse.json({ persisted: false });
 
+  // Five ratings an hour is plenty of feedback from one person.
+  const { count } = await supabase
+    .from("vent_feedback")
+    .select("id", { count: "exact", head: true })
+    .eq("anon_id", parsed.data.anonId)
+    .gte("created_at", new Date(Date.now() - 3_600_000).toISOString());
+
+  if ((count ?? 0) >= 5) {
+    return NextResponse.json(
+      { error: "rate_limited", message: "Thanks — we've got plenty from you for now." },
+      { status: 429 },
+    );
+  }
+
   const { data: user } = await supabase
     .from("vent_users")
     .select("id")

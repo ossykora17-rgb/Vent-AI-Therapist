@@ -249,8 +249,10 @@ export async function GET(request: Request) {
 
   const { data } = await supabase
     .from("vents")
+    // Everything the user gave us comes back out — export is real ownership,
+    // not a summary of what we felt like sharing.
     .select(
-      "id, user_message, ai_reply, mood_score, tension_before, tension_after, tactic_used, intent_type, real_world_tag, body_tapped, created_at",
+      "id, user_message, ai_reply, mood_score, tension_before, tension_after, language, duality_value, pressure_value, chair_picked, tactic_used, intent_type, real_world_tag, real_date_used, body_tapped, created_at",
     )
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })

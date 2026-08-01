@@ -18,16 +18,19 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
+drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own"
   on public.profiles for select
   to authenticated
   using (auth.uid() = id);
 
+drop policy if exists "profiles_insert_own" on public.profiles;
 create policy "profiles_insert_own"
   on public.profiles for insert
   to authenticated
   with check (auth.uid() = id);
 
+drop policy if exists "profiles_update_own" on public.profiles;
 create policy "profiles_update_own"
   on public.profiles for update
   to authenticated
@@ -51,22 +54,26 @@ create index if not exists sessions_user_id_updated_at_idx
 
 alter table public.sessions enable row level security;
 
+drop policy if exists "sessions_select_own" on public.sessions;
 create policy "sessions_select_own"
   on public.sessions for select
   to authenticated
   using (auth.uid() = user_id);
 
+drop policy if exists "sessions_insert_own" on public.sessions;
 create policy "sessions_insert_own"
   on public.sessions for insert
   to authenticated
   with check (auth.uid() = user_id);
 
+drop policy if exists "sessions_update_own" on public.sessions;
 create policy "sessions_update_own"
   on public.sessions for update
   to authenticated
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+drop policy if exists "sessions_delete_own" on public.sessions;
 create policy "sessions_delete_own"
   on public.sessions for delete
   to authenticated
@@ -91,11 +98,13 @@ alter table public.messages enable row level security;
 
 -- The session_id subquery is itself RLS-filtered, so a user cannot attach a
 -- message to somebody else's session even by guessing its id.
+drop policy if exists "messages_select_own" on public.messages;
 create policy "messages_select_own"
   on public.messages for select
   to authenticated
   using (auth.uid() = user_id);
 
+drop policy if exists "messages_insert_own" on public.messages;
 create policy "messages_insert_own"
   on public.messages for insert
   to authenticated
@@ -107,6 +116,7 @@ create policy "messages_insert_own"
     )
   );
 
+drop policy if exists "messages_delete_own" on public.messages;
 create policy "messages_delete_own"
   on public.messages for delete
   to authenticated
@@ -136,6 +146,7 @@ create index if not exists subscriptions_user_id_idx
 
 alter table public.subscriptions enable row level security;
 
+drop policy if exists "subscriptions_select_own" on public.subscriptions;
 create policy "subscriptions_select_own"
   on public.subscriptions for select
   to authenticated

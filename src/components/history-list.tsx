@@ -80,7 +80,11 @@ export function HistoryList() {
     setRows([]);
     try {
       await fetch(`/api/vent?anonId=${encodeURIComponent(anonId())}`, { method: "DELETE" });
+      // A full wipe makes them a new person here: drop the id AND the
+      // onboarding flag, so the chair question seeds their tension again
+      // rather than starting the next session at a meaningless default.
       localStorage.removeItem("mw-anon-id");
+      localStorage.removeItem("mw-onboarded");
       toast("All cleared. Fresh start.", "success");
     } catch {
       toast("Couldn't clear it all.", "error");
