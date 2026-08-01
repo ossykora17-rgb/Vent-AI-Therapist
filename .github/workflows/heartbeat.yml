@@ -54,12 +54,18 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm run build
 
-      - name: Live checks against the built app
-        run: |
-          VENT_LOCAL_STORE=1 npx next start -p 3001 &
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:3001/api/health >/dev/null && break
-            sleep 1
-          done
-          node scripts/eval.mjs http://localhost:3001
-          node scripts/live-verify.mjs http://localhost:3001
+      # Two deployments, not one. Routes that answer "this instance has no
+      # voice" before they touch the store behave differently with keys and
+      # without, and a suite that only ever sees one shape will pass locally
+      # for an author who has keys and fail here — which is exactly what it
+      # did. The SFU host is the discard port, so any call fails instantly
+      # rather than hanging a CI job on DNS.
+      - name: Live checks — no voice configured
+        run: .github/live-checks.sh
+
+      - name: Live checks — voice configured
+        env:
+          LIVEKIT_URL: ws://127.0.0.1:9
+          LIVEKIT_API_KEY: ci-key
+          LIVEKIT_API_SECRET: ci-secret-0123456789
+        run: .github/live-checks.sh

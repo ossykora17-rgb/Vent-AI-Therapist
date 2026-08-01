@@ -513,16 +513,22 @@ if (BASE) {
 
     // Every surface, not just the ones somebody remembered. Authority does
     // not outlive the circle it was granted for.
+    // The two voice routes answer 501 before they touch the store when the
+    // instance has no LiveKit keys — deliberately, so a dead endpoint cannot
+    // be used as a circle-existence oracle. Assert the contract for whichever
+    // deployment this is rather than assuming the one the author ran locally.
+    const voiceGone = solo.voice ? 410 : 501;
+
     const closed = [
-      ["a voice token", await post(`/api/circles/${circle.id}/voice`, { anonId: two })],
-      ["the Keeper's mute", await post(`/api/circles/${circle.id}/voice/mute`, { anonId: one, seat: 2 })],
+      ["a voice token", await post(`/api/circles/${circle.id}/voice`, { anonId: two }), voiceGone],
+      ["the Keeper's mute", await post(`/api/circles/${circle.id}/voice/mute`, { anonId: one, seat: 2 }), voiceGone],
       ["reading the transcript", await fetch(`${BASE}/api/circles/${circle.id}/messages?anonId=${two}`)],
       ["posting a message", await post(`/api/circles/${circle.id}/messages`, { anonId: two, content: "still here?", kind: "share" })],
       ["taking a seat", await post(`/api/circles/${circle.id}`, { anonId: "latecomer-99999", consent: true, pressure: 55 })],
       ["sealing", await post(`/api/circles/${circle.id}`, { anonId: two, mood: 8 }, "PATCH")],
     ];
-    for (const [what, res] of closed) {
-      is(res.status, 410, `${what} is refused once the circle is over`);
+    for (const [what, res, expected = 410] of closed) {
+      is(res.status, expected, `${what} is refused once the circle is over`);
     }
   });
 }

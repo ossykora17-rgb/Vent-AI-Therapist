@@ -98,6 +98,16 @@ their areas: `.claude/skills/data-quality/` and `.claude/skills/circles-quality/
   SDK's enums.
 - **`FileStore` caches the whole database in memory.** Editing
   `.data/vent.json` under a running server does nothing until restart.
+- **A leftover server will answer your checks.** `npx next start` spawns
+  `next-server` as a grandchild; killing the `npx` pid orphans it and it keeps
+  port 3001. The next run then reports on the wrong build, or the wrong
+  configuration, and looks green. `.github/live-checks.sh` refuses a busy port
+  and kills the process group for exactly this reason — it produced a false
+  pass twice while being written.
+- **Verify both deployment shapes.** The voice routes answer `501` before
+  touching the store when there are no LiveKit keys, so a suite run by an
+  author who has keys asserts different status codes than CI. CI runs the live
+  checks twice, with and without.
 - **`livekit-client` is 13 MB.** It is imported *inside* the join handler in
   `src/components/circle-voice.tsx` and nowhere else. A static import puts
   508 KB into every room's first load.
