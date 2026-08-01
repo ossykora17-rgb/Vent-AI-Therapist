@@ -467,6 +467,21 @@ if (BASE) {
     }, "PATCH").then((r) => r.json());
     is(sealed.drop, tensionDrop(62, 8), "the seal records the drop from their own chair");
 
+    // The Guardian's inspection endpoint is not an open relay. It was, and a
+    // 1,000-a-day quota that every circle depends on is not worth leaving
+    // open to a script.
+    const guardian = (who, id, text = "you are stupid and useless") =>
+      post("/api/external/guardian/score", { text, anonId: who, circleId: id });
+
+    is((await guardian(two, circle.id)).status, 200, "a member may ask about their own room");
+    is((await guardian("nobody-999999", circle.id)).status, 403, "a stranger may not");
+    is((await guardian(two, "no-such-circle-1")).status, 404, "nor may anyone name a room that does not exist");
+    is(
+      (await post("/api/external/guardian/score", { text: "you are stupid" })).status,
+      422,
+      "and the old unauthenticated shape is refused outright",
+    );
+
     // Close means close.
     await fetch(`${BASE}/api/circles/${circle.id}?anonId=${one}`, { method: "DELETE" });
     const gone = await fetch(`${BASE}/api/circles/${circle.id}?anonId=${one}`);
@@ -474,6 +489,8 @@ if (BASE) {
     const words = await fetch(`${BASE}/api/circles/${circle.id}/messages?anonId=${one}`)
       .then((r) => r.json());
     is(words.messages.length, 0, "and every word went with it");
+    is((await guardian(two, circle.id)).status, 410,
+      "a closed room answers nothing, to a member or anybody else");
   });
 }
 

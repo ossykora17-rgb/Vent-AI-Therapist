@@ -7,6 +7,7 @@ import { logPreference } from "@/lib/rlhf/log";
 import { presenceOf, shouldTouch } from "@/lib/circles/presence";
 import { economyContext } from "@/lib/external/sources";
 import { isLivekitConfigured } from "@/lib/env";
+import { closeVoiceRoom } from "@/lib/voice/close";
 import {
   MAX_SEATS, PHASE_LABEL, economyFact, keeperIntention, keeperReflection,
   phaseFor, roleForSeat,
@@ -46,7 +47,12 @@ export async function GET(request: Request, { params }: Params) {
   // the Keeper's move; answering 200 afterwards meant the room kept polling
   // as though it were alive, with the transcript already deleted underneath.
   if (msRemaining === 0 || circle.status === "closed") {
-    if (circle.status !== "closed") await store.closeCircle(params.id);
+    if (circle.status !== "closed") {
+      await store.closeCircle(params.id);
+      // The voice room ends with the circle. Six people talking in an SFU
+      // room whose transcript was just deleted is not a closed circle.
+      await closeVoiceRoom(params.id);
+    }
     return NextResponse.json(
       { error: "not_found", closed: true },
       { status: 404, headers: { "cache-control": "no-store" } },
@@ -269,5 +275,6 @@ export async function DELETE(request: Request, { params }: Params) {
   }
 
   await store.closeCircle(params.id);
+  await closeVoiceRoom(params.id);
   return NextResponse.json({ closed: true }, { headers: { "cache-control": "no-store" } });
 }
