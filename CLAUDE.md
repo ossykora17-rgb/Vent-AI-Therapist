@@ -132,3 +132,34 @@ objectively verifiable, is it bounded, is it reproducible. Advice slipping
 into a reply passes. Whether the tone reads warm does not, and no gate will
 ever measure it — that one is read by a person, in a real room, and it is
 where every product-quality finding so far has come from.
+
+There is a fifth question, and it is the one this project keeps failing.
+
+## Which deployment shape makes this false?
+
+Ask it of every user-facing string that makes a claim, and of every assertion
+that expects a status code. Before it ships. It is read by a person, because
+no gate can ask it — a gate only ever runs in the shape it was written in.
+
+Every automated path here has a store. `live-checks.sh` sets
+`VENT_LOCAL_STORE=1`, CI sets it, dev falls back to `FileStore`. So the one
+configuration with no store — production with no Supabase env vars, which is
+what a fresh Vercel project *is* — is the one configuration nothing runs. It
+was also the one real people were using.
+
+That gap has now produced the same bug four times, wearing four faces:
+
+- A voice token with a flat 50-minute TTL. Correct from where the author sat,
+  wrong from where the circle sat: a seat taken at minute 44 held a live
+  credential until minute 94.
+- A live-check script reporting 145 assertions where the truth was 142,
+  because it ran against an orphaned `next-server` instead of the build under
+  test.
+- An eval assertion expecting `410` where CI got `501` — the voice routes
+  answer before they touch the store, and the author had keys.
+- A no-model-key reply that told people *"I've saved it, word for word"*
+  while `getStore()` returned null and their words were dropped.
+
+Four findings, one mechanism: **the suite tests the shape its author is
+standing in.** Eval check 12 closes the fourth instance. It does not close the
+class, and nothing written in `scripts/` ever will. Only the question does.
