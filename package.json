@@ -12,6 +12,7 @@
     "eval": "node scripts/eval.mjs",
     "data": "node scripts/data-pipeline.mjs",
     "rlhf": "node scripts/rlhf-pipeline.mjs",
+    "migrations": "node scripts/migrations.mjs",
     "heartbeat": "node scripts/heartbeat-data.mjs",
     "gate": "node scripts/heartbeat-data.mjs --gate",
     "live-checks": "bash .github/live-checks.sh"
