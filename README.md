@@ -50,9 +50,18 @@ Optional: `NEXT_PUBLIC_SITE_URL` for a custom domain (Vercel's `VERCEL_URL`
 is used automatically otherwise), and the Paystack keys if you turn billing
 back on.
 
-**The app builds and runs with none of them set.** No Anthropic key means a
-vent is saved and told so rather than answered; no Supabase means the session
-works but nothing persists. Neither path 500s.
+**The app builds and runs with none of them set**, and says which of them is
+missing rather than guessing. No Supabase means nothing persists; no Anthropic
+key means a vent is held rather than answered. With neither — the state a
+fresh Vercel project is actually in — the reply says both, because telling
+someone their words were saved when there is nowhere to save them is the one
+thing it must not do. No path 500s.
+
+To apply the migrations as a single paste instead of five files in order:
+
+```bash
+npm run migrations          # prints all five, in order, to stdout
+```
 
 ## Run it locally — no Vercel, no Supabase, no account
 
@@ -140,7 +149,7 @@ the suite passes while the product regresses.
 
 ```bash
 npm run data     # store → data/sft.jsonl + data/eval.jsonl
-npm run eval     # 11 checks, no server; pass a URL for the live room
+npm run eval     # 12 checks, no server; pass a URL for the live room
 npm run rlhf     # ratings → data/dpo.jsonl, and what is losing
 ```
 

@@ -8,6 +8,7 @@ import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
 import { buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
 import { MEMORY_TURNS, memoryFetchSize, selectMemory } from "@/lib/vent/memory";
+import { noModelKeyReply } from "@/lib/vent/fallback";
 import { buildFlavour } from "@/lib/flavour/profile";
 
 export const dynamic = "force-dynamic";
@@ -168,9 +169,10 @@ export async function POST(request: Request) {
   let tokensSpent = false;
 
   if (!isAnthropicConfigured) {
-    // No key yet: still move the session forward rather than 500ing.
-    reply =
-      "I'm running without my model key right now, so I can't go deep on that yet — but I've saved it, word for word. Say the next part.";
+    // No key yet: still move the session forward rather than 500ing. What it
+    // may claim about saving depends on whether this deployment can — see
+    // noModelKeyReply.
+    reply = noModelKeyReply(Boolean(store && userId));
   } else {
     try {
       const anthropic = new Anthropic({ apiKey: env.anthropicApiKey });
