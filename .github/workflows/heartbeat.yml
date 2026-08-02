@@ -10,17 +10,25 @@ name: heartbeat
 # a green tick that silently checked nothing.
 
 on:
+  # `push` is scoped to the default branch on purpose. A branch with an open
+  # pull request fires both triggers, and gating the same commit twice cost a
+  # second cold `npm ci`, a second build and a second pair of live-check
+  # shapes for an identical answer. `pull_request` covers every branch that is
+  # actually heading for a merge; `main` is covered here.
+  #
+  # The cost, stated so nobody rediscovers it: a push to a branch with no pull
+  # request open gets no CI. `npm run gate` is the local equivalent and has no
+  # dependencies, and the PR-time run still catches everything before a merge.
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
   schedule:
     - cron: "0 5 * * *"
   workflow_dispatch:
 
-# A push to a branch with an open pull request fires both triggers, so the
-# gate ran twice on the same commit. `head_ref` is the source branch on a
-# pull_request event and empty on a push, where `ref_name` is that same
-# branch — so both events land in one group and the newer run wins.
+# Rapid successive pushes still queue a run each. This lets the newest win
+# rather than racing; the cancelled run belongs to the superseded commit, so
+# the head commit's checks stay clean.
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
