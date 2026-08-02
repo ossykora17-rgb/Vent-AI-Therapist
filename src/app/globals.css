@@ -1,0 +1,131 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Raw RGB channels so Tailwind's /alpha modifiers keep working. */
+  :root {
+    --ink: 26 26 26;
+    --paper: 254 252 248; /* warm marble */
+    --card: 255 255 255;
+    --ash: 139 126 116; /* taupe */
+    --gold: 201 168 106;
+    --gold-deep: 184 151 95;
+    --line: 26 26 26;
+    --shadow: rgba(0, 0, 0, 0.08);
+    color-scheme: light;
+  }
+
+  .dark {
+    --ink: 254 252 248;
+    --paper: 18 18 18; /* charcoal */
+    --card: 30 30 30;
+    --ash: 168 155 144;
+    --gold: 201 168 106;
+    --gold-deep: 184 151 95;
+    --line: 255 255 255;
+    --shadow: rgba(0, 0, 0, 0.4);
+    color-scheme: dark;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+    overflow-x: hidden;
+    /* Subtle grain — flat noise, never a gradient. */
+    background-image: radial-gradient(
+      rgb(var(--ink) / 0.035) 0.5px,
+      transparent 0.5px
+    );
+    background-size: 3px 3px;
+    transition:
+      background-color 300ms ease,
+      color 300ms ease;
+  }
+
+  *:focus-visible {
+    @apply outline-none;
+    box-shadow:
+      0 0 0 2px rgb(var(--paper)),
+      0 0 0 4px rgb(var(--gold));
+  }
+
+  h1 {
+    @apply font-display;
+  }
+
+  /* 16px minimum stops iOS Safari zooming the viewport on focus. */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  ::selection {
+    background: rgb(var(--gold) / 0.35);
+    color: rgb(var(--ink));
+  }
+}
+
+@layer components {
+  /* Frosted plate. The one surface the whole product is built from. */
+  .glass {
+    @apply rounded-card border bg-card/70 shadow-glass backdrop-blur-glass;
+    border-color: rgb(var(--line) / 0.1);
+  }
+
+  .label-mono {
+    @apply font-mono text-[12px] uppercase tracking-[0.1em] text-ash;
+  }
+
+  /*
+   * A native range track is ~8px tall — far under the 44px thumb target on a
+   * phone. Pad the control to 44px and keep the track thin, so it stays a hair
+   * line but the whole strip is draggable.
+   */
+  input[type="range"] {
+    @apply h-11 w-full cursor-pointer bg-transparent;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 2px;
+    background: rgb(var(--gold));
+    border-radius: 2px;
+  }
+  input[type="range"]::-moz-range-track {
+    height: 2px;
+    background: rgb(var(--gold));
+    border-radius: 2px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 20px;
+    width: 20px;
+    margin-top: -9px;
+    border-radius: 9999px;
+    background: rgb(var(--gold));
+    border: 2px solid rgb(var(--paper));
+  }
+  input[type="range"]::-moz-range-thumb {
+    height: 20px;
+    width: 20px;
+    border: 2px solid rgb(var(--paper));
+    border-radius: 9999px;
+    background: rgb(var(--gold));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

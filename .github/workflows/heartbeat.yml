@@ -1,0 +1,87 @@
+name: heartbeat
+
+# The other half of the loop. The local heartbeat watches the store and finds
+# work; this one watches the branch and holds the gate — every push, plus
+# once a day at 06:00 WAT (05:00 UTC), which is when someone would look.
+#
+# It cannot see `.data/` — that store is local and ephemeral by design — so it
+# runs the half of the gate that needs no data: the selector guarantees, the
+# eval suite against the fixture, and a real build. Saying that plainly beats
+# a green tick that silently checked nothing.
+
+on:
+  # `push` is scoped to the default branch on purpose. A branch with an open
+  # pull request fires both triggers, and gating the same commit twice cost a
+  # second cold `npm ci`, a second build and a second pair of live-check
+  # shapes for an identical answer. `pull_request` covers every branch that is
+  # actually heading for a merge; `main` is covered here.
+  #
+  # The cost, stated so nobody rediscovers it: a push to a branch with no pull
+  # request open gets no CI. `npm run gate` is the local equivalent and has no
+  # dependencies, and the PR-time run still catches everything before a merge.
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+# Rapid successive pushes still queue a run each. This lets the newest win
+# rather than racing; the cancelled run belongs to the superseded commit, so
+# the head commit's checks stay clean.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # The gate itself has zero dependencies. Only the build needs these.
+      - run: npm ci
+
+      - name: Selector guarantees
+        run: npm run verify
+
+      - name: Eval suite
+        run: npm run eval
+
+      - name: Data pipeline over the fixture
+        env:
+          VENT_DATA_DIR: scripts/fixtures
+          VENT_OUT_DIR: ${{ runner.temp }}/data
+        run: node scripts/data-pipeline.mjs
+
+      - name: Preference pipeline over the fixture
+        env:
+          VENT_DATA_DIR: scripts/fixtures
+          VENT_OUT_DIR: ${{ runner.temp }}/data
+        run: node scripts/rlhf-pipeline.mjs
+
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run build
+
+      # Two deployments, not one. Routes that answer "this instance has no
+      # voice" before they touch the store behave differently with keys and
+      # without, and a suite that only ever sees one shape will pass locally
+      # for an author who has keys and fail here — which is exactly what it
+      # did. The SFU host is the discard port, so any call fails instantly
+      # rather than hanging a CI job on DNS.
+      - name: Live checks — no voice configured
+        run: .github/live-checks.sh
+
+      - name: Live checks — voice configured
+        env:
+          LIVEKIT_URL: ws://127.0.0.1:9
+          LIVEKIT_API_KEY: ci-key
+          LIVEKIT_API_SECRET: ci-secret-0123456789
+        run: .github/live-checks.sh

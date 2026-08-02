@@ -1,0 +1,5 @@
+[
+  { "title": "Customer Success Manager", "company": "Remote Co", "location": "Remote — Europe", "url": "https://example.invalid/jobs/1", "remote": true },
+  { "title": "Support Engineer", "company": "Distributed Ltd", "location": "Remote — Worldwide", "url": "https://example.invalid/jobs/2", "remote": true },
+  { "title": "Community Lead", "company": "Async Works", "location": "Remote — EMEA", "url": "https://example.invalid/jobs/3", "remote": true }
+]

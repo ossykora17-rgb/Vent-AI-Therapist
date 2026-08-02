@@ -1,0 +1,9 @@
+{
+  "default": { "toxicity": 0.08, "insult": 0.04, "threat": 0.01 },
+  "match": [
+    { "contains": "stupid", "scores": { "toxicity": 0.93, "insult": 0.88, "threat": 0.12 } },
+    { "contains": "useless", "scores": { "toxicity": 0.91, "insult": 0.86, "threat": 0.09 } },
+    { "contains": "find you", "scores": { "toxicity": 0.66, "insult": 0.21, "threat": 0.79 } },
+    { "contains": "disgusting", "scores": { "toxicity": 0.62, "insult": 0.30, "threat": 0.02 } }
+  ]
+}
