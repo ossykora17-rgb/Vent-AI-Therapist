@@ -13,7 +13,8 @@
     "data": "node scripts/data-pipeline.mjs",
     "rlhf": "node scripts/rlhf-pipeline.mjs",
     "heartbeat": "node scripts/heartbeat-data.mjs",
-    "gate": "node scripts/heartbeat-data.mjs --gate"
+    "gate": "node scripts/heartbeat-data.mjs --gate",
+    "live-checks": "bash .github/live-checks.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
