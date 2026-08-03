@@ -195,10 +195,12 @@ export async function POST(request: Request) {
   let tokensSpent = false;
 
   if (!isAnthropicConfigured) {
-    // No key yet: still move the session forward rather than 500ing. What it
-    // may claim about saving depends on whether this deployment can — see
-    // noModelKeyReply.
-    reply = noModelKeyReply(Boolean(store && userId));
+    // No key yet: still move the session forward rather than 500ing. The
+    // selected tactic already exists — selecting one costs nothing — so when
+    // it carries an authored room phrasing, that is a real move to offer
+    // instead of a shrug. What it may claim about saving depends on whether
+    // this deployment can. See noModelKeyReply.
+    reply = noModelKeyReply(Boolean(store && userId), tactic.hold);
   } else {
     try {
       const anthropic = new Anthropic({ apiKey: env.anthropicApiKey });

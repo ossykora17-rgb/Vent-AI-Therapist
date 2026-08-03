@@ -425,6 +425,19 @@ check("12 A reply with no model key promises only what it can keep", () => {
     "it says so plainly instead of leaving them to assume");
   ok(kept.includes("Say the next part") && dropped.includes("Say the next part"),
     "either way the session keeps moving");
+
+  // With no key at all, a real-world vent can still be answered with the room
+  // phrasing its tactic already carries — authored, not generated. The saving
+  // claim has to survive that path too.
+  const hold = REAL_WORLD_TACTIC.economy.hold;
+  const withHold = noModelKeyReply(false, hold);
+  ok(withHold.includes(hold), "an authored hold is offered rather than a shrug");
+  ok(!/I've saved/.test(withHold),
+    "and it still does not claim a save it did not make", withHold);
+  ok(noModelKeyReply(true, hold).includes("word for word"),
+    "with a store behind it, the same reply may say the words were kept");
+  ok(!noModelKeyReply(false, null).includes("That's the move"),
+    "a tactic with no authored hold invents nothing to fill the space");
 });
 
 // ── live: the four things only a running room can prove ────────────────────
