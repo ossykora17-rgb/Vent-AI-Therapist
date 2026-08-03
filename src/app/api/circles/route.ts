@@ -67,24 +67,36 @@ export async function POST(request: Request) {
   }
 
   const now = new Date();
-  const circle = await store.createCircle({
-    creator_anon_id: input.anonId,
-    tag: input.tag ?? null,
-    chair_picked: input.chairPicked ?? null,
-    pressure_seeded: input.pressure != null ? Math.round(input.pressure) : null,
-    flavour: input.flavour ?? null,
-    status: "waiting",
-    starts_at: now.toISOString(),
-    ends_at: new Date(now.getTime() + CIRCLE_MINUTES * 60_000).toISOString(),
-  });
+  let circle;
+  try {
+    // The one store method that throws rather than returning null. An insert
+    // the database rejects was a 500 here; the caller's answer is the same as
+    // if there were no store at all, because from where they sit there isn't.
+    circle = await store.createCircle({
+      creator_anon_id: input.anonId,
+      tag: input.tag ?? null,
+      chair_picked: input.chairPicked ?? null,
+      pressure_seeded: input.pressure != null ? Math.round(input.pressure) : null,
+      flavour: input.flavour ?? null,
+      status: "waiting",
+      starts_at: now.toISOString(),
+      ends_at: new Date(now.getTime() + CIRCLE_MINUTES * 60_000).toISOString(),
+    });
 
-  // Whoever opens the circle holds it.
-  await store.addMember({
-    circle_id: circle.id,
-    anon_id: input.anonId,
-    role: roleForSeat(0),
-    pressure_seeded: input.pressure != null ? Math.round(input.pressure) : null,
-  });
+    // Whoever opens the circle holds it.
+    await store.addMember({
+      circle_id: circle.id,
+      anon_id: input.anonId,
+      role: roleForSeat(0),
+      pressure_seeded: input.pressure != null ? Math.round(input.pressure) : null,
+    });
+  } catch (error) {
+    console.error("[circles] could not open a circle", error);
+    return NextResponse.json(
+      { error: "no_storage", message: "Circles need storage. Run locally or configure Supabase." },
+      { status: 503, headers: { "cache-control": "no-store" } },
+    );
+  }
 
   return NextResponse.json(
     { circle, role: roleForSeat(0), storage: store.kind },

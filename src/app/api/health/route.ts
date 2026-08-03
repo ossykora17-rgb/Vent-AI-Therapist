@@ -7,6 +7,7 @@ import {
   isPaystackConfigured,
   isPerspectiveConfigured,
   isSupabaseConfigured,
+  isSupabaseUrlValid,
 } from "@/lib/env";
 import { inventory } from "@/lib/external/cache";
 
@@ -17,9 +18,16 @@ export const dynamic = "force-dynamic";
  * database actually answers — not just whether the keys are present.
  */
 export async function GET() {
-  let database: "ok" | "unreachable" | "not_configured" = "not_configured";
+  let database: "ok" | "unreachable" | "misconfigured" | "not_configured" =
+    "not_configured";
 
-  if (isSupabaseConfigured) {
+  // Distinct from "unreachable" on purpose. A URL that does not parse is a
+  // typo you fix in the dashboard in ten seconds; an unreachable database is
+  // an outage or a wrong key. Collapsing them sends you looking in the wrong
+  // place, and this endpoint exists to stop exactly that.
+  if (isSupabaseConfigured && !isSupabaseUrlValid) {
+    database = "misconfigured";
+  } else if (isSupabaseConfigured) {
     try {
       const supabase = await createClient();
       // head+count touches the table without transferring rows. RLS means an
