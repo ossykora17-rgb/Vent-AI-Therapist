@@ -31,6 +31,30 @@ export interface ModelVerdict {
   status: ModelStatus;
   /** The upstream message, truncated. The fastest route to the real cause. */
   detail: string | null;
+  /** Only set when something is wrong. Never the key — only its shape. */
+  keyShape?: KeyShape;
+}
+
+export type KeyShape = "ok" | "unexpected_prefix" | "short" | "absent";
+
+/**
+ * The shape of the key, never the key.
+ *
+ * `authentication_error` is the same answer for two very different mistakes:
+ * a well-formed key that has been revoked or belongs to another workspace,
+ * and a value that was never an Anthropic key at all — the wrong secret, or
+ * one truncated by a copy that stopped early. They send you to different
+ * places, so the health block distinguishes them.
+ *
+ * This reports a classification only. `/api/health` is public; nothing here
+ * echoes any part of the secret.
+ */
+export function anthropicKeyShape(): KeyShape {
+  const key = env.anthropicApiKey;
+  if (!key) return "absent";
+  if (!key.startsWith("sk-ant-")) return "unexpected_prefix";
+  if (key.length < 40) return "short";
+  return "ok";
 }
 
 /**
@@ -66,7 +90,10 @@ export async function probeModel(): Promise<ModelVerdict> {
     await anthropic.models.retrieve(VENT_MODEL);
     return { status: "ok", detail: null };
   } catch (error) {
-    return classifyModelError(error);
+    // The shape is only worth reporting when the call failed — it is a hint
+    // about where to look, not a verdict of its own. A key can be perfectly
+    // shaped and still revoked.
+    return { ...classifyModelError(error), keyShape: anthropicKeyShape() };
   }
 }
 
