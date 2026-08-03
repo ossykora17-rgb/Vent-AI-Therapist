@@ -6,21 +6,32 @@
  * Only code paths that genuinely need a key call the `require*` helpers.
  */
 
+/**
+ * Every value is trimmed.
+ *
+ * A dashboard paste picks up a trailing newline or a leading space far more
+ * often than anyone admits, and a credential with one invisible character on
+ * the end is rejected exactly like a wrong one — an `authentication_error`
+ * that sends you hunting for a revoked key that was never revoked. Trimming
+ * costs nothing and removes the whole class.
+ */
+const s = (v: string | undefined) => (v ?? "").trim();
+
 export const env = {
-  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-  supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
-  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
-  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
-  paystackSecretKey: process.env.PAYSTACK_SECRET_KEY ?? "",
+  supabaseUrl: s(process.env.NEXT_PUBLIC_SUPABASE_URL),
+  supabaseAnonKey: s(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+  supabaseServiceRoleKey: s(process.env.SUPABASE_SERVICE_ROLE_KEY),
+  anthropicApiKey: s(process.env.ANTHROPIC_API_KEY),
+  paystackSecretKey: s(process.env.PAYSTACK_SECRET_KEY),
   /** Perspective — the Guardian's second opinion on a message. */
-  perspectiveApiKey: process.env.PERSPECTIVE_API_KEY ?? "",
+  perspectiveApiKey: s(process.env.PERSPECTIVE_API_KEY),
   /** Sugra — commodities and market data. Optional; the rate works without it. */
-  sugraApiKey: process.env.SUGRA_API_KEY ?? "",
+  sugraApiKey: s(process.env.SUGRA_API_KEY),
   /** LiveKit — Phase 1 voice. Server half only until the client lands. */
-  livekitUrl: process.env.LIVEKIT_URL ?? "",
-  livekitApiKey: process.env.LIVEKIT_API_KEY ?? "",
-  livekitApiSecret: process.env.LIVEKIT_API_SECRET ?? "",
-  paystackPublicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY ?? "",
+  livekitUrl: s(process.env.LIVEKIT_URL),
+  livekitApiKey: s(process.env.LIVEKIT_API_KEY),
+  livekitApiSecret: s(process.env.LIVEKIT_API_SECRET),
+  paystackPublicKey: s(process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY),
   siteUrl:
     process.env.NEXT_PUBLIC_SITE_URL ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
