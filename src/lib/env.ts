@@ -31,6 +31,29 @@ export const isSupabaseConfigured = Boolean(
   env.supabaseUrl && env.supabaseAnonKey,
 );
 
+/**
+ * Present is not the same as parseable.
+ *
+ * `createClient()` in supabase-js throws on a malformed URL — and
+ * `abc.supabase.co`, without the scheme, is the paste people actually make.
+ * It throws during construction, inside `getStore()`, which every route calls
+ * before it does anything. Unguarded, one bad character in this variable is a
+ * 500 across the whole app *including `/api/health`* — the endpoint you would
+ * use to find out why.
+ *
+ * Verified against the installed client, not assumed: "abc.supabase.co" and
+ * "not a url" throw; a wrong service-role key does not.
+ */
+export const isSupabaseUrlValid = (() => {
+  if (!env.supabaseUrl) return false;
+  try {
+    const { protocol } = new URL(env.supabaseUrl);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+})();
+
 export const isAnthropicConfigured = Boolean(env.anthropicApiKey);
 export const isPerspectiveConfigured = Boolean(env.perspectiveApiKey);
 export const isLivekitConfigured = Boolean(
