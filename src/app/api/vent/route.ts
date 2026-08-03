@@ -9,13 +9,21 @@ import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
 import { buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
 import { MEMORY_TURNS, memoryFetchSize, selectMemory } from "@/lib/vent/memory";
 import { noModelKeyReply } from "@/lib/vent/fallback";
+import {
+  MAX_TOKENS,
+  VENT_MODEL,
+  classifyModelError,
+  modelFailureReply,
+} from "@/lib/vent/model";
 import { buildFlavour } from "@/lib/flavour/profile";
 
 export const dynamic = "force-dynamic";
 
-/** Depth costs money, so only a real vent reaches it. */
-const VENT_MODEL = "claude-sonnet-5";
-const MAX_TOKENS = 220;
+/**
+ * Depth costs money, so only a real vent reaches it. The id and the failure
+ * vocabulary live in one module so /api/health checks the model the product
+ * actually calls, rather than a second copy of the name.
+ */
 
 const RATE_PER_MINUTE = 10;
 const RATE_PER_DAY = 100;
@@ -229,9 +237,19 @@ export async function POST(request: Request) {
         .trim();
       tokensSpent = true;
     } catch (error) {
-      console.error("[vent] model call failed", error);
+      // Every model failure used to read "Network dipped on my side", which
+      // names one cause out of four and invites a retry that a rejected key
+      // or a wrong model id can never satisfy. The status is on the response
+      // so /api/health is not the only place the truth exists.
+      const verdict = classifyModelError(error);
+      console.error("[vent] model call failed", verdict.status, verdict.detail);
       return NextResponse.json(
-        { error: "model_unavailable", reply: "Network dipped on my side. Say that again." },
+        {
+          error: "model_unavailable",
+          reason: verdict.status,
+          detail: verdict.detail,
+          reply: modelFailureReply(verdict.status),
+        },
         { status: 503, headers: { "cache-control": "no-store" } },
       );
     }

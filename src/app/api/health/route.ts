@@ -10,6 +10,7 @@ import {
   isSupabaseUrlValid,
 } from "@/lib/env";
 import { inventory } from "@/lib/external/cache";
+import { VENT_MODEL, probeModel } from "@/lib/vent/model";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,13 @@ export async function GET() {
 
   const store = getStore();
 
+  // Present is not the same as working — the lesson the database check was
+  // built on, which this field did not have. `anthropic: true` meant only
+  // "the variable is set", so a rejected key looked identical to a good one
+  // and the sole symptom was every vent answering "Network dipped".
+  // Zero-token metadata read, against the model the product actually calls.
+  const model = await probeModel();
+
   const services = {
     supabase: isSupabaseConfigured,
     anthropic: isAnthropicConfigured,
@@ -53,8 +61,12 @@ export async function GET() {
 
   return NextResponse.json(
     {
-      status: database === "unreachable" ? "degraded" : "ok",
+      status:
+        database === "unreachable" || (model.status !== "ok" && model.status !== "not_configured")
+          ? "degraded"
+          : "ok",
       database,
+      model: { id: VENT_MODEL, ...model },
       storage: store?.kind ?? "none",
       persisting: Boolean(store),
       services,
