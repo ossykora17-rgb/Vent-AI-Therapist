@@ -53,12 +53,22 @@ export async function POST(request: Request) {
 
   // ── 1. CRISIS. Checked before anything else, never sent to a model. ──────
   if (classification.intent === "crisis") {
+    let saved = false;
     if (store) {
-      const userId = await store.ensureUser(input.anonId, {
-        chairPicked: input.chairPicked ?? undefined,
-      });
-      if (userId) {
-        await persist(store, userId, input, classification, CRISIS_RESPONSE, null, grounding.iso, true);
+      // A store that throws must never cost somebody in crisis their reply.
+      // The lines are local constants and this path spends nothing, so the
+      // only thing a database failure can take away here is the record.
+      try {
+        const userId = await store.ensureUser(input.anonId, {
+          chairPicked: input.chairPicked ?? undefined,
+        });
+        if (userId) {
+          saved = await tryPersist(
+            store, userId, input, classification, CRISIS_RESPONSE, null, grounding.iso, true,
+          );
+        }
+      } catch (error) {
+        console.error("[vent] store unreachable on the crisis path", error);
       }
     }
     return NextResponse.json(
@@ -66,7 +76,9 @@ export async function POST(request: Request) {
         intent: "crisis",
         reply: CRISIS_RESPONSE,
         crisis: { ...CRISIS_LINES, gated: true },
-        persisted: Boolean(store),
+        // What happened, not what was configured. A store that exists and
+        // then throws had reported `true` here.
+        persisted: saved,
         storage: store?.kind ?? "none",
       },
       { headers: { "cache-control": "no-store" } },
@@ -79,33 +91,46 @@ export async function POST(request: Request) {
   let recentTactics: string[] = [];
 
   if (store) {
-    userId = await store.ensureUser(input.anonId, {
-      chairPicked: input.chairPicked ?? undefined,
-    });
+    // Configured is not the same as reachable. One wrong character in
+    // SUPABASE_SERVICE_ROLE_KEY makes every call below throw, and an
+    // unhandled throw here is a 500 — the only 500 this route had. Degrade
+    // to the no-store shape instead: the session still works, and because
+    // userId stays null the reply tells them nothing is being saved, which
+    // by then is true.
+    try {
+      userId = await store.ensureUser(input.anonId, {
+        chairPicked: input.chairPicked ?? undefined,
+      });
 
-    if (userId) {
-      const now = Date.now();
-      const [inMinute, inDay] = await Promise.all([
-        store.countVentsSince(userId, new Date(now - 60_000)),
-        store.countVentsSince(userId, new Date(now - 86_400_000)),
-      ]);
+      if (userId) {
+        const now = Date.now();
+        const [inMinute, inDay] = await Promise.all([
+          store.countVentsSince(userId, new Date(now - 60_000)),
+          store.countVentsSince(userId, new Date(now - 86_400_000)),
+        ]);
 
-      if (inMinute >= RATE_PER_MINUTE || inDay >= RATE_PER_DAY) {
-        return NextResponse.json(
-          { error: "rate_limited", reply: "Small small — breathe. Try again in a minute." },
-          { status: 429, headers: { "cache-control": "no-store" } },
-        );
+        if (inMinute >= RATE_PER_MINUTE || inDay >= RATE_PER_DAY) {
+          return NextResponse.json(
+            { error: "rate_limited", reply: "Small small — breathe. Try again in a minute." },
+            { status: 429, headers: { "cache-control": "no-store" } },
+          );
+        }
+
+        // Asking the date is not a vent — `selectMemory` is where that rule
+        // lives, so the eval suite measures the real filter and not a copy.
+        const recent = await store.recentVents(userId, memoryFetchSize(MEMORY_TURNS));
+        const rows = selectMemory(recent, MEMORY_TURNS);
+
+        history = rows as unknown as MemoryRow[];
+        recentTactics = rows
+          .map((r) => r.tactic_used)
+          .filter((t): t is string => Boolean(t));
       }
-
-      // Asking the date is not a vent — `selectMemory` is where that rule
-      // lives, so the eval suite measures the real filter and not a copy.
-      const recent = await store.recentVents(userId, memoryFetchSize(MEMORY_TURNS));
-      const rows = selectMemory(recent, MEMORY_TURNS);
-
-      history = rows as unknown as MemoryRow[];
-      recentTactics = rows
-        .map((r) => r.tactic_used)
-        .filter((t): t is string => Boolean(t));
+    } catch (error) {
+      console.error("[vent] store unreachable — continuing without it", error);
+      userId = null;
+      history = [];
+      recentTactics = [];
     }
   }
 
@@ -128,9 +153,10 @@ export async function POST(request: Request) {
     factual ?? localReply(classification.intent, grounding, classification.language);
 
   if (local) {
-    if (store && userId) {
-      await persist(store, userId, input, classification, local, null, grounding.iso);
-    }
+    const saved =
+      store && userId
+        ? await tryPersist(store, userId, input, classification, local, null, grounding.iso)
+        : false;
     return NextResponse.json(
       {
         intent: classification.intent,
@@ -139,7 +165,7 @@ export async function POST(request: Request) {
         realWorldTag: classification.realWorldTag,
         grounding: { date: grounding.date, time: grounding.time },
         tokensSpent: false,
-        persisted: Boolean(userId),
+        persisted: saved,
         storage: store?.kind ?? "none",
       },
       { headers: { "cache-control": "no-store" } },
@@ -209,9 +235,10 @@ export async function POST(request: Request) {
     }
   }
 
-  if (store && userId) {
-    await persist(store, userId, input, classification, reply, tactic.id, grounding.iso);
-  }
+  const saved =
+    store && userId
+      ? await tryPersist(store, userId, input, classification, reply, tactic.id, grounding.iso)
+      : false;
 
   return NextResponse.json(
     {
@@ -230,7 +257,7 @@ export async function POST(request: Request) {
       },
       memoryUsed: history.length,
       tokensSpent,
-      persisted: Boolean(userId),
+      persisted: saved,
       storage: store?.kind ?? "none",
     },
     { headers: { "cache-control": "no-store" } },
@@ -288,6 +315,24 @@ export async function DELETE(request: Request) {
     { deleted: ventId ? 1 : "all", persisted: true, storage: store.kind },
     { headers: { "cache-control": "no-store" } },
   );
+}
+
+/**
+ * A write that failed is a write that did not happen.
+ *
+ * Every caller reports `persisted` from what this returns rather than from
+ * whether a store was configured, so a database that accepts a connection and
+ * then rejects the insert cannot make the response claim otherwise. It also
+ * means a store failing mid-request costs the record and not the reply.
+ */
+async function tryPersist(...args: Parameters<typeof persist>): Promise<boolean> {
+  try {
+    await persist(...args);
+    return true;
+  } catch (error) {
+    console.error("[vent] store write failed", error);
+    return false;
+  }
 }
 
 async function persist(
