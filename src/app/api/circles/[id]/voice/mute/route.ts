@@ -5,6 +5,7 @@ import { getStore } from "@/lib/store";
 import { env, isLivekitConfigured } from "@/lib/env";
 import { roomNameFor } from "@/lib/voice/livekit";
 import { sweepIfOver } from "@/lib/circles/sweep";
+import { withStore } from "@/lib/http/with-store";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,7 @@ const schema = z.object({
  *   told too. A circle whose whole promise is being heard cannot take a voice
  *   away without saying so — a quiet mute would be the worst lie in here.
  */
-export async function POST(request: Request, { params }: Params) {
+async function handlePOST(request: Request, { params }: Params) {
   const { id } = await params;
   if (!isLivekitConfigured) {
     return NextResponse.json({ error: "voice_not_configured" }, { status: 501 });
@@ -130,3 +131,6 @@ export async function POST(request: Request, { params }: Params) {
     );
   }
 }
+
+// A store that stops answering is a 503 here, not a 404 and not a 500.
+export const POST = withStore(handlePOST);

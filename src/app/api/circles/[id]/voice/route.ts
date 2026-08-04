@@ -4,6 +4,7 @@ import { getStore } from "@/lib/store";
 import { mintVoiceToken } from "@/lib/voice/livekit";
 import { isLivekitConfigured } from "@/lib/env";
 import { sweepIfOver } from "@/lib/circles/sweep";
+import { withStore } from "@/lib/http/with-store";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ const schema = z.object({ anonId: z.string().min(8).max(64) });
  *
  * 501 rather than 500 when the keys are absent: not broken, not built yet.
  */
-export async function POST(request: Request, { params }: Params) {
+async function handlePOST(request: Request, { params }: Params) {
   const { id } = await params;
   if (!isLivekitConfigured) {
     return NextResponse.json(
@@ -84,3 +85,6 @@ export async function POST(request: Request, { params }: Params) {
 
   return NextResponse.json(token, { headers: { "cache-control": "no-store" } });
 }
+
+// A store that stops answering is a 503 here, not a 404 and not a 500.
+export const POST = withStore(handlePOST);

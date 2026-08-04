@@ -6,6 +6,7 @@ import { checkMessage } from "@/lib/circles/rules";
 import { sweepIfOver } from "@/lib/circles/sweep";
 import { scoreToxicity } from "@/lib/external/sources";
 import { guardianVerdict } from "@/lib/external/guardian";
+import { withStore } from "@/lib/http/with-store";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
 type Params = { params: Promise<{ id: string }> };
 
 /** Only members read the room, and only inside the 24h window. */
-export async function GET(request: Request, { params }: Params) {
+async function handleGET(request: Request, { params }: Params) {
   const { id } = await params;
   const anonId = new URL(request.url).searchParams.get("anonId") ?? "";
   const store = getStore();
@@ -64,7 +65,7 @@ const postSchema = z.object({
   kind: z.enum(["share", "witness"]),
 });
 
-export async function POST(request: Request, { params }: Params) {
+async function handlePOST(request: Request, { params }: Params) {
   const { id } = await params;
   let json: unknown;
   try {
@@ -141,3 +142,7 @@ export async function POST(request: Request, { params }: Params) {
     { status: 201, headers: { "cache-control": "no-store" } },
   );
 }
+
+// A store that stops answering is a 503 here, not a 404 and not a 500.
+export const GET = withStore(handleGET);
+export const POST = withStore(handlePOST);

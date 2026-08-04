@@ -62,6 +62,7 @@ const TACTICS: Tactic[] = [
     family: "validation",
     instruction:
       "Mirror their exact two strongest words back, then name where they are holding it. e.g. \"Choke. And you dey hold am for chest make e no show.\"",
+    hold: "Say the two heaviest words again, out loud. Then name where in the body they sit.",
     fits: (c) => c.ventCount <= 1 || c.pressure !== null && c.pressure > 60,
     weight: (c) => (c.ventCount <= 1 ? 90 : 40),
   },
@@ -70,6 +71,7 @@ const TACTICS: Tactic[] = [
     family: "validation",
     instruction:
       "Name the emotion sitting underneath the one they showed. e.g. \"Na shame dey under that anger.\"",
+    hold: "Name the one underneath the anger. Not the loud one — the one beneath it.",
     fits: has(ANGER),
     weight: () => 75,
   },
@@ -78,6 +80,7 @@ const TACTICS: Tactic[] = [
     family: "validation",
     instruction:
       "Normalise without softening — anyone shaped this way would feel this. e.g. \"Anybody wey grow for house where love na performance go feel this.\"",
+    hold: "Nothing is wrong with you for feeling this. Anybody shaped the same way would.",
     fits: has(/\b(crazy|mad|only me|am i normal|something wrong with me)\b/),
     weight: () => 80,
   },
@@ -88,6 +91,7 @@ const TACTICS: Tactic[] = [
     family: "cognitive",
     instruction:
       "One Socratic question aimed at what the critical voice is trying to prove. e.g. \"Wetin that oga voice dey try prove say you no be?\"",
+    hold: "Ask that voice what it is trying to prove. Just the question tonight. No answer yet.",
     fits: has(ANALYTICAL),
     weight: () => 70,
   },
@@ -99,6 +103,7 @@ const TACTICS: Tactic[] = [
     // they already survived, then hand them one smaller true sentence.
     instruction:
       "Take the exact sentence they just said to themselves and hold it up. Ask what has actually happened so far that backs it, and what they have already survived that says otherwise. Then give them one smaller, truer sentence to carry instead of the big one. Never say 'evidence for and against' — that is a clipboard talking.",
+    hold: "Take the sentence you said to yourself. Find one smaller one that is still true.",
     fits: has(CATASTROPHE),
     weight: () => 78,
   },
@@ -107,6 +112,7 @@ const TACTICS: Tactic[] = [
     family: "cognitive",
     instruction:
       "Hand the power back without excusing the other person. e.g. \"Oga no make you small — e just find the small pikin wey you already hide.\"",
+    hold: "Two short lists — what is theirs, what is yours. Short ones. Do not pad either.",
     fits: has(/\b(he made me|she made me|they made me|oga|boss|manager)\b/),
     weight: () => 74,
   },
@@ -115,6 +121,7 @@ const TACTICS: Tactic[] = [
     family: "cognitive",
     instruction:
       "Put a number on it: if the worst actually lands, one to ten, how bad — and are they still standing at the end of that sentence? Ask it plainly, not as an exercise.",
+    hold: "Put a number on the worst case, one to ten. Then say whether you are still standing.",
     fits: has(CATASTROPHE),
     weight: () => 68,
   },
@@ -123,6 +130,7 @@ const TACTICS: Tactic[] = [
     family: "cognitive",
     instruction:
       "Turn it outward: if their closest friend said this about themselves, what would they tell them?",
+    hold: "Say it again as if your closest friend said it about themselves. Then answer them.",
     fits: has(SELF_CRITIC),
     weight: () => 82,
   },
@@ -133,6 +141,7 @@ const TACTICS: Tactic[] = [
     family: "somatic",
     instruction:
       "Name the exact place they said, then one drop set: 4 secs inhale, 6 secs exhale, drop the shoulder. Tell them to do it now.",
+    hold: "Four seconds in, six out, drop the shoulder. Once, now, before the next sentence.",
     fits: (c) => c.body !== null,
     weight: (c) => (c.pressure !== null && c.pressure > 70 ? 88 : 72),
   },
@@ -141,6 +150,7 @@ const TACTICS: Tactic[] = [
     family: "somatic",
     instruction:
       "5 things you see, 4 you touch, 3 you hear, 2 you smell, 1 you taste — have them call it out now.",
+    hold: "Five you can see, four you can touch, three you can hear. Out loud, now.",
     fits: has(/\b(panic|numb|blank|floating|not real|dissociat|idk|i don'?t know)\b/),
     weight: () => 80,
   },
@@ -149,6 +159,7 @@ const TACTICS: Tactic[] = [
     family: "somatic",
     instruction:
       "Clench the fist 5 secs, release, notice the difference — then do it for the shoulder.",
+    hold: "Fist tight for five, then let go. Notice the difference. That is the whole task.",
     fits: (c) => (c.pressure ?? 0) > 70,
     weight: () => 66,
   },
@@ -157,6 +168,7 @@ const TACTICS: Tactic[] = [
     family: "somatic",
     instruction:
       "Look slowly left, slowly right — where did the eye want to rest? Is that place safe?",
+    hold: "Look slow to the left, slow to the right. Where did your eyes want to stop?",
     fits: has(/\b(anxious|on edge|jumpy|can'?t settle|watching|scared)\b/),
     weight: () => 64,
   },
@@ -167,6 +179,7 @@ const TACTICS: Tactic[] = [
     family: "duality",
     instruction:
       "Name the two parts and ask which is louder right now, 0–100. e.g. impress the oga vs burn the office down.",
+    hold: "Name the two parts pulling. Then say which is louder right now, zero to a hundred.",
     fits: (c) => PARTS.test(c.message.toLowerCase()) || c.duality !== null,
     weight: (c) => (c.duality !== null ? 84 : 70),
   },
@@ -175,6 +188,7 @@ const TACTICS: Tactic[] = [
     family: "duality",
     instruction:
       "Find the young part carrying the rule — \"if I don't perform I'm not loved\" — and ask how old it is.",
+    hold: "Find the rule you have been keeping. Then ask how old you were when you learned it.",
     fits: has(/\b(perform|prove|earn|not enough|never good enough|since i was)\b/),
     weight: () => 76,
   },
@@ -183,6 +197,7 @@ const TACTICS: Tactic[] = [
     family: "duality",
     instruction:
       "Put the fear in the chair opposite. What does it say? Have them answer it out loud.",
+    hold: "Put the fear in the chair across from you. Let it talk first. Then answer it.",
     fits: has(/\b(stuck|two minds|can'?t decide|torn|i dey confuse)\b/),
     weight: () => 72,
   },
@@ -193,6 +208,7 @@ const TACTICS: Tactic[] = [
     family: "behavioral",
     instruction:
       "One micro action, ten words or fewer, doable in under a minute. e.g. \"Send one text: 'I go late small.'\" Tell them to do it now.",
+    hold: "One thing, under a minute, doable now. Ten words or fewer. Then go and do it.",
     fits: has(/\b(avoid|procrastinat|putting off|haven'?t|can'?t start|no fit start)\b/),
     weight: () => 80,
   },
@@ -201,6 +217,7 @@ const TACTICS: Tactic[] = [
     family: "behavioral",
     instruction:
       "DBT opposite action — they want to withdraw, so send them out the door for 30 seconds.",
+    hold: "Thirty seconds outside the door. Not an hour, not a plan. Thirty seconds.",
     fits: has(WITHDRAW),
     weight: () => 82,
   },
@@ -209,6 +226,7 @@ const TACTICS: Tactic[] = [
     family: "behavioral",
     instruction:
       "Ask which chair they are in today, then one thing that would make them stand up out of it.",
+    hold: "Say which chair you are in today. Then one thing that would get you standing.",
     fits: (c) => (c.mood ?? 10) <= 4,
     weight: () => 78,
   },
@@ -219,6 +237,7 @@ const TACTICS: Tactic[] = [
     family: "narrative",
     instruction:
       "Externalise the story — when did this 'failure' story first enter the house? Father, school, or the economy?",
+    hold: "Ask when that story first entered your house. Father, school, or the economy.",
     fits: (c) => words(c.message) > 45,
     weight: () => 74,
   },
@@ -227,6 +246,7 @@ const TACTICS: Tactic[] = [
     family: "narrative",
     instruction:
       "If they woke tomorrow and it had shifted slightly, what would they notice first in the body?",
+    hold: "If it had shifted by morning, what would the body notice first? Only the first thing.",
     fits: has(HOPELESS),
     weight: () => 76,
   },
@@ -235,6 +255,7 @@ const TACTICS: Tactic[] = [
     family: "narrative",
     instruction:
       "Lay the repetition out with their own past phrases and dates, then ask if it is the same pattern.",
+    hold: "Say what has come back more than once. Then ask if it is the same thing again.",
     fits: (c) => c.ventCount >= 3,
     weight: (c) => 60 + Math.min(c.ventCount * 3, 25),
   },
@@ -243,6 +264,7 @@ const TACTICS: Tactic[] = [
     family: "relational",
     instruction:
       "Pull them into the present — as they type this to you right now, what is happening in the belly?",
+    hold: "Stop on this sentence. What is happening in your belly as you say it?",
     fits: has(ANALYTICAL),
     weight: () => 62,
   },
@@ -251,6 +273,7 @@ const TACTICS: Tactic[] = [
     family: "relational",
     instruction:
       "Let them go before they run. \"I go let you go before you run. Shrine dey when ready.\"",
+    hold: "You can stop here. Nothing is owed. The room stays open for whenever.",
     fits: (c) => AVOIDANT.test(c.message.toLowerCase()) && words(c.message) <= 6,
     weight: () => 85,
   },
@@ -342,4 +365,14 @@ export function selectTactic(ctx: TacticContext): Tactic {
 export const ALL_TACTIC_IDS = [
   ...TACTICS.map((t) => t.id),
   ...Object.values(REAL_WORLD_TACTIC).map((t) => t.id),
+];
+
+/**
+ * Every tactic, for the eval suite and for anything that needs the library
+ * rather than one selection. Exported so a check asserts the shipping table
+ * instead of a copy of it.
+ */
+export const ALL_TACTICS: readonly Tactic[] = [
+  ...TACTICS,
+  ...Object.values(REAL_WORLD_TACTIC),
 ];

@@ -20,7 +20,8 @@ import path from "node:path";
 import { app, ROOT } from "./app-imports.mjs";
 
 const { classify } = await app("src/lib/vent/intent.ts");
-const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS } = await app("src/lib/vent/tactics.ts");
+const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS, ALL_TACTICS } =
+  await app("src/lib/vent/tactics.ts");
 const { buildFlavour } = await app("src/lib/flavour/profile.ts");
 const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/vent/chairs.ts");
@@ -177,6 +178,16 @@ check("5  Every real-world pressure carries its own tool, and a room phrasing", 
   // Concrete beats zen. "Ten naira" is a number a person can act on tonight.
   ok(/ten naira/i.test(REAL_WORLD_TACTIC.economy.instruction), "economy names ten naira");
   ok(/ten naira/i.test(REAL_WORLD_TACTIC.economy.hold), "the room hears the same number");
+
+  // Every tactic carries one, because a deployment with no model key answers
+  // a vent with it. A tactic added without a hold is a vent answered with a
+  // shrug, and the only place that is catchable is here.
+  const mute = ALL_TACTICS.filter((t) => !t.hold || t.hold.trim().length < 20);
+  ok(mute.length === 0,
+    "every tactic has a room phrasing a key-less deployment can offer",
+    mute.map((t) => t.id).join(", "));
+  ok(ALL_TACTICS.length === ALL_TACTIC_IDS.length,
+    "the table the suite reads is the table the product selects from");
 });
 
 // ── 6. flavour keeps its mouth shut when it does not know ──────────────────
