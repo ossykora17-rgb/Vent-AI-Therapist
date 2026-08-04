@@ -16,7 +16,7 @@ import { env, isAnthropicConfigured } from "@/lib/env";
  * in the wrong place — the same reason /api/health separates `misconfigured`
  * from `unreachable`.
  */
-export const VENT_MODEL = "claude-sonnet-5";
+export const VENT_MODEL = "claude-sonnet-5-20250715;
 export const MAX_TOKENS = 220;
 
 export type ModelStatus =
