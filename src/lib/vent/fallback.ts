@@ -10,13 +10,16 @@
  *
  * The second is about the reply itself. A vent with no key used to get one
  * static sentence, which is honest and dead. But `selectTactic()` has already
- * run by then, for free, and ten of the thirty-two tactics carry a `hold` —
- * the room phrasing a Keeper opens a circle with, authored by a person and
- * already asserted by the eval suite. That is a real move, not a generated
- * one, so a key-less deployment can offer it.
+ * run by then, for free, and every tactic now carries a `hold` — the room
+ * phrasing a Keeper opens a circle with, written by a person and reviewed in
+ * a diff. That is a real move, not a generated one, so a key-less deployment
+ * can offer it and a vent gets an answer rather than a shrug.
  *
- * The other twenty-two tactics have no `hold`. Nothing is invented to fill
- * that space: they get the plain sentence. Silence beats a guess.
+ * The plain sentence below is not dead code. A `hold` is authored, so a
+ * tactic added without one has nothing true to say here, and it says the
+ * plain thing rather than inventing a move to fill the space. Eval check 5
+ * keeps that from happening quietly; this keeps it from being a lie if it
+ * ever does. Silence beats a guess.
  */
 export function noModelKeyReply(persisting: boolean, hold?: string | null): string {
   if (hold) {
