@@ -4,6 +4,7 @@ import { getStore } from "@/lib/store";
 import { scoreToxicity } from "@/lib/external/sources";
 import { guardianVerdict } from "@/lib/external/guardian";
 import { isPerspectiveConfigured } from "@/lib/env";
+import { withStore } from "@/lib/http/with-store";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,7 @@ const schema = z.object({
  * `circleId` are used here, to decide whether to ask at all, and are never
  * forwarded.
  */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   let json: unknown;
   try {
     json = await request.json();
@@ -71,3 +72,6 @@ export async function POST(request: Request) {
     { headers: { "cache-control": "no-store" } },
   );
 }
+
+// A store that stops answering is a 503 here, not a 404 and not a 500.
+export const POST = withStore(handlePOST);

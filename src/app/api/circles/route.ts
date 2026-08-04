@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getStore } from "@/lib/store";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { CIRCLE_MINUTES, MAX_SEATS, roleForSeat } from "@/lib/circles/rules";
+import { withStore } from "@/lib/http/with-store";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ const createSchema = z.object({
 });
 
 /** Open circles, with seat counts. No content, ever — just the shape. */
-export async function GET() {
+async function handleGET() {
   const store = getStore();
   if (!store) {
     return NextResponse.json({ circles: [], persisting: false, storage: "none" });
@@ -36,7 +37,7 @@ export async function GET() {
   );
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   let json: unknown;
   try {
     json = await request.json();
@@ -103,3 +104,7 @@ export async function POST(request: Request) {
     { status: 201, headers: { "cache-control": "no-store" } },
   );
 }
+
+// A store that stops answering is a 503 here, not a 404 and not a 500.
+export const GET = withStore(handleGET);
+export const POST = withStore(handlePOST);

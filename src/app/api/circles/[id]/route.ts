@@ -13,6 +13,7 @@ import {
   MAX_SEATS, PHASE_LABEL, economyFact, keeperIntention, keeperReflection,
   phaseFor, roleForSeat,
 } from "@/lib/circles/rules";
+import { withStore } from "@/lib/http/with-store";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ const KEEPER_REFLECT = "keeper:reflect";
 type Params = { params: Promise<{ id: string }> };
 
 /** The room: who is in it, what role you hold, how long is left. */
-export async function GET(request: Request, { params }: Params) {
+async function handleGET(request: Request, { params }: Params) {
   const { id } = await params;
   const query = new URL(request.url).searchParams;
   const anonId = query.get("anonId") ?? "";
@@ -152,7 +153,7 @@ const joinSchema = z.object({
 });
 
 /** Join. Consent is required, crisis is refused, seats are capped at six. */
-export async function POST(request: Request, { params }: Params) {
+async function handlePOST(request: Request, { params }: Params) {
   const { id } = await params;
   let json: unknown;
   try {
@@ -224,7 +225,7 @@ const sealSchema = z.object({
  * thing worth keeping out of a circle: whether the room moved anything.
  * The two words and a number, no content, nothing anybody said.
  */
-export async function PATCH(request: Request, { params }: Params) {
+async function handlePATCH(request: Request, { params }: Params) {
   const { id } = await params;
   let json: unknown;
   try {
@@ -270,7 +271,7 @@ export async function PATCH(request: Request, { params }: Params) {
 }
 
 /** The Keeper may end early. Closing deletes every word said. */
-export async function DELETE(request: Request, { params }: Params) {
+async function handleDELETE(request: Request, { params }: Params) {
   const { id } = await params;
   const anonId = new URL(request.url).searchParams.get("anonId") ?? "";
   const store = getStore();
@@ -286,3 +287,9 @@ export async function DELETE(request: Request, { params }: Params) {
   await closeVoiceRoom(id);
   return NextResponse.json({ closed: true }, { headers: { "cache-control": "no-store" } });
 }
+
+// A store that stops answering is a 503 here, not a 404 and not a 500.
+export const GET = withStore(handleGET);
+export const POST = withStore(handlePOST);
+export const PATCH = withStore(handlePATCH);
+export const DELETE = withStore(handleDELETE);
