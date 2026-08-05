@@ -87,6 +87,15 @@ export class SupabaseStore implements Store {
     return (data ?? []) as unknown as VentRow[];
   }
 
+  async recentVentsAcross(limit: number): Promise<VentRow[]> {
+    const data = ok("recentVentsAcross", await this.db
+      .from("vents")
+      .select(FULL_SELECT)
+      .order("created_at", { ascending: false })
+      .limit(limit));
+    return (data ?? []) as unknown as VentRow[];
+  }
+
   listVents(userId: string, limit: number): Promise<VentRow[]> {
     return this.recentVents(userId, limit);
   }
