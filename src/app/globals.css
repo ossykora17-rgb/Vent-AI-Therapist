@@ -161,6 +161,43 @@
   }
 
   /*
+   * The Closing.
+   *
+   * This is the moment a circle exists for, and it arrived like every other
+   * card. It takes twice as long now — 900ms, slow enough that the eye waits
+   * for it — and the room dims behind it so there is one thing to look at.
+   *
+   * Nothing flashes and nothing celebrates. Leaving somewhere is quiet.
+   */
+  .closing {
+    animation: closing 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    box-shadow:
+      0 0 0 1px rgb(var(--gold) / 0.25),
+      0 24px 60px -20px rgb(var(--gold) / 0.18);
+  }
+
+  @keyframes closing {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.99);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* What is behind the Closing recedes rather than disappears. */
+  .receding {
+    opacity: 0.35;
+    filter: saturate(0.8);
+    transition:
+      opacity 900ms ease,
+      filter 900ms ease;
+    pointer-events: none;
+  }
+
+  /*
    * A native range track is ~8px tall — far under the 44px thumb target on a
    * phone. Pad the control to 44px and keep the track thin, so it stays a hair
    * line but the whole strip is draggable.

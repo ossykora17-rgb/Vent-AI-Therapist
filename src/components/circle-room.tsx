@@ -325,7 +325,9 @@ export function CircleRoom({ id }: { id: string }) {
                   : state.intention}
             </p>
 
-            <ol className="mt-4 space-y-3">
+            {/* When the Closing is up, everything said recedes. Not hidden —
+                still there, just no longer what the room is about. */}
+            <ol className={cn("mt-4 space-y-3", state.phase === "close" && "receding")}>
               {messages.map((m) => (
                 <li
                   key={m.id}
@@ -346,8 +348,8 @@ export function CircleRoom({ id }: { id: string }) {
               ))}
             </ol>
             {state.phase === "close" && (
-              <div className="glass mt-4 animate-slide-up border-gold/50 p-4">
-                <p className="label-mono mb-3">Closing — where did you land?</p>
+              <div className="glass closing mt-6 border-gold/50 p-6 sm:p-8">
+                <p className="label-mono mb-4">Closing — where did you land?</p>
 
                 {mood === null ? (
                   <>
@@ -436,7 +438,9 @@ export function CircleRoom({ id }: { id: string }) {
 
                     {dropped && (
                       <>
-                        <p className="mt-4 text-[15px] leading-[1.6]">
+                        {/* The sentence somebody leaves with. It was set at
+                            the same size as a form label. */}
+                        <p className="reply mt-6">
                           You carry {carry ?? "what you came with"}. You drop{" "}
                           {dropped}. The words in this room go with it.
                         </p>
