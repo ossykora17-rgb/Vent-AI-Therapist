@@ -141,6 +141,7 @@ export function buildSystemPrompt({
     memoryBlock(memory),
     "",
     `Reply in ${classification.language === "pidgin" ? "Pidgin" : "English"}. Three to four sentences.`,
+    "Output only the words you would say to them. No preamble, no labels, no\nrestating the move, no headings. Start with the first thing you would say.",
   ]
     .filter(Boolean)
     .join("\n");
