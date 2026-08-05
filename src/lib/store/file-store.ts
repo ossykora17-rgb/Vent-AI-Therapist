@@ -144,6 +144,13 @@ export class FileStore implements Store {
     return this.byUserDesc(userId).slice(0, limit);
   }
 
+  /** Everybody, newest first. Loop only — see the interface for why. */
+  async recentVentsAcross(limit: number): Promise<VentRow[]> {
+    return [...this.read().vents]
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+      .slice(0, limit);
+  }
+
   async insertVent(vent: NewVent): Promise<void> {
     await this.write((db) => {
       db.vents.push({

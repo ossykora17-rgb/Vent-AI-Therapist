@@ -84,6 +84,15 @@ export interface Store {
 
   /** Most recent first is easier to query; callers reverse for prompt order. */
   recentVents(userId: string, limit: number): Promise<VentRow[]>;
+  /**
+   * The newest vents across everybody, for the loop only.
+   *
+   * Deliberately not scoped to a person, and deliberately never reachable
+   * from a route that returns content. /api/heartbeat counts what comes back
+   * and returns numbers; nothing anybody wrote leaves through it. Any new
+   * caller has to answer that question again before using this.
+   */
+  recentVentsAcross(limit: number): Promise<VentRow[]>;
   listVents(userId: string, limit: number): Promise<VentRow[]>;
 
   insertVent(vent: NewVent): Promise<void>;

@@ -1,0 +1,75 @@
+name: loop
+
+# The other half of the heartbeat.
+#
+# `heartbeat.yml` gates the code. This watches the users. It asks production
+# what is actually happening — counts only, never content — and opens an issue
+# when the answer contains a finding.
+#
+# It runs against the deployed app rather than a checkout because the store
+# lives in Supabase and only the deployment has the credentials. The daily
+# `npm run heartbeat` in CI has been reading an empty `.data` directory and
+# reporting green, which is a loop that cannot see anybody.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # 07:00 WAT, when somebody would look
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ask production what happened
+        id: ask
+        run: |
+          URL="${VENT_URL:-https://vent-ai-therapist.vercel.app}/api/heartbeat"
+          curl -sS --max-time 60 "$URL" -o beat.json || { echo "unreachable"; exit 1; }
+          cat beat.json
+          # A finding count of zero is the normal, quiet outcome. Only a
+          # non-zero count is worth waking anybody for.
+          COUNT=$(node -e 'const j=require("./beat.json");console.log((j.findings||[]).length)')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          {
+            echo "body<<EOF"
+            node -e '
+              const j = require("./beat.json");
+              console.log(`Production, ${j.timestamp}\n`);
+              console.log(`- vents in window: **${j.vents}**`);
+              console.log(`- anchored with a drop: **${j.anchored}**`);
+              console.log(`- mean drop: **${j.meanDrop ?? "not enough data"}**`);
+              console.log(`- storage: \`${j.storage}\`\n`);
+              for (const f of j.findings || []) {
+                console.log(`### ${f.kind} — ${f.count}`);
+                console.log(`${f.why}\n`);
+                console.log(`Context: \`.claude/skills/${f.skill}/SKILL.md\`\n`);
+              }
+              console.log("Counts only. Nothing anybody wrote is in this issue.");
+            '
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open an issue when there is something to fix
+        if: steps.ask.outputs.count != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = process.env.BODY;
+            const title = `loop: ${new Date().toISOString().slice(0, 10)} — production has findings`;
+            // One issue per day at most. A loop that opens a duplicate every
+            // run teaches everybody to ignore it.
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: "open", labels: "loop",
+            });
+            if (open.some((i) => i.title === title)) return;
+            await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              title, body, labels: ["loop"],
+            });
+        env:
+          BODY: ${{ steps.ask.outputs.body }}
