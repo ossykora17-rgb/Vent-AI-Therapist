@@ -1,6 +1,5 @@
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
-import { env, isAnthropicConfigured } from "@/lib/env";
+import { env } from "@/lib/env";
 
 /**
  * The model, and the truth about whether it actually answers.
@@ -108,14 +107,12 @@ export function classifyModelError(error: unknown): ModelVerdict {
  * credit and the network in one answer.
  */
 export async function probeModel(): Promise<ModelVerdict> {
-  if (!isAnthropicConfigured) return { status: "not_configured", detail: null };
+  const { configuredProviders } = await import("./providers");
+  const providers = configuredProviders();
+  if (!providers.length) return { status: "not_configured", detail: null };
   try {
-    const anthropic = new Anthropic({ apiKey: env.anthropicApiKey });
-    await anthropic.messages.create({
-      model: VENT_MODEL,
-      max_tokens: 1,
-      messages: [{ role: "user", content: "." }],
-    });
+    // The first provider in the chain — the one a vent reaches first.
+    await providers[0].send({ system: ".", messages: [{ role: "user", content: "." }], maxTokens: 1 });
     return { status: "ok", detail: null };
   } catch (error) {
     // The shape is only worth reporting when the call failed — it is a hint

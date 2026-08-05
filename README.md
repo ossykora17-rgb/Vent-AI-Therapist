@@ -17,7 +17,7 @@ emergency **199**.
 | Frontend | Next.js 16 (App Router) + React 19 + TypeScript |
 | Styling  | Tailwind, CSS-variable tokens           |
 | DB       | Supabase (Postgres), RLS deny-by-default |
-| AI       | Anthropic (`@anthropic-ai/sdk`)         |
+| AI       | Provider chain — Anthropic, Gemini, Groq, OpenRouter, Cerebras |
 | Hosting  | Vercel, auto-deploy from the branch     |
 
 ## Deploy
@@ -44,7 +44,26 @@ supabase/migrations/0005_circle_presence.sql    -- last_seen_at, typing_until
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | same page |
 | `SUPABASE_SERVICE_ROLE_KEY` | same page — **server only, never expose** |
-| `ANTHROPIC_API_KEY` | console.anthropic.com → API Keys |
+| **one model key** | any of the five below |
+
+Any one of these makes the chatbot work. They are tried in order and the
+first that answers wins, so a rate limit or an empty balance on one falls
+through to the next instead of silencing the room.
+
+| Variable | Free tier | Where |
+| --- | --- | --- |
+| `ANTHROPIC_API_KEY` | no | console.anthropic.com |
+| `GEMINI_API_KEY` | **yes, no card** | aistudio.google.com |
+| `GROQ_API_KEY` | **yes, no card** | console.groq.com |
+| `OPENROUTER_API_KEY` | some models | openrouter.ai |
+| `CEREBRAS_API_KEY` | yes | cloud.cerebras.ai |
+
+Order is `VENT_PROVIDER_ORDER` (comma-separated ids). Each model id is
+overridable — `VENT_MODEL_GEMINI`, `VENT_MODEL_GROQ` and so on — so a
+provider renaming a model is an env change, not a deploy. `/api/health`
+prints the whole chain and probes the first configured one with a real
+one-token call, because a metadata read passes on an empty account and that
+cost this project a week.|
 
 Optional: `NEXT_PUBLIC_SITE_URL` for a custom domain (Vercel's `VERCEL_URL`
 is used automatically otherwise), and the Paystack keys if you turn billing
@@ -117,7 +136,7 @@ Routing is pure local keyword work, so most messages never reach a model.
 | Crisis | Local — checked first, always wins | No |
 | Factual (date, time, who are you) | Local, from the real clock | No |
 | Greeting / meta | Local | No |
-| Vent | Anthropic, with the built prompt | **Yes** |
+| Vent | The provider chain, with the built prompt | **Yes** |
 
 The system prompt is assembled per turn from: real-time grounding, flavour
 (temperament × occupation × hobby, three lines, tunes delivery only), the
@@ -149,7 +168,7 @@ the suite passes while the product regresses.
 
 ```bash
 npm run data     # store → data/sft.jsonl + data/eval.jsonl
-npm run eval     # 12 checks, no server; pass a URL for the live room
+npm run eval     # 13 checks, no server; pass a URL for the live room
 npm run rlhf     # ratings → data/dpo.jsonl, and what is losing
 ```
 
@@ -169,12 +188,12 @@ deletion — circles are counted, never quoted), and **a reply the circle rules
 would refuse is not a reply worth training on**, so `checkMessage` runs over
 every candidate completion as a quality filter.
 
-**`npm run eval`** is MMLU for this product: eleven checks, every one of them a
+**`npm run eval`** is MMLU for this product: thirteen checks, every one of them a
 bug actually shipped here. The date answered as therapy. "It's the same thing
 every week" heard as an insult and answered with an apology. A worksheet where
-a sentence belonged. A witness who could never speak. 121 assertions, about a
-second, no tokens. Give it a base URL and it adds the live room checks — 12
-checks, and 142 or 145 assertions depending on whether the instance has voice
+a sentence belonged. A witness who could never speak. 136 assertions, about a
+second, no tokens. Give it a base URL and it adds the live room checks — 14
+checks, and 157 or 160 assertions depending on whether the instance has voice
 keys, because a few of them assert the token's shape. CI runs it both ways.
 One of those live checks found a real bug: a Keeper's early close deleted the
 transcript while the room kept answering `200`.

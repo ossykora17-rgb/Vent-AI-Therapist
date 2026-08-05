@@ -10,7 +10,8 @@ import {
   isSupabaseUrlValid,
 } from "@/lib/env";
 import { cached, inventory } from "@/lib/external/cache";
-import { VENT_MODEL, probeModel } from "@/lib/vent/model";
+import { probeModel } from "@/lib/vent/model";
+import { allProviders, configuredProviders } from "@/lib/vent/providers";
 
 export const dynamic = "force-dynamic";
 
@@ -53,12 +54,21 @@ export async function GET() {
   // unauthenticated endpoint must not be a way to spend somebody's account
   // down one token at a time.
   const model =
-    (await cached("model-probe", 60_000, "anthropic", probeModel))?.value ??
+    (await cached("model-probe", 60_000, "chain", probeModel))?.value ??
     (await probeModel());
+
+  // The whole chain, so a build running on a free key can see that it is, and
+  // a fallback that was never configured cannot be mistaken for one that is.
+  const chain = allProviders().map((p) => ({
+    provider: p.id,
+    model: p.model,
+    configured: p.configured,
+  }));
 
   const services = {
     supabase: isSupabaseConfigured,
     anthropic: isAnthropicConfigured,
+    providers: configuredProviders().length,
     paystack: isPaystackConfigured,
     perspective: isPerspectiveConfigured,
     livekit: isLivekitConfigured,
@@ -71,7 +81,8 @@ export async function GET() {
           ? "degraded"
           : "ok",
       database,
-      model: { id: VENT_MODEL, ...model },
+      model: { id: configuredProviders()[0]?.model ?? null, ...model },
+      chain,
       storage: store?.kind ?? "none",
       persisting: Boolean(store),
       services,

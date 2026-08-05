@@ -22,6 +22,11 @@ export const env = {
   supabaseAnonKey: s(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
   supabaseServiceRoleKey: s(process.env.SUPABASE_SERVICE_ROLE_KEY),
   anthropicApiKey: s(process.env.ANTHROPIC_API_KEY),
+  /** Every other provider speaks the OpenAI shape — see lib/vent/providers. */
+  geminiApiKey: s(process.env.GEMINI_API_KEY),
+  groqApiKey: s(process.env.GROQ_API_KEY),
+  openrouterApiKey: s(process.env.OPENROUTER_API_KEY),
+  cerebrasApiKey: s(process.env.CEREBRAS_API_KEY),
   paystackSecretKey: s(process.env.PAYSTACK_SECRET_KEY),
   /** Perspective — the Guardian's second opinion on a message. */
   perspectiveApiKey: s(process.env.PERSPECTIVE_API_KEY),
@@ -66,6 +71,19 @@ export const isSupabaseUrlValid = (() => {
 })();
 
 export const isAnthropicConfigured = Boolean(env.anthropicApiKey);
+
+/**
+ * Any way at all to answer. The vent route branches on this rather than on
+ * Anthropic alone — a build with only a free Gemini key is a working product,
+ * and telling that build it has no model would be false.
+ */
+export const isModelConfigured = Boolean(
+  env.anthropicApiKey ||
+    env.geminiApiKey ||
+    env.groqApiKey ||
+    env.openrouterApiKey ||
+    env.cerebrasApiKey,
+);
 export const isPerspectiveConfigured = Boolean(env.perspectiveApiKey);
 export const isLivekitConfigured = Boolean(
   env.livekitUrl && env.livekitApiKey && env.livekitApiSecret,

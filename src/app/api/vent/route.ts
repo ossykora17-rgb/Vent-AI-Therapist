@@ -1,20 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import Anthropic from "@anthropic-ai/sdk";
 import { getStore, type Store, type VentRow } from "@/lib/store";
-import { env, isAnthropicConfigured } from "@/lib/env";
+import { isModelConfigured } from "@/lib/env";
 import { answerFactual, groundNow } from "@/lib/vent/grounding";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
 import { buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
 import { MEMORY_TURNS, memoryFetchSize, selectMemory } from "@/lib/vent/memory";
 import { noModelKeyReply } from "@/lib/vent/fallback";
-import {
-  MAX_TOKENS,
-  VENT_MODEL,
-  classifyModelError,
-  modelFailureReply,
-} from "@/lib/vent/model";
+import { MAX_TOKENS, classifyModelError, modelFailureReply } from "@/lib/vent/model";
+import { generateReply } from "@/lib/vent/providers";
 import { buildFlavour } from "@/lib/flavour/profile";
 import { withStore } from "@/lib/http/with-store";
 
@@ -207,8 +202,9 @@ async function handlePOST(request: Request) {
 
   let reply: string;
   let tokensSpent = false;
+  let answeredBy: string | null = null;
 
-  if (!isAnthropicConfigured) {
+  if (!isModelConfigured) {
     // No key yet: still move the session forward rather than 500ing. The
     // selected tactic already exists — selecting one costs nothing — so when
     // it carries an authored room phrasing, that is a real move to offer
@@ -217,12 +213,12 @@ async function handlePOST(request: Request) {
     reply = noModelKeyReply(Boolean(store && userId), tactic.hold);
   } else {
     try {
-      const anthropic = new Anthropic({ apiKey: env.anthropicApiKey });
-      const completion = await anthropic.messages.create({
-        model: VENT_MODEL,
-        max_tokens: MAX_TOKENS,
-        temperature: 0.7,
+      // The chain, not one provider. A rate limit or an empty balance on the
+      // first is a reason to try the next, not a reason to tell somebody
+      // mid-sentence that they cannot be heard.
+      const answered = await generateReply({
         system: systemPrompt,
+        maxTokens: MAX_TOKENS,
         messages: [
           ...history.flatMap((h) =>
             h.ai_reply
@@ -232,15 +228,15 @@ async function handlePOST(request: Request) {
                 ]
               : [],
           ),
-          { role: "user", content: input.message },
+          { role: "user" as const, content: input.message },
         ],
       });
 
-      reply = completion.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("")
-        .trim();
+      reply = answered.text;
+      answeredBy = answered.provider;
+      if (answered.fellThrough.length) {
+        console.warn("[vent] fell through", JSON.stringify(answered.fellThrough));
+      }
       tokensSpent = true;
     } catch (error) {
       // Every model failure used to read "Network dipped on my side", which
@@ -295,6 +291,7 @@ async function handlePOST(request: Request) {
       },
       memoryUsed: history.length,
       tokensSpent,
+      provider: answeredBy,
       persisted: saved,
       storage: store?.kind ?? "none",
     },
