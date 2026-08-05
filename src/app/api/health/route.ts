@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getStore } from "@/lib/store";
 import {
@@ -25,6 +26,12 @@ export async function GET() {
   // Which tables answered and which did not — a migration that was never run
   // looks exactly like a wrong key unless the check says which.
   let missingTables: string[] = [];
+  // Why they did not answer. "Missing" and "not allowed to read" are different
+  // problems with the same symptom, and calling both of them missing sent this
+  // hunting for a table that existed. PostgREST puts the difference in `code`
+  // — 42P01/PGRST205 is absent, 42501 is a grant — and the actionable half in
+  // `hint`, which literally spells out the GRANT statement to run.
+  const tableErrors: Record<string, { code?: string; hint?: string }> = {};
 
   // Distinct from "unreachable" on purpose. A URL that does not parse is a
   // typo you fix in the dashboard in ten seconds; an unreachable database is
@@ -34,20 +41,33 @@ export async function GET() {
     database = "misconfigured";
   } else if (isSupabaseConfigured) {
     try {
-      const supabase = await createClient();
-      // head+count touches the table without transferring rows. RLS means an
-      // anonymous caller legitimately gets 0 — we only care that it responds.
-      // Both tables, because they come from different migrations and one
-      // being applied never implied the other. This reported ok on profiles
-      // alone while vents did not exist, so the store looked healthy and
-      // every write was being swallowed. The product does not use profiles
-      // for a vent; it uses vents.
+      // The identity the product actually uses.
+      //
+      // This probed with the anonymous client, which is a different role with
+      // different privileges — and under deny-by-default RLS an anonymous
+      // caller legitimately gets a count of 0 with no error. So it reported
+      // `ok` while every server read of `vents` was failing with `permission
+      // denied`, because service_role had no GRANT. A health probe on a path
+      // the product never takes is the green light over the broken road,
+      // again: this file already learned it once with models.retrieve.
+      const supabase = createAdminClient() ?? (await createClient());
+      // head+count touches the table without transferring rows. Both tables,
+      // because they come from different migrations and one being applied
+      // never implied the other.
       const [a, b] = await Promise.all([
         supabase!.from("profiles").select("id", { count: "exact", head: true }),
         supabase!.from("vents").select("id", { count: "exact", head: true }),
       ]);
       database = a.error || b.error ? "unreachable" : "ok";
       missingTables = [a.error && "profiles", b.error && "vents"].filter(Boolean) as string[];
+      for (const [name, res] of [["profiles", a], ["vents", b]] as const) {
+        if (res.error) {
+          tableErrors[name] = {
+            code: res.error.code ?? undefined,
+            hint: res.error.hint ?? undefined,
+          };
+        }
+      }
     } catch {
       database = "unreachable";
     }
@@ -94,6 +114,7 @@ export async function GET() {
           : "ok",
       database,
       missingTables,
+      tableErrors,
       // Which one actually answered, not which one is listed first.
       model: { id: probe.model ?? configuredProviders()[0]?.model ?? null, answeredBy: probe.answered, ...model },
       chain,

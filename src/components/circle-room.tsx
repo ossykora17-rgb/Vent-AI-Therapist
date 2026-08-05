@@ -1,5 +1,6 @@
 "use client";
 
+import { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL } from "@/lib/vent/intent";
 import * as React from "react";
 import Link from "next/link";
 import { anonId } from "@/lib/anon";
@@ -242,11 +243,11 @@ export function CircleRoom({ id }: { id: string }) {
               you need a person, now.
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <a href="tel:08062106493" className="flex min-h-[44px] flex-1 items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-ink">
-                Call 0806 210 6493
+              <a href={`tel:${CRISIS_TEL}`} className="flex min-h-[44px] flex-1 items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-ink">
+                Call {CRISIS_LINES.nigeria}
               </a>
-              <a href="tel:199" className="flex min-h-[44px] flex-1 items-center justify-center rounded-card border border-line/20 px-4 text-sm font-semibold">
-                Emergency 199
+              <a href={`tel:${EMERGENCY_TEL}`} className="flex min-h-[44px] flex-1 items-center justify-center rounded-card border border-line/20 px-4 text-sm font-semibold">
+                Emergency {CRISIS_LINES.emergency}
               </a>
             </div>
             <Link href="/chat" className="mt-3 block min-h-[44px] text-center text-sm text-ash underline underline-offset-4">

@@ -1,3 +1,4 @@
+import { CRISIS_LINES } from "@/lib/vent/intent";
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter } from "next/font/google";
 import { ToastProvider } from "@/components/ui/toast";
@@ -41,7 +42,7 @@ export const metadata: Metadata = {
     template: "%s · Mind Weave Vent",
   },
   description:
-    "Autonomous AI therapy grounded in real time. Vent, track mood, breathe, journal. Light and dark mode. Nigeria support 0806 210 6493.",
+    `Autonomous AI therapy grounded in real time. Vent, track mood, breathe, journal. Light and dark mode. Nigeria support ${CRISIS_LINES.nigeria}.`,
   applicationName: "Mind Weave Vent",
   manifest: "/manifest.webmanifest",
   // Declared explicitly rather than via app/icon.svg: the file-based

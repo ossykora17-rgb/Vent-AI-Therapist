@@ -1,3 +1,4 @@
+import { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL } from "@/lib/vent/intent";
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
 
@@ -20,8 +21,8 @@ export default function TermsPage() {
       <h2>If you are in danger</h2>
       <p>
         Contact a human right now. Nigeria:{" "}
-        <a href="tel:08062106493">0806 210 6493</a>. Emergency:{" "}
-        <a href="tel:199">199</a>. If you are outside Nigeria, call your local
+        <a href={`tel:${CRISIS_TEL}`}>{CRISIS_LINES.nigeria}</a>. Emergency:{" "}
+        <a href={`tel:${EMERGENCY_TEL}`}>{CRISIS_LINES.emergency}</a>. If you are outside Nigeria, call your local
         emergency number.
       </p>
 

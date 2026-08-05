@@ -1,5 +1,6 @@
 "use client";
 
+import { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL } from "@/lib/vent/intent";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -264,12 +265,12 @@ export function CirclesList() {
           advice, and not affiliated with AA. What&apos;s said in a circle stays
           in the circle — nothing is recorded and every word is deleted within
           24 hours. In crisis, call{" "}
-          <a href="tel:08062106493" className="underline underline-offset-2">
-            0806 210 6493
+          <a href={`tel:${CRISIS_TEL}`} className="underline underline-offset-2">
+            {CRISIS_LINES.nigeria}
           </a>{" "}
           or{" "}
-          <a href="tel:199" className="underline underline-offset-2">
-            199
+          <a href={`tel:${EMERGENCY_TEL}`} className="underline underline-offset-2">
+            {CRISIS_LINES.emergency}
           </a>
           .
         </p>
