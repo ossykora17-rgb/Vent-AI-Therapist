@@ -16,7 +16,10 @@ import { env, isAnthropicConfigured } from "@/lib/env";
  * in the wrong place — the same reason /api/health separates `misconfigured`
  * from `unreachable`.
  */
-export const VENT_MODEL = "claude-sonnet-5-20250715";
+// Not a dated snapshot id. `claude-sonnet-5-20250715` was tried in production
+// and Anthropic answered 404 not_found_error, naming the model — the probe in
+// this file is what caught it. The unsuffixed id is the one that resolves.
+export const VENT_MODEL = "claude-sonnet-5";
 export const MAX_TOKENS = 220;
 
 export type ModelStatus =
