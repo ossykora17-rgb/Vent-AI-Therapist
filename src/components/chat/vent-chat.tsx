@@ -193,6 +193,14 @@ export function VentChat() {
             >
               History
             </Link>
+            {/* Anything kept about somebody needs a door they can find without
+                being told where it is. */}
+            <Link
+              href="/memory"
+              className="hidden h-11 items-center rounded-full border border-line/10 px-4 text-sm sm:flex"
+            >
+              Memory
+            </Link>
             <ThemeToggle />
           </div>
         </div>
