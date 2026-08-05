@@ -63,15 +63,16 @@ overridable — `VENT_MODEL_GEMINI`, `VENT_MODEL_GROQ` and so on — so a
 provider renaming a model is an env change, not a deploy. `/api/health`
 prints the whole chain and probes the first configured one with a real
 one-token call, because a metadata read passes on an empty account and that
-cost this project a week.|
+cost this project a week.
 
 Optional: `NEXT_PUBLIC_SITE_URL` for a custom domain (Vercel's `VERCEL_URL`
 is used automatically otherwise), and the Paystack keys if you turn billing
 back on.
 
 **The app builds and runs with none of them set**, and says which of them is
-missing rather than guessing. No Supabase means nothing persists; no Anthropic
-key means a vent is held rather than answered. With neither — the state a
+missing rather than guessing. No Supabase means nothing persists; no model
+key means a vent is answered with its tactic's authored move rather than by a
+model. With neither — the state a
 fresh Vercel project is actually in — the reply says both, because telling
 someone their words were saved when there is nowhere to save them is the one
 thing it must not do. No path 500s.
@@ -94,8 +95,10 @@ back to a **local JSON store** at `.data/vent.json` — no Docker, no daemon, no
 extra dependency. Everything works: onboarding, memory across turns, history,
 filter and search, export, delete, rate limits. The file survives restarts.
 
-Add `ANTHROPIC_API_KEY` to `.env.local` if you want real replies; without it a
-vent is saved and told so rather than answered. Nothing 500s either way.
+Add any one model key to `.env.local` for real replies — `GEMINI_API_KEY` is
+free and needs no card. Without one, a vent is answered with the move its
+tactic already carries and told plainly that no model is running. Nothing
+500s either way.
 
 `GET /api/health` reports which backend answered:
 
@@ -168,7 +171,7 @@ the suite passes while the product regresses.
 
 ```bash
 npm run data     # store → data/sft.jsonl + data/eval.jsonl
-npm run eval     # 13 checks, no server; pass a URL for the live room
+npm run eval     # 14 checks, no server; pass a URL for the live room
 npm run rlhf     # ratings → data/dpo.jsonl, and what is losing
 ```
 

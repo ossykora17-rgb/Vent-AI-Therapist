@@ -135,8 +135,13 @@ async function discoverModel(
 /**
  * One adapter for every OpenAI-shaped API. The system prompt becomes the first
  * message because that is how they all take it.
+ *
+ * Exported so the eval suite can build one against a stubbed fetch. Every
+ * failure that reached a real person this week — a retired model id, a reply
+ * truncated mid-sentence, an empty completion, a rate limit — happened in a
+ * shape no check ever ran. They run here now.
  */
-function openAiCompatible(
+export function openAiCompatible(
   id: string,
   baseUrl: string,
   apiKey: string,
