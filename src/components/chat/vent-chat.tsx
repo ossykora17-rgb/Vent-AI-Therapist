@@ -29,6 +29,9 @@ interface VentResponse {
   memoryUsed?: number;
   tokensSpent?: boolean;
   persisted?: boolean;
+  /** Why the model did not answer, when it did not. Shown, not swallowed. */
+  reason?: string;
+  detail?: string | null;
 }
 
 export function VentChat() {
@@ -100,12 +103,20 @@ export function VentChat() {
       }
       if (!res.ok && !data.reply) throw new Error(data.error ?? `HTTP ${res.status}`);
 
+      // When the model does not answer, the reply alone names one cause out of
+      // four and the real one is only in the JSON. Days were lost reading
+      // "Network dipped" as a network problem. If the server said why, show it.
+      const why =
+        !res.ok && data.reason
+          ? `\n\n[${data.reason}${data.detail ? ` — ${data.detail}` : ""}]`
+          : "";
+
       setLines((l) => [
         ...l,
         {
           id: nextId.current++,
           speaker: "vent",
-          text: data.reply,
+          text: data.reply + why,
           crisis: data.intent === "crisis",
         },
       ]);
