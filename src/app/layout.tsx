@@ -1,21 +1,38 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Playfair_Display } from "next/font/google";
+import { Fraunces, Inter } from "next/font/google";
 import { ToastProvider } from "@/components/ui/toast";
 import { THEME_SCRIPT } from "@/components/theme-toggle";
 import { ServiceWorkerRegistrar } from "@/components/sw-register";
 import "./globals.css";
 
+/**
+ * Inter, as a variable font.
+ *
+ * Dropping the weight array is what makes it variable rather than two static
+ * cuts: the whole axis ships, so 450 and 550 exist and text can be nudged
+ * without jumping a step. It is also one file instead of several.
+ */
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
   display: "swap",
 });
 
-const playfair = Playfair_Display({
+/**
+ * Fraunces for display, in place of Playfair.
+ *
+ * Playfair is the default serif of every wellness template on the internet,
+ * and a room that looks like every other room is not a room anybody remembers.
+ * Fraunces is variable with an optical-size axis, so it grows warmer and
+ * softer as it gets larger rather than just scaling — which is exactly what a
+ * heading in a quiet room should do. SOFT rounds the terminals; WONK lets the
+ * italics keep their strangeness instead of being sanded flat.
+ */
+const fraunces = Fraunces({
   subsets: ["latin"],
-  variable: "--font-playfair",
+  variable: "--font-fraunces",
   display: "swap",
-  weight: ["700", "900"],
+  axes: ["SOFT", "WONK", "opsz"],
 });
 
 export const metadata: Metadata = {
@@ -59,7 +76,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${playfair.variable}`}
+      className={`${inter.variable} ${fraunces.variable}`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />

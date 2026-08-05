@@ -106,8 +106,45 @@
     z-index: 1;
   }
 
-  h1 {
+  /*
+   * Display type, set the way a variable font wants to be set.
+   *
+   * opsz is an optical-size axis, not a scale: at 96 the letterforms open up
+   * and the terminals soften, which is the difference between a heading that
+   * is big and a heading that is calm. SOFT rounds the corners a little
+   * further than the default. Both are wasted on a static font and free here.
+   *
+   * text-wrap: balance stops a two-word heading breaking one-and-one, which
+   * is the single most common way a considered layout looks careless.
+   *
+   * The size is fluid rather than stepped, so it reads the same at 360px and
+   * on a laptop without a breakpoint deciding for it.
+   */
+  h1,
+  h2 {
     @apply font-display;
+    font-variation-settings: "opsz" 96, "SOFT" 40, "WONK" 0;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  h1 {
+    font-size: clamp(1.75rem, 1.2rem + 2.4vw, 2.75rem);
+    line-height: 1.1;
+  }
+
+  /*
+   * Numbers that do not shuffle.
+   *
+   * A tension reading counting 78 → 20 with proportional figures makes the
+   * whole line jitter as it changes. Tabular figures hold their column, so a
+   * number that is being watched stays still.
+   */
+  .tabular,
+  input[type="range"] + *,
+  [data-numeric] {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
   }
 
   /* 16px minimum stops iOS Safari zooming the viewport on focus. */
@@ -143,9 +180,17 @@
    * what makes an interface feel like it wants you to hurry up and finish.
    */
   .reply {
-    @apply text-[17px] leading-[1.75] tracking-[0.005em];
+    @apply leading-[1.75] tracking-[0.005em];
+    /* Fluid, so the measure holds at 360px and on a laptop without a
+       breakpoint guessing which one somebody is on. */
+    font-size: clamp(1rem, 0.95rem + 0.3vw, 1.0625rem);
     max-width: 62ch;
+    /* pretty stops a paragraph ending on one orphaned word — the thing that
+       makes a considered layout look accidental. */
     text-wrap: pretty;
+    /* Contextual alternates and proper quotes; off by default in most stacks. */
+    font-feature-settings: "calt" 1, "liga" 1;
+    hanging-punctuation: first last;
   }
 
   /*
