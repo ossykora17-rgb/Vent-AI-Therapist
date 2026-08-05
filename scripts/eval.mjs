@@ -1,7 +1,7 @@
 /**
  * Stage 5 — the eval suite. MMLU, but for truth instead of trivia.
  *
- *   node scripts/eval.mjs                          # 12 checks, no server
+ *   node scripts/eval.mjs                          # 13 checks, no server
  *   node scripts/eval.mjs http://localhost:3001    # + the live room checks
  *
  * A benchmark is only worth anything if it measures the thing that would
@@ -32,6 +32,7 @@ const { PRESENCE_WINDOW_MS, TYPING_WINDOW_MS, isPresent, isTyping, presenceOf, s
   await app("src/lib/circles/presence.ts");
 const { guardianVerdict, THRESHOLD } = await app("src/lib/external/guardian.ts");
 const { noModelKeyReply } = await app("src/lib/vent/fallback.ts");
+const { allProviders, configuredProviders } = await app("src/lib/vent/providers.ts");
 
 const BASE = (process.argv[2] || "").replace(/\/$/, "");
 
@@ -451,6 +452,25 @@ check("12 A reply with no model key promises only what it can keep", () => {
     "a tactic with no authored hold invents nothing to fill the space");
 });
 
+// ── 13. more than one way to answer ────────────────────────────────────────
+// An empty credit balance on one provider silenced this product for a week.
+// A chain is only worth having if the order is the order, and if a provider
+// with no key is skipped rather than tried and reported broken.
+check("13 The provider chain is ordered, and skips what is not configured", () => {
+  const all = allProviders();
+  ok(all.length >= 5, "at least five providers are known to this build", `${all.length}`);
+  ok(all.every((p) => p.id && p.model), "every provider names itself and its model");
+
+  const ids = all.map((p) => p.id);
+  is(new Set(ids).size, ids.length, "no provider is listed twice");
+
+  // Nothing is configured in the suite's environment, so nothing is offered.
+  ok(configuredProviders().every((p) => p.configured),
+    "only providers with a key are ever offered to a vent");
+  ok(all.filter((p) => !p.configured).length === all.length - configuredProviders().length,
+    "and the rest are known but not attempted");
+});
+
 // ── live: the four things only a running room can prove ────────────────────
 if (BASE) {
   const post = (p, body, method = "POST") =>
@@ -460,7 +480,7 @@ if (BASE) {
       body: JSON.stringify(body),
     });
 
-  await checkAsync("13 A Keeper does not speak to an empty room", async () => {
+  await checkAsync("14 A Keeper does not speak to an empty room", async () => {
     const one = `eval-${Date.now()}-a`;
     const { circle } = await post("/api/circles", {
       anonId: one, tag: "family", chairPicked: "tight_edge", pressure: 78,

@@ -37,6 +37,12 @@ const found = (file) => ({
 
 registerHooks({
   resolve(specifier, context, next) {
+    // `server-only` is a build-time guard with no runtime meaning. Without
+    // this the suite cannot import the modules that carry it, which is most
+    // of the ones worth asserting.
+    if (specifier === "server-only") {
+      return { url: "data:text/javascript,export{}", shortCircuit: true };
+    }
     // An already-absolute `file:…/x.ts` still needs the format hint, or Node
     // parses it as CommonJS first and warns about the retry.
     if (specifier.startsWith("file:") && /\.tsx?$/.test(specifier)) {
