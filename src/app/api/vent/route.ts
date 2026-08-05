@@ -5,6 +5,7 @@ import { isModelConfigured } from "@/lib/env";
 import { answerFactual, groundNow } from "@/lib/vent/grounding";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
+import { getEfficacy } from "@/lib/vent/efficacy";
 import { buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
 import { MEMORY_TURNS, memoryFetchSize, selectMemory } from "@/lib/vent/memory";
 import { noModelKeyReply } from "@/lib/vent/fallback";
@@ -182,7 +183,12 @@ async function handlePOST(request: Request) {
   }
 
   // ── 4. A real vent. The only path that spends tokens. ───────────────────
-  const tactic = selectTactic(ctx);
+  //
+  // Efficacy is read here and nowhere earlier: every free path has already
+  // returned, so nothing anybody gets for nothing waits on it. It is cached on
+  // a half-hour clock and fails open to "no opinion", which is also what a
+  // product with no usage yet looks like.
+  const tactic = selectTactic({ ...ctx, efficacy: await getEfficacy(store) });
 
   // Flavour is read from everything they have said here — pure local
   // heuristics, so personalising the delivery costs nothing.

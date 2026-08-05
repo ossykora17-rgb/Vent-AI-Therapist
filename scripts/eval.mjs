@@ -535,6 +535,136 @@ await checkAsync("14 A provider's four real failures are handled, not passed on"
   }
 });
 
+// ── 15. the part that learns, and what stops it inventing ─────────────────
+//
+// "Would the LLMs train themselves?" — this is the answer, so it needs the
+// same suspicion as anything else that changes what a person is offered. The
+// risk is not that it learns the wrong thing. It is that it learns *anything*
+// from four sessions and a coincidence.
+const { measureEfficacy, EFFICACY_FLOOR, EFFICACY_SPAN, getEfficacy, resetEfficacyCache } =
+  await app("src/lib/vent/efficacy.ts");
+
+await checkAsync("15 The selector learns from outcomes, and refuses thin evidence", async () => {
+  const row = (tactic, before, after, i) => ({
+    id: `v${i}`,
+    user_id: "u",
+    user_message: "x",
+    ai_reply: "y",
+    tactic_used: tactic,
+    tension_before: before,
+    tension_after: after,
+    created_at: new Date(Date.now() - i * 60_000).toISOString(),
+    real_world_tag: null,
+    intent_type: "vent",
+  });
+  const many = (tactic, drop, n, o = 0) =>
+    Array.from({ length: n }, (_, i) => row(tactic, 80, 80 - drop, o + i));
+
+  // Thin data says nothing at all. This is the same rule as the flavour floor
+  // and the pattern floor, applied to the machine talking to itself.
+  ok(
+    measureEfficacy(many("a", 40, EFFICACY_FLOOR - 1).concat(many("b", 5, EFFICACY_FLOOR - 1, 50)))
+      .size === 0,
+    "below the floor, a 35-point difference still earns no opinion",
+  );
+
+  // One tactic over the floor cannot be above its own average.
+  ok(
+    measureEfficacy(many("a", 40, EFFICACY_FLOOR + 4).concat(many("b", 5, 3, 90))).size === 0,
+    "a single qualifying tactic is not ranked against itself",
+  );
+
+  const table = measureEfficacy(
+    many("good", 30, EFFICACY_FLOOR + 2).concat(many("poor", 4, EFFICACY_FLOOR + 2, 90)),
+  );
+  ok(table.get("good") > 0, "a move followed by bigger drops is weighted up");
+  ok(table.get("poor") < 0, "a move followed by smaller drops is weighted down");
+  ok(
+    Math.abs(table.get("good")) <= EFFICACY_SPAN && Math.abs(table.get("poor")) <= EFFICACY_SPAN,
+    "the adjustment stays inside its span",
+    `got ${table.get("good")} / ${table.get("poor")}`,
+  );
+
+  // The invariant this must never rewrite: a named pressure keeps its own
+  // tool. Give the real-world tactic the worst record in the table and the
+  // best possible general rival, and it still wins.
+  const rwId = REAL_WORLD_TACTIC.economy.id;
+  const rigged = new Map([[rwId, -EFFICACY_SPAN]]);
+  for (const t of ALL_TACTIC_IDS) if (t !== rwId) rigged.set(t, EFFICACY_SPAN);
+  is(
+    selectTactic({ ...base, realWorldTag: "economy", efficacy: rigged }).id,
+    rwId,
+    "learning reorders peers and never crosses the real-world band",
+  );
+
+  // Same context, no table: whatever it picked before it could learn anything.
+  const cold = selectTactic({ ...base, recentTactics: [] });
+  is(
+    selectTactic({ ...base, recentTactics: [], efficacy: new Map() }).id,
+    cold.id,
+    "an empty table leaves the selector exactly as it was",
+  );
+
+  // A store that is down must not reach the person. Fail open, every time.
+  resetEfficacyCache();
+  const down = { recentVentsAcross: async () => { throw new Error("store operation failed"); } };
+  is((await getEfficacy(down)).size, 0, "a broken store yields no opinion rather than an error");
+  resetEfficacyCache();
+  is((await getEfficacy(null)).size, 0, "no store at all yields no opinion");
+});
+
+// ── 16. the request the store actually sends ───────────────────────────────
+//
+// Two ways a URL was built wrong, both of which broke every read of `vents`
+// in production while looking correct in the source. PostgREST answered
+// "Invalid path specified in request URL" for one of them and the same
+// sentence was misread three times.
+const { supabaseBase } = await app("src/lib/env.ts");
+
+check("16 The store asks PostgREST for something it can parse", () => {
+  // A project URL is an origin. supabase-js appends /rest/v1 itself, so a
+  // pasted endpoint makes every query ask for /rest/v1/rest/v1/vents.
+  for (const suffix of ["rest", "auth", "storage", "realtime", "functions"]) {
+    is(
+      supabaseBase(`https://ref.supabase.co/${suffix}/v1`),
+      "https://ref.supabase.co",
+      `a pasted /${suffix}/v1 endpoint is normalised back to the project`,
+    );
+  }
+  is(
+    supabaseBase("https://ref.supabase.co/rest/v1/"),
+    "https://ref.supabase.co",
+    "and with the trailing slash it comes with",
+  );
+  is(
+    supabaseBase("https://ref.supabase.co"),
+    "https://ref.supabase.co",
+    "a correct project URL is left alone",
+  );
+  // Which deployment shape makes this false: self-hosted behind a path.
+  // Stripping any path would break it to fix a paste.
+  is(
+    supabaseBase("https://example.com/supabase"),
+    "https://example.com/supabase",
+    "a self-hosted path prefix survives normalisation",
+  );
+  is(supabaseBase(""), "", "an unset variable stays unset rather than becoming a URL");
+  is(supabaseBase("not a url"), "not a url", "an unparseable value is left for the validator");
+
+  // PostgREST takes the select list verbatim into the query string, so one
+  // space asks for a column named " user_id" and the error names a path.
+  const store = fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8");
+  const lists = [...store.matchAll(/\.select\(\s*"([^"]*)"/g)].map((m) => m[1]);
+  ok(lists.length > 0, "the store's select lists are found at all", `${lists.length}`);
+  for (const list of lists) {
+    ok(!/\s/.test(list), "no select list carries whitespace", JSON.stringify(list));
+  }
+  const joins = [...store.matchAll(/\.join\(\s*"([^"]*)"\s*\)/g)].map((m) => m[1]);
+  for (const j of joins) {
+    is(j, ",", "a select list built by join uses a bare comma");
+  }
+});
+
 // ── live: the four things only a running room can prove ────────────────────
 if (BASE) {
   const post = (p, body, method = "POST") =>
@@ -544,7 +674,7 @@ if (BASE) {
       body: JSON.stringify(body),
     });
 
-  await checkAsync("15 A Keeper does not speak to an empty room", async () => {
+  await checkAsync("17 A Keeper does not speak to an empty room", async () => {
     const one = `eval-${Date.now()}-a`;
     const { circle } = await post("/api/circles", {
       anonId: one, tag: "family", chairPicked: "tight_edge", pressure: 78,

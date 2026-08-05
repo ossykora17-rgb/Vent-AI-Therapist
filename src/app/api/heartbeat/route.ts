@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
 import { checkMessage } from "@/lib/circles/rules";
+import { supabaseUrlPath } from "@/lib/env";
+import { efficacyNote, measureEfficacy } from "@/lib/vent/efficacy";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -47,7 +49,14 @@ export async function GET() {
     vents = await store.recentVentsAcross(500);
   } catch (error) {
     return NextResponse.json(
-      { error: "storage_unavailable", detail: (error as Error).message },
+      {
+        error: "storage_unavailable",
+        detail: (error as Error).message,
+        // The path and nothing else. A PostgREST path error names a path and
+        // the eye reads it as a table, so the shape that would cause one is
+        // reported next to it. "/" is correct for every hosted project.
+        restPath: supabaseUrlPath,
+      },
       { status: 503, headers: { "cache-control": "no-store" } },
     );
   }
@@ -118,6 +127,9 @@ export async function GET() {
       anchored: withDrop.length,
       meanDrop: meanDrop === null ? null : Number(meanDrop.toFixed(1)),
       findings,
+      // What the selector has learned from this same window, as a sentence.
+      // Names tactic ids and counts — never anything anybody wrote.
+      learned: efficacyNote(measureEfficacy(vents)),
       storage: store.kind,
       timestamp: new Date().toISOString(),
     },
