@@ -28,6 +28,7 @@ export type ModelStatus =
   | "unauthorized"
   | "model_not_found"
   | "rate_limited"
+  | "upstream_down"
   | "unreachable";
 
 export interface ModelVerdict {
@@ -77,6 +78,11 @@ export function classifyModelError(error: unknown): ModelVerdict {
   }
   if (e?.status === 401 || e?.status === 403) return { status: "unauthorized", detail };
   if (e?.status === 429) return { status: "rate_limited", detail };
+  // 529 is Anthropic overloaded; any 5xx is their side, not the network. Calling
+  // that "network dipped" sends somebody to check their wifi for an hour.
+  if (typeof e?.status === "number" && e.status >= 500) {
+    return { status: "upstream_down", detail };
+  }
   return { status: "unreachable", detail };
 }
 
@@ -111,6 +117,8 @@ export function modelFailureReply(status: ModelStatus): string {
   switch (status) {
     case "rate_limited":
       return "Too many at once on my side. Give it a minute, then say that again.";
+    case "upstream_down":
+      return "The model is down on its own side, not yours. Give it a minute and say that again.";
     case "unauthorized":
     case "model_not_found":
       return "My side is set up wrong — not busy, wrong. Saying it again won't get through, and that's on the setup, not on you.";

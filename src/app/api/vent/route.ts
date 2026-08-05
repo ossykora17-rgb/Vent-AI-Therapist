@@ -19,6 +19,10 @@ import { buildFlavour } from "@/lib/flavour/profile";
 import { withStore } from "@/lib/http/with-store";
 
 export const dynamic = "force-dynamic";
+// A model call is the one slow thing here. The platform default can be short
+// enough to kill it mid-answer, which surfaces as a network fault and sends
+// everyone looking at their wifi.
+export const maxDuration = 60;
 
 // Depth costs money, so only a real vent reaches it. VENT_MODEL and the
 // failure vocabulary live in @/lib/vent/model so /api/health probes the model
