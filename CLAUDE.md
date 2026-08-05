@@ -21,7 +21,7 @@ constraint. It outranks elegance, cleverness, and feature count.
 npm run local      # the whole product, no accounts, no cloud  → :3001
 npm run gate       # selector + eval + pipelines + live-verify → merge or don't
 npm run live-checks # boots its own build on :3001, runs the live half alone
-npm run eval       # 13 checks, no server; add a URL for the live room
+npm run eval       # 14 checks, no server; add a URL for the live room
 npm run heartbeat  # what changed, what is dirty, who should fix it
 npm run data       # store → data/sft.jsonl + data/eval.jsonl
 npm run rlhf       # ratings → data/dpo.jsonl, and what is losing
@@ -84,6 +84,8 @@ own copy passes while the product regresses.
 | Outside world, all four windows | `src/lib/external/sources.ts` |
 | Voice tokens, room naming | `src/lib/voice/livekit.ts` |
 | Two storage backends behind one interface | `src/lib/store/` |
+| The provider chain, and model discovery | `src/lib/vent/providers.ts` |
+| Failure vocabulary, the health probe | `src/lib/vent/model.ts` |
 
 Two skills carry the deeper context and are worth loading before touching
 their areas: `.claude/skills/data-quality/` and `.claude/skills/circles-quality/`.
@@ -147,7 +149,7 @@ configuration with no store — production with no Supabase env vars, which is
 what a fresh Vercel project *is* — is the one configuration nothing runs. It
 was also the one real people were using.
 
-That gap has now produced the same bug four times, wearing four faces:
+That gap has now produced the same bug seven times, wearing seven faces:
 
 - A voice token with a flat 50-minute TTL. Correct from where the author sat,
   wrong from where the circle sat: a seat taken at minute 44 held a live
@@ -159,7 +161,18 @@ That gap has now produced the same bug four times, wearing four faces:
   answer before they touch the store, and the author had keys.
 - A no-model-key reply that told people *"I've saved it, word for word"*
   while `getStore()` returned null and their words were dropped.
+- A health probe calling `models.retrieve` — metadata, which needs no credit
+  — reporting `ok` for a week while every real vent failed on billing. A
+  green light over a broken road is worse than no light.
+- Two model ids that did not exist, `claude-sonnet-5-20250715` and a retired
+  `gemini-2.5-flash`, both found by a person in production because nothing
+  here could check a hardcoded string. The adapter asks the provider now.
+- `max_tokens: 220`, correct for a model that speaks immediately and wrong
+  for one that thinks first: 217 tokens of silent reasoning, three tokens of
+  "Tired. Na" to somebody who had just written that they were tired.
 
-Four findings, one mechanism: **the suite tests the shape its author is
-standing in.** Eval check 12 closes the fourth instance. It does not close the
-class, and nothing written in `scripts/` ever will. Only the question does.
+Seven findings, one mechanism: **the suite tests the shape its author is
+standing in.** Checks 12 and 14 close instances — 14 stubs `fetch` and makes
+every provider failure that reached a real person fail a build instead. That
+is the most a script can do. It does not close the class, because the next
+face will be a shape nobody thought to stub. Only the question does.

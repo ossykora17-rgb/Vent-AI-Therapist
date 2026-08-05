@@ -1,7 +1,7 @@
 /**
  * Stage 5 — the eval suite. MMLU, but for truth instead of trivia.
  *
- *   node scripts/eval.mjs                          # 13 checks, no server
+ *   node scripts/eval.mjs                          # 14 checks, no server
  *   node scripts/eval.mjs http://localhost:3001    # + the live room checks
  *
  * A benchmark is only worth anything if it measures the thing that would
@@ -32,7 +32,8 @@ const { PRESENCE_WINDOW_MS, TYPING_WINDOW_MS, isPresent, isTyping, presenceOf, s
   await app("src/lib/circles/presence.ts");
 const { guardianVerdict, THRESHOLD } = await app("src/lib/external/guardian.ts");
 const { noModelKeyReply } = await app("src/lib/vent/fallback.ts");
-const { allProviders, configuredProviders } = await app("src/lib/vent/providers.ts");
+const { allProviders, configuredProviders, openAiCompatible } =
+  await app("src/lib/vent/providers.ts");
 
 const BASE = (process.argv[2] || "").replace(/\/$/, "");
 
@@ -471,6 +472,69 @@ check("13 The provider chain is ordered, and skips what is not configured", () =
     "and the rest are known but not attempted");
 });
 
+// ── 14. the four ways a provider broke a real conversation ─────────────────
+// Every one of these reached somebody before it reached a check. A retired
+// model id, a reply cut off at three tokens, an empty completion, a rate
+// limit. No network: fetch is stubbed, so this stays free and deterministic.
+await checkAsync("14 A provider's four real failures are handled, not passed on", async () => {
+  const real = globalThis.fetch;
+  const calls = [];
+  const stub = (handler) => {
+    globalThis.fetch = async (url, init) => {
+      calls.push(String(url));
+      return handler(String(url), init);
+    };
+  };
+  const json = (status, body) =>
+    new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+  try {
+    // A whole reply comes back whole.
+    stub(() => json(200, { choices: [{ message: { content: " a full answer " }, finish_reason: "stop" }] }));
+    const good = openAiCompatible("t-ok", "https://x", "k", "m");
+    is(await good.send({ system: "s", messages: [], maxTokens: 220 }), "a full answer",
+      "a complete reply is returned trimmed");
+
+    // "Tired. Na" — a thinking model interrupted. Not an answer.
+    stub(() => json(200, { choices: [{ message: { content: "Tired. Na" }, finish_reason: "length" }] }));
+    const cut = openAiCompatible("t-cut", "https://x", "k", "m");
+    let threw = false;
+    try { await cut.send({ system: "s", messages: [], maxTokens: 220 }); } catch { threw = true; }
+    ok(threw, "a reply cut off mid-sentence is a failure, never shown as an answer");
+
+    // A retired id: ask what exists, retry, remember.
+    calls.length = 0;
+    stub((url) =>
+      url.endsWith("/models")
+        ? json(200, { data: [{ id: "models/gemini-9.9-flash" }, { id: "text-embedding-004" }] })
+        : calls.filter((c) => c.endsWith("/chat/completions")).length === 1
+          ? json(404, { error: { message: "model is no longer available" } })
+          : json(200, { choices: [{ message: { content: "recovered" }, finish_reason: "stop" }] }));
+    const stale = openAiCompatible("t-stale", "https://x", "k", "dead-model", ["flash"]);
+    is(await stale.send({ system: "s", messages: [], maxTokens: 220 }), "recovered",
+      "a retired model id is replaced with one the provider actually has");
+    ok(calls.some((c) => c.endsWith("/models")), "and it asked, rather than guessing again");
+    is(stale.model, "gemini-9.9-flash", "the working id is remembered, not rediscovered every turn");
+
+    // A rate limit must not spend the free tier on a pointless second try.
+    calls.length = 0;
+    stub(() => json(429, { error: { message: "rate limit" } }));
+    const limited = openAiCompatible("t-429", "https://x", "k", "m");
+    try { await limited.send({ system: "s", messages: [], maxTokens: 220 }); } catch { /* expected */ }
+    ok(!calls.some((c) => c.endsWith("/models")),
+      "a rate limit is not retried — the answer would be the same and the tier is finite");
+
+    // An empty completion is not a reply either.
+    stub(() => json(200, { choices: [{ message: { content: "   " }, finish_reason: "stop" }] }));
+    const blank = openAiCompatible("t-blank", "https://x", "k", "m");
+    let blankThrew = false;
+    try { await blank.send({ system: "s", messages: [], maxTokens: 220 }); } catch { blankThrew = true; }
+    ok(blankThrew, "an empty completion never becomes a blank bubble");
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
 // ── live: the four things only a running room can prove ────────────────────
 if (BASE) {
   const post = (p, body, method = "POST") =>
@@ -480,7 +544,7 @@ if (BASE) {
       body: JSON.stringify(body),
     });
 
-  await checkAsync("14 A Keeper does not speak to an empty room", async () => {
+  await checkAsync("15 A Keeper does not speak to an empty room", async () => {
     const one = `eval-${Date.now()}-a`;
     const { circle } = await post("/api/circles", {
       anonId: one, tag: "family", chairPicked: "tight_edge", pressure: 78,
