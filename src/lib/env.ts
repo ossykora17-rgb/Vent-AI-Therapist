@@ -17,8 +17,41 @@
  */
 const s = (v: string | undefined) => (v ?? "").trim();
 
+/**
+ * The project origin, not an endpoint inside it.
+ *
+ * `https://ref.supabase.co/rest/v1` is a valid https URL, looks right in a
+ * dashboard, and is wrong: supabase-js appends `/rest/v1` itself, so every
+ * query then asks for `/rest/v1/rest/v1/vents` and PostgREST answers
+ * `PGRST125 — Invalid path specified in request URL`. Every read fails, and
+ * the message names a *path* while the eye reads it as a table problem. That
+ * cost three misdiagnoses.
+ *
+ * The four `/x/v1` suffixes are unambiguous — they are endpoints inside a
+ * project, never a project base — so they are stripped rather than rejected.
+ * Any other path is left exactly as given: a self-hosted Supabase behind
+ * `https://example.com/supabase` is a real deployment shape, and refusing a
+ * path outright would break it to fix a paste.
+ */
+const ENDPOINT_SUFFIX = /\/(rest|auth|storage|realtime|functions)\/v1$/;
+
+export function supabaseBase(raw: string): string {
+  if (!raw) return raw;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    // Not parseable at all — isSupabaseUrlValid is the one that says so.
+    return raw;
+  }
+  const path = url.pathname.replace(/\/+$/, "");
+  if (!ENDPOINT_SUFFIX.test(path)) return raw;
+  url.pathname = path.replace(ENDPOINT_SUFFIX, "");
+  return url.toString().replace(/\/$/, "");
+}
+
 export const env = {
-  supabaseUrl: s(process.env.NEXT_PUBLIC_SUPABASE_URL),
+  supabaseUrl: supabaseBase(s(process.env.NEXT_PUBLIC_SUPABASE_URL)),
   supabaseAnonKey: s(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
   supabaseServiceRoleKey: s(process.env.SUPABASE_SERVICE_ROLE_KEY),
   anthropicApiKey: s(process.env.ANTHROPIC_API_KEY),
@@ -67,6 +100,22 @@ export const isSupabaseUrlValid = (() => {
     return protocol === "http:" || protocol === "https:";
   } catch {
     return false;
+  }
+})();
+
+/**
+ * What is left on the URL after normalisation, for the diagnostic surfaces.
+ *
+ * The path and nothing else — no host, no project ref, no key — so it is safe
+ * in an open response body. `"/"` is the shape every hosted project has; a
+ * store error alongside anything else here is the first thing to look at.
+ */
+export const supabaseUrlPath = (() => {
+  if (!env.supabaseUrl) return null;
+  try {
+    return new URL(env.supabaseUrl).pathname || "/";
+  } catch {
+    return null;
   }
 })();
 

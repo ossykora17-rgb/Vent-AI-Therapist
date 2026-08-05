@@ -133,7 +133,9 @@ export class SupabaseStore implements Store {
   async listOpenCircles() {
     const data = ok("listOpenCircles", await this.db
       .from("circles")
-      .select("*, circle_members(count)")
+      // No space after the comma — see FULL_SELECT. An embedded resource is
+      // read out of the same verbatim query string as a column.
+      .select("*,circle_members(count)")
       .neq("status", "closed")
       .gt("ends_at", new Date().toISOString())
       .order("created_at", { ascending: true }));

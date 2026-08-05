@@ -41,6 +41,12 @@ export interface TacticContext extends Classification {
   mood: number | null;
   ventCount: number;
   recentTactics: string[];
+  /**
+   * What has actually been working, from `lib/vent/efficacy`. Optional and
+   * bounded: absent means the selector behaves exactly as it did before there
+   * was anything to learn from, which is also what a cold start looks like.
+   */
+  efficacy?: ReadonlyMap<string, number>;
 }
 
 const words = (s: string) => s.trim().split(/\s+/).length;
@@ -340,9 +346,18 @@ function mk(id: string, instruction: string, hold: string): Tactic {
   };
 }
 
+/** Above this, a tactic is a real-world tool and outranks the general library. */
+const PRIORITY_BAND = 95;
+
 /**
  * Picks the highest-weighted eligible tactic that has NOT been used in the
  * last three turns. Falls back progressively rather than repeating.
+ *
+ * Efficacy is applied *inside* a band, never across one. Sorting on
+ * `weight + delta` alone would let a general tactic at 85 + 6 overtake a
+ * real-world tactic at 95 − 6, which is the one ordering this file has always
+ * guaranteed: a named pressure gets its own tool. Learning is allowed to
+ * reorder peers and is not allowed to rewrite that.
  */
 export function selectTactic(ctx: TacticContext): Tactic {
   const blocked = new Set(ctx.recentTactics.slice(-3));
@@ -350,9 +365,15 @@ export function selectTactic(ctx: TacticContext): Tactic {
   const pool: Tactic[] = [...TACTICS];
   if (ctx.realWorldTag) pool.push(REAL_WORLD_TACTIC[ctx.realWorldTag]);
 
+  const rank = (t: Tactic) => {
+    const base = t.weight(ctx);
+    const band = base >= PRIORITY_BAND ? 1 : 0;
+    return band * 1000 + base + (ctx.efficacy?.get(t.id) ?? 0);
+  };
+
   const eligible = pool
     .filter((t) => t.fits(ctx))
-    .sort((a, b) => b.weight(ctx) - a.weight(ctx));
+    .sort((a, b) => rank(b) - rank(a));
 
   const fresh = eligible.find((t) => !blocked.has(t.id));
   if (fresh) return fresh;
