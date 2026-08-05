@@ -88,6 +88,45 @@ const resolved: Record<string, string> = {};
 const THINKING_BUDGET = 1400;
 
 /**
+ * Providers to stop trying for a while, and why.
+ *
+ * An empty credit balance is not a blip — it stays empty until somebody pays.
+ * With Anthropic first in the chain and out of credit, every single message
+ * paid a full round-trip to be refused before Gemini was even asked. That is
+ * latency a person feels, on every turn, for an answer nobody could give.
+ *
+ * A rate limit is different and deliberately not here: it clears on its own,
+ * often within a minute, and refusing to try would throw away a provider that
+ * is about to work again.
+ */
+const DEAD_FOR_MS = 10 * 60 * 1000;
+const dead = new Map<string, { until: number; why: string }>();
+
+const NON_TRANSIENT = new Set(["unauthorized", "insufficient_credit", "model_not_found"]);
+
+function isDead(id: string): boolean {
+  const entry = dead.get(id);
+  if (!entry) return false;
+  if (Date.now() >= entry.until) {
+    dead.delete(id);
+    return false;
+  }
+  return true;
+}
+
+/** For /api/health — what is being skipped, and why, without probing it. */
+export function skipped(): Array<{ provider: string; why: string; secondsLeft: number }> {
+  const now = Date.now();
+  return [...dead.entries()]
+    .filter(([, e]) => e.until > now)
+    .map(([provider, e]) => ({
+      provider,
+      why: e.why,
+      secondsLeft: Math.round((e.until - now) / 1000),
+    }));
+}
+
+/**
  * Ask the provider what it actually offers, and pick the best chat model.
  *
  * Preference is by keyword, then by version number, with previews and "lite"
@@ -320,8 +359,14 @@ export interface Answered {
  * still names a real cause rather than a guess.
  */
 export async function generateReply(call: ProviderCall): Promise<Answered> {
-  const providers = configuredProviders();
-  if (!providers.length) throw new ProviderError(401, "no provider configured");
+  const all = configuredProviders();
+  if (!all.length) throw new ProviderError(401, "no provider configured");
+
+  // Skip what is known to be out of credit or holding a rejected key. If that
+  // leaves nothing, try everything anyway — a stale note is a worse reason to
+  // refuse somebody than a slow answer.
+  const live = all.filter((p) => !isDead(p.id));
+  const providers = live.length ? live : all;
 
   const fellThrough: Answered["fellThrough"] = [];
   let last: unknown = new ProviderError(502, "no provider attempted");
@@ -329,11 +374,46 @@ export async function generateReply(call: ProviderCall): Promise<Answered> {
   for (const p of providers) {
     try {
       const text = await p.send(call);
+      dead.delete(p.id);
       return { text, provider: p.id, model: p.model, fellThrough };
     } catch (error) {
       last = error;
-      fellThrough.push({ provider: p.id, status: classifyModelError(error).status });
+      const { status } = classifyModelError(error);
+      if (NON_TRANSIENT.has(status)) {
+        dead.set(p.id, { until: Date.now() + DEAD_FOR_MS, why: status });
+      }
+      fellThrough.push({ provider: p.id, status });
     }
   }
   throw last;
+}
+
+/**
+ * Can this deployment answer at all?
+ *
+ * /api/health probed only the first provider, so with Anthropic first and out
+ * of credit it reported `degraded` while the chatbot was working perfectly on
+ * Gemini. The product tries the chain; the check has to try the chain, or it
+ * is measuring something nobody experiences.
+ */
+export async function probeChain(): Promise<{
+  answered: string | null;
+  model: string | null;
+  tried: Array<{ provider: string; status: string }>;
+  lastError: unknown;
+}> {
+  const tried: Array<{ provider: string; status: string }> = [];
+  let lastError: unknown = null;
+
+  for (const p of configuredProviders()) {
+    try {
+      await p.send({ system: ".", messages: [{ role: "user", content: "." }], maxTokens: 1 });
+      tried.push({ provider: p.id, status: "ok" });
+      return { answered: p.id, model: p.model, tried, lastError: null };
+    } catch (error) {
+      lastError = error;
+      tried.push({ provider: p.id, status: classifyModelError(error).status });
+    }
+  }
+  return { answered: null, model: null, tried, lastError };
 }
