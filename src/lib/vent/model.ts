@@ -107,13 +107,14 @@ export function classifyModelError(error: unknown): ModelVerdict {
  * credit and the network in one answer.
  */
 export async function probeModel(): Promise<ModelVerdict> {
-  const { configuredProviders } = await import("./providers");
-  const providers = configuredProviders();
-  if (!providers.length) return { status: "not_configured", detail: null };
+  const { configuredProviders, probeChain } = await import("./providers");
+  if (!configuredProviders().length) return { status: "not_configured", detail: null };
   try {
-    // The first provider in the chain — the one a vent reaches first.
-    await providers[0].send({ system: ".", messages: [{ role: "user", content: "." }], maxTokens: 1 });
-    return { status: "ok", detail: null };
+    // The whole chain, because that is what a vent does. Probing only the
+    // first reported "degraded" while the chatbot was working on the second.
+    const { answered, lastError } = await probeChain();
+    if (answered) return { status: "ok", detail: null };
+    throw lastError;
   } catch (error) {
     // The shape is only worth reporting when the call failed — it is a hint
     // about where to look, not a verdict of its own. A key can be perfectly

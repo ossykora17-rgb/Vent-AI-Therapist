@@ -10,8 +10,8 @@ import {
   isSupabaseUrlValid,
 } from "@/lib/env";
 import { cached, inventory } from "@/lib/external/cache";
-import { probeModel } from "@/lib/vent/model";
-import { allProviders, configuredProviders } from "@/lib/vent/providers";
+import { classifyModelError } from "@/lib/vent/model";
+import { allProviders, configuredProviders, probeChain, skipped } from "@/lib/vent/providers";
 
 export const dynamic = "force-dynamic";
 
@@ -45,17 +45,17 @@ export async function GET() {
 
   const store = getStore();
 
-  // Present is not the same as working — the lesson the database check was
-  // built on, which this field did not have. `anthropic: true` meant only
-  // "the variable is set", so a rejected key looked identical to a good one
-  // and the sole symptom was every vent answering "Network dipped".
-  // Zero-token metadata read, against the model the product actually calls.
-  // Cached for a minute. The probe is a real inference call now, so an
-  // unauthenticated endpoint must not be a way to spend somebody's account
-  // down one token at a time.
-  const model =
-    (await cached("model-probe", 60_000, "chain", probeModel))?.value ??
-    (await probeModel());
+  // Present is not the same as working, and the first link is not the chain.
+  // This probed only the first provider, so with Anthropic out of credit it
+  // read "degraded" while the chatbot answered fine on Gemini. A vent walks
+  // the chain; the check walks the chain. Cached a minute, because the probe
+  // makes real calls and a public endpoint must not spend an account down.
+  const probe =
+    (await cached("model-probe", 60_000, "chain", probeChain))?.value ??
+    (await probeChain());
+  const model: { status: string; detail: string | null } = probe.answered
+    ? { status: "ok", detail: null }
+    : { ...classifyModelError(probe.lastError) };
 
   // The whole chain, so a build running on a free key can see that it is, and
   // a fallback that was never configured cannot be mistaken for one that is.
@@ -76,13 +76,18 @@ export async function GET() {
 
   return NextResponse.json(
     {
+      // Degraded means nobody can be answered — not that one link is down.
       status:
-        database === "unreachable" || (model.status !== "ok" && model.status !== "not_configured")
+        database === "unreachable" ||
+        (configuredProviders().length > 0 && model.status !== "ok")
           ? "degraded"
           : "ok",
       database,
-      model: { id: configuredProviders()[0]?.model ?? null, ...model },
+      // Which one actually answered, not which one is listed first.
+      model: { id: probe.model ?? configuredProviders()[0]?.model ?? null, answeredBy: probe.answered, ...model },
       chain,
+      tried: probe.tried,
+      skipped: skipped(),
       storage: store?.kind ?? "none",
       persisting: Boolean(store),
       services,
