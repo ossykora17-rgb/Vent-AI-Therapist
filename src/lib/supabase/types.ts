@@ -49,6 +49,42 @@ export interface Database {
         };
         Update: {
           title?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+
+      /**
+       * Long-term memory. `embedding` crosses the wire as pgvector's text
+       * form — "[0.1,0.2,…]" — because PostgREST has no JSON representation
+       * for the type. src/lib/vent/embeddings.ts is the only place that
+       * literal is built.
+       */
+      memories: {
+        Row: {
+          id: string;
+          user_id: string;
+          key: string;
+          value: string;
+          embedding: string | null;
+          source_message_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          key: string;
+          value: string;
+          embedding?: string | null;
+          source_message_id?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          key?: string;
+          value?: string;
+          embedding?: string | null;
+          updated_at?: string;
         };
         Relationships: [];
       };
@@ -100,7 +136,13 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      /** Nearest memories by cosine distance. See 0006_memory_vectors.sql. */
+      match_memories: {
+        Args: { p_user_id: string; p_embedding: string; p_limit?: number };
+        Returns: Array<{ id: string; key: string; value: string; similarity: number }>;
+      };
+    };
     Enums: Record<string, never>;
   };
 }
