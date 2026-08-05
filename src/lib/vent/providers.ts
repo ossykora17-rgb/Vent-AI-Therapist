@@ -403,20 +403,30 @@ export async function generateReply(call: ProviderCall): Promise<Answered> {
 export async function probeChain(): Promise<{
   answered: string | null;
   model: string | null;
-  tried: Array<{ provider: string; status: string }>;
+  tried: Array<{ provider: string; status: string; detail?: string | null }>;
   lastError: unknown;
 }> {
-  const tried: Array<{ provider: string; status: string }> = [];
+  const tried: Array<{ provider: string; status: string; detail?: string | null }> = [];
   let lastError: unknown = null;
 
   for (const p of configuredProviders()) {
     try {
-      await p.send({ system: ".", messages: [{ role: "user", content: "." }], maxTokens: 1 });
+      // "." asked a reasoning model to work out what was wanted, and some of
+      // them spend the whole budget doing it. Ask for the shortest possible
+      // real completion instead — still the product's path, over in a breath.
+      await p.send({
+        system: "Reply with exactly one word: ok",
+        messages: [{ role: "user", content: "ok" }],
+        maxTokens: 8,
+      });
       tried.push({ provider: p.id, status: "ok" });
       return { answered: p.id, model: p.model, tried, lastError: null };
     } catch (error) {
       lastError = error;
-      tried.push({ provider: p.id, status: classifyModelError(error).status });
+      // The label alone said "unreachable" and nothing else, which is exactly
+      // the shape that cost a week. Carry the upstream words.
+      const verdict = classifyModelError(error);
+      tried.push({ provider: p.id, status: verdict.status, detail: verdict.detail });
     }
   }
   return { answered: null, model: null, tried, lastError };
