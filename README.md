@@ -26,7 +26,7 @@ emergency **199**.
 branch `claude/nextjs-app-init-deploy-yb4qlo`. Framework detection and build
 settings need no changes.
 
-**2. Apply the migrations** in the Supabase SQL editor, in order. All five are
+**2. Apply the migrations** in the Supabase SQL editor, in order. All seven are
 re-runnable, so applying twice is safe:
 
 ```
@@ -35,6 +35,8 @@ supabase/migrations/0002_truth_anchor.sql       -- vent_users, vents, vent_feedb
 supabase/migrations/0003_circles.sql            -- circles, members, messages
 supabase/migrations/0004_circle_member_pressure.sql  -- each seat's own chair
 supabase/migrations/0005_circle_presence.sql    -- last_seen_at, typing_until
+supabase/migrations/0006_memory_vectors.sql     -- pgvector memories, vent-files bucket
+supabase/migrations/0007_rls_performance.sql    -- (select auth.uid()) + FK indexes
 ```
 
 **3. Set four environment variables** (Production + Preview):
@@ -77,10 +79,10 @@ fresh Vercel project is actually in — the reply says both, because telling
 someone their words were saved when there is nowhere to save them is the one
 thing it must not do. No path 500s.
 
-To apply the migrations as a single paste instead of five files in order:
+To apply the migrations as a single paste instead of seven files in order:
 
 ```bash
-npm run migrations          # prints all five, in order, to stdout
+npm run migrations          # prints all seven, in order, to stdout
 ```
 
 ## Run it locally — no Vercel, no Supabase, no account
@@ -128,7 +130,7 @@ cp .env.example .env.local     # fill in the Supabase keys
 npm run dev -- -p 3001
 ```
 
-Apply all five migrations first (see Deploy). `storage` then reports `supabase`.
+Apply all seven migrations first (see Deploy). `storage` then reports `supabase`.
 
 ## How a message is handled
 
