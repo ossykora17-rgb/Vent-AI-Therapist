@@ -1,5 +1,6 @@
 "use client";
 
+import { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL } from "@/lib/vent/intent";
 import * as React from "react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -122,7 +123,7 @@ export function VentChat() {
       ]);
 
       if (data.intent === "crisis") {
-        setCrisis(data.crisis ?? { nigeria: "0806 210 6493", emergency: "199" });
+        setCrisis(data.crisis ?? CRISIS_LINES);
         setGated(true);
       } else if (data.intent === "vent") {
         // Only a real vent earns the mood check — greetings don't.
@@ -441,12 +442,12 @@ export function VentChat() {
           <p className="mt-3 text-[12px] leading-relaxed text-ash">
             Mind Weave is not a licensed therapist. VENT is for emotional
             support only, not medical advice. In crisis, call Nigeria{" "}
-            <a href="tel:08062106493" className="underline underline-offset-2">
-              0806 210 6493
+            <a href={`tel:${CRISIS_TEL}`} className="underline underline-offset-2">
+              {CRISIS_LINES.nigeria}
             </a>{" "}
             or emergency{" "}
-            <a href="tel:199" className="underline underline-offset-2">
-              199
+            <a href={`tel:${EMERGENCY_TEL}`} className="underline underline-offset-2">
+              {CRISIS_LINES.emergency}
             </a>
             .
           </p>

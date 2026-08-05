@@ -170,9 +170,32 @@ That gap has now produced the same bug seven times, wearing seven faces:
 - `max_tokens: 220`, correct for a model that speaks immediately and wrong
   for one that thinks first: 217 tokens of silent reasoning, three tokens of
   "Tired. Na" to somebody who had just written that they were tired.
+- A select list joined with `", "`. PostgREST takes it verbatim, so every read
+  of `vents` asked for a column named `" user_id"` and got back a *path* error
+  naming no column at all. Invisible for months because every caller sat in a
+  try/catch that degrades quietly — memory across turns returned nothing in
+  production the whole time, and nothing anywhere said so.
+- Eleven tables and no `GRANT`. 0001–0007 wrote RLS carefully and never
+  mentioned the older, coarser gate underneath it, leaning instead on default
+  privileges — which attach to whoever created the object. So whether the
+  server could read its own tables depended on who ran the migration and in
+  which tool. `/api/health` reported `database: ok` throughout, because it
+  probed with the *anonymous* client and an anonymous caller under deny-by-
+  default RLS legitimately gets zero rows and no error. A green light over a
+  broken road, from a probe that does not take the road: the same sentence as
+  `models.retrieve`, two years of lessons apart.
 
-Seven findings, one mechanism: **the suite tests the shape its author is
-standing in.** Checks 12 and 14 close instances — 14 stubs `fetch` and makes
-every provider failure that reached a real person fail a build instead. That
-is the most a script can do. It does not close the class, because the next
-face will be a shape nobody thought to stub. Only the question does.
+Nine findings, one mechanism: **the suite tests the shape its author is
+standing in.** Checks 12, 14, 16 and 17 close instances — 14 stubs `fetch` and
+makes every provider failure that reached a real person fail a build instead;
+16 reads the store as text and fails any select list with a space in it; 17
+fails any surface that writes the crisis number out by hand. That is the most
+a script can do, and check 16 is the closest one to closing a class rather
+than an instance: it found the second occurrence in the circles path
+immediately, one nobody had noticed.
+
+It still does not close the class, because the next face will be a shape
+nobody thought to stub. Only the question does. The ninth face is the sharpest
+version of it so far — the probe that says everything is fine is itself the
+thing standing in the wrong shape. Ask of `/api/health`, before trusting it:
+*is this asking as the identity that does the work?*

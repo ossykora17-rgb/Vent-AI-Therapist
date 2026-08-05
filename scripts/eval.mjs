@@ -715,6 +715,55 @@ check("16 The store asks PostgREST for something it can parse", () => {
   }
 });
 
+// ── 17. the number somebody calls in the worst hour of their life ─────────
+//
+// It was written out by hand in nine places: six components, a metadata
+// description, a `tel:` href and a client-side fallback. Change it once and
+// eight surfaces keep quietly dialling the old one — the exact shape
+// `CLAUDE.md` names for chair tensions, wearing the highest stakes here.
+const { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL, CRISIS_RESPONSE } =
+  await app("src/lib/vent/intent.ts");
+
+check("17 The crisis number exists once, and every surface reads that one", () => {
+  ok(/^0\d{3} \d{3} \d{4}$/.test(CRISIS_LINES.nigeria), "the line is a formatted Nigerian number");
+  is(CRISIS_TEL, "08062106493", "the dial string is derived, not typed twice");
+  is(EMERGENCY_TEL, CRISIS_LINES.emergency, "and so is the emergency one");
+  ok(!/\s/.test(CRISIS_TEL), "a tel: href carries no spaces");
+
+  // Never promise what the code cannot keep: this reply hands somebody to a
+  // person, so it must not also claim to be one.
+  ok(!/\bI can (help|fix)\b/i.test(CRISIS_RESPONSE), "the crisis reply promises nothing it is not");
+  ok(/not alone/i.test(CRISIS_RESPONSE), "and it says the one thing that is true");
+
+  // The literal, anywhere but its home, is the bug.
+  const digits = [CRISIS_LINES.nigeria, CRISIS_TEL];
+  const walk = (dir) =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) return walk(full);
+      return /\.tsx?$/.test(e.name) ? [full] : [];
+    });
+
+  const home = path.join(ROOT, "src/lib/vent/intent.ts");
+  const offenders = walk(path.join(ROOT, "src"))
+    .filter((f) => f !== home)
+    .filter((f) => digits.some((d) => fs.readFileSync(f, "utf8").includes(d)))
+    .map((f) => path.relative(ROOT, f));
+
+  ok(
+    offenders.length === 0,
+    "no surface hardcodes the crisis number",
+    offenders.join(", ") || undefined,
+  );
+
+  // And it is genuinely reachable from the surfaces, not merely absent from
+  // them — an empty page passes the check above.
+  const shown = walk(path.join(ROOT, "src"))
+    .filter((f) => fs.readFileSync(f, "utf8").includes("CRISIS_LINES"))
+    .map((f) => path.relative(ROOT, f));
+  ok(shown.length >= 6, "at least six surfaces import it", `${shown.length}: ${shown.join(", ")}`);
+});
+
 // ── live: the four things only a running room can prove ────────────────────
 if (BASE) {
   const post = (p, body, method = "POST") =>
@@ -724,7 +773,7 @@ if (BASE) {
       body: JSON.stringify(body),
     });
 
-  await checkAsync("17 A Keeper does not speak to an empty room", async () => {
+  await checkAsync("18 A Keeper does not speak to an empty room", async () => {
     const one = `eval-${Date.now()}-a`;
     const { circle } = await post("/api/circles", {
       anonId: one, tag: "family", chairPicked: "tight_edge", pressure: 78,

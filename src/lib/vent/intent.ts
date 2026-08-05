@@ -129,7 +129,24 @@ export function classify(message: string): Classification {
 export const CRISIS_RESPONSE =
   "I'm really concerned about you. You deserve support right now, from a person, not a screen. You are not alone.";
 
+/**
+ * The one place these digits exist.
+ *
+ * They were written out by hand in six components, a metadata description and
+ * a client-side fallback — nine copies of the number somebody calls when they
+ * are in the worst hour of their life. Change it in one place and eight
+ * surfaces keep quietly dialling the old one. `CLAUDE.md` already names this
+ * shape ("chair tensions lived in four files once"); this is the same bug
+ * wearing the highest stakes in the product.
+ *
+ * `tel:` wants no spaces and a reader wants them, so the dial string is
+ * derived rather than typed a second time.
+ */
 export const CRISIS_LINES = {
   nigeria: "0806 210 6493",
   emergency: "199",
 } as const;
+
+/** What goes in `href="tel:…"`. Derived, so it cannot drift from the label. */
+export const CRISIS_TEL = CRISIS_LINES.nigeria.replace(/\s/g, "");
+export const EMERGENCY_TEL = CRISIS_LINES.emergency.replace(/\s/g, "");
