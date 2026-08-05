@@ -29,6 +29,7 @@ export type ModelStatus =
   | "rate_limited"
   | "insufficient_credit"
   | "upstream_down"
+  | "timeout"
   | "unreachable";
 
 export interface ModelVerdict {
@@ -67,9 +68,19 @@ export function anthropicKeyShape(): KeyShape {
  * "unreachable".
  */
 export function classifyModelError(error: unknown): ModelVerdict {
-  const e = error as { status?: number; message?: string };
+  const e = error as { status?: number; message?: string; name?: string };
   const message = typeof e?.message === "string" ? e.message : "";
-  const detail = message ? message.slice(0, 300) : null;
+  // A thrown value with no message at all left `detail: null`, which is how
+  // "unreachable" became a bucket with nothing in it — the same crime as
+  // "Network dipped on my side". Always carry something back.
+  const detail = message ? message.slice(0, 300) : (e?.name ?? String(error)).slice(0, 300);
+
+  // AbortSignal.timeout throws a TimeoutError with no HTTP status, so it fell
+  // to the default and was reported as unreachable. A clock and a network are
+  // different problems: one is a number in this file, the other is not.
+  if (e?.name === "TimeoutError" || e?.name === "AbortError") {
+    return { status: "timeout", detail };
+  }
 
   // Billing arrives as a 400 invalid_request_error and says so in words. It
   // is not a bad request, not a network fault, and no code change fixes it —
@@ -138,6 +149,8 @@ export function modelFailureReply(status: ModelStatus): string {
       return "The account behind me is out of credit. Not you, not your words — somebody has to top it up before I can go deep.";
     case "upstream_down":
       return "The model is down on its own side, not yours. Give it a minute and say that again.";
+    case "timeout":
+      return "That took too long on my side and I cut it off. Say it again — it usually lands.";
     case "unauthorized":
     case "model_not_found":
       return "My side is set up wrong — not busy, wrong. Saying it again won't get through, and that's on the setup, not on you.";
