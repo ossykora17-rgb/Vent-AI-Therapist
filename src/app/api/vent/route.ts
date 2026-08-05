@@ -245,12 +245,24 @@ async function handlePOST(request: Request) {
       // so /api/health is not the only place the truth exists.
       const verdict = classifyModelError(error);
       console.error("[vent] model call failed", verdict.status, verdict.detail);
+      const failure = modelFailureReply(verdict.status);
+
+      // Their words are kept even when the answer cannot be. This path
+      // returned before it wrote, so a model outage silently dropped
+      // everything anyone said during it — the storage looked broken because
+      // the model was, and the two symptoms had one cause.
+      const held =
+        store && userId
+          ? await tryPersist(store, userId, input, classification, failure, tactic.id, grounding.iso)
+          : false;
+
       return NextResponse.json(
         {
           error: "model_unavailable",
           reason: verdict.status,
           detail: verdict.detail,
-          reply: modelFailureReply(verdict.status),
+          persisted: held,
+          reply: failure,
         },
         { status: 503, headers: { "cache-control": "no-store" } },
       );
