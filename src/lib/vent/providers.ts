@@ -78,6 +78,16 @@ class ProviderError extends Error {
 const resolved: Record<string, string> = {};
 
 /**
+ * Headroom for models that think before they speak.
+ *
+ * The reply itself is three or four sentences — a couple of hundred tokens at
+ * most. The rest of this is the reasoning budget a Gemini-class model spends
+ * silently first, and `reasoning_effort: "none"` is not honoured everywhere.
+ * Unused headroom costs nothing; too little costs somebody an answer.
+ */
+const THINKING_BUDGET = 1400;
+
+/**
  * Ask the provider what it actually offers, and pick the best chat model.
  *
  * Preference is by keyword, then by version number, with previews and "lite"
@@ -132,6 +142,8 @@ function openAiCompatible(
   apiKey: string,
   model: string,
   prefer: string[] = ["flash", "chat", "instruct"],
+  /** Ask a reasoning model not to think. See THINKING_BUDGET. */
+  noThinking = false,
 ): Provider {
   const attempt = async (
     useModel: string,
@@ -145,8 +157,13 @@ function openAiCompatible(
         },
         body: JSON.stringify({
           model: useModel,
-          max_tokens: maxTokens,
+          // A reasoning model spends the budget on thinking before it says a
+          // word. At 220 it thought for 217 and shipped "Tired. Na" — a
+          // fragment in front of somebody who had just said they were tired.
+          // Ask it not to think, and leave room in case it does anyway.
+          max_tokens: Math.max(maxTokens, THINKING_BUDGET),
           temperature: 0.7,
+          ...(noThinking ? { reasoning_effort: "none" } : {}),
           messages: [{ role: "system", content: system }, ...messages],
         }),
         signal: AbortSignal.timeout(30_000),
@@ -155,17 +172,30 @@ function openAiCompatible(
       const body = await r.text();
       if (!r.ok) throw new ProviderError(r.status, `${r.status} ${body.slice(0, 300)}`);
 
-      let parsed: { choices?: Array<{ message?: { content?: string } }> };
+      let parsed: {
+        choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+      };
       try {
         parsed = JSON.parse(body);
       } catch {
         throw new ProviderError(502, `${id} returned a body that is not JSON`);
       }
 
-      const text = parsed.choices?.[0]?.message?.content?.trim();
+      const choice = parsed.choices?.[0];
+      const text = choice?.message?.content?.trim();
       // An empty completion is a failure, not an answer. Returning "" here
       // would put a blank bubble in front of somebody mid-sentence.
       if (!text) throw new ProviderError(502, `${id} returned an empty completion`);
+
+      // Neither is half a sentence. A reply cut off at the budget is the
+      // model being interrupted, and showing the stub is worse than saying
+      // plainly that it could not answer.
+      if (choice?.finish_reason === "length" && text.split(/\s+/).length < 12) {
+        throw new ProviderError(
+          502,
+          `${id} was cut off before it finished a sentence (${text.length} chars)`,
+        );
+      }
       return text;
   };
 
@@ -232,6 +262,7 @@ export function allProviders(): Provider[] {
       env.geminiApiKey,
       MODEL.gemini,
       ["flash", "gemini"],
+      true,
     ),
     openAiCompatible("groq", "https://api.groq.com/openai/v1", env.groqApiKey, MODEL.groq, [
       "llama-3.3",
