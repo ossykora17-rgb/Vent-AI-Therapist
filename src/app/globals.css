@@ -61,8 +61,17 @@
    * high centre, fixed to the viewport so it does not travel when the page
    * scrolls — the light stays where it is and you move under it.
    *
-   * It breathes on a twelve-second cycle, which is roughly a slow exhale.
-   * Nobody will consciously see it; they will feel that the screen is not
+   * It breathes on the same ten seconds as everything else here — 4s in, 6s
+   * out, which is the pace the drop set asks of a person. One rhythm in the
+   * room, not two: a light on twelve and a canvas on ten would be two things
+   * breathing out of sync on one screen, which is worse than neither
+   * breathing at all.
+   *
+   * The keyframes are named room-breath rather than breathe because Tailwind
+   * already emits a `breathe` from the config, and two definitions of one
+   * animation name is whichever the cascade happens to reach last.
+   *
+   * Nobody will consciously see this. They will feel that the screen is not
    * holding its breath, which is most of what stillness is. Reduced motion
    * stops the cycle and keeps the light.
    */
@@ -77,15 +86,16 @@
       rgb(var(--gold) / 0.09),
       transparent 60%
     );
-    animation: breathe 12s ease-in-out infinite;
+    animation: room-breath 10s ease-in-out infinite;
   }
 
-  @keyframes breathe {
+  @keyframes room-breath {
     0%,
     100% {
       opacity: 0.75;
     }
-    50% {
+    /* Peak at 40%, so the fall out is longer than the rise in. */
+    40% {
       opacity: 1;
     }
   }
