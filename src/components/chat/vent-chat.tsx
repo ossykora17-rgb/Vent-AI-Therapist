@@ -395,6 +395,9 @@ export function VentChat() {
                 value={pressure}
                 onChange={(e) => setPressure(Number(e.target.value))}
                 aria-label="Pressure, 0 loose to 100 tight"
+                // The track reads as weight, not as a form control. See
+                // input[type="range"] in globals.css.
+                style={{ "--fill": `${pressure}%` } as React.CSSProperties}
                 className="h-2 w-full accent-gold"
               />
             </label>
