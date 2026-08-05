@@ -16,8 +16,21 @@ export class StoreUnavailableError extends Error {
   /** Which store call failed — enough to find it without the stack. */
   readonly op: string;
 
-  constructor(op: string, cause?: { message?: string } | null) {
-    super(`store operation "${op}" failed: ${cause?.message ?? "unknown cause"}`);
+  constructor(
+    op: string,
+    // PostgREST puts the useful part in code/details/hint and the vague part
+    // in message. Reporting message alone gave "Invalid path specified in
+    // request URL" three times running with nothing to act on — the same
+    // shape as a failure bucket with nothing in it.
+    cause?: { message?: string; code?: string; details?: string; hint?: string } | null,
+  ) {
+    const parts = [
+      cause?.code && `[${cause.code}]`,
+      cause?.message,
+      cause?.details && `details: ${cause.details}`,
+      cause?.hint && `hint: ${cause.hint}`,
+    ].filter(Boolean);
+    super(`store operation "${op}" failed: ${parts.join(" · ") || "unknown cause"}`);
     this.name = "StoreUnavailableError";
     this.op = op;
   }

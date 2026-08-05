@@ -8,10 +8,18 @@ import type {
   NewVent, ProfilePatch, Store, VentRow,
 } from "./types";
 
-const FULL_SELECT =
-  "id, user_id, user_message, ai_reply, mood_score, tension_before, tension_after, " +
-  "language, duality_value, pressure_value, chair_picked, tactic_used, intent_type, " +
-  "real_world_tag, real_date_used, body_tapped, safety_flagged, created_at";
+/**
+ * No spaces. PostgREST takes the select list verbatim into the query string,
+ * so "id, user_id" asks for a column literally named " user_id" — and what
+ * comes back is a routing error rather than anything naming the column.
+ */
+const FULL_SELECT = [
+  "id", "user_id", "user_message", "ai_reply", "mood_score",
+  "tension_before", "tension_after", "language", "duality_value",
+  "pressure_value", "chair_picked", "tactic_used", "intent_type",
+  "real_world_tag", "real_date_used", "body_tapped", "safety_flagged",
+  "created_at",
+].join(",");
 
 type Admin = NonNullable<ReturnType<typeof createAdminClient>>;
 
