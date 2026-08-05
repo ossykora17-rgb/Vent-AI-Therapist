@@ -9,7 +9,7 @@ import {
   isSupabaseConfigured,
   isSupabaseUrlValid,
 } from "@/lib/env";
-import { inventory } from "@/lib/external/cache";
+import { cached, inventory } from "@/lib/external/cache";
 import { VENT_MODEL, probeModel } from "@/lib/vent/model";
 
 export const dynamic = "force-dynamic";
@@ -49,7 +49,12 @@ export async function GET() {
   // "the variable is set", so a rejected key looked identical to a good one
   // and the sole symptom was every vent answering "Network dipped".
   // Zero-token metadata read, against the model the product actually calls.
-  const model = await probeModel();
+  // Cached for a minute. The probe is a real inference call now, so an
+  // unauthenticated endpoint must not be a way to spend somebody's account
+  // down one token at a time.
+  const model =
+    (await cached("model-probe", 60_000, "anthropic", probeModel))?.value ??
+    (await probeModel());
 
   const services = {
     supabase: isSupabaseConfigured,

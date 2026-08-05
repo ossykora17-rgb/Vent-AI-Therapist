@@ -28,6 +28,7 @@ export type ModelStatus =
   | "unauthorized"
   | "model_not_found"
   | "rate_limited"
+  | "insufficient_credit"
   | "upstream_down"
   | "unreachable";
 
@@ -71,6 +72,13 @@ export function classifyModelError(error: unknown): ModelVerdict {
   const message = typeof e?.message === "string" ? e.message : "";
   const detail = message ? message.slice(0, 300) : null;
 
+  // Billing arrives as a 400 invalid_request_error and says so in words. It
+  // is not a bad request, not a network fault, and no code change fixes it —
+  // and it is invisible to a metadata read, which is how it hid for a week.
+  if (/credit balance|purchase credits|plans & billing/i.test(message)) {
+    return { status: "insufficient_credit", detail };
+  }
+
   // A rejected model id arrives as 404 on some paths and 400 on others; the
   // message names the model either way.
   if (e?.status === 404 || (e?.status === 400 && /model/i.test(message))) {
@@ -87,16 +95,27 @@ export function classifyModelError(error: unknown): ModelVerdict {
 }
 
 /**
- * Zero-token probe. `models.retrieve` is a metadata read, not an inference
- * call, so health can ask "does this key work, and does this exact model
- * exist for it" without spending anything. It checks VENT_MODEL itself —
- * checking some other model would answer a question nobody asked.
+ * Probe the path the product actually uses.
+ *
+ * This called `models.retrieve` — a metadata read — and reported `ok` for a
+ * week while every real vent failed, because metadata needs no credit and
+ * inference does. A check that exercises a different shape than the product
+ * is worse than no check: it is a green light over a broken road.
+ *
+ * So it is a real `messages.create` now, one token in and one out, cached for
+ * a minute so a public endpoint cannot be used to spend an account down. That
+ * is the smallest call that proves the key, the model id, the account's
+ * credit and the network in one answer.
  */
 export async function probeModel(): Promise<ModelVerdict> {
   if (!isAnthropicConfigured) return { status: "not_configured", detail: null };
   try {
     const anthropic = new Anthropic({ apiKey: env.anthropicApiKey });
-    await anthropic.models.retrieve(VENT_MODEL);
+    await anthropic.messages.create({
+      model: VENT_MODEL,
+      max_tokens: 1,
+      messages: [{ role: "user", content: "." }],
+    });
     return { status: "ok", detail: null };
   } catch (error) {
     // The shape is only worth reporting when the call failed — it is a hint
@@ -117,6 +136,8 @@ export function modelFailureReply(status: ModelStatus): string {
   switch (status) {
     case "rate_limited":
       return "Too many at once on my side. Give it a minute, then say that again.";
+    case "insufficient_credit":
+      return "The account behind me is out of credit. Not you, not your words — somebody has to top it up before I can go deep.";
     case "upstream_down":
       return "The model is down on its own side, not yours. Give it a minute and say that again.";
     case "unauthorized":
