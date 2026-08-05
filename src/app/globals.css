@@ -217,15 +217,31 @@
     -webkit-appearance: none;
     appearance: none;
   }
+  /*
+   * The track carries the reading.
+   *
+   * It was solid gold end to end, so five and ninety-five looked identical —
+   * a control for naming how much weight somebody is under, showing none of
+   * it. The filled portion is what they have said; the rest is faint. --fill
+   * comes from the value, set inline where the slider is rendered.
+   */
   input[type="range"]::-webkit-slider-runnable-track {
     height: 2px;
-    background: rgb(var(--gold));
     border-radius: 2px;
+    background: linear-gradient(
+      to right,
+      rgb(var(--gold)) 0 var(--fill, 50%),
+      rgb(var(--line) / 0.15) var(--fill, 50%) 100%
+    );
   }
   input[type="range"]::-moz-range-track {
     height: 2px;
-    background: rgb(var(--gold));
     border-radius: 2px;
+    background: linear-gradient(
+      to right,
+      rgb(var(--gold)) 0 var(--fill, 50%),
+      rgb(var(--line) / 0.15) var(--fill, 50%) 100%
+    );
   }
   input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
