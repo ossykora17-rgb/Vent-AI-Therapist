@@ -225,15 +225,24 @@ export function VentChat() {
             <li key={line.id}>
               <div
                 className={cn(
-                  "glass animate-slide-up p-4",
+                  "glass settle p-5 sm:p-6",
                   line.speaker === "you" && "border-gold/30 bg-card/50",
                   line.crisis && "border-gold/60",
                 )}
               >
-                <p className="label-mono mb-2">
+                <p className="label-mono mb-3">
                   {line.speaker === "you" ? "You" : "Vent"}
                 </p>
-                <p className="text-[16px] leading-[1.6]">{line.text}</p>
+                {/* What they said stays as they typed it, line breaks and all.
+                    What VENT says is set to be read slowly — see .reply. */}
+                <p
+                  className={cn(
+                    "whitespace-pre-wrap",
+                    line.speaker === "vent" ? "reply" : "text-[16px] leading-[1.6]",
+                  )}
+                >
+                  {line.text}
+                </p>
               </div>
             </li>
           ))}
