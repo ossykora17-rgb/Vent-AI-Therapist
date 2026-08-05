@@ -29,11 +29,29 @@ export function HistoryList() {
   const [query, setQuery] = React.useState("");
   const [minMood, setMinMood] = React.useState(1);
   const [openId, setOpenId] = React.useState<string | null>(null);
+  const [pattern, setPattern] = React.useState<{
+    sentence: string;
+    dropHere: number | null;
+    dropElsewhere: number | null;
+    firstWords: string | null;
+    latestWords: string | null;
+  } | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
+        // Counted, not generated — see lib/vent/pattern. Runs beside the
+        // history fetch because it costs nothing and is the reason to be here.
+        fetch(`/api/pattern?anonId=${encodeURIComponent(anonId())}`)
+          .then((r) => r.json())
+          .then((d) => {
+            if (!cancelled && d.pattern && d.sentence) {
+              setPattern({ sentence: d.sentence, ...d.pattern });
+            }
+          })
+          .catch(() => {});
+
         const res = await fetch(`/api/vent?anonId=${encodeURIComponent(anonId())}`);
         const data = await res.json();
         if (cancelled) return;
@@ -124,6 +142,48 @@ export function HistoryList() {
       </header>
 
       <main id="main" className="mx-auto w-full max-w-[640px] flex-1 px-4 py-5">
+        {/*
+          The Pattern. Counted from their own rows, never generated — and only
+          shown once there is enough to count, because a pattern claimed from
+          four data points is a horoscope. Everyone else in this category draws
+          a mood line, which answers a question nobody was asking.
+        */}
+        {pattern && (
+          <section className="glass settle mb-5 border-gold/40 p-5 sm:p-6">
+            <p className="label-mono mb-3">What keeps coming back</p>
+            <p className="reply" data-numeric>
+              {pattern.sentence}
+            </p>
+
+            {pattern.dropHere !== null && pattern.dropElsewhere !== null && (
+              <p className="reply mt-3 text-ash" data-numeric>
+                {pattern.dropHere < pattern.dropElsewhere
+                  ? `It shifts less than everything else you bring here — ${pattern.dropHere} points against ${pattern.dropElsewhere}.`
+                  : `It shifts about as much as everything else — ${pattern.dropHere} points against ${pattern.dropElsewhere}.`}
+              </p>
+            )}
+
+            {pattern.firstWords && pattern.latestWords && (
+              <dl className="mt-4 space-y-2 border-l-2 border-line/15 pl-3">
+                <div>
+                  <dt className="label-mono">First</dt>
+                  <dd className="text-[15px] leading-[1.6] text-ash">{pattern.firstWords}</dd>
+                </div>
+                <div>
+                  <dt className="label-mono">Latest</dt>
+                  <dd className="text-[15px] leading-[1.6] text-ash">{pattern.latestWords}</dd>
+                </div>
+              </dl>
+            )}
+
+            {/* Their words, their meaning. Naming what somebody's life is about
+                is the one thing this product will not do for them. */}
+            <p className="mt-4 text-[15px] leading-[1.6] text-ash">
+              That is the count, not the meaning. The meaning is yours.
+            </p>
+          </section>
+        )}
+
         <div className="flex flex-col gap-2 sm:flex-row">
           <label htmlFor="history-search" className="sr-only">
             Search your vents
