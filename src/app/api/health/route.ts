@@ -22,6 +22,9 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   let database: "ok" | "unreachable" | "misconfigured" | "not_configured" =
     "not_configured";
+  // Which tables answered and which did not — a migration that was never run
+  // looks exactly like a wrong key unless the check says which.
+  let missingTables: string[] = [];
 
   // Distinct from "unreachable" on purpose. A URL that does not parse is a
   // typo you fix in the dashboard in ten seconds; an unreachable database is
@@ -34,10 +37,17 @@ export async function GET() {
       const supabase = await createClient();
       // head+count touches the table without transferring rows. RLS means an
       // anonymous caller legitimately gets 0 — we only care that it responds.
-      const { error } = await supabase!
-        .from("profiles")
-        .select("id", { count: "exact", head: true });
-      database = error ? "unreachable" : "ok";
+      // Both tables, because they come from different migrations and one
+      // being applied never implied the other. This reported ok on profiles
+      // alone while vents did not exist, so the store looked healthy and
+      // every write was being swallowed. The product does not use profiles
+      // for a vent; it uses vents.
+      const [a, b] = await Promise.all([
+        supabase!.from("profiles").select("id", { count: "exact", head: true }),
+        supabase!.from("vents").select("id", { count: "exact", head: true }),
+      ]);
+      database = a.error || b.error ? "unreachable" : "ok";
+      missingTables = [a.error && "profiles", b.error && "vents"].filter(Boolean) as string[];
     } catch {
       database = "unreachable";
     }
@@ -83,6 +93,7 @@ export async function GET() {
           ? "degraded"
           : "ok",
       database,
+      missingTables,
       // Which one actually answered, not which one is listed first.
       model: { id: probe.model ?? configuredProviders()[0]?.model ?? null, answeredBy: probe.answered, ...model },
       chain,
