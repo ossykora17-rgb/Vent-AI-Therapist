@@ -125,6 +125,54 @@ Only use a breathing or body instruction if they mentioned their body, or the
 pressure reading is high. Otherwise go cognitive. A stranger telling someone
 to drop their shoulders for the third time is the reason people quit.`;
 
+/**
+ * Where in the arc.
+ *
+ * A therapist's first ten minutes and last five are structurally different
+ * work, and until now every reply here was written as if it were the only one.
+ * Same voice at turn one and turn nine — which is the tell that nothing is
+ * keeping track, and the reason a long session drifts into a loop of
+ * well-phrased openings.
+ *
+ * The number is free: the rate limiter already counts today's vents before
+ * anything else runs, so this costs one extra query of zero and about forty
+ * tokens of prompt.
+ *
+ * Null when there is no store. A session that cannot be counted gets no claim
+ * about where it is — the same rule as the exchange rate that did not fetch.
+ * Guessing "you have been here a while" at somebody on their first sentence is
+ * exactly the kind of confident invention this codebase keeps having to remove.
+ */
+export function arcBlock(turnsToday: number | null): string | null {
+  if (turnsToday === null || turnsToday < 0) return null;
+  const turn = turnsToday + 1;
+
+  if (turnsToday === 0)
+    return `WHERE YOU ARE
+First thing they have said today. Nothing is established yet, including whether
+you are safe to talk to. The work of this reply is to be believed: mirror them
+closely enough that they know they were heard, and carry the move lightly. A
+tool offered before somebody feels heard is a door closing.`;
+
+  if (turnsToday <= 2)
+    return `WHERE YOU ARE
+Turn ${turn} today. Still early. What they have said is what they can afford to
+say so far — the thing under it has not surfaced and you do not know it yet.
+Stay close to their words. Do not name a pattern for them this soon.`;
+
+  if (turnsToday <= 6)
+    return `WHERE YOU ARE
+Turn ${turn} today. The middle, where a move actually lands: they have said
+enough that you can point at something specific instead of something general.
+Be more precise now than you were at the start — not warmer, more precise.`;
+
+  return `WHERE YOU ARE
+Turn ${turn} today. They have been here a while. Do not open anything that
+cannot be finished in this exchange. Go back to a phrase they used earlier and
+give it back to them with what it has cost. If they are circling the same
+ground, say so plainly — circling is information, not failure.`;
+}
+
 export interface BuildPromptArgs {
   grounding: Grounding;
   classification: Classification;
@@ -132,6 +180,8 @@ export interface BuildPromptArgs {
   ctx: TacticContext;
   memory: MemoryRow[];
   flavour?: FlavourProfile | null;
+  /** Vents in the last 24h, from the rate limiter. Null when there is no store. */
+  turnsToday?: number | null;
 }
 
 export function buildSystemPrompt({
@@ -141,6 +191,7 @@ export function buildSystemPrompt({
   ctx,
   memory,
   flavour = null,
+  turnsToday = null,
 }: BuildPromptArgs): string {
   const state = [
     ctx.body && `They said it sits in the ${ctx.body}.`,
@@ -159,6 +210,8 @@ export function buildSystemPrompt({
     groundingBlock(grounding),
     "",
     VOICE,
+    "",
+    arcBlock(turnsToday),
     "",
     flavourBlock(flavour),
     "",

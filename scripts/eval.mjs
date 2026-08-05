@@ -544,7 +544,7 @@ await checkAsync("14 A provider's four real failures are handled, not passed on"
 const { measureEfficacy, EFFICACY_FLOOR, EFFICACY_SPAN, getEfficacy, resetEfficacyCache } =
   await app("src/lib/vent/efficacy.ts");
 
-await checkAsync("15 The selector learns from outcomes, and refuses thin evidence", async () => {
+await checkAsync("15a The selector learns from outcomes, and refuses thin evidence", async () => {
   const row = (tactic, before, after, i) => ({
     id: `v${i}`,
     user_id: "u",
@@ -611,6 +611,56 @@ await checkAsync("15 The selector learns from outcomes, and refuses thin evidenc
   is((await getEfficacy(down)).size, 0, "a broken store yields no opinion rather than an error");
   resetEfficacyCache();
   is((await getEfficacy(null)).size, 0, "no store at all yields no opinion");
+});
+
+// ── 15b. the arc — a session has a shape, and an uncounted one has none ────
+const { arcBlock, buildSystemPrompt } = await app("src/lib/vent/prompt.ts");
+
+check("15b The reply knows where in the session it is, or says nothing", () => {
+  // The rule this shares with the exchange rate and the flavour floor: a
+  // number that did not arrive is an absent sentence, not an estimate.
+  is(arcBlock(null), null, "no store means no claim about how long they have been here");
+  ok(
+    !buildSystemPrompt({
+      grounding: { date: "5 August 2026", time: "18:00", iso: "2026-08-05", lines: [] },
+      classification: { intent: "vent", realWorldTag: null, language: "en", body: null },
+      tactic: ALL_TACTICS[0],
+      ctx: { ...base },
+      memory: [],
+    }).includes("WHERE YOU ARE"),
+    "and the block is absent from the prompt entirely rather than empty",
+  );
+
+  const phases = [0, 1, 4, 12].map((n) => arcBlock(n));
+  ok(phases.every(Boolean), "every turn count lands in a phase");
+  ok(new Set(phases).size === 4, "the four phases are four different instructions");
+
+  ok(/first thing they have said/i.test(phases[0]), "turn one is about being believed");
+  ok(
+    /lightly|before somebody feels heard/i.test(phases[0]),
+    "and it holds the tool back until they are heard",
+  );
+  ok(/do not name a pattern/i.test(phases[1]), "early on, the pattern is still theirs to name");
+  ok(/precise/i.test(phases[2]), "the middle asks for precision rather than warmth");
+  ok(
+    /cannot be finished|circling/i.test(phases[3]),
+    "a long session closes rather than opening something new",
+  );
+
+  // Turn numbers are 1-indexed for a reader; off-by-one here would tell
+  // somebody on their first sentence that this is turn 0.
+  ok(/Turn 2 today/.test(phases[1]), "the second vent of the day is called turn 2");
+  ok(
+    buildSystemPrompt({
+      grounding: { date: "5 August 2026", time: "18:00", iso: "2026-08-05", lines: [] },
+      classification: { intent: "vent", realWorldTag: null, language: "en", body: null },
+      tactic: ALL_TACTICS[0],
+      ctx: { ...base },
+      memory: [],
+      turnsToday: 9,
+    }).includes("Turn 10 today"),
+    "and the block reaches the prompt the model is actually sent",
+  );
 });
 
 // ── 16. the request the store actually sends ───────────────────────────────
