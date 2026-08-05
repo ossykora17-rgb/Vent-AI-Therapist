@@ -68,6 +68,61 @@ class ProviderError extends Error {
 }
 
 /**
+ * Model ids resolved at runtime, keyed by provider.
+ *
+ * A hardcoded id is a guess with a shelf life. `claude-sonnet-5-20250715` did
+ * not exist and `gemini-2.5-flash` was retired for new accounts — two dead
+ * ends, both discovered by a person in production rather than by anything
+ * here. Providers publish what they have; asking beats guessing.
+ */
+const resolved: Record<string, string> = {};
+
+/**
+ * Ask the provider what it actually offers, and pick the best chat model.
+ *
+ * Preference is by keyword, then by version number, with previews and "lite"
+ * variants ranked below a stable full model. Anything that plainly is not a
+ * chat model is dropped — an embedding model would answer nobody.
+ */
+async function discoverModel(
+  baseUrl: string,
+  apiKey: string,
+  prefer: string[],
+): Promise<string | null> {
+  const r = await fetch(`${baseUrl}/models`, {
+    headers: { authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!r.ok) return null;
+
+  let body: { data?: Array<{ id?: string }> };
+  try {
+    body = JSON.parse(await r.text());
+  } catch {
+    return null;
+  }
+
+  const chat = (body.data ?? [])
+    .map((m) => (m.id ?? "").replace(/^models\//, ""))
+    .filter(Boolean)
+    .filter((id) => !/embed|aqa|imagen|veo|tts|whisper|guard|rerank|vision/i.test(id));
+
+  const score = (id: string) => {
+    const version = parseFloat(id.match(/(\d+(?:\.\d+)?)/)?.[1] ?? "0");
+    let s = version * 100;
+    if (/lite|mini|8b/i.test(id)) s -= 30;
+    if (/preview|exp|beta/i.test(id)) s -= 20;
+    return s;
+  };
+
+  for (const keyword of prefer) {
+    const hits = chat.filter((id) => id.toLowerCase().includes(keyword));
+    if (hits.length) return hits.sort((a, b) => score(b) - score(a))[0];
+  }
+  return chat.sort((a, b) => score(b) - score(a))[0] ?? null;
+}
+
+/**
  * One adapter for every OpenAI-shaped API. The system prompt becomes the first
  * message because that is how they all take it.
  */
@@ -76,12 +131,12 @@ function openAiCompatible(
   baseUrl: string,
   apiKey: string,
   model: string,
+  prefer: string[] = ["flash", "chat", "instruct"],
 ): Provider {
-  return {
-    id,
-    model,
-    configured: Boolean(apiKey),
-    async send({ system, messages, maxTokens }) {
+  const attempt = async (
+    useModel: string,
+    { system, messages, maxTokens }: ProviderCall,
+  ): Promise<string> => {
       const r = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
@@ -89,7 +144,7 @@ function openAiCompatible(
           authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model,
+          model: useModel,
           max_tokens: maxTokens,
           temperature: 0.7,
           messages: [{ role: "system", content: system }, ...messages],
@@ -112,6 +167,31 @@ function openAiCompatible(
       // would put a blank bubble in front of somebody mid-sentence.
       if (!text) throw new ProviderError(502, `${id} returned an empty completion`);
       return text;
+  };
+
+  return {
+    id,
+    get model() {
+      return resolved[id] ?? model;
+    },
+    configured: Boolean(apiKey),
+    async send(call) {
+      try {
+        return await attempt(resolved[id] ?? model, call);
+      } catch (error) {
+        // A retired or renamed model is the one failure worth a second try,
+        // because the provider can be asked which ones it still has. Anything
+        // else — rate limit, quota, auth — retrying would only repeat.
+        const status = (error as { status?: number }).status;
+        if (status !== 404 && status !== 400) throw error;
+
+        const found = await discoverModel(baseUrl, apiKey, prefer);
+        if (!found || found === (resolved[id] ?? model)) throw error;
+
+        console.warn(`[providers] ${id}: ${resolved[id] ?? model} rejected, using ${found}`);
+        resolved[id] = found;
+        return attempt(found, call);
+      }
     },
   };
 }
@@ -151,8 +231,12 @@ export function allProviders(): Provider[] {
       "https://generativelanguage.googleapis.com/v1beta/openai",
       env.geminiApiKey,
       MODEL.gemini,
+      ["flash", "gemini"],
     ),
-    openAiCompatible("groq", "https://api.groq.com/openai/v1", env.groqApiKey, MODEL.groq),
+    openAiCompatible("groq", "https://api.groq.com/openai/v1", env.groqApiKey, MODEL.groq, [
+      "llama-3.3",
+      "llama",
+    ]),
     openAiCompatible(
       "openrouter",
       "https://openrouter.ai/api/v1",
