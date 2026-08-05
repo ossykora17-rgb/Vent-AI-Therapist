@@ -53,6 +53,49 @@
       0 0 0 4px rgb(var(--gold));
   }
 
+  /*
+   * Light, from above.
+   *
+   * A room that is meant to hold somebody has one source and everything else
+   * is what the light reaches. This is that source: a wide, weak fall from
+   * high centre, fixed to the viewport so it does not travel when the page
+   * scrolls — the light stays where it is and you move under it.
+   *
+   * It breathes on a twelve-second cycle, which is roughly a slow exhale.
+   * Nobody will consciously see it; they will feel that the screen is not
+   * holding its breath, which is most of what stillness is. Reduced motion
+   * stops the cycle and keeps the light.
+   */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background: radial-gradient(
+      120% 80% at 50% -10%,
+      rgb(var(--gold) / 0.09),
+      transparent 60%
+    );
+    animation: breathe 12s ease-in-out infinite;
+  }
+
+  @keyframes breathe {
+    0%,
+    100% {
+      opacity: 0.75;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  /* Everything real sits above the light. */
+  body > * {
+    position: relative;
+    z-index: 1;
+  }
+
   h1 {
     @apply font-display;
   }
@@ -79,6 +122,42 @@
 
   .label-mono {
     @apply font-mono text-[12px] uppercase tracking-[0.1em] text-ash;
+  }
+
+  /*
+   * What VENT says, set to be read slowly.
+   *
+   * Three or four sentences is not a chat message, it is a paragraph somebody
+   * is going to sit with. Longer leading and a measure that stops around 62
+   * characters do the work — the eye lands, rests, and moves. Tight leading is
+   * what makes an interface feel like it wants you to hurry up and finish.
+   */
+  .reply {
+    @apply text-[17px] leading-[1.75] tracking-[0.005em];
+    max-width: 62ch;
+    text-wrap: pretty;
+  }
+
+  /*
+   * Arriving, not appearing.
+   *
+   * A reply that pops into place reads as output. A reply that settles reads
+   * as somebody answering. Four hundred milliseconds and eight pixels is
+   * under the threshold where it becomes a performance.
+   */
+  .settle {
+    animation: settle 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes settle {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
 
   /*
