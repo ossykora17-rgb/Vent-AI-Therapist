@@ -96,6 +96,9 @@ async function handlePOST(request: Request) {
   let userId: string | null = null;
   let history: MemoryRow[] = [];
   let recentTactics: string[] = [];
+  // Where in the arc. Null unless the store actually answers — a session that
+  // cannot be counted gets no claim about how long it has been going.
+  let turnsToday: number | null = null;
 
   if (store) {
     // Configured is not the same as reachable, and the store now says which
@@ -118,6 +121,10 @@ async function handlePOST(request: Request) {
           store.countVentsSince(userId, new Date(now - 60_000)),
           store.countVentsSince(userId, new Date(now - 86_400_000)),
         ]);
+
+        // The rate limiter already paid for this number; the prompt gets it
+        // for nothing rather than counting the same rows a second time.
+        turnsToday = inDay;
 
         if (inMinute >= RATE_PER_MINUTE || inDay >= RATE_PER_DAY) {
           return NextResponse.json(
@@ -204,6 +211,7 @@ async function handlePOST(request: Request) {
     ctx,
     memory: history,
     flavour,
+    turnsToday,
   });
 
   let reply: string;
