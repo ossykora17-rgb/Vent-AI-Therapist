@@ -210,7 +210,11 @@ export function openAiCompatible(
           ...(noThinking ? { reasoning_effort: "none" } : {}),
           messages: [{ role: "system", content: system }, ...messages],
         }),
-        signal: AbortSignal.timeout(30_000),
+        // A model that reasons before it speaks needs longer than a normal
+        // API call. Gemini resolved its id, then timed out at thirty seconds
+        // and was reported unreachable — the network was fine, the clock was
+        // wrong. maxDuration on the route is 60s, so this fits inside it.
+        signal: AbortSignal.timeout(50_000),
       });
 
       const body = await r.text();
