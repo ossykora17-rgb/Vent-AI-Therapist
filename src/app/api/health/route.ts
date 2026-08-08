@@ -63,9 +63,17 @@ export async function GET() {
       // inside a route that degrades quietly.
       const names = Object.keys(FULL_CONTRACT);
       const results = await Promise.all(
-        names.map((t) =>
-          supabase!.from(t).select(FULL_CONTRACT[t], { count: "exact", head: true }),
-        ),
+        // `limit(0)`, not `head: true`.
+        //
+        // A HEAD request has no body, so PostgREST's error JSON — the object
+        // carrying `code`, `details` and `hint` — never arrives, and every
+        // failing table reported `[?] no hint`. The loop printed seven tables
+        // failing for an unstated reason, which is the failure bucket with
+        // nothing in it all over again, in the endpoint built to prevent it.
+        //
+        // `limit(0)` is a GET that returns an empty array on success and the
+        // full error object on failure. Still no rows over the wire.
+        names.map((t) => supabase!.from(t).select(FULL_CONTRACT[t]).limit(0)),
       );
 
       for (const [i, res] of results.entries()) {
