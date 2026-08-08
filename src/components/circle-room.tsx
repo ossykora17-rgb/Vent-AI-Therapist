@@ -328,25 +328,86 @@ export function CircleRoom({ id }: { id: string }) {
 
             {/* When the Closing is up, everything said recedes. Not hidden —
                 still there, just no longer what the room is about. */}
-            <ol className={cn("mt-4 space-y-3", state.phase === "close" && "receding")}>
-              {messages.map((m) => (
-                <li
-                  key={m.id}
-                  className={cn(
-                    "glass p-4",
-                    m.kind === "witness" && "border-gold/30",
-                    m.kind === "keeper_prompt" && "border-gold/60 bg-gold/5",
-                  )}
-                >
-                  <p className="label-mono mb-1">
-                    {m.kind === "keeper_prompt"
-                      ? "Keeper · pattern"
-                      : `${m.mine ? "You" : `Seat ${m.seat}`} · ${m.role}`}
-                    {m.kind === "witness" && " · heard"}
-                  </p>
-                  <p className="text-[15px] leading-[1.6]">{m.content}</p>
-                </li>
-              ))}
+            {/* More air than before. The shapes now carry the difference
+                between voices, and they need room around them to do it —
+                twelve pixels between an inscription and a share reads as a
+                list, which is what this was. */}
+            <ol className={cn("mt-4 space-y-5", state.phase === "close" && "receding")}>
+              {/*
+                Four kinds of speech, four shapes.
+
+                Every line in here was the same plate, separated by border
+                tints at thirty and sixty percent. In a room of six anonymous
+                strangers the single most important thing to know at a glance
+                is which of these is mine — and mine looked exactly like a
+                stranger's. The guardian had no treatment at all.
+
+                  Keeper    the room itself, not a person. No plate, centred,
+                            display face, letterspaced. An inscription.
+                  You       right, off the spine, no plate — the same shape
+                            your words take in /chat, so "you" reads the same
+                            everywhere in the product.
+                  Someone   the plate, left, seat number.
+                  Witness   an echo, not a statement. Quieter than a share,
+                            indented behind a gold mark.
+                  Guardian  unmistakable, never alarming.
+
+                The label line still names the speaker in every case, so none
+                of this is load-bearing for a screen reader.
+              */}
+              {messages.map((m) => {
+                if (m.kind === "keeper_prompt") {
+                  return (
+                    <li key={m.id} className="py-4 text-center">
+                      <p className="label-mono mb-2 text-gold">Keeper · pattern</p>
+                      <p className="mx-auto max-w-[46ch] font-display text-[17px] leading-[1.55] tracking-[0.01em]">
+                        {m.content}
+                      </p>
+                    </li>
+                  );
+                }
+
+                if (m.kind === "guardian") {
+                  return (
+                    <li key={m.id}>
+                      <div className="rounded-card border border-gold/45 bg-gold/5 p-4">
+                        <p className="label-mono mb-1 text-gold">Guardian</p>
+                        <p className="text-[15px] leading-[1.6]">{m.content}</p>
+                      </div>
+                    </li>
+                  );
+                }
+
+                if (m.kind === "witness") {
+                  return (
+                    <li key={m.id} className="border-l-2 border-gold/30 pl-4">
+                      <p className="label-mono mb-1">
+                        {m.mine ? "You" : `Seat ${m.seat}`} · heard
+                      </p>
+                      <p className="text-[14px] leading-[1.6] text-ink/70">{m.content}</p>
+                    </li>
+                  );
+                }
+
+                // A share — theirs on the plate, yours in the margin.
+                return m.mine ? (
+                  <li key={m.id} className="flex justify-end">
+                    <div className="max-w-[85%] border-r-2 border-gold/40 pr-4 text-right sm:max-w-[75%]">
+                      <p className="label-mono mb-1">You · {m.role}</p>
+                      <p className="text-[15px] leading-[1.6] text-ink/70">{m.content}</p>
+                    </div>
+                  </li>
+                ) : (
+                  <li key={m.id}>
+                    <div className="glass border-l-2 border-l-gold/70 p-4">
+                      <p className="label-mono mb-1">
+                        Seat {m.seat} · {m.role}
+                      </p>
+                      <p className="text-[15px] leading-[1.6]">{m.content}</p>
+                    </div>
+                  </li>
+                );
+              })}
             </ol>
             {state.phase === "close" && (
               <div className="glass closing mt-6 border-gold/50 p-6 sm:p-8">
