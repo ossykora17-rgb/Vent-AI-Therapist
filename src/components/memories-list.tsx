@@ -96,9 +96,13 @@ export function MemoriesList() {
           anything you want gone — it goes immediately and does not come back.
         </p>
 
+        {/* Page states are not the room speaking, so they do not get the
+            room's plate. Same correction as the chat and lobby empty states. */}
         {!signedIn && (
-          <div className="glass p-6">
-            <p className="mb-3">Memory belongs to an account, so it needs you signed in.</p>
+          <div className="mt-2">
+            <p className="mb-3 max-w-[46ch] leading-[1.7]">
+              Memory belongs to an account, so it needs you signed in.
+            </p>
             <Link href="/login" className="text-gold underline underline-offset-4">
               Sign in
             </Link>
@@ -108,16 +112,24 @@ export function MemoriesList() {
         {signedIn && loading && <p className="label-mono">Reading…</p>}
 
         {signedIn && !loading && rows.length === 0 && (
-          <div className="glass p-6">
-            <p>Nothing is being kept yet. That is not a gap — it fills only when something is worth carrying.</p>
+          <div className="mt-2">
+            <p className="max-w-[46ch] leading-[1.7]">
+              Nothing is being kept yet. That is not a gap — it fills only when
+              something is worth carrying.
+            </p>
           </div>
         )}
 
         <ul className="space-y-3">
           {rows.map((m) => (
             <li key={m.id} className="glass settle p-5">
+              {/* Not `.reply`. That class is what VENT *says* — 62ch, slow
+                  leading, built to be sat with. A memory is a stored fact
+                  about you, and dressing a record in the voice of the room
+                  makes the app look like it is talking when it is only
+                  holding. */}
               <p className="label-mono mb-2">{m.key}</p>
-              <p className="reply mb-4">{m.value}</p>
+              <p className="mb-4 text-[15px] leading-[1.6]">{m.value}</p>
               <div className="flex items-center justify-between gap-4">
                 <span className="label-mono">
                   {new Date(m.updated_at).toLocaleDateString()}
