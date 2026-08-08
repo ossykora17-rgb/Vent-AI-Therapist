@@ -60,6 +60,7 @@ export function CirclesList() {
    */
   const [carrying, setCarrying] = React.useState<{
     total: number;
+    truncated?: boolean;
     tags: Array<{ tag: string; count: number }>;
   } | null>(null);
 
@@ -213,6 +214,10 @@ export function CirclesList() {
           <div className="mt-6 border-l border-gold/25 pl-5">
             <p className="label-mono mb-2">This week, in the house</p>
             <p className="max-w-[44ch] text-[15px] leading-[1.7]">
+              {/* "More than" when the window was full. The number is a floor
+                  at that point, not a count, and stating a ceiling as a fact
+                  is the same class of claim this codebase keeps removing. */}
+              {carrying.truncated ? "More than " : ""}
               <span className="tabular font-semibold">{carrying.total}</span>{" "}
               people sat down with something. Mostly{" "}
               {carrying.tags.slice(0, 3).map((t, i, arr) => (
