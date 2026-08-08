@@ -181,29 +181,36 @@ export function VentChat() {
               VENT
             </h1>
           </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/circles"
-              className="flex h-11 items-center rounded-full border border-line/10 px-4 text-sm"
-            >
-              Circles
-            </Link>
-            <Link
-              href="/history"
-              className="hidden h-11 items-center rounded-full border border-line/10 px-4 text-sm sm:flex"
-            >
-              History
-            </Link>
-            {/* Anything kept about somebody needs a door they can find without
-                being told where it is. */}
-            <Link
-              href="/memory"
-              className="hidden h-11 items-center rounded-full border border-line/10 px-4 text-sm sm:flex"
-            >
-              Memory
-            </Link>
+          {/*
+            Three doors, visible on a phone.
+
+            These were pill buttons, and two of the three were `sm:` hidden —
+            so on the device almost everybody here is holding, History and
+            Memory did not exist. The most distinctive thing in the product and
+            the page where you take your words back, both unreachable from the
+            screen you actually sit on.
+
+            The pill chrome was what ate the width: borders and 16px of padding
+            each, three times over, at 360px. Dropping to plain text fits all
+            three with room to spare — and reads better anyway. A door in a
+            quiet room is a word on a wall, not a button.
+          */}
+          <nav aria-label="Sections" className="flex items-center gap-3 sm:gap-4">
+            {[
+              ["/circles", "Circles"],
+              ["/history", "History"],
+              ["/memory", "Memory"],
+            ].map(([href, label]) => (
+              <Link
+                key={href}
+                href={href}
+                className="label-mono flex h-11 items-center text-ink/70 underline-offset-[6px] transition-colors duration-300 hover:text-ink hover:underline hover:decoration-gold"
+              >
+                {label}
+              </Link>
+            ))}
             <ThemeToggle />
-          </div>
+          </nav>
         </div>
 
         {memoryCount > 0 && (

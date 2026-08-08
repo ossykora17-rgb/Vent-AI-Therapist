@@ -61,6 +61,23 @@ export function Onboarding({
   const [carry, setCarry] = React.useState<string | null>(null);
   const [drop, setDrop] = React.useState<string | null>(null);
 
+  // Named, so Escape and the button are the same door rather than two
+  // implementations of it that can drift apart.
+  function skip() {
+    try {
+      localStorage.setItem(DONE_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    onDone({
+      chair: chair ?? "half_off",
+      object: object ?? "heavy_stone",
+      carry,
+      drop,
+      tension: CHAIR_TENSION[chair ?? "half_off"],
+    });
+  }
+
   async function finish(finalDrop: string | null) {
     if (!chair || !object) return;
     try {
@@ -90,15 +107,51 @@ export function Onboarding({
     });
   }
 
+  // Leaving is always available, from the keyboard too. A modal that traps
+  // somebody is the opposite of what this screen is for, and the person most
+  // likely to hit Escape here is the person least able to sit through three
+  // questions — which is exactly who must not be held.
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") skip();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chair, object, carry, drop]);
+
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-label="Getting started"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-paper/80 backdrop-blur-glass sm:items-center"
+      // Deeper than the page, not the same warm paper at 80%. The card has to
+      // read as floating in a room rather than as a box dropped on a page —
+      // ink at low alpha darkens whatever is behind it in both themes, where
+      // paper/80 just washed it out.
+      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/25 backdrop-blur-glass sm:items-center"
     >
-      <div className="glass m-3 w-full max-w-[440px] animate-slide-up p-5">
-        <p className="label-mono mb-4">Step {step + 1} of 3</p>
+      <div className="glass m-3 w-full max-w-[440px] animate-slide-up p-5 shadow-glass">
+        {/*
+          Three marks, not "Step 1 of 3".
+          A counter tells you there is a form and how much of it is left, which
+          is the register of an insurance quote. Marks let you feel where you
+          are without being told you are filling something in. The count is
+          still announced to screen readers, where it is genuinely useful.
+        */}
+        <div className="mb-5 flex items-center gap-2">
+          <span className="sr-only">{`Question ${step + 1} of 3`}</span>
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              aria-hidden
+              className={cn(
+                "h-px flex-1 transition-colors duration-500",
+                i <= step ? "bg-gold" : "bg-line/15",
+              )}
+            />
+          ))}
+        </div>
 
         {step === 0 && (
           <>
@@ -199,26 +252,31 @@ export function Onboarding({
           </>
         )}
 
-        <button
-          type="button"
-          onClick={() => {
-            try {
-              localStorage.setItem(DONE_KEY, "1");
-            } catch {
-              /* ignore */
-            }
-            onDone({
-              chair: chair ?? "half_off",
-              object: object ?? "heavy_stone",
-              carry,
-              drop,
-              tension: CHAIR_TENSION[chair ?? "half_off"],
-            });
-          }}
-          className="mt-5 min-h-[44px] w-full text-sm text-ash underline underline-offset-4"
-        >
-          Skip — just let me talk
-        </button>
+        {/*
+          A way back.
+          Picking a chair advanced immediately with no way to change it, so a
+          misclick on question one was permanent — and question one is the one
+          that seeds the tension reading every tactic is chosen against. Three
+          screens with no back button is a kiosk, not a conversation.
+        */}
+        <div className="mt-5 flex items-center gap-4">
+          {step > 0 && (
+            <button
+              type="button"
+              onClick={() => setStep((s) => s - 1)}
+              className="min-h-[44px] shrink-0 text-sm text-ash underline underline-offset-4"
+            >
+              Back
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={skip}
+            className="min-h-[44px] flex-1 text-right text-sm text-ash underline underline-offset-4"
+          >
+            Skip — just let me talk
+          </button>
+        </div>
       </div>
     </div>
   );
