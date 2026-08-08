@@ -17,12 +17,16 @@
 -- coarser gate that runs first — was never mentioned. RLS cannot allow what
 -- GRANT has not permitted, so a perfect policy sat behind a closed door.
 --
--- Scope: service_role and nothing else. Every table read in this app goes
--- through the admin client (`src/lib/supabase/admin.ts`); no browser and no
--- SSR client queries a table directly. So `anon` and `authenticated` need no
--- table privileges at all, and giving them any would widen the surface to fix
--- a problem they do not have. The deny-by-default posture 0001 set stays
--- exactly as it is.
+-- Scope: service_role. The anonymous path — vents, circles and everything
+-- around them — goes through the admin client (`src/lib/supabase/admin.ts`),
+-- and those tables keep the deny-by-default posture 0001 set.
+--
+-- CORRECTION, see 0009: this file used to claim that no SSR client queries a
+-- table directly and that `authenticated` therefore needs nothing. That was
+-- checked against components and is wrong about routes. `requireUser()` builds
+-- the SSR client, so every signed-in surface reaches Postgres as
+-- `authenticated`. 0009 grants that role exactly what its RLS policies already
+-- permit. `anon` still gets nothing.
 --
 -- Idempotent: GRANT is, by definition. Safe to run twice.
 
