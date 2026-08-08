@@ -37,17 +37,54 @@ export default function LandingPage() {
 
         <p className="label-mono mt-3">Free · No account · Nothing to install</p>
 
-        <div className="mt-10 grid gap-3 sm:grid-cols-3">
+        {/*
+          This was three cards in a grid: Grounded, Remembers, Critical.
+          A feature grid is written for somebody deciding whether to buy. The
+          person who lands here at 2am is not deciding whether to buy. They are
+          deciding whether it is safe to say the thing, and a row of boxes with
+          product nouns in them answers a question they are not asking.
+
+          So: no boxes. Three lines with air around them, in the display face,
+          each one a thing the app does *to* them rather than a capability it
+          has. Set as a litany, because that is the register the room is in.
+        */}
+        <ul className="mt-12 space-y-5 border-l border-gold/25 pl-5">
           {[
-            ["Grounded", "It knows the real date, time and place — like you do."],
-            ["Remembers", "Your exact words come back, not a summary of them."],
-            ["Critical", "Warm, but it will call a TED talk a TED talk."],
-          ].map(([title, body]) => (
-            <div key={title} className="glass p-4">
-              <p className="label-mono mb-2">{title}</p>
-              <p className="text-sm leading-[1.6]">{body}</p>
-            </div>
+            "It knows what day it is, and what that costs here.",
+            "It gives your own words back to you, exactly as you said them.",
+            "It will not tell you to drop your shoulders three times in a row.",
+          ].map((line) => (
+            <li
+              key={line}
+              className="max-w-[42ch] font-display text-[17px] leading-[1.5] text-ink/85"
+              style={{ textWrap: "pretty" } as React.CSSProperties}
+            >
+              {line}
+            </li>
           ))}
+        </ul>
+
+        {/*
+          Anonymity, stated plainly and near the door.
+          It is the thing that decides whether somebody types the true sentence
+          or a safer one, so it does not belong in a footer. Every clause is
+          something the code actually does — no account exists to make, the id
+          is generated on the device, and /memory deletes everything.
+        */}
+        <div className="mt-12 max-w-[46ch]">
+          <p className="label-mono mb-2">Nobody knows it is you</p>
+          <p className="text-[15px] leading-[1.7] text-ash">
+            No name, no email, no password — there is no account to make. You
+            are a random id made on your phone, and{" "}
+            {/* /history, not /memory. /memory is the signed-in vector list;
+                the anonymous "delete everything" — every vent and the user row
+                with it — lives on /history. Linking the wrong one would have
+                promised a button that is not on the page you land on. */}
+            <Link href="/history" className="underline underline-offset-4">
+              one tap deletes everything
+            </Link>
+            , for good. Say the real thing.
+          </p>
         </div>
 
         {!isSupabaseConfigured && (

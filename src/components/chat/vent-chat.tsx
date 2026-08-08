@@ -229,36 +229,58 @@ export function VentChat() {
           </div>
         )}
 
-        <ol className="space-y-4">
-          {lines.map((line) => (
-            <li key={line.id}>
-              <div
-                className={cn(
-                  "glass settle p-5 sm:p-6",
-                  line.speaker === "you" && "border-gold/30 bg-card/50",
-                  line.crisis && "border-gold/60",
-                )}
-              >
-                <p className="label-mono mb-3">
-                  {line.speaker === "you" ? "You" : "Vent"}
-                </p>
-                {/* What they said stays as they typed it, line breaks and all.
-                    What VENT says is set to be read slowly — see .reply. */}
-                <p
+        {/*
+          Two voices, built differently — not two bubbles in two colours.
+
+          They were the same plate: `glass` both sides, separated by a border
+          at thirty percent opacity. Which is to say they were the same, and
+          reading back a session you could not tell at a glance who had
+          spoken. A chat app solves this with a blue bubble and a grey one.
+          This is not a chat app; it is a transcript of a session, and the two
+          voices in a session are not symmetrical.
+
+          What you said is already out of you. It is handed over — so it sits
+          to the right, off the spine, narrower, lighter, with no plate under
+          it at all. Something written in the margin.
+
+          What the room says back is the thing you sit with. It keeps the
+          plate, the full measure, the slow leading, and a gold spine down its
+          left edge — one vertical line, the only ornament on the screen, so
+          the eye knows where the answer starts before it reads a word.
+
+          The asymmetry is the whole design. Restraint on one side, weight on
+          the other, and silence in between.
+        */}
+        <ol className="space-y-6">
+          {lines.map((line) =>
+            line.speaker === "you" ? (
+              <li key={line.id} className="settle flex justify-end">
+                <div className="max-w-[85%] border-r-2 border-gold/40 pr-4 text-right sm:max-w-[75%]">
+                  <p className="label-mono mb-1.5">You</p>
+                  {/* Their words, exactly as typed — line breaks and all. */}
+                  <p className="whitespace-pre-wrap text-[15px] leading-[1.65] text-ink/70">
+                    {line.text}
+                  </p>
+                </div>
+              </li>
+            ) : (
+              <li key={line.id}>
+                <div
                   className={cn(
-                    "whitespace-pre-wrap",
-                    line.speaker === "vent" ? "reply" : "text-[16px] leading-[1.6]",
+                    "glass settle border-l-2 border-l-gold p-5 sm:p-6",
+                    line.crisis && "border-gold/60 border-l-gold",
                   )}
                 >
-                  {line.text}
-                </p>
-              </div>
-            </li>
-          ))}
+                  <p className="label-mono mb-3">Vent</p>
+                  <p className="reply whitespace-pre-wrap">{line.text}</p>
+                </div>
+              </li>
+            ),
+          )}
 
           {thinking && (
             <li>
-              <div className="glass p-4">
+              <div className="glass border-l-2 border-l-gold/50 p-5">
                 <p className="label-mono mb-2">Vent</p>
                 <p aria-live="polite" className="text-sm text-ash">
                   Thinking<span className="animate-pulse">…</span>
