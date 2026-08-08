@@ -95,6 +95,42 @@ const BODY: Array<["head" | "throat" | "chest", RegExp]> = [
   ["chest", /\b(chest|heart|lungs|breath|ribs|belle|stomach)\b/],
 ];
 
+/**
+ * "Work dey choke me" is not a throat.
+ *
+ * It is the most ordinary sentence in this product's vocabulary — it is in
+ * check 1 of the eval suite as the example of a vent — and `\bchoke\b` was
+ * reading it as a somatic report. That opens the somatic gate on a metaphor,
+ * and the somatic gate exists for exactly one reason: never hand a breathing
+ * instruction to somebody who never mentioned their body. A workload gets a
+ * throat exercise, which is the "drop your shoulders for the third time"
+ * failure the tactic library was built to avoid.
+ *
+ * Only the idiomatic spans are removed. "I feel like I'm choking" survives and
+ * still routes to throat, because that one is a real sensation and often a
+ * panic response — the thing you least want to miss.
+ */
+const BODY_IDIOM = /\b(?:\w+\s+)?dey\s+choke(?:\s+me)?\b|\bchoke\s+(?:me\s+)?(?:up\s+)?with\b/g;
+
+/**
+ * Whichever body word they said *first*, not whichever sits earliest in the
+ * table above.
+ *
+ * `BODY.find` returned head before throat before chest no matter what the
+ * sentence emphasised, so "my chest is tight and my head is fine" reported a
+ * head. Reading position in their sentence is the only tie-break that is
+ * actually about them.
+ */
+function bodyIn(m: string): "head" | "throat" | "chest" | null {
+  const cleaned = m.replace(BODY_IDIOM, " ");
+  let best: { at: number; part: "head" | "throat" | "chest" } | null = null;
+  for (const [part, re] of BODY) {
+    const at = cleaned.search(re);
+    if (at !== -1 && (best === null || at < best.at)) best = { at, part };
+  }
+  return best?.part ?? null;
+}
+
 const any = (patterns: RegExp[], text: string) => patterns.some((r) => r.test(text));
 
 export interface Classification {
@@ -109,7 +145,7 @@ export function classify(message: string): Classification {
   const m = message.toLowerCase().trim();
 
   const language: Language = any(PIDGIN, m) ? "pidgin" : "en";
-  const body = BODY.find(([, re]) => re.test(m))?.[0] ?? null;
+  const body = bodyIn(m);
   const realWorldTag = REAL_WORLD.find(([, re]) => re.test(m))?.[0] ?? null;
 
   // Crisis wins over everything, always.

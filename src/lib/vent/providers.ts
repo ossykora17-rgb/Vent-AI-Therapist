@@ -45,7 +45,12 @@ export interface Provider {
  */
 const MODEL = {
   anthropic: process.env.VENT_MODEL_ANTHROPIC || "claude-sonnet-5",
-  gemini: process.env.VENT_MODEL_GEMINI || "gemini-2.5-flash",
+  // An alias, not a snapshot. The comment sixty lines down already recorded
+  // that `gemini-2.5-flash` was retired for new accounts — and the default
+  // stayed pointed at it anyway, so every cold start spent a 404 and a
+  // discovery round-trip to learn what the file already knew. A default that
+  // contradicts its own postmortem is not a default, it is a note nobody read.
+  gemini: process.env.VENT_MODEL_GEMINI || "gemini-flash-latest",
   groq: process.env.VENT_MODEL_GROQ || "llama-3.3-70b-versatile",
   openrouter: process.env.VENT_MODEL_OPENROUTER || "meta-llama/llama-3.3-70b-instruct:free",
   cerebras: process.env.VENT_MODEL_CEREBRAS || "llama-3.3-70b",
