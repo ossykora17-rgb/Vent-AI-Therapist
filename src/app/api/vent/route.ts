@@ -7,6 +7,7 @@ import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
 import { getEfficacy } from "@/lib/vent/efficacy";
 import { findPattern, type Pattern } from "@/lib/vent/pattern";
+import { coverage, COVERAGE_FLOOR } from "@/lib/vent/scan";
 import { buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
 import { MEMORY_TURNS, memoryFetchSize, selectMemory } from "@/lib/vent/memory";
 import { noModelKeyReply } from "@/lib/vent/fallback";
@@ -220,6 +221,7 @@ async function handlePOST(request: Request) {
     flavour,
     turnsToday,
     pattern,
+    message: input.message,
   });
 
   let reply: string;
@@ -312,6 +314,24 @@ async function handlePOST(request: Request) {
         hobby: flavour.hobby.value,
       },
       memoryUsed: history.length,
+      // How much of what they said came back.
+      //
+      // Scored locally — regex and set arithmetic, zero tokens — and reported
+      // rather than acted on. The obvious next step is to regenerate below the
+      // floor, and that is deliberately not wired: it doubles the cost of the
+      // one path that costs anything, on the messages that are longest and
+      // therefore most expensive. Check 19 forbids a second completion and it
+      // is right to.
+      //
+      // So the enforcement lives in the prompt, where it is free — the clause
+      // list goes in numbered and the model is told to answer all of them —
+      // and this is the measurement that says whether that worked. Visible on
+      // the response so `live-verify` can hold real replies to it instead of
+      // anybody assuming.
+      coverage: (() => {
+        const c = coverage(input.message, reply);
+        return { score: Number(c.score.toFixed(2)), missed: c.missed, floor: COVERAGE_FLOOR };
+      })(),
       tokensSpent,
       provider: answeredBy,
       persisted: saved,

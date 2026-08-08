@@ -375,22 +375,51 @@ export function VentChat() {
         )}
 
         {/* Mood check, asked inside the flow rather than as a popup. */}
+        {/*
+          The closing question, asked the way the room asks things.
+
+          It read "How are you feeling now? 1–10" over ten identical circles —
+          a survey, in the middle of a session. Production says `anchored: 0`:
+          people were answering the vent and skipping this, which means the
+          one outcome this product claims was going unmeasured on every
+          session that happened.
+
+          Three things were wrong. It never said why it was asking, so it read
+          as data collection by a company. "How are you feeling" is the exact
+          phrase `VOICE` forbids the model from using, printed by the
+          interface instead. And ten unlabelled circles is a lottery ticket —
+          nothing tells you which end is which, so 6 and 4 are a coin toss.
+
+          Now: it says what it is for in one clause, it asks where the weight
+          went rather than how they feel, and the row is anchored at both ends
+          so a number means something. The skip stays, plainly — a person who
+          does not want to be measured tonight must not be held for it, and
+          a forced rating is a worse number than no number.
+        */}
         {askMood && (
-          <div className="glass mt-4 animate-slide-up p-4">
-            <p className="label-mono mb-3">How are you feeling now? 1–10</p>
-            <div className="flex flex-wrap gap-2">
+          <div className="mt-6 border-l-2 border-gold pl-5">
+            <p className="label-mono mb-2">Before you go</p>
+            <p className="max-w-[42ch] text-[15px] leading-[1.7]">
+              Where did the weight land? Not how the day was — just this, now,
+              against how you came in.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
                 <button
                   key={n}
                   type="button"
                   onClick={() => submitMood(n)}
-                  aria-label={`Feeling ${n} out of 10`}
-                  className="h-11 w-11 rounded-full border border-line/15 text-sm font-semibold transition-colors duration-300 hover:bg-gold hover:text-ink"
+                  aria-label={`${n} out of 10, where 1 is heaviest`}
+                  className="tabular h-11 w-11 rounded-full border border-line/15 text-sm font-semibold transition-colors duration-300 hover:border-gold hover:bg-gold hover:text-ink"
                 >
                   {n}
                 </button>
               ))}
             </div>
+            <p className="label-mono mt-2 flex justify-between max-w-[26rem]">
+              <span>1 · still heavy</span>
+              <span>10 · lighter</span>
+            </p>
           </div>
         )}
 
