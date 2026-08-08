@@ -461,13 +461,34 @@ export function VentChat() {
           />
         )}
 
+        {/*
+          The one moment in this product that has earned an arrival.
+
+          Everything else here is deliberately quiet, and it should be — a room
+          that shouts at somebody mid-sentence is a room they leave. But
+          restraint applied everywhere flattens the one place a person actually
+          gets something back. This is the payoff: they walked in carrying a
+          number and they are walking out carrying a smaller one, and it was
+          read as "How your stress is dropping" in 14px grey.
+
+          A number that large is not decoration. It is the only evidence this
+          product produces that any of it worked, and it should land like
+          evidence. `.closing` is borrowed from the circle — 900ms, slow enough
+          that the eye waits for it — because this is the private version of
+          the same moment.
+        */}
         {drop !== null && drop > 0 && (
-          <div className="glass mt-4 animate-slide-up p-4">
-            <p className="label-mono mb-2">Tension</p>
-            <p className="text-sm leading-relaxed">
-              How your stress is dropping —{" "}
-              <span className="font-semibold">down {drop} points</span> since
-              check-in.
+          <div className="glass closing mt-6 border-l-2 border-l-gold p-5 sm:p-6">
+            <p className="label-mono mb-3">What you put down</p>
+            <p className="flex items-baseline gap-3">
+              <span className="tabular font-display text-[56px] font-bold leading-[0.9] tracking-[-0.03em]">
+                {drop}
+              </span>
+              <span className="text-[15px] leading-[1.5] text-ash">
+                points lighter
+                <br />
+                than when you sat down
+              </span>
             </p>
             {/* scaleX, not width. Animating width is layout on every frame,
                 and this is the one number in the product that is a claim about
@@ -481,8 +502,10 @@ export function VentChat() {
                 }}
               />
             </div>
-            <p className="label-mono mt-2">
-              Earlier {tensionBefore} · Now {tensionAfter} · −{drop}
+            {/* The journey, not a row of stats. Two readings and the
+                distance between them, in their order. */}
+            <p className="label-mono mt-3">
+              Came in at {tensionBefore} · leaving at {tensionAfter}
             </p>
           </div>
         )}
