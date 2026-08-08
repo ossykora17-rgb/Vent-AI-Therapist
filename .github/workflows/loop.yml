@@ -42,7 +42,8 @@ jobs:
             console.log(`commit ${h.commit} · database ${h.database} · ${h.tablesChecked ?? "?"} tables checked`);
             console.log(`storage ${h.storage} · model ${h.model?.status} via ${h.model?.answeredBy || "nobody"}`);
             for (const [t, e] of Object.entries(h.tableErrors || {})) {
-              console.log(`  ${t}: [${e.code ?? "?"}] ${e.hint ?? "no hint"}`);
+              console.log(`  ${t}: [${e.code ?? "?"}] ${e.hint ?? e.message ?? "no hint"}`);
+              if (e.hint && e.message) console.log(`      ${e.message}`);
             }
           '
 

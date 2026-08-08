@@ -6,8 +6,8 @@
 -- `requireUser()` in `src/lib/http/session.ts` builds the **SSR** client, so
 -- every signed-in surface — /api/chats, /api/chats/[id]/messages,
 -- /api/memories, /api/profile — reaches Postgres as `authenticated`, not as
--- `service_role`. 0008 would have left all of them refused, and the symptom
--- would have been a signed-in person with a working chat and an empty
+-- `service_role`. 0008 alone would have left all of them refused, and the
+-- symptom would have been a signed-in person with a working chat and an empty
 -- everything-else: the same silhouette as every other bug in this file.
 --
 -- This is Supabase's intended two-gate design, stated properly for once.
@@ -17,37 +17,67 @@
 --
 -- Least privilege, matched to the policies that exist. A verb granted here
 -- with no policy behind it would be refused by RLS anyway, so granting more
--- than this buys nothing and widens the surface for no reason:
---
---   profiles       select, insert, update   (0001 — no delete policy)
---   sessions       select, insert, update, delete
---   messages       select, insert, delete   (0001 — no update policy)
---   memories       select, insert, update, delete   (0006)
---   subscriptions  select                   (0001 — read-only to its owner)
+-- than this buys nothing and widens the surface for no reason.
 --
 -- Deliberately absent: vents, vent_users, vent_feedback, circles,
 -- circle_members, circle_messages. Those belong to the anonymous path, which
 -- is served only by the admin client, and they carry deny-by-default RLS on
 -- purpose. A signed-in stranger has no business reaching them, and 0008
--- already gave the server what it needs.
+-- already gave the server what it needs. `anon` gets nothing at all.
 --
--- `anon` gets nothing at all. Signing in is what changes that.
 --
--- Idempotent. Safe to run twice, and safe to run before or after 0008.
+-- WHY THIS IS A DO BLOCK AND NOT EIGHT PLAIN GRANTS
+--
+-- `grant ... on public.memories` against a database where `memories` does not
+-- exist raises an error, and one error in the Supabase SQL editor rolls back
+-- the whole script. Production says `PGRST205` for `memories` right now —
+-- 0006 has not been applied there — so a flat list of grants would abort on
+-- the first missing table and silently leave the earlier ones unapplied too.
+--
+-- The first version of this file was a flat list. It would have failed on
+-- paste and looked like the grant "didn't work", which is a worse outcome
+-- than not shipping it: it teaches you to distrust the fix that is correct.
+--
+-- So each grant is applied only if its table is actually there. Running this
+-- before 0006, after 0006, or twice all produce the same end state, and a
+-- table that is missing is reported rather than fatal.
+
+do $$
+declare
+  spec record;
+begin
+  for spec in
+    select * from (values
+      ('profiles',      'select, insert, update'),
+      ('sessions',      'select, insert, update, delete'),
+      ('messages',      'select, insert, delete'),
+      ('memories',      'select, insert, update, delete'),
+      ('subscriptions', 'select')
+    ) as t(tbl, verbs)
+  loop
+    if to_regclass('public.' || spec.tbl) is null then
+      raise notice 'skipping %: table does not exist yet', spec.tbl;
+    else
+      execute format('grant %s on public.%I to authenticated', spec.verbs, spec.tbl);
+    end if;
+  end loop;
+end
+$$;
 
 grant usage on schema public to authenticated;
 
-grant select, insert, update          on public.profiles      to authenticated;
-grant select, insert, update, delete  on public.sessions      to authenticated;
-grant select, insert, delete          on public.messages      to authenticated;
-grant select, insert, update, delete  on public.memories      to authenticated;
-grant select                          on public.subscriptions to authenticated;
-
 -- Vector search. 0006 defines match_memories as security definer with a
--- pinned search_path and takes the caller's id as an argument rather than
+-- pinned search_path, taking the caller's id as an argument rather than
 -- reading auth.uid() inside, so it cannot be steered into another person's
--- rows. It already grants execute to authenticated; repeated here so this
--- file stands alone if 0006 is ever re-run out of order.
-grant usage on schema extensions to authenticated;
-grant execute on function public.match_memories(uuid, extensions.vector, int)
-  to authenticated, service_role;
+-- rows. Guarded the same way — the function does not exist until 0006 runs.
+do $$
+begin
+  if to_regprocedure('public.match_memories(uuid, extensions.vector, int)') is null then
+    raise notice 'skipping match_memories: function does not exist yet (apply 0006)';
+  else
+    grant usage on schema extensions to authenticated;
+    execute 'grant execute on function public.match_memories(uuid, extensions.vector, int)'
+         || ' to authenticated, service_role';
+  end if;
+end
+$$;

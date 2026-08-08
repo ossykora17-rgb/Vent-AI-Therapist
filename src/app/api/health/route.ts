@@ -32,7 +32,7 @@ export async function GET() {
   // hunting for a table that existed. PostgREST puts the difference in `code`
   // — 42P01/PGRST205 is absent, 42501 is a grant — and the actionable half in
   // `hint`, which literally spells out the GRANT statement to run.
-  const tableErrors: Record<string, { code?: string; hint?: string }> = {};
+  const tableErrors: Record<string, { code?: string; hint?: string; message?: string }> = {};
   // Which contract was checked, so a green health cannot mean "checked two".
   const tablesChecked = Object.keys(FULL_CONTRACT).length;
 
@@ -83,6 +83,12 @@ export async function GET() {
         tableErrors[name] = {
           code: res.error.code ?? undefined,
           hint: res.error.hint ?? explainDbCode(res.error.code) ?? undefined,
+          // 42703 says a column is missing and puts *which* column in the
+          // message, with no hint at all. Reporting the code alone turns
+          // "column pressure_seeded does not exist" into "the schema has
+          // drifted" — true, useless, and one more round trip to find out
+          // what everybody already knew.
+          message: res.error.message ?? undefined,
         };
       }
       database = missingTables.length ? "unreachable" : "ok";
