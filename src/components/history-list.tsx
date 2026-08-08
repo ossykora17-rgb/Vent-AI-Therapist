@@ -285,12 +285,22 @@ export function HistoryList() {
                     </p>
                   </button>
 
+                  {/* The reply, set the way they first read it.
+                      This used plain 15px/1.6 while the live surface uses
+                      .reply — longer leading, a 62ch measure, pretty wrapping.
+                      So a sentence that landed one way in the room came back
+                      looking like a log entry, and the gold spine that means
+                      "this is the room speaking" everywhere else was missing.
+                      Reading your own session back should look like the
+                      session. */}
                   {open && (
                     <div className="mt-3 border-t border-line/10 pt-3">
-                      <p className="label-mono mb-2">Vent</p>
-                      <p className="text-[15px] leading-[1.6]">
-                        {r.ai_reply ?? "—"}
-                      </p>
+                      <div className="border-l-2 border-gold pl-4">
+                        <p className="label-mono mb-2">Vent</p>
+                        <p className="reply whitespace-pre-wrap">
+                          {r.ai_reply ?? "—"}
+                        </p>
+                      </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {r.tactic_used && <Tag>{r.tactic_used}</Tag>}
                         {r.intent_type && <Tag>{r.intent_type}</Tag>}
