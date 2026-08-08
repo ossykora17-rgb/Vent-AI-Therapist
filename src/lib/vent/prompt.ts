@@ -1,8 +1,10 @@
 import { groundingBlock, type Grounding } from "./grounding";
+import { objectLabel, objectReads } from "./chairs";
 import type { Pattern } from "./pattern";
 import { scan, scanBlock } from "./scan";
 import type { Classification } from "./intent";
 import type { Tactic, TacticContext } from "./tactics";
+import { OCCUPATION_PRESSURE } from "@/lib/flavour/profile";
 import type { FlavourProfile } from "@/lib/flavour/types";
 import {
   CONFIDENCE_FLOOR,
@@ -38,9 +40,19 @@ export function flavourBlock(f: FlavourProfile | null): string | null {
 
   return [
     `FLAVOUR — ${known.join(", ")}.`,
+    // What the job does, not what it is called. A label tells the model
+    // nothing it can use; "billable hours, partners who never say well done"
+    // is the thing that is actually pressing on them at 11pm. This table was
+    // stranded in a system prompt nothing called — see OCCUPATION_PRESSURE.
+    // Gated on a known occupation, so it never asserts a pressure at
+    // somebody whose work the detector could not read.
+    f.occupation.value !== "unknown" &&
+      `What loads that work: ${OCCUPATION_PRESSURE[f.occupation.value]}. Assume none of it out loud — let it shape what you think is likely, never what you claim.`,
     `Match their pace: ${f.voice.pace}; sentences ${f.voice.sentenceLength}; ${f.voice.challenge}.`,
     `Draw any analogy from ${f.analogySource}, and ${f.regulation}.`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export interface MemoryRow {
@@ -274,6 +286,65 @@ If they name it themselves, that sentence is theirs and it is the most
 valuable thing they will ever type here. Hold still and let it land.`;
 }
 
+/**
+ * What they answered on the way in, thirty seconds ago.
+ *
+ * Every field optional and every field skippable, because the door out of
+ * onboarding is always open and a person who pressed Escape has told you
+ * something too.
+ */
+export interface Opening {
+  object?: string | null;
+  carrying?: string | null;
+  putDown?: string | null;
+}
+
+/**
+ * The first thing known about somebody, and the last thing that should be
+ * read back to them.
+ *
+ * Onboarding asks three questions that are close to the bone — what shape is
+ * it, what are you carrying, what did you come to put down — and until now
+ * every one of those answers was discarded by `completeOnboarding` the
+ * instant it was given. The room asked who you were and then opened as
+ * though nobody had spoken. That is not a missing feature; it is the product
+ * forgetting something in front of the person who just said it.
+ *
+ * It goes in as aim, not as content. Same discipline as `patternBlock`: the
+ * moment a model repeats "you said you're carrying guilt", the person is
+ * being read their own form back and the room becomes an office.
+ *
+ * And it is explicitly marked low-fidelity, which matters more here than
+ * anywhere else in this prompt. These came off a list of six words. The
+ * thing somebody is actually here about is very often not on a list of six
+ * words, so the typed message outranks the tap, always. Treating a tap as a
+ * confession is how you end up confidently addressing the wrong wound.
+ */
+export function openingBlock(o?: Opening | null): string | null {
+  if (!o) return null;
+  const reads = objectReads(o.object);
+  const lines = [
+    reads && `They picked the ${objectLabel(o.object)?.toLowerCase()} — ${reads}.`,
+    o.carrying && `Off a list of six, the word they chose for what they are carrying was ${o.carrying.toLowerCase()}.`,
+    o.putDown && `The one they came to put down was ${o.putDown.toLowerCase()}.`,
+  ].filter(Boolean);
+  if (lines.length === 0) return null;
+
+  return `HOW THEY WALKED IN
+${lines.join("\n")}
+
+This is thirty seconds old and it is the only thing you know about them.
+
+Do not say it back. "You mentioned you're carrying guilt" is a form being
+read aloud, and it tells them the room was filing rather than listening. Let
+it aim the one question you ask, and nothing else.
+
+It was tapped, not written. Six words were offered and one was closest — the
+real thing may not have been on the list at all. The moment their own
+sentence points somewhere else, their sentence wins and this is discarded
+without comment.`;
+}
+
 export interface BuildPromptArgs {
   grounding: Grounding;
   classification: Classification;
@@ -287,6 +358,8 @@ export interface BuildPromptArgs {
   pattern?: Pattern | null;
   /** Their message, so the scan can be built from it. */
   message?: string;
+  /** What onboarding collected, for the session it was collected in. */
+  opening?: Opening | null;
 }
 
 export function buildSystemPrompt({
@@ -299,6 +372,7 @@ export function buildSystemPrompt({
   turnsToday = null,
   pattern = null,
   message,
+  opening = null,
 }: BuildPromptArgs): string {
   const state = [
     ctx.body && `They said it sits in the ${ctx.body}.`,
@@ -327,6 +401,10 @@ export function buildSystemPrompt({
     message ? scanBlock(scan(message)) : null,
     "",
     patternBlock(pattern),
+    "",
+    // After the pattern, before the flavour. What recurs across weeks
+    // outranks what they tapped a minute ago; both are only ever aim.
+    openingBlock(opening),
     "",
     flavourBlock(flavour),
     "",

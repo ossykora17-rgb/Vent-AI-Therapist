@@ -2,7 +2,14 @@
 
 import * as React from "react";
 import { anonId } from "@/lib/anon";
-import { CHAIRS, CHAIR_TENSION, type ChairId } from "@/lib/vent/chairs";
+import {
+  CARRY_WORDS,
+  CHAIRS,
+  CHAIR_TENSION,
+  OBJECTS,
+  type ChairId,
+  type ObjectId,
+} from "@/lib/vent/chairs";
 import { cn } from "@/lib/utils";
 
 /**
@@ -13,25 +20,13 @@ import { cn } from "@/lib/utils";
 
 const DONE_KEY = "mw-onboarded";
 
+// One table, imported. These lists lived here and the server had no way to
+// know what the person had actually been shown, which is why three of the
+// five answers went nowhere.
 type Chair = ChairId;
-type Obj =
-  | "heavy_stone"
-  | "tight_knot"
-  | "buzzing_wire"
-  | "empty_bowl"
-  | "spinning_top"
-  | "cold_block";
+type Obj = ObjectId;
 
-const OBJECTS: Array<[Obj, string]> = [
-  ["heavy_stone", "Heavy stone"],
-  ["tight_knot", "Tight knot"],
-  ["buzzing_wire", "Buzzing wire"],
-  ["empty_bowl", "Empty bowl"],
-  ["spinning_top", "Spinning top"],
-  ["cold_block", "Cold block"],
-];
-
-const WORDS = ["Guilt", "Proof", "Anger", "Hope", "Silence", "Tiredness"];
+const WORDS: readonly string[] = CARRY_WORDS;
 
 export interface OnboardingResult {
   chair: Chair;
@@ -188,7 +183,7 @@ export function Onboarding({
               Pick the object for how you feel.
             </h2>
             <div className="mt-5 grid grid-cols-2 gap-2">
-              {OBJECTS.map(([value, label]) => (
+              {OBJECTS.map(({ id: value, label }) => (
                 <button
                   key={value}
                   type="button"

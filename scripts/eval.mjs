@@ -23,6 +23,7 @@ const { classify } = await app("src/lib/vent/intent.ts");
 const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS, ALL_TACTICS } =
   await app("src/lib/vent/tactics.ts");
 const { buildFlavour } = await app("src/lib/flavour/profile.ts");
+const { flavourBlock, openingBlock } = await app("src/lib/vent/prompt.ts");
 const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/vent/chairs.ts");
 const { selectMemory } = await app("src/lib/vent/memory.ts");
@@ -209,6 +210,22 @@ check("6  Flavour stays silent below the confidence floor", () => {
   is(rich.temperament.value, "fire", "loud, fast input reads as fire");
   is(rich.occupation.value, "lawyer", "chambers and a brief read as a lawyer");
   is(rich.hobby.value, "gym", "leg day reads as gym");
+
+  // The block, not just the reading. A detector that resolves correctly and
+  // a prompt that never says so is a personality engine talking to itself.
+  const block = flavourBlock(rich);
+  ok(/billable hours/.test(block),
+    "a known occupation carries what that work actually loads, not just its name");
+  ok(/never what you claim/.test(block),
+    "and the model is told to let it aim, never to assert it");
+  is(flavourBlock(null), null, "no reading at all produces no block at all");
+  // Each dimension gates on its own. A thin reading can still carry a
+  // confident temperament, and must still say nothing about a job it could
+  // not read — that is the line that would otherwise invent somebody's work.
+  const thinBlock = flavourBlock(thin);
+  ok(!/what loads that work/i.test(thinBlock),
+    "an unknown occupation never has a pressure asserted at it", thinBlock);
+  ok(!/occupation/i.test(thinBlock), "and it is not named either");
 });
 
 // ── 7. the chair is the measurement ────────────────────────────────────────
@@ -1592,6 +1609,94 @@ check("18 Nothing pinned to the bottom lands on the crisis line", () => {
   // falls back to a guess — which is the 232px bug wearing a CSS variable.
   ok(chat.includes("ResizeObserver") && chat.includes("--composer-h"),
     "the composer publishes its real height, and keeps publishing it");
+});
+
+// ── 21. what the door collected has to reach the room ─────────────────────
+//
+// Onboarding asks three questions that are close to the bone — what shape is
+// it, what are you carrying, what did you come to put down — and
+// `completeOnboarding` read `tension` off the chair and let the other three
+// fall out of scope. The room asked who you were and then opened as though
+// nobody had spoken.
+//
+// Nothing could have failed that. The answers were collected, the screen
+// worked, the types were right, and the data went nowhere. So: the wiring
+// itself is the assertion.
+check("21 The door's answers reach the room, and personality has one home", () => {
+  is(openingBlock(null), null, "no onboarding answers means no block at all");
+  is(openingBlock({}), null, "and neither does an empty one — Escape is always available");
+
+  const full = openingBlock({
+    object: "tight_knot",
+    carrying: "Guilt",
+    putDown: "Tiredness",
+  });
+  ok(/tangled/.test(full), "the object carries how it behaves, not just its name");
+  ok(/guilt/.test(full) && /tiredness/.test(full), "both words reach the prompt");
+  ok(/Do not say it back/.test(full),
+    "and the model is forbidden from reading the form back to them");
+  ok(/tapped, not written/.test(full),
+    "the low fidelity of a six-word list is stated, not hidden");
+  ok(/their sentence wins/.test(full),
+    "and what they type outranks what they tapped");
+
+  // A partial answer is the normal case, not an error case.
+  const partial = openingBlock({ object: null, carrying: "Anger", putDown: null });
+  ok(partial && /anger/.test(partial), "one answer is enough to be worth something");
+  ok(partial && !/undefined|null/.test(partial), "and the absent ones say nothing at all");
+
+  // The wire carries ids. This is the only field on /api/vent whose contents
+  // reach a system prompt as prose, so a free-text version would be a client
+  // writing into the model's instructions.
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
+  ok(/openingObject: z\.enum\(/.test(route) && /openingCarrying: z\.enum\(/.test(route),
+    "the opening fields are enums on the wire, never free text");
+  ok(/opening: \{/.test(route), "and the route actually hands them to the prompt");
+
+  const chat = fs.readFileSync(
+    path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
+  ok(/setOpening\(/.test(chat), "the client keeps what onboarding collected");
+  ok(/openingCarrying: opening\?\./.test(chat), "and sends it with the vent");
+
+  // ── one home for personality ────────────────────────────────────────────
+  //
+  // There were two `buildSystemPrompt`s. The live one in `lib/vent/prompt.ts`,
+  // and a second, divergent one in `lib/flavour/profile.ts` — the file anybody
+  // asked to work on personality opens first — reachable only from an
+  // orphaned `lib/trinity` prototype that also carried four hardcoded model
+  // ids, the exact thing CLAUDE.md says a person had to find in production.
+  const walkTs = (dir) =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) return walkTs(full);
+      return /\.tsx?$/.test(e.name) ? [full] : [];
+    });
+  const files = walkTs(path.join(ROOT, "src"));
+
+  const builders = files.filter((f) =>
+    /export function buildSystemPrompt/.test(fs.readFileSync(f, "utf8")));
+  is(builders.length, 1, "exactly one module builds the system prompt",
+    builders.map((f) => path.relative(ROOT, f)).join(", "));
+  is(path.relative(ROOT, builders[0]), "src/lib/vent/prompt.ts",
+    "and it is the one the product imports");
+
+  // Model ids are the provider chain's business. A string anywhere else is a
+  // name nothing can check, which is how two dead ones shipped.
+  const hardcoded = files
+    .filter((f) => !/lib\/vent\/(providers|model)\.ts$/.test(f))
+    .filter((f) => /["'](claude|gemini|gpt)-[a-z0-9.-]+["']/.test(fs.readFileSync(f, "utf8")))
+    .map((f) => path.relative(ROOT, f));
+  ok(hardcoded.length === 0,
+    "no module outside the provider chain hardcodes a model id",
+    hardcoded.join(", ") || undefined);
+
+  // And the vocabulary the screen shows is the vocabulary the server reads.
+  const onboarding = fs.readFileSync(
+    path.join(ROOT, "src/components/onboarding.tsx"), "utf8");
+  ok(/from "@\/lib\/vent\/chairs"/.test(onboarding) && /OBJECTS/.test(onboarding),
+    "onboarding renders the shared table rather than its own copy");
+  ok(!/heavy_stone["']\s*,\s*["']Heavy stone/.test(onboarding),
+    "the object labels are not duplicated in the component");
 });
 
 // ── 19. the credit policy, as something a script can fail ─────────────────
