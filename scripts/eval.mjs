@@ -842,6 +842,37 @@ check("16 The store asks PostgREST for something it can parse", () => {
       invented.join(", ") || undefined,
     );
   }
+
+  // supabase/APPLY.sql is the whole schema as one paste, committed so it can
+  // be opened and copied in a browser — there is no terminal in the Supabase
+  // dashboard, and telling somebody to run `npm run migrations` when they are
+  // standing in a SQL editor is how that command ended up pasted *into* the
+  // SQL editor. It is generated, which means it can go stale, and a stale
+  // copy of a schema is worse than no copy: it applies confidently and leaves
+  // out the migration you just wrote. So it is regenerated here and compared.
+  const applyPath = path.join(ROOT, "supabase/APPLY.sql");
+  ok(fs.existsSync(applyPath), "the one-paste schema file exists");
+  if (fs.existsSync(applyPath)) {
+    const fresh = execFileSync(process.execPath, [path.join(ROOT, "scripts/migrations.mjs")], {
+      encoding: "utf8",
+    }).trim();
+    const onDisk = fs.readFileSync(applyPath, "utf8").trim();
+    // Compared with ok() rather than is(): both sides are ~950 lines of SQL,
+    // and is() prints the actual value on failure. A stale file would bury the
+    // gate under 40KB of schema and hide every other result in the run — a
+    // check whose failure output is unreadable has failed at being a check.
+    // The first differing line is the whole diagnosis anyway.
+    const a = onDisk.split("\n");
+    const b = fresh.split("\n");
+    const at = a.findIndex((l, i) => l !== b[i]);
+    ok(
+      onDisk === fresh,
+      "and it matches the migrations — run `npm run migrations > supabase/APPLY.sql`",
+      at === -1
+        ? `${a.length} vs ${b.length} lines`
+        : `first differs at line ${at + 1}: ${JSON.stringify(a[at] ?? "").slice(0, 60)}`,
+    );
+  }
 });
 
 // ── 17. the number somebody calls in the worst hour of their life ─────────
