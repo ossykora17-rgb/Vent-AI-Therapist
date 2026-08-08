@@ -315,7 +315,26 @@ export function VentChat() {
       {/* pb, not py: the feedback pill floats 12px above the composer and is
           44px tall, so the last 56px of any transcript sits under it at full
           scroll. Empty space there instead of the end of somebody's sentence. */}
-      <main id="main" className="mx-auto w-full max-w-[640px] flex-1 px-4 pt-6 pb-[92px]">
+      <main
+        id="main"
+        className={cn(
+          "mx-auto w-full max-w-[640px] flex-1 px-4 pt-6 pb-[92px]",
+          // An empty room should look empty — but empty is a proportion, not a
+          // pile at the top. Measured at 360px: the invitation ended at y=280
+          // and the composer began at y=565, so a third of the screen was a
+          // void *below* the only thing on it. That does not read as a room
+          // waiting; it reads as a page that failed to finish loading.
+          //
+          // Nothing is added to fill it. The same two sentences, sat in the
+          // middle of the space they have, so the air falls on both sides of
+          // them. Silence beats a guess applies to layout too: when there is
+          // nothing true to put somewhere, arrange what you have and leave it.
+          //
+          // Only while the room is empty. The moment there is a transcript it
+          // flows from the top like any conversation.
+          lines.length === 0 && !thinking && "flex flex-col justify-center",
+        )}
+      >
         {/*
           An empty room should look empty.
 
