@@ -451,6 +451,63 @@ async function persist(
 export type { VentRow };
 
 // A store that stops answering is a 503 here, not a 404 and not a 500.
+/**
+ * Record the outcome. The only claim this product makes.
+ *
+ * There was no route for this at all. The closing question set some React
+ * state, toasted "Saved. That's the anchor.", and made no network call —
+ * while `tryPersist` wrote `tension_after: null` on every insert. So no
+ * session could ever be anchored: the heartbeat's mean drop was structurally
+ * unreachable, `drop_is_flat` could never fire, and the efficacy loop had no
+ * data and never would have.
+ *
+ * "Saved" over nothing saved is the oldest bug in this repo, and this was its
+ * most expensive version — it silently disabled the only measurement the
+ * product has.
+ */
+async function handlePATCH(request: Request) {
+  let json: unknown;
+  try {
+    json = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Malformed body" }, { status: 400 });
+  }
+
+  const parsed = z
+    .object({ anonId: z.string().min(8).max(64), mood: z.number().int().min(1).max(10) })
+    .safeParse(json);
+  if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 422 });
+
+  const store = getStore();
+  if (!store) {
+    // Honest, and the UI must not claim otherwise on this response.
+    return NextResponse.json(
+      { anchored: false, reason: "no_storage" },
+      { status: 200, headers: { "cache-control": "no-store" } },
+    );
+  }
+
+  const userId = await store.findUserId(parsed.data.anonId);
+  if (!userId) {
+    return NextResponse.json(
+      { anchored: false, reason: "no_session" },
+      { status: 200, headers: { "cache-control": "no-store" } },
+    );
+  }
+
+  // Mood 1–10 becomes tension 0–100, inverted — feeling better is less
+  // tension. The same arithmetic the circle close uses, so the two surfaces
+  // cannot disagree about what a 7 means.
+  const tensionAfter = Math.round((10 - parsed.data.mood) * 10);
+  const anchored = await store.anchorLatestVent(userId, parsed.data.mood, tensionAfter);
+
+  return NextResponse.json(
+    { anchored, tensionAfter, reason: anchored ? null : "nothing_to_anchor" },
+    { headers: { "cache-control": "no-store" } },
+  );
+}
+
 export const POST = withStore(handlePOST);
+export const PATCH = withStore(handlePATCH);
 export const GET = withStore(handleGET);
 export const DELETE = withStore(handleDELETE);

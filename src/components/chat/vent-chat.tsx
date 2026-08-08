@@ -157,12 +157,31 @@ export function VentChat() {
     }
   }
 
-  function submitMood(value: number) {
+  async function submitMood(value: number) {
     setMood(value);
     setAskMood(false);
-    // Mood 1–10 read as tension 0–100, inverted: feeling better = less tension.
+    // Shown immediately — the drop is theirs to see whether or not a database
+    // agrees. Only the *claim* about saving waits for the server.
     setTensionAfter(Math.round((10 - value) * 10));
-    toast("Saved. That's the anchor.", "success");
+
+    // This said "Saved. That's the anchor." and made no request at all. The
+    // rating lived in React state and died with the tab, which is why
+    // production reported zero anchored sessions and the efficacy loop had
+    // nothing to learn from.
+    try {
+      const res = await fetch("/api/vent", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ anonId: anonId(), mood: value }),
+      });
+      const d = await res.json();
+      toast(
+        d.anchored ? "Anchored." : "Noted here — not saved.",
+        d.anchored ? "success" : "info",
+      );
+    } catch {
+      toast("Noted here — not saved.", "info");
+    }
   }
 
   const drop =

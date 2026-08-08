@@ -97,6 +97,19 @@ export interface Store {
 
   insertVent(vent: NewVent): Promise<void>;
   deleteVent(userId: string, ventId: string): Promise<void>;
+  /**
+   * Write the outcome onto the most recent vent.
+   *
+   * The only thing this product claims is that the weight goes down, and
+   * until now nothing ever wrote the second reading — `tension_after` was a
+   * hardcoded null on every insert, so no session could be anchored, the
+   * heartbeat's mean drop could never exist, and the efficacy loop had no
+   * data and never would.
+   *
+   * Returns whether a row was actually updated, because the UI said "Saved"
+   * before it knew.
+   */
+  anchorLatestVent(userId: string, mood: number, tensionAfter: number): Promise<boolean>;
   deleteAll(userId: string): Promise<void>;
 
   // ── Circles ─────────────────────────────────────────────────────────────

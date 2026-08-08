@@ -1220,6 +1220,66 @@ check("15k The Carver refuses a summary, and the campfire says its own words", (
   );
 });
 
+// ── 15l. the outcome is written, or nothing claims it was ─────────────────
+//
+// The closing question set React state, toasted "Saved. That's the anchor."
+// and made no network call — while every insert wrote `tension_after: null`.
+// So no session could ever be anchored: the heartbeat's mean drop was
+// unreachable, `drop_is_flat` could never fire, and the efficacy loop had no
+// data and never would have. The only claim this product makes was never
+// recorded, and the interface said it was.
+const { FileStore } = await app("src/lib/store/file-store.ts");
+
+await checkAsync("15l The anchor is written once, and never claimed falsely", async () => {
+  const store = new FileStore();
+  const anonId = `eval-anchor-${Date.now()}`;
+  const userId = await store.ensureUser(anonId);
+
+  is(
+    await store.anchorLatestVent(userId, 5, 50),
+    false,
+    "with nothing to anchor it reports false rather than pretending",
+  );
+
+  await store.insertVent({
+    user_id: userId, user_message: "heavy", ai_reply: "heard",
+    tension_before: 78, tension_after: null, mood_score: null,
+    language: "en", duality_value: null, body_tapped: null, chair_picked: null,
+    pressure_value: 78, tactic_used: "exact_mirror", intent_type: "vent",
+    real_world_tag: null, real_date_used: null, safety_flagged: false,
+  });
+
+  is(await store.anchorLatestVent(userId, 8, 20), true, "a real session anchors");
+
+  const row = (await store.recentVents(userId, 1))[0];
+  is(row.tension_after, 20, "and the second reading is actually on the row");
+  is(row.mood_score, 8, "with the mood they gave");
+  is(row.tension_before - row.tension_after, 58, "so the drop finally exists: 78 → 20");
+
+  // A second rating from a different moment must not overwrite the first
+  // honest one — and the caller has to be told it did nothing.
+  is(
+    await store.anchorLatestVent(userId, 1, 90),
+    false,
+    "rating twice does not overwrite the first answer",
+  );
+  is((await store.recentVents(userId, 1))[0].tension_after, 20, "the original reading stands");
+
+  // The efficacy loop only counts rows with both readings. Before this it
+  // could never have counted one.
+  const table = measureEfficacy(
+    Array.from({ length: 30 }, (_, i) => ({
+      ...row,
+      id: `e${i}`,
+      tactic_used: i % 2 ? "a" : "b",
+      tension_after: i % 2 ? 70 : 20,
+    })),
+  );
+  ok(table.size > 0, "and an anchored corpus is finally something the loop can read");
+
+  await store.deleteAll(userId);
+});
+
 // ── 16. the request the store actually sends ───────────────────────────────
 //
 // Two ways a URL was built wrong, both of which broke every read of `vents`
