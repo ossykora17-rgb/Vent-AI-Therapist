@@ -189,7 +189,25 @@ export function VentChat() {
     setAskMood(false);
     // Shown immediately — the drop is theirs to see whether or not a database
     // agrees. Only the *claim* about saving waits for the server.
-    setTensionAfter(Math.round((10 - value) * 10));
+    const after = Math.round((10 - value) * 10);
+    setTensionAfter(after);
+
+    /*
+      Whether the card below is about to speak for this.
+
+      A screenshot of the moment: the drop card rendering "35 points lighter
+      than when you sat down", and a toast parked across its last line saying
+      "Anchored." Two confirmations of one event, the smaller one covering
+      part of the larger, and the smaller one is the app talking about its
+      own database at the single moment this product has something to say
+      about the person.
+
+      So the card gets the moment when there is a card. The toast is kept for
+      the two cases where nothing else will speak: a rating that produced no
+      drop to show, and a write that did not land — that one always speaks,
+      even over the card, because it is the only place they would learn it.
+    */
+    const cardWillSpeak = tensionBefore !== null && tensionBefore - after > 0;
 
     // This said "Saved. That's the anchor." and made no request at all. The
     // rating lived in React state and died with the tab, which is why
@@ -202,10 +220,8 @@ export function VentChat() {
         body: JSON.stringify({ anonId: anonId(), mood: value }),
       });
       const d = await res.json();
-      toast(
-        d.anchored ? "Anchored." : "Noted here — not saved.",
-        d.anchored ? "success" : "info",
-      );
+      if (!d.anchored) toast("Noted here — not saved.", "info");
+      else if (!cardWillSpeak) toast("Anchored.", "success");
     } catch {
       toast("Noted here — not saved.", "info");
     }
@@ -219,7 +235,7 @@ export function VentChat() {
       {showOnboarding && <Onboarding onDone={completeOnboarding} />}
       <FeedbackFab />
 
-      <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/80 backdrop-blur-glass">
+      <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/92 backdrop-blur-glass">
         <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
           <div className="min-w-0">
             {/* nowrap: at 360px this wrapped to two lines and shoved the
@@ -296,7 +312,10 @@ export function VentChat() {
         )}
       </header>
 
-      <main id="main" className="mx-auto w-full max-w-[640px] flex-1 px-4 py-6">
+      {/* pb, not py: the feedback pill floats 12px above the composer and is
+          44px tall, so the last 56px of any transcript sits under it at full
+          scroll. Empty space there instead of the end of somebody's sentence. */}
+      <main id="main" className="mx-auto w-full max-w-[640px] flex-1 px-4 pt-6 pb-[92px]">
         {/*
           An empty room should look empty.
 
@@ -558,10 +577,35 @@ export function VentChat() {
           </div>
         )}
 
-        <div ref={endRef} />
+        {/*
+          The scroll sentinel, and why it carries a margin.
+
+          `scrollIntoView({block: "end"})` puts this element's bottom edge at
+          the bottom of the viewport. The footer is `sticky bottom-0`, so at
+          any scroll position short of the document's end it pins itself over
+          exactly that spot — which means the auto-scroll after every reply
+          landed the tail of the conversation *underneath the composer*, every
+          single time, by construction.
+
+          A screenshot of one ordinary session is what showed it: "Before you
+          go" — the closing question — rendering half-eaten by the composer's
+          top edge. Production reports `anchored: 0`, and I had been reading
+          that as a copy problem and rewriting the question. The question was
+          fine. Almost nobody was ever shown it.
+
+          `scroll-margin-bottom` is the mechanism for this: the browser scrolls
+          as though this element extended that much further down, so it comes
+          to rest at the composer's top edge instead of behind it. The extra
+          68px clears the feedback pill floating above the footer, and the
+          matching `pb` on `<main>` gives the document the room to do it.
+        */}
+        <div
+          ref={endRef}
+          className="scroll-mb-[calc(var(--composer-h,232px)+68px)]"
+        />
       </main>
 
-      <footer ref={footerRef} className="sticky bottom-0 border-t border-line/10 bg-paper/85 backdrop-blur-glass">
+      <footer ref={footerRef} className="sticky bottom-0 border-t border-line/10 bg-paper/95 backdrop-blur-glass">
         <div className="mx-auto max-w-[640px] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
           {/* Where it sits + how tight. Both feed the tactic choice. */}
           <div className="mb-3 flex flex-wrap items-center gap-2">
