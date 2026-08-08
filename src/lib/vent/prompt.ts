@@ -1,4 +1,5 @@
 import { groundingBlock, type Grounding } from "./grounding";
+import type { Pattern } from "./pattern";
 import type { Classification } from "./intent";
 import type { Tactic, TacticContext } from "./tactics";
 import type { FlavourProfile } from "@/lib/flavour/types";
@@ -173,6 +174,49 @@ give it back to them with what it has cost. If they are circling the same
 ground, say so plainly — circling is information, not failure.`;
 }
 
+/**
+ * The thing that keeps bringing them back — given to the model, not to them.
+ *
+ * `findPattern` has been computed and rendered on `/history` for a while and
+ * has never once reached the prompt. So the reply has been written by
+ * something that did not know this was the seventh time in three weeks, while
+ * a page two clicks away did. That is the most expensive kind of gap: the
+ * knowledge exists, is free, is already in memory, and was not used.
+ *
+ * It costs nothing. The rows come from the fetch the memory block already
+ * makes — twenty-four of them, where a pattern needs five tagged — so this is
+ * one more read of an array that is already in hand.
+ *
+ * The instruction matters more than the number. `VOICE` says a pattern named
+ * by them is worth ten named by us, and handing a model a count is the surest
+ * way to get "you've mentioned this seven times" — which is a chart talking.
+ * So the block gives the knowledge and forbids the announcement.
+ */
+export function patternBlock(p: Pattern | null): string | null {
+  if (!p || !p.tag) return null;
+
+  const span = p.spanDays === 1 ? "today" : `across ${p.spanDays} days`;
+  const moving =
+    p.dropHere !== null && p.dropElsewhere !== null
+      ? p.dropHere < p.dropElsewhere
+        ? " It shifts less than everything else they bring here."
+        : " It shifts about as much as anything else they bring here."
+      : "";
+
+  return `WHAT KEEPS BRINGING THEM BACK
+${p.times} of their recent sessions have been about ${p.tag}, ${span}.${moving}
+You know this. They may never have said it out loud.
+
+Do not announce it. Do not open with it, do not offer it as an insight, and
+never put the number in front of them — "you've mentioned this ${p.times} times" is
+a chart talking, not a person, and it lands as being counted rather than being
+known. Let it change what you ask instead: the ground has been covered, so
+start one layer under where you otherwise would.
+
+If they name it themselves, that sentence is theirs and it is the most
+valuable thing they will ever type here. Hold still and let it land.`;
+}
+
 export interface BuildPromptArgs {
   grounding: Grounding;
   classification: Classification;
@@ -182,6 +226,8 @@ export interface BuildPromptArgs {
   flavour?: FlavourProfile | null;
   /** Vents in the last 24h, from the rate limiter. Null when there is no store. */
   turnsToday?: number | null;
+  /** What recurs, counted from rows already fetched. Null below the floor. */
+  pattern?: Pattern | null;
 }
 
 export function buildSystemPrompt({
@@ -192,6 +238,7 @@ export function buildSystemPrompt({
   memory,
   flavour = null,
   turnsToday = null,
+  pattern = null,
 }: BuildPromptArgs): string {
   const state = [
     ctx.body && `They said it sits in the ${ctx.body}.`,
@@ -212,6 +259,8 @@ export function buildSystemPrompt({
     VOICE,
     "",
     arcBlock(turnsToday),
+    "",
+    patternBlock(pattern),
     "",
     flavourBlock(flavour),
     "",

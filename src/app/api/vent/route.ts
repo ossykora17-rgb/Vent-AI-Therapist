@@ -6,6 +6,7 @@ import { answerFactual, groundNow } from "@/lib/vent/grounding";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
 import { getEfficacy } from "@/lib/vent/efficacy";
+import { findPattern, type Pattern } from "@/lib/vent/pattern";
 import { buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
 import { MEMORY_TURNS, memoryFetchSize, selectMemory } from "@/lib/vent/memory";
 import { noModelKeyReply } from "@/lib/vent/fallback";
@@ -99,6 +100,9 @@ async function handlePOST(request: Request) {
   // Where in the arc. Null unless the store actually answers — a session that
   // cannot be counted gets no claim about how long it has been going.
   let turnsToday: number | null = null;
+  // What recurs, from the same twenty-four rows the memory block already
+  // fetched. Computed, never generated, and null below the floor.
+  let pattern: Pattern | null = null;
 
   if (store) {
     // Configured is not the same as reachable, and the store now says which
@@ -138,6 +142,8 @@ async function handlePOST(request: Request) {
         const recent = await store.recentVents(userId, memoryFetchSize(MEMORY_TURNS));
         const rows = selectMemory(recent, MEMORY_TURNS);
 
+        pattern = findPattern(recent);
+
         history = rows as unknown as MemoryRow[];
         recentTactics = rows
           .map((r) => r.tactic_used)
@@ -148,6 +154,7 @@ async function handlePOST(request: Request) {
       userId = null;
       history = [];
       recentTactics = [];
+      pattern = null;
     }
   }
 
@@ -212,6 +219,7 @@ async function handlePOST(request: Request) {
     memory: history,
     flavour,
     turnsToday,
+    pattern,
   });
 
   let reply: string;

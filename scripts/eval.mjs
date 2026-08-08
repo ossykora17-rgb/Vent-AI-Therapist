@@ -663,6 +663,75 @@ check("15b The reply knows where in the session it is, or says nothing", () => {
   );
 });
 
+// ── 15c. what recurs reaches the reply, without being read out ────────────
+const { patternBlock } = await app("src/lib/vent/prompt.ts");
+const { findPattern, PATTERN_FLOOR } = await app("src/lib/vent/pattern.ts");
+
+check("15c The pattern reaches the prompt, and is forbidden from being announced", () => {
+  const row = (tag, i) => ({
+    id: `v${i}`,
+    user_id: "u",
+    user_message: "money no dey and rent is due",
+    ai_reply: "y",
+    tactic_used: "exact_mirror",
+    tension_before: 80,
+    tension_after: 55,
+    real_world_tag: tag,
+    intent_type: "vent",
+    created_at: new Date(Date.now() - i * 86_400_000).toISOString(),
+  });
+
+  is(patternBlock(null), null, "no pattern means no block at all");
+  is(
+    findPattern(Array.from({ length: PATTERN_FLOOR - 1 }, (_, i) => row("economy", i))),
+    null,
+    "and below the floor there is no pattern to have",
+  );
+
+  // Seven about money, three about family — a clear winner, not a tie.
+  const vents = [
+    ...Array.from({ length: 7 }, (_, i) => row("economy", i)),
+    ...Array.from({ length: 3 }, (_, i) => row("family", i + 20)),
+  ];
+  const p = findPattern(vents);
+  ok(p !== null, "ten tagged sessions with a clear leader is a pattern");
+  is(p.tag, "economy", "and it is the one that recurs most");
+
+  const block = patternBlock(p);
+  ok(block.includes("WHAT KEEPS BRINGING THEM BACK"), "the block is labelled for the model");
+  ok(/do not announce it/i.test(block), "and it is told, in words, not to say it");
+  ok(
+    /chart talking/i.test(block),
+    "with the reason — being counted is not the same as being known",
+  );
+  ok(
+    /most\s+valuable thing they will ever type/i.test(block),
+    "and if they name it themselves, that is theirs",
+  );
+
+  // It has to actually reach the prompt the model is sent. This was computed
+  // and rendered on /history for weeks and never once got into a reply.
+  const built = buildSystemPrompt({
+    grounding: { date: "8 August 2026", time: "05:30", iso: "2026-08-08", lines: [] },
+    classification: { intent: "vent", realWorldTag: null, language: "en", body: null },
+    tactic: ALL_TACTICS[0],
+    ctx: { ...base },
+    memory: [],
+    pattern: p,
+  });
+  ok(built.includes("WHAT KEEPS BRINGING THEM BACK"), "and buildSystemPrompt carries it");
+  ok(
+    !buildSystemPrompt({
+      grounding: { date: "8 August 2026", time: "05:30", iso: "2026-08-08", lines: [] },
+      classification: { intent: "vent", realWorldTag: null, language: "en", body: null },
+      tactic: ALL_TACTICS[0],
+      ctx: { ...base },
+      memory: [],
+    }).includes("WHAT KEEPS BRINGING THEM BACK"),
+    "absent when there is nothing to say, rather than present and empty",
+  );
+});
+
 // ── 16. the request the store actually sends ───────────────────────────────
 //
 // Two ways a URL was built wrong, both of which broke every read of `vents`
