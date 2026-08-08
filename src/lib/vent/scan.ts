@@ -228,8 +228,119 @@ export function coverage(message: string, reply: string): Coverage {
  * — "sixteen hours" for "6am to 10pm" — and every one of those reads as a
  * miss here. Set where only a reply that echoed almost nothing of a long
  * message trips it, which is the single failure this can actually detect.
+ *
+ * **`1 / 3`, not `0.34`.** It was written as 0.34, and the most common shape
+ * of a scoreable message is exactly three clauses — so a reply that engaged
+ * one of them scored 0.3333…, which is less than 0.34, and was called a
+ * failure by a constant whose own docstring says a third is the line. The
+ * threshold excluded precisely the value it was written to admit.
+ *
+ * Found by pointing the metric at `scripts/fixtures`, an older corpus written
+ * for something else: five of its nine scoreable replies "failed", all of
+ * them at exactly 0.33, and every one was good. *"Everybody gone, and the
+ * feed keeps showing you the door they used"* echoes not one word of
+ * "i open instagram and na airport pictures" and is the best line in the set.
+ *
+ * The 51 examples in `holisticExamples.jsonl` never caught this, and could
+ * not have: they were written alongside this metric and the floor was tuned
+ * until they passed. A corpus fitted to a threshold cannot falsify it. The
+ * independent one did so on first contact.
  */
-export const COVERAGE_FLOOR = 0.34;
+export const COVERAGE_FLOOR = 1 / 3;
+
+/**
+ * Below this many scoreable replies, a rate is not a rate.
+ *
+ * Same reasoning as `CARRYING_FLOOR`: under it you are looking at one person
+ * and a rounding, and a loop that wakes an agent for that is worse than one
+ * that sleeps.
+ */
+export const COVERAGE_SAMPLE_MIN = 8;
+
+/**
+ * How many long messages may come back near-empty before it is a regression.
+ *
+ * A quarter. The 51 authored examples in `holisticExamples.jsonl` all clear
+ * the floor — check 15j fails the build if any stops doing so — so replies
+ * written to the standard essentially never trip it. A model tripping it on
+ * one in four long messages is not variance, it is the scan block being
+ * ignored.
+ */
+export const COVERAGE_MISS_RATE = 0.25;
+
+export interface CoverageDrift {
+  /** Scoreable replies in the window. Short messages are not in it. */
+  sampled: number;
+  below: number;
+  rate: number;
+  mean: number;
+  /** The move losing hardest, when one is clearly losing. */
+  worstTactic: { tactic: string; miss: number; of: number } | null;
+}
+
+/**
+ * Whether the product has started answering long messages by their last noun.
+ *
+ * **This is the aggregate, and it exists because the per-reply number must
+ * never be used as one.** `coverage()` measures lexical echo, so a good reply
+ * that compresses — "Sixteen hours." for "i dey do 6am to 10pm" — scores zero
+ * and is better than anything that echoed the words back. Flagging individual
+ * low scores would push the whole product toward parroting, which is the
+ * opposite of the voice, and the metric's own docstring rules it out.
+ *
+ * A *rate* is a different claim and a defensible one. One reply below the
+ * floor is noise. A quarter of them is the scan block being ignored, and that
+ * is a regression somebody can act on.
+ *
+ * Lives here rather than inside the heartbeat so that the eval suite asserts
+ * the function the loop actually runs. A suite that checks its own copy of a
+ * threshold passes while the product regresses — the reason the chair
+ * tensions were consolidated into one table in the first place.
+ *
+ * Null means no opinion: too few scoreable replies, or a rate inside normal.
+ * It is never a complaint about one person's session.
+ */
+export function coverageDrift(
+  replies: ReadonlyArray<{ message: string; reply: string | null; tactic?: string | null }>,
+): CoverageDrift | null {
+  const scored: Array<{ score: number; tactic: string }> = [];
+  for (const r of replies) {
+    if (!r.reply) continue;
+    const c = coverage(r.message, r.reply);
+    if (c.score !== null) scored.push({ score: c.score, tactic: r.tactic ?? "none" });
+  }
+
+  if (scored.length < COVERAGE_SAMPLE_MIN) return null;
+
+  const below = scored.filter((s) => s.score < COVERAGE_FLOOR);
+  const rate = below.length / scored.length;
+  if (rate <= COVERAGE_MISS_RATE) return null;
+
+  // Which move is losing, because that is the actionable handle: one tactic's
+  // instruction is a line in the library, while a rate spread evenly across
+  // all of them is the VOICE block instead. Three samples minimum, or the
+  // "worst" is whichever move happened once and missed.
+  const byTactic = new Map<string, { miss: number; of: number }>();
+  for (const s of scored) {
+    const t = byTactic.get(s.tactic) ?? { miss: 0, of: 0 };
+    t.of += 1;
+    if (s.score < COVERAGE_FLOOR) t.miss += 1;
+    byTactic.set(s.tactic, t);
+  }
+  const ranked = [...byTactic.entries()]
+    .filter(([, t]) => t.of >= 3 && t.miss > 0)
+    .sort((a, b) => b[1].miss / b[1].of - a[1].miss / a[1].of);
+
+  return {
+    sampled: scored.length,
+    below: below.length,
+    rate,
+    mean: scored.reduce((a, s) => a + s.score, 0) / scored.length,
+    worstTactic: ranked[0]
+      ? { tactic: ranked[0][0], miss: ranked[0][1].miss, of: ranked[0][1].of }
+      : null,
+  };
+}
 
 /** The scan, written for the model to run before it writes anything. */
 export function scanBlock(s: Scan): string | null {

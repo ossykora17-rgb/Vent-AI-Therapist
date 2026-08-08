@@ -26,6 +26,7 @@ import { app, ROOT } from "./app-imports.mjs";
 
 const { classify } = await app("src/lib/vent/intent.ts");
 const { checkMessage } = await app("src/lib/circles/rules.ts");
+const { coverageDrift, COVERAGE_FLOOR } = await app("src/lib/vent/scan.ts");
 
 const DATA_DIR = path.resolve(ROOT, process.env.VENT_DATA_DIR || ".data");
 const STATE_FILE = path.join(DATA_DIR, "loop-state.json");
@@ -59,6 +60,11 @@ const LOOPABLE = {
     repeats: true, verifiable: true, bounded: true, reproducible: true,
     skill: "data-quality",
     why: "a cached upstream reading has aged out — refetch, or the room says nothing at all",
+  },
+  coverage_drift: {
+    repeats: true, verifiable: true, bounded: true, reproducible: true,
+    skill: "data-quality",
+    why: "long messages are coming back answered by their last noun — the scan block is in the prompt and the rate is recomputed from stored rows, so it is fixable and checkable",
   },
   tone: {
     repeats: true, verifiable: false, bounded: false, reproducible: true,
@@ -123,9 +129,38 @@ const newCircles = (db.circles ?? []).filter((c) => c.created_at > since);
 /** Findings, not errors. Each carries what a person would need to reproduce it. */
 const findings = [];
 
+/*
+  Coverage, recomputed from rows that are already sitting there.
+
+  The single most common complaint against every product in this category is
+  that it does not answer what you actually wrote — Wysa's reviews say it
+  "strayed completely from the conversation", Woebot's said "scripted". This
+  repo has the instrument for exactly that failure, and until now it computed
+  a number, put it on the JSON response, and nothing anywhere ever read it.
+
+  It is deliberately **not** a per-reply grade, and that constraint comes from
+  the metric's own docstring: coverage measures lexical echo, so a good reply
+  that compresses — "Sixteen hours." for "i dey do 6am to 10pm" — scores zero
+  and is better than anything that echoed the words back. Flagging individual
+  low scores would push the whole product toward parroting, which is the
+  opposite of the voice.
+
+  What the metric is honestly good for is the aggregate: a *rate* of long
+  messages coming back with nothing of themselves in them. One is noise. A
+  quarter of them is the model answering the last noun and ignoring the rest,
+  which is a regression somebody can act on.
+
+  Free, and it stays free: `user_message` and `ai_reply` are both stored, the
+  scan is local regex, and nothing here calls a model. No schema change — this
+  is why it is computed here rather than persisted as a column.
+*/
+const scoreable = [];
+
 for (const v of newVents) {
   if ((v.intent_type ?? classify(v.user_message).intent) !== "vent") continue;
   if (!v.ai_reply || PLACEHOLDER.test(v.ai_reply)) continue;
+
+  scoreable.push({ message: v.user_message, reply: v.ai_reply, tactic: v.tactic_used });
 
   const verdict = checkMessage(v.ai_reply, "share");
   if (!verdict.ok) {
@@ -140,6 +175,21 @@ for (const v of newVents) {
       detail: "a vent reached a model with no tactic selected", at: v.created_at,
     });
   }
+}
+
+const drift = coverageDrift(scoreable);
+if (drift) {
+  findings.push({
+    kind: "coverage_drift",
+    tag: drift.worstTactic?.tactic ?? "none",
+    detail:
+      `${drift.below}/${drift.sampled} scoreable replies below the coverage floor ` +
+      `(${(drift.rate * 100).toFixed(0)}%, mean ${drift.mean.toFixed(2)}, floor ${COVERAGE_FLOOR})` +
+      (drift.worstTactic
+        ? ` — worst move: ${drift.worstTactic.tactic} at ${drift.worstTactic.miss}/${drift.worstTactic.of}`
+        : ""),
+    at: nowIso(),
+  });
 }
 
 /** Keeper verdicts, from the same drop the Closing shows a person. */
