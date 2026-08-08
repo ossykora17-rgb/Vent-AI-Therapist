@@ -450,9 +450,22 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
           {voices.map((id) => (
             <li
               key={id}
+              // Lit, not merely darker.
+              //
+              // This went from grey text to black text — the doc comment at
+              // the top of this file promises "a lit ring on a seat" and what
+              // it delivered was a shade change you could miss across the
+              // room. In a voice circle, who is speaking is the only evidence
+              // there are people here at all; it is what a face does in a
+              // room, and it has to be unmistakable at a glance.
+              //
+              // Gold, because the whole product has one light and this is it
+              // landing on whoever is talking.
               className={cn(
-                "label-mono flex items-center gap-2 rounded-full border px-3 py-1 transition-colors duration-300",
-                speaking.includes(id) ? "border-ink text-ink" : "border-line/15 text-ash",
+                "label-mono flex items-center gap-2 rounded-full border px-3 py-1 transition-all duration-300",
+                speaking.includes(id)
+                  ? "border-gold bg-gold/15 text-ink shadow-[0_0_0_3px_rgb(var(--gold)/0.12)]"
+                  : "border-line/15 text-ash",
               )}
             >
               <span>
