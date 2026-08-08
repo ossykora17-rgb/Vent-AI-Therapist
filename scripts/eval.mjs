@@ -945,14 +945,42 @@ check("15f The house counts what it holds, and stays quiet below the floor", () 
     [...many("economy", 7), ...many("family", 4, 2, 40), ...many("japa", 1, 1, 80)],
     NOW,
   );
-  ok(c !== null, "twelve sessions with two real pressures is a house");
-  is(c.total, 12, "the total counts every session in the window");
+  ok(c !== null, "twelve people with two real pressures is a house");
+  is(c.total, 12, "the total counts every person in the window");
   is(c.tags.length, 2, "and only the pressures that cleared TAG_FLOOR are named");
   is(c.tags[0].tag, "economy", "ranked by how many are carrying it");
   ok(
     c.tags.every((t) => t.count >= TAG_FLOOR),
     "nothing thinner than the tag floor is ever named",
   );
+
+  /*
+    People, not rows — and this is the case the fixture above could never
+    have caught.
+
+    Every helper row here gets `user_id: u${i}`, one person per row, so rows
+    and people were the same number and every assertion passed either way.
+    The page meanwhile read "More than 500 people sat down with something"
+    over 591 vents written by 66 people: an eightfold overstatement of the one
+    number in this product that is a claim about other human beings, shown to
+    somebody alone at 2am asking whether they are the only one.
+
+    The module docstring says it does not fake anything. Counting rows and
+    calling them people is faking something — arithmetically rather than
+    deliberately, which is exactly how it survived a review looking for
+    invented data rather than a wrong denominator.
+  */
+  const sameSoul = (tag, n, daysAgo = 1) =>
+    Array.from({ length: n }, (_, i) => ({ ...row(tag, daysAgo, i), user_id: "one-hard-week" }));
+
+  is(whatIsCarried(sameSoul("economy", 40), NOW), null,
+    "forty vents from one person in one week is one person, and says nothing");
+
+  const mixed = whatIsCarried(
+    [...sameSoul("economy", 30), ...many("economy", 9, 1, 200)], NOW);
+  ok(mixed !== null, "nine other people plus that one clears the floor");
+  is(mixed.total, 10, "and the total is ten people, not thirty-nine rows");
+  is(mixed.tags[0].count, 10, "the per-tag count is people too, not mentions");
 
   // Last week is not this week. A window that quietly includes old rows makes
   // a dead house look busy, which is the fake-activity failure this avoids.
@@ -1624,8 +1652,115 @@ check("18 Nothing pinned to the bottom lands on the crisis line", () => {
 
   // The measurement itself has to keep existing, or every calc above silently
   // falls back to a guess — which is the 232px bug wearing a CSS variable.
-  ok(chat.includes("ResizeObserver") && chat.includes("--composer-h"),
+  const hook = fs.readFileSync(
+    path.join(ROOT, "src/lib/ui/use-composer-height.ts"), "utf8");
+  ok(hook.includes("ResizeObserver") && hook.includes("--composer-h"),
     "the composer publishes its real height, and keeps publishing it");
+
+  /*
+    Both surfaces, from one implementation.
+
+    The chat had this and the circle room did not, so the room kept the exact
+    bug the chat had already fixed — `scrollIntoView({block:"end"})` under a
+    `sticky bottom-0` footer, landing the tail of the transcript behind the
+    composer. In a circle that tail is the last thing somebody said, which is
+    the only reason anybody is in the room.
+
+    Asserted as "both call the hook" rather than "both contain a
+    ResizeObserver", because two correct copies is how they drift.
+  */
+  const room = fs.readFileSync(
+    path.join(ROOT, "src/components/circle-room.tsx"), "utf8");
+  for (const [name, src] of [["chat", chat], ["circle room", room]]) {
+    ok(/useComposerHeight\(footerRef\)/.test(src),
+      `the ${name} measures its composer through the shared hook`);
+    ok(/scroll-mb-\[calc\(var\(--composer-h/.test(src),
+      `and the ${name} sentinel clears it by that measurement`);
+    ok(!/new ResizeObserver/.test(src),
+      `${name} holds no second copy of the measurement`);
+  }
+
+  // ── the name has to be the word on the button ───────────────────────────
+  //
+  // The circle composer read "Say" and carried `aria-label="Send"`. Screen
+  // readers announce "Send"; somebody driving their phone by voice — not a
+  // rare way to use an app you are crying into — says "click Say" and hits
+  // nothing at all. WCAG 2.5.3: the accessible name must contain the visible
+  // label.
+  //
+  // Found because it broke a Playwright selector, which is the only reason
+  // anybody noticed. That is exactly the kind of defect that never gets
+  // reported by the people it fails.
+  const labelled = [];
+  for (const file of walkTsx(path.join(ROOT, "src/components"))) {
+    const src = fs.readFileSync(file, "utf8");
+    /*
+      Where the opening tag actually ends, counted rather than matched.
+
+      The first two attempts used `<button[^>]*aria-label=…`, which finds
+      nothing at all: `onClick={() => void send()}` puts a `>` inside the
+      attribute list, so the character class stops before it ever reaches the
+      label. Both versions passed on clean code and passed again with the
+      defect pasted back in — a check that could not fail, twice.
+
+      Braces, then. Depth zero and a `>` is the end of the tag; everything
+      inside `{…}` — arrows included — is skipped.
+    */
+    for (const start of [...src.matchAll(/<button\b/g)].map((m) => m.index)) {
+      let depth = 0;
+      let i = start;
+      for (; i < src.length; i++) {
+        const ch = src[i];
+        if (ch === "{") depth++;
+        else if (ch === "}") depth--;
+        else if (ch === ">" && depth === 0) break;
+      }
+      // Comments stripped first. The fix for this very defect documents the
+      // old string in prose — `This said \`aria-label="Send"\`` — and the
+      // checker read the explanation instead of the code, then reported the
+      // bug it had just been told about. A scanner that cannot tell code from
+      // a comment about code is reading fiction.
+      const open = src.slice(start, i).replace(/\/\*[\s\S]*?\*\//g, "");
+      const close = src.indexOf("</button>", i);
+      if (close === -1) continue;
+      const label = open.match(/aria-label="([^"]+)"/)?.[1];
+      if (!label) continue;
+      const inner = src.slice(i + 1, close).replace(/\/\*[\s\S]*?\*\//g, "");
+      /*
+        Every word the button can render, including through a ternary.
+
+        The first version of this check skipped ternaries — and the button it
+        was written for renders `{busy ? "…" : "Say"}`, so it could not see
+        the one defect it existed to catch. It passed on the fixed code and
+        passed again when the bug was pasted back in: a detector structurally
+        unable to observe its own subject, which is the HEAD-request lesson
+        in CLAUDE.md wearing an accessibility hat. Verified by reintroducing
+        the mismatch and watching it fail this time.
+
+        So: pull every string literal and every bare word the element can
+        show, and require the accessible name to contain at least one of them.
+        Icon-only buttons render no word and are skipped, correctly — that is
+        what `aria-label` is for.
+      */
+      const shown = [
+        ...[...inner.matchAll(/"([^"]{1,24})"/g)].map((w) => w[1]),
+        ...[...inner.matchAll(/(?:^|[>}])\s*([A-Za-z][A-Za-z ]{1,20}?)\s*(?:[<{]|$)/g)]
+          .map((w) => w[1]),
+      ]
+        .map((w) => w.trim())
+        .filter((w) => /[A-Za-z]/.test(w));
+
+      if (shown.length === 0) continue;
+      if (!shown.some((w) => label.toLowerCase().includes(w.toLowerCase()))) {
+        labelled.push(
+          `${path.relative(ROOT, file)}: shows ${shown.map((w) => `"${w}"`).join("/")}, announced "${label}"`,
+        );
+      }
+    }
+  }
+  ok(labelled.length === 0,
+    "every button's accessible name contains the word printed on it",
+    labelled.join(" | ") || undefined);
 });
 
 // ── 21. what the door collected has to reach the room ─────────────────────

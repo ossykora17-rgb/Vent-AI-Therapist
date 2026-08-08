@@ -345,6 +345,30 @@ export function CirclesList() {
                         : `${6 - c.seats} ${6 - c.seats === 1 ? "seat" : "seats"} open`}
                     </span>
                   </div>
+
+                  {/*
+                    The way in, said out loud.
+
+                    This card is a `<Link>` and always was, but nothing on it
+                    said so: it read as a status panel — a tag, a countdown, a
+                    row of seats — while the only element styled as a control
+                    said "Open a different circle". So the one thing on the
+                    screen that looked pressable offered to start a *second*
+                    room, and the room with five free seats looked like an
+                    announcement about somebody else's evening.
+
+                    Found by driving the lobby as a stranger: a join was
+                    reachable and I could not see how to take it. If a person
+                    has to guess that a card is tappable, the seat is not
+                    really open.
+
+                    Its own line rather than a button, because a button inside
+                    a link is a broken control — and this is the whole card's
+                    job, not a corner of it.
+                  */}
+                  <p className="mt-3 border-t border-line/10 pt-3 text-[15px] font-medium">
+                    {c.seats === 6 ? "Room is full" : "Take a seat →"}
+                  </p>
                 </Link>
               </li>
             );

@@ -421,7 +421,21 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
           <button
             type="button"
             aria-pressed={talking || latched}
-            aria-label="Hold to speak"
+            /*
+              No accessible-name override here, deliberately.
+
+              This carried a fixed label reading "Hold to speak" over a button
+              that renders three different things — and when the mic is
+              latched open it shows "Microphone open" while still announcing
+              the old one. That is not a naming mismatch, it is an instruction
+              to do something that does nothing: hold a button that is already
+              open, told only to the person who cannot see that it is.
+
+              The visible text is correct in all three states, so it is the
+              name. `aria-pressed` carries the state, which is what it is for.
+              An override could only ever be a fourth string to keep in sync
+              with three.
+            */
             onPointerDown={() => setTalkingSafely(true)}
             onPointerUp={() => setTalkingSafely(false)}
             onPointerCancel={() => setTalkingSafely(false)}

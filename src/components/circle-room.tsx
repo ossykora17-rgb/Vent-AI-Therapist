@@ -9,6 +9,7 @@ import { CircleVoice } from "@/components/circle-voice";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { useComposerHeight } from "@/lib/ui/use-composer-height";
 
 interface Msg {
   id: string;
@@ -63,6 +64,9 @@ export function CircleRoom({ id }: { id: string }) {
   const [dropped, setDropped] = React.useState<string | null>(null);
   const [quote, setQuote] = React.useState<{ text: string; author: string } | null>(null);
   const endRef = React.useRef<HTMLDivElement>(null);
+  const footerRef = React.useRef<HTMLElement>(null);
+  // The room had the bug the chat had already fixed. See the hook.
+  useComposerHeight(footerRef);
   /**
    * Read by the poll, not by the render. Putting the draft in `load`'s deps
    * would tear down and rebuild the four-second interval on every keystroke.
@@ -575,12 +579,28 @@ export function CircleRoom({ id }: { id: string }) {
               keeper={state.role === "keeper"}
             />
 
+            {/*
+              A room before anybody speaks, sat where a person is looking.
+
+              Measured at 360px in a real two-person circle: this line sat
+              directly under the breathing card and then roughly eight hundred
+              pixels of nothing ran down to the composer. The silence a circle
+              opens with is the point — but a line pinned to the top of a void
+              reads as a page that stopped loading, not as a room holding its
+              breath.
+
+              Same treatment the chat empty state got, for the same reason and
+              with nothing added to fill it: the air falls on both sides of the
+              sentence instead of all of it underneath.
+            */}
             {messages.length === 0 && (
-              <p className="mt-4 text-center text-sm text-ash">
-                {(state.present ?? 1) > 1
-                  ? `Nobody has spoken yet. ${state.present} people are here, waiting with you.`
-                  : "Nobody has spoken yet. Someone goes first."}
-              </p>
+              <div className="flex min-h-[38dvh] flex-col justify-center">
+                <p className="text-center text-sm text-ash">
+                  {(state.present ?? 1) > 1
+                    ? `Nobody has spoken yet. ${state.present} people are here, waiting with you.`
+                    : "Nobody has spoken yet. Someone goes first."}
+                </p>
+              </div>
             )}
 
             {/* The whole point of #5: silence with somebody in it reads
@@ -597,13 +617,19 @@ export function CircleRoom({ id }: { id: string }) {
                   : `${state.typingOthers} people are writing.`}
               </p>
             )}
-            <div ref={endRef} />
+            {/* scroll-margin, or `block: "end"` parks this exactly where the
+                sticky footer pins itself and the last thing anybody said
+                renders underneath the composer. Same fix as the chat. */}
+            <div
+              ref={endRef}
+              className="scroll-mb-[calc(var(--composer-h,180px)+16px)]"
+            />
           </>
         )}
       </main>
 
       {state?.joined && (
-        <footer className="sticky bottom-0 border-t border-line/10 bg-paper/95 backdrop-blur-glass">
+        <footer ref={footerRef} className="sticky bottom-0 border-t border-line/10 bg-paper/95 backdrop-blur-glass">
           <div className="mx-auto max-w-[640px] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
             {ruleError && (
               <p role="alert" className="mb-2 rounded-card border border-gold/50 p-3 text-[13px] leading-relaxed">
@@ -657,7 +683,21 @@ export function CircleRoom({ id }: { id: string }) {
                 type="button"
                 onClick={() => void send()}
                 disabled={!draft.trim() || busy}
-                aria-label="Send"
+                /*
+                  The name has to be the word on the button.
+
+                  This said `aria-label="Send"` over a button that reads
+                  "Say". Screen readers announce "Send"; voice control users
+                  saying "click Say" hit nothing, because the accessible name
+                  never contains the visible label — WCAG 2.5.3, and a real
+                  dead end for somebody driving a phone by voice, which is not
+                  a rare way to use an app you are crying into.
+
+                  Kept as a label rather than deleted because the visible text
+                  becomes "…" while a share is in flight, and "…" is not a
+                  name. This way the name is stable and it is the right word.
+                */
+                aria-label="Say"
                 className="flex h-12 min-w-[64px] items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-ink disabled:opacity-40"
               >
                 {busy ? "…" : "Say"}
