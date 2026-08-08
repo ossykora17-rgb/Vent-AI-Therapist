@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { isExpired, MAX_SEATS } from "@/lib/circles/rules";
 import { TYPING_WINDOW_MS } from "@/lib/circles/presence";
+import { CARVE_KEY } from "@/lib/vent/carve";
 import type {
   CircleMemberRow, CircleMessageRow, CircleRow,
   NewVent, ProfilePatch, Store, VentRow,
@@ -37,6 +38,14 @@ interface FeedbackRow {
   created_at: string;
 }
 
+interface MemoryRecord {
+  id: string;
+  user_id: string;
+  key: string;
+  value: string;
+  created_at: string;
+}
+
 interface Db {
   users: UserRow[];
   vents: VentRow[];
@@ -44,11 +53,13 @@ interface Db {
   circles: CircleRow[];
   circleMembers: CircleMemberRow[];
   circleMessages: CircleMessageRow[];
+  memories: MemoryRecord[];
 }
 
 const EMPTY: Db = {
   users: [], vents: [], feedback: [],
   circles: [], circleMembers: [], circleMessages: [],
+  memories: [],
 };
 
 export class FileStore implements Store {
@@ -176,6 +187,32 @@ export class FileStore implements Store {
     return hit;
   }
 
+  async getCarve(userId: string): Promise<string | null> {
+    const db = this.read();
+    return db.memories?.find((m) => m.user_id === userId && m.key === CARVE_KEY)?.value ?? null;
+  }
+
+  async setCarve(userId: string, carve: string): Promise<boolean> {
+    await this.write((db) => {
+      db.memories ??= [];
+      // One row per person per key, same as the unique constraint upstream.
+      const existing = db.memories.find((m) => m.user_id === userId && m.key === CARVE_KEY);
+      if (existing) {
+        existing.value = carve;
+        existing.created_at = new Date().toISOString();
+      } else {
+        db.memories.push({
+          id: randomUUID(),
+          user_id: userId,
+          key: CARVE_KEY,
+          value: carve,
+          created_at: new Date().toISOString(),
+        });
+      }
+    });
+    return true;
+  }
+
   async deleteVent(userId: string, ventId: string): Promise<void> {
     await this.write((db) => {
       db.vents = db.vents.filter((v) => !(v.id === ventId && v.user_id === userId));
@@ -186,6 +223,11 @@ export class FileStore implements Store {
     await this.write((db) => {
       db.vents = db.vents.filter((v) => v.user_id !== userId);
       db.users = db.users.filter((u) => u.id !== userId);
+      // The carve goes with them. It is one sentence about somebody's life
+      // that they did not write, held outside the vents — so a delete that
+      // cleared the transcript and left this behind would leave the most
+      // pointed thing in the database standing after they asked to be gone.
+      db.memories = (db.memories ?? []).filter((m) => m.user_id !== userId);
     });
   }
 

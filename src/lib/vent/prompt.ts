@@ -345,6 +345,43 @@ sentence points somewhere else, their sentence wins and this is discarded
 without comment.`;
 }
 
+/**
+ * The carve, read back at the top of the next session.
+ *
+ * `memoryBlock` gives the model six verbatim paragraphs, which is a
+ * transcript. This is one line, and it is a different kind of knowing: the
+ * thing they would recognise at 2am, in the words they used, carried across
+ * the gap between sessions.
+ *
+ * It is aim, exactly like the pattern and the opening. A model that says
+ * "last time you told me your dad is sick" has turned a memory into a receipt
+ * and told the person they are a file with a history. What it is for is that
+ * the second session does not start from zero — the ground has been covered,
+ * so the first question can land one layer under where it otherwise would.
+ *
+ * And it is explicitly disposable. It was written by a model about somebody
+ * rather than by them, which makes it the one thing in this prompt most
+ * likely to be subtly wrong, and the least defensible to insist on.
+ */
+export function carveBlock(carve?: string | null): string | null {
+  if (!carve?.trim()) return null;
+
+  return `WHAT YOU ALREADY KNEW
+"${carve.trim()}"
+
+That is the line carried from the last session that had one. It is why you
+do not start from zero.
+
+Never quote it, never allude to having it, and never tell them you remember.
+"Last time you said…" turns this into a receipt and turns them into a file.
+They can clear it in one tap and it will be gone, correctly — so it is not
+something to lean on out loud.
+
+It may also be wrong. It was written about them, not by them. If what they
+say tonight does not fit it, it is discarded on the spot, without comment and
+without asking them to reconcile the two.`;
+}
+
 export interface BuildPromptArgs {
   grounding: Grounding;
   classification: Classification;
@@ -360,6 +397,8 @@ export interface BuildPromptArgs {
   message?: string;
   /** What onboarding collected, for the session it was collected in. */
   opening?: Opening | null;
+  /** Eight words from the last session that had one. Null is the common case. */
+  carve?: string | null;
 }
 
 export function buildSystemPrompt({
@@ -373,6 +412,7 @@ export function buildSystemPrompt({
   pattern = null,
   message,
   opening = null,
+  carve = null,
 }: BuildPromptArgs): string {
   const state = [
     ctx.body && `They said it sits in the ${ctx.body}.`,
@@ -399,6 +439,10 @@ export function buildSystemPrompt({
     // would be handing over an instruction about a message the model has not
     // been made to look at yet.
     message ? scanBlock(scan(message)) : null,
+    "",
+    // Before the pattern: what was carried across sessions is the oldest
+    // thing known, and everything after it is this week and tonight.
+    carveBlock(carve),
     "",
     patternBlock(pattern),
     "",
