@@ -10,6 +10,7 @@ import { Onboarding, hasOnboarded, type OnboardingResult } from "@/components/on
 import { Breathing, Journaling, ToolRow, shouldOfferBreathing } from "@/components/tools";
 import { anonId, queueVent } from "@/lib/anon";
 import { cn } from "@/lib/utils";
+import { useComposerHeight } from "@/lib/ui/use-composer-height";
 
 type Body = "head" | "throat" | "chest";
 
@@ -94,31 +95,8 @@ export function VentChat() {
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
   const footerRef = React.useRef<HTMLElement>(null);
 
-  /**
-   * Publish the composer's real height, so nothing has to guess it.
-   *
-   * The feedback button was pinned 232px from the bottom — a number somebody
-   * measured once. At 360px the disclaimer wraps to three lines and the
-   * footer is taller than that, so the button sat on top of the CHEST
-   * control: the thing you tap to say where it hurts, covered by a survey.
-   *
-   * A ResizeObserver rather than a one-off measurement, because this footer
-   * changes height on its own — the textarea grows to 32 lines, the crisis
-   * gate appears, the disclaimer rewraps on rotation.
-   */
-  React.useEffect(() => {
-    const el = footerRef.current;
-    if (!el) return;
-    const publish = () =>
-      document.documentElement.style.setProperty("--composer-h", `${Math.round(el.getBoundingClientRect().height)}px`);
-    publish();
-    const ro = new ResizeObserver(publish);
-    ro.observe(el);
-    return () => {
-      ro.disconnect();
-      document.documentElement.style.removeProperty("--composer-h");
-    };
-  }, []);
+  // One implementation, shared with the circle room — see the hook.
+  useComposerHeight(footerRef);
 
   React.useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });

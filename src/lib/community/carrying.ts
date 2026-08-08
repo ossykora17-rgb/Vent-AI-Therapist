@@ -28,13 +28,23 @@ import type { VentRow } from "@/lib/store";
  * week.
  */
 
-/** Below this, a count is not a community — it is one person and a rounding. */
+/**
+ * Below this many **distinct people**, a count is not a community — it is one
+ * person and a rounding.
+ *
+ * A real bar now. It counted rows, so eight vents from one bad night cleared
+ * it and the page announced a community of one.
+ */
 export const CARRYING_FLOOR = 8;
 
 /**
- * Per-tag floor. A single pressure needs its own weight before it is named,
- * or the page tells somebody "3 people are carrying money" and quietly means
- * "you, twice, and somebody's test message".
+ * Per-tag floor, also in people.
+ *
+ * The old comment described this exact bug and did not fix it: "or the page
+ * tells somebody '3 people are carrying money' and quietly means 'you, twice,
+ * and somebody's test message'." That is precisely what it did, because the
+ * count it filtered was a count of rows. Knowing the failure and writing the
+ * threshold against the wrong denominator is its own lesson.
  */
 export const TAG_FLOOR = 3;
 
@@ -42,7 +52,22 @@ export const TAG_FLOOR = 3;
 export const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface Carrying {
-  /** People-sessions in the window, across every pressure. */
+  /**
+   * **Distinct people** in the window, across every pressure.
+   *
+   * Rows, once — and the page said "591 people sat down with something" over
+   * 591 vents written by 66 people. An eight-fold overstatement of the one
+   * number in this product that is a claim about other human beings, shown to
+   * somebody sitting alone at 2am asking whether they are the only one.
+   *
+   * The docstring above says this does not fake anything. It counted rows and
+   * called them people, which is faking something — just arithmetically
+   * rather than deliberately, which is how it survived a review that was
+   * looking for invented data and not for a wrong denominator.
+   *
+   * `user_id`, deduped. A person who vents nine times in a week is one person
+   * who is having a hard week.
+   */
   total: number;
   /**
    * Whether the window hit the fetch limit, so `total` is a floor rather
@@ -81,15 +106,22 @@ export function whatIsCarried(
     const at = new Date(v.created_at).getTime();
     return Number.isFinite(at) && at >= since;
   });
-  if (recent.length < CARRYING_FLOOR) return null;
 
-  const counts = new Map<string, number>();
+  // People, not rows. Everything below counts sets of user_id, because every
+  // number this returns is rendered to somebody as a number of human beings.
+  const people = new Set(recent.map((v) => v.user_id));
+  if (people.size < CARRYING_FLOOR) return null;
+
+  const byTag = new Map<string, Set<string>>();
   for (const v of recent) {
     if (!v.real_world_tag) continue;
-    counts.set(v.real_world_tag, (counts.get(v.real_world_tag) ?? 0) + 1);
+    const set = byTag.get(v.real_world_tag) ?? new Set<string>();
+    set.add(v.user_id);
+    byTag.set(v.real_world_tag, set);
   }
 
-  const tags = [...counts.entries()]
+  const tags = [...byTag.entries()]
+    .map(([tag, set]) => [tag, set.size] as const)
     .filter(([, count]) => count >= TAG_FLOOR)
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([tag, count]) => ({ tag, count }));
@@ -99,7 +131,7 @@ export function whatIsCarried(
   if (tags.length === 0) return null;
 
   return {
-    total: recent.length,
+    total: people.size,
     truncated: fetchLimit !== undefined && vents.length >= fetchLimit,
     tags,
   };
