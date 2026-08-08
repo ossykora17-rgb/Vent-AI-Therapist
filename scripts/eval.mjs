@@ -31,6 +31,8 @@ const { checkMessage, economyFact, keeperIntention, keeperReflection, roleForSea
 const { PRESENCE_WINDOW_MS, TYPING_WINDOW_MS, isPresent, isTyping, presenceOf, shouldTouch } =
   await app("src/lib/circles/presence.ts");
 const { guardianVerdict, THRESHOLD } = await app("src/lib/external/guardian.ts");
+// The campfire's own lines, imported once so no check keeps a copy of them.
+const { MYCELIUM: MYCELIUM_RULE } = await app("src/lib/circles/rules.ts");
 const { noModelKeyReply } = await app("src/lib/vent/fallback.ts");
 const { allProviders, configuredProviders, openAiCompatible } =
   await app("src/lib/vent/providers.ts");
@@ -253,7 +255,16 @@ check("9  Circle governance protects people without breaking a promise", () => {
 
   const advice = checkMessage("you should just tell her no", "share");
   ok(!advice.ok, "advice is refused");
-  ok(/no fixing here/i.test(advice.reason ?? ""), "and refused for the right reason", advice.reason);
+  // Asserted against the constant, not a copy of its wording. This held a
+  // hardcoded "no fixing here" and broke the moment the room got its own
+  // voice — a check testing its own copy of a string passes while the
+  // product changes underneath it, which is the failure mode this suite
+  // exists to avoid.
+  ok(
+    (advice.reason ?? "").startsWith(MYCELIUM_RULE.noFixing),
+    "and refused in the room's own words",
+    advice.reason,
+  );
   ok(!checkMessage("@seat2 that is your problem", "witness").ok, "cross-talk is refused");
   ok(!checkMessage("x".repeat(200), "witness").ok, "a reflection stays one line");
 
@@ -1150,6 +1161,63 @@ check("15j The authored corpus holds the scan to what it claims", () => {
     .filter(({ c }) => c.score !== null && c.score < COVERAGE_FLOOR)
     .map(({ r, c }) => `${r.input.slice(0, 30)} (${c.score.toFixed(2)})`);
   ok(failing.length === 0, "no authored reply falls below the floor", failing.slice(0, 3).join(" ; "));
+});
+
+// ── 15k. the Carver, and the campfire that costs nothing ──────────────────
+const { CARVER_SYSTEM, parseCarve, worthCarving, CARVE_FLOOR, CARVE_MAX_WORDS } =
+  await app("src/lib/vent/carve.ts");
+const { MYCELIUM } = await app("src/lib/circles/rules.ts");
+
+check("15k The Carver refuses a summary, and the campfire says its own words", () => {
+  // A carve is the wound, not a case note. The distinction is the whole file.
+  ok(/Not a summary\. The wound\./i.test(CARVER_SYSTEM), "the Carver is told wound, not summary");
+  ok(/case note/i.test(CARVER_SYSTEM), "and told what a case note looks like, so it can avoid one");
+  ok(/if\s+they wrote Pidgin, the carve is Pidgin/i.test(CARVER_SYSTEM), "the carve keeps their language");
+  ok(/Never diagnose/i.test(CARVER_SYSTEM), "and never diagnoses");
+  ok(
+    /Saying nothing is correct far more often/i.test(CARVER_SYSTEM),
+    "silence is offered as the common answer, not the failure",
+  );
+
+  // The parser is the guard. A model that returns a paragraph must not get a
+  // paragraph into somebody's memory.
+  is(parseCarve("not json at all"), null, "prose is refused");
+  is(parseCarve('{"carve":"","remembers":true}'), null, "an empty carve is refused");
+  is(parseCarve('{"carve":"something","remembers":false}'), null, "remembers:false is refused");
+  is(
+    parseCarve('{"carve":"the user discussed his father diagnosis and family communication issues","remembers":true}'),
+    null,
+    "and a summary over the word limit is refused rather than shipped",
+  );
+
+  const good = parseCarve('Here you go:\n```json\n{"carve":"pops sick / fear of being useless son","remembers":true}\n```');
+  ok(good !== null, "a real carve survives fences and preamble");
+  is(good.carve, "pops sick / fear of being useless son", "verbatim, including the slash");
+  ok(
+    good.carve.split(/\s+/).filter((w) => w !== "/").length <= CARVE_MAX_WORDS,
+    "and lands inside eight words",
+  );
+
+  // Bounded hard. This is the one extra call in the product and it must not
+  // fire on a greeting or on somebody in crisis.
+  ok(!worthCarving(CARVE_FLOOR - 1, false), "a thin session is not carved");
+  ok(!worthCarving(99, true), "and a crisis is never carved — nothing is spent on their worst hour");
+  ok(worthCarving(CARVE_FLOOR, false), "a real session is");
+
+  // MYCELIUM is authored, not generated. A facilitator whose lines come from
+  // a model costs money per circle and can be argued out of the rules.
+  is(MYCELIUM.open, "We start. Who carry wetin for chest?", "the campfire opens the same way every night");
+  is(MYCELIUM.noFixing, "We no dey fix here. We dey witness.", "and says this to anybody reaching for a fix");
+  is(MYCELIUM.ephemeral, "Wetin talk for here, dey die for here.", "and says the confidentiality out loud");
+
+  // The opening a room actually gets, and the refusal somebody actually hits.
+  const opening = keeperIntention("economy", null);
+  ok(opening.startsWith(MYCELIUM.open), "every circle opens with the first words");
+  ok(opening.includes(MYCELIUM.ephemeral), "and closes the intention with the promise");
+  ok(
+    checkMessage("you should just call her", "share").reason.startsWith(MYCELIUM.noFixing),
+    "and a fix is refused in the room's voice, not a moderator's",
+  );
 });
 
 // ── 16. the request the store actually sends ───────────────────────────────
