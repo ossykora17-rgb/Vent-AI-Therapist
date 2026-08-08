@@ -440,10 +440,16 @@ export function VentChat() {
               <span className="font-semibold">down {drop} points</span> since
               check-in.
             </p>
+            {/* scaleX, not width. Animating width is layout on every frame,
+                and this is the one number in the product that is a claim about
+                whether any of it worked — it should not stutter on the phone
+                it is being read on. */}
             <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-line/10">
               <div
-                className="h-full rounded-full bg-gold transition-[width] duration-1000 ease-out"
-                style={{ width: `${100 - (tensionAfter ?? 0)}%` }}
+                className="h-full w-full origin-left rounded-full bg-gold transition-transform duration-1000 ease-out"
+                style={{
+                  transform: `scaleX(${(100 - (tensionAfter ?? 0)) / 100})`,
+                }}
               />
             </div>
             <p className="label-mono mt-2">

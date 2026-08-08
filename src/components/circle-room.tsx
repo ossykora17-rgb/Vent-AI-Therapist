@@ -411,7 +411,20 @@ export function CircleRoom({ id }: { id: string }) {
             </ol>
             {state.phase === "close" && (
               <div className="glass closing mt-6 border-gold/50 p-6 sm:p-8">
-                <p className="label-mono mb-4">Closing — where did you land?</p>
+                {/*
+                  The one screen that earns display type.
+
+                  This is the moment the circle exists for, and it was
+                  announced in `label-mono` — the same 12px uppercase as
+                  "Tension" and "Presence". A system label for the thing the
+                  whole hour was building toward. `CLAUDE.md` already made this
+                  arrive slower than everything else and dimmed the room behind
+                  it; the words themselves were still furniture.
+                */}
+                <p className="label-mono mb-2 text-gold">Closing</p>
+                <h2 className="mb-5 font-display text-[24px] leading-[1.2] tracking-[-0.01em]">
+                  Where did you land?
+                </h2>
 
                 {mood === null ? (
                   <>
@@ -444,10 +457,16 @@ export function CircleRoom({ id }: { id: string }) {
                           </span>{" "}
                           since you sat down.
                         </p>
+                        {/* scaleX, not width — same reason as the breathing
+                            circle. Animating width is layout on every frame,
+                            and this bar runs for a full second on the screen
+                            somebody is watching most closely. */}
                         <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-line/10">
                           <div
-                            className="h-full rounded-full bg-gold transition-[width] duration-1000 ease-out"
-                            style={{ width: `${100 - tensionNow(mood)}%` }}
+                            className="h-full w-full origin-left rounded-full bg-gold transition-transform duration-1000 ease-out"
+                            style={{
+                              transform: `scaleX(${(100 - tensionNow(mood)) / 100})`,
+                            }}
                           />
                         </div>
                         <p className="label-mono mt-2">
