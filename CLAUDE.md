@@ -194,8 +194,21 @@ That gap has now produced the same bug seven times, wearing seven faces:
   the entire time. Two probes of the same database, one of them structurally
   unable to see what it was looking at.
 
-Ten findings, one mechanism: **the suite tests the shape its author is
-standing in.** Checks 12, 14, 16 and 17 close instances — 14 stubs `fetch` and
+- Three claims made before their answer arrived. `persisted: false` nested
+  inside `memoryCount > 0`, so a first-time user whose words were dropped saw
+  nothing. `submitMood` toasting *"Saved. That's the anchor."* with no network
+  call at all, against inserts that hardcoded `tension_after: null` — so no
+  session could ever be anchored, and the mean drop, `drop_is_flat` and the
+  whole efficacy loop were unreachable rather than merely empty. And
+  `void seal(w)` followed immediately by *"Sealed. Nothing here is kept."*,
+  where `seal` never checked `res.ok` and swallowed the rest behind a comment
+  reasoning that it had already happened.
+  That last one is the sharpest: the sentence held **two** promises, and only
+  one depended on the request. The transcript deletion was true either way, so
+  the failure tied a guarantee that always holds to one that had just broken.
+
+Eleven findings, two mechanisms. The first, and the one most of them share:
+**the suite tests the shape its author is standing in.** Checks 12, 14, 16 and 17 close instances — 14 stubs `fetch` and
 makes every provider failure that reached a real person fail a build instead;
 16 reads the store as text and fails any select list with a space in it; 17
 fails any surface that writes the crisis number out by hand. That is the most
@@ -216,3 +229,10 @@ actually carry the failure?*
 A green light over a broken road is the oldest bug in this file. It has now
 arrived three times — `models.retrieve`, the anonymous probe, and the HEAD
 request — and every time the light was the part that was wrong.
+
+And the second mechanism, which is newer and simpler than the first:
+**the interface reported an intention instead of an outcome.** Not a
+probe in the wrong shape — a sentence written before, or without, the answer.
+Ask of any string that says something happened:
+
+*Did this wait for the thing, and did it read what came back?*
