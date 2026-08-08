@@ -764,6 +764,89 @@ check("17 The crisis number exists once, and every surface reads that one", () =
   ok(shown.length >= 6, "at least six surfaces import it", `${shown.length}: ${shown.join(", ")}`);
 });
 
+// ── 19. the credit policy, as something a script can fail ─────────────────
+//
+// `CLAUDE.md` says most messages never reach a model and that a change to the
+// free paths which needs one is a change that is wrong. That was a paragraph.
+// A sketch landed on this branch proposing three extra model calls per
+// message — two of them to map a sentence to a body part and to parse affect,
+// both of which are already regex and a table — and nothing in the repo could
+// have failed it. Now something can.
+const { PIPELINE, FREE_STAGES, MAX_COMPLETIONS_PER_MESSAGE, describePipeline } =
+  await app("src/lib/vent/orchestrator.ts");
+
+check("19 A vent costs one model call, and the free stages stay free", () => {
+  is(MAX_COMPLETIONS_PER_MESSAGE, 1, "a real vent is one completion, never a fan-out");
+  is(FREE_STAGES.length, 3, "three of the four stages cost nothing");
+  ok(
+    FREE_STAGES.includes("intake"),
+    "intake is free — crisis routing has to work on an empty account",
+  );
+  ok(
+    FREE_STAGES.includes("somatic"),
+    "the body map is free — a model would invent a body part they never named",
+  );
+
+  // The stage table holds functions, not names, so a deleted module is a type
+  // error. Assert they are all actually callable rather than truthy strings.
+  for (const s of PIPELINE) {
+    ok(typeof s.implementation === "function", `${s.id} points at a real function`);
+  }
+
+  // Intake and somatic are the same call, and it is a pure one. If either ever
+  // becomes async, it has almost certainly grown a network call.
+  const intake = PIPELINE.find((s) => s.id === "intake").implementation;
+  const parsed = intake("my chest is tight and work dey choke me");
+  ok(!(parsed instanceof Promise), "intake is synchronous — nothing to await means nothing to bill");
+  is(parsed.body, "chest", "and it reads the body from the word they used");
+
+  // "Work dey choke me" is a workload, not a throat. It was routing to throat
+  // and opening the somatic gate on a metaphor — a breathing instruction for
+  // somebody who never mentioned their body, which is the exact failure the
+  // gate exists to prevent. It is check 1's own example of a vent.
+  is(intake("work dey choke me").body, null, "the Pidgin idiom names no body part");
+  is(intake("money dey choke me sha").body, null, "nor does any other stressor doing the choking");
+  is(
+    intake("i feel like i'm choking").body,
+    "throat",
+    "but a real one still lands — that one is often panic",
+  );
+  is(
+    intake("my chest is tight and my head is fine").body,
+    "chest",
+    "and the body they named first wins, not whichever the table lists first",
+  );
+
+  // The weaver's model id has to be one the adapter can actually resolve. A
+  // dead id — claude-sonnet-5-20250715 — reached production once already and
+  // came back on this branch inside the sketch.
+  const { weaverModel } = describePipeline();
+  ok(!/^claude-sonnet-5-\d{8}$/.test(weaverModel), "the weaver model is not a dated dead id", weaverModel);
+
+  // No surface anywhere may hardcode it again.
+  const walk = (dir) =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) return walk(full);
+      return /\.(tsx?|mjs)$/.test(e.name) ? [full] : [];
+    });
+  // Quoted only. These ids are named in comments on purpose — the whole
+  // reason they are remembered is so nobody reaches for them again — and a
+  // scan that cannot tell a warning from a usage would force the warnings to
+  // be deleted, which is the opposite of the point.
+  // Straight quotes only — a TypeScript string literal. Backticks are how
+  // these ids are written when a comment is warning about them, and a scan
+  // that cannot tell a warning from a usage would force the warnings to be
+  // deleted. It caught a real one on its first run: the Gemini default was
+  // still `gemini-2.5-flash` sixty lines above a comment saying it was
+  // retired.
+  const QUOTED_DEAD = /["'](?:claude-sonnet-5-\d{8}|gemini-2\.5-flash)["']/;
+  const dead = walk(path.join(ROOT, "src"))
+    .filter((f) => QUOTED_DEAD.test(fs.readFileSync(f, "utf8")))
+    .map((f) => path.relative(ROOT, f));
+  ok(dead.length === 0, "no file names a model id known to be retired", dead.join(", ") || undefined);
+});
+
 // ── live: the four things only a running room can prove ────────────────────
 if (BASE) {
   const post = (p, body, method = "POST") =>
@@ -773,7 +856,7 @@ if (BASE) {
       body: JSON.stringify(body),
     });
 
-  await checkAsync("18 A Keeper does not speak to an empty room", async () => {
+  await checkAsync("20 A Keeper does not speak to an empty room", async () => {
     const one = `eval-${Date.now()}-a`;
     const { circle } = await post("/api/circles", {
       anonId: one, tag: "family", chairPicked: "tight_edge", pressure: 78,
