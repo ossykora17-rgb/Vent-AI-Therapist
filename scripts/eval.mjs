@@ -909,7 +909,8 @@ check("15f The house counts what it holds, and stays quiet below the floor", () 
 // with mumcy but i'm holding am for mind". Four clauses, every one
 // load-bearing, and a reply about mumcy — because mumcy was nearest the full
 // stop.
-const { scan, scanBlock, coverage, COVERAGE_FLOOR } = await app("src/lib/vent/scan.ts");
+const { scan, scanBlock, coverage, COVERAGE_FLOOR, SCOREABLE_MIN } =
+  await app("src/lib/vent/scan.ts");
 
 check("15g The scan reads every clause, and coverage proves the reply did", () => {
   const MSG =
@@ -957,13 +958,22 @@ check("15g The scan reads every clause, and coverage proves the reply did", () =
 
   const bad = coverage(MSG, lazy);
   const good = coverage(MSG, whole);
-  ok(bad.score < COVERAGE_FLOOR, "a reply about the last noun fails the floor", `${bad.score}`);
-  ok(good.score >= COVERAGE_FLOOR, "a reply that carries the clauses passes", `${good.score}`);
+  ok(bad.score !== null && bad.score < COVERAGE_FLOOR, "a reply about the last noun fails the floor", `${bad.score}`);
+  ok(good.score !== null && good.score >= COVERAGE_FLOOR, "a reply that carries the clauses passes", `${good.score}`);
   ok(bad.missed.length > 0, "and the misses are named in their own words", bad.missed.join(" | "));
 
-  // Compression is not a miss. Demanding every clause back would produce a
-  // checklist read aloud, which is the opposite of the voice.
-  ok(COVERAGE_FLOOR < 1, "the floor allows compression rather than demanding recitation");
+  // No opinion on short messages, and that is the point. Two clauses means
+  // one unechoed clause is 50% and two is 0% — noise wearing a decimal point.
+  is(coverage("work dey choke me", "Choke. What is on the pile?").score, null,
+    "a one-clause message gets no score at all");
+  is(coverage("money no dey and rent don near", "No money and a date coming.").score, null,
+    "and neither does a two-clause one");
+  ok(SCOREABLE_MIN >= 3, "the floor for having an opinion is three scoreable clauses");
+
+  // Compression is not a miss. This measures lexical echo, and a reply that
+  // answers "6am to 10pm" with "sixteen hours" is better than one that
+  // repeats it — so the floor sits where only a near-total miss trips it.
+  ok(COVERAGE_FLOOR <= 0.34, "and the floor is low, because echo is not quality");
 
   // Zero tokens, structurally: nothing here may become async.
   ok(!(scan("x") instanceof Promise), "the scan is synchronous — nothing to await, nothing to bill");
@@ -1069,6 +1079,77 @@ check("15i The three engines are selectable, and none of them is orphaned", () =
   for (const id of ["iterated_game", "future_self", "micro_loop"]) {
     ok(seen.has(id), `${id} is actually reachable, not just present`);
   }
+});
+
+// ── 15j. the authored corpus, run against the thing that reads it ─────────
+//
+// 51 hand-labelled examples: input, what each clause is doing, the affect
+// under it, where it sits, and a reply that carries all of it.
+//
+// They are NOT injected into the prompt. Few-shot would put them on the wire
+// on every vent forever, which is a per-message tax for a fixed asset — and
+// the standing order here is strictest credit usage. They are a fine-tune
+// corpus and, more usefully today, the regression set the scan is measured
+// against. Twelve of them falsified the coverage metric on their first run,
+// which is most of the reason they were worth writing.
+check("15j The authored corpus holds the scan to what it claims", () => {
+  const raw = fs.readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8");
+  const rows = raw.trim().split("\n").map((l, i) => {
+    try {
+      return JSON.parse(l);
+    } catch {
+      throw new Error(`line ${i + 1} is not JSON`);
+    }
+  });
+
+  ok(rows.length >= 50, "the corpus is at least fifty examples", `${rows.length}`);
+  for (const r of rows) {
+    ok(typeof r.input === "string" && r.input.length > 0, "every example has an input");
+    ok(r.clauses && Object.keys(r.clauses).length > 0, `every example labels its clauses: ${r.input.slice(0, 30)}`);
+    ok(typeof r.full_integration === "string", "and carries an authored reply");
+  }
+
+  // Pidgin is not a garnish here — it is how a large share of this audience
+  // writes, and a corpus that is all standard English trains a voice that
+  // cannot meet them.
+  const pidgin = rows.filter((r) => /\b(dey|wey|na|abeg|sabi|oga|japa|pikin|papa|mumcy|no fit|don)\b/i.test(r.input));
+  ok(pidgin.length >= 15, "a real share of the corpus is Pidgin", `${pidgin.length}/${rows.length}`);
+
+  // The scan has to actually read them. A corpus the reader cannot parse is
+  // a document, not a test.
+  let clausesFound = 0;
+  for (const r of rows) clausesFound += scan(r.input).clauses.length;
+  ok(clausesFound >= rows.length, "the scan finds at least one clause in every example", `${clausesFound}`);
+
+  // `somatic_read`, not `somatic`, and the rename is the finding.
+  //
+  // The corpus field is a therapist's *inference* — "she left and i never
+  // even fight for am" reads as chest, and nobody in that sentence said
+  // chest. The scan's field is *detection*: what they actually named. Fifteen
+  // examples "disagreed" and every one was the code correctly refusing to
+  // guess where a human would infer. Two different questions with one name
+  // between them, which is the guess-versus-silence rule showing up inside
+  // my own data.
+  //
+  // So: the read may be richer than the detection, never contradictory.
+  const VALID = new Set(["HEAD", "THROAT", "CHEST", "MID"]);
+  const read = rows.filter((r) => r.somatic_read);
+  ok(read.length >= 10, "enough examples carry a somatic read", `${read.length}`);
+  for (const r of read) {
+    ok(VALID.has(r.somatic_read), `${r.somatic_read} is one of the four`, r.input.slice(0, 30));
+  }
+  ok(
+    !rows.some((r) => "somatic" in r),
+    "and no example still uses the ambiguous field name",
+  );
+
+  // No authored reply may fail the floor. If one does, either the example is
+  // bad or the metric is — and the first time this ran, it was the metric.
+  const failing = rows
+    .map((r) => ({ r, c: coverage(r.input, r.full_integration) }))
+    .filter(({ c }) => c.score !== null && c.score < COVERAGE_FLOOR)
+    .map(({ r, c }) => `${r.input.slice(0, 30)} (${c.score.toFixed(2)})`);
+  ok(failing.length === 0, "no authored reply falls below the floor", failing.slice(0, 3).join(" ; "));
 });
 
 // ── 16. the request the store actually sends ───────────────────────────────
