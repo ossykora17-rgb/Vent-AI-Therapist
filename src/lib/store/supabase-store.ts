@@ -108,6 +108,29 @@ export class SupabaseStore implements Store {
     return this.recentVents(userId, limit);
   }
 
+  async anchorLatestVent(userId: string, mood: number, tensionAfter: number): Promise<boolean> {
+    // The newest vent for this person, and only if it has no outcome yet —
+    // rating twice must not overwrite the first honest answer with a later
+    // one from a different moment.
+    const rows = ok("anchorLatestVent:find", await this.db
+      .from("vents")
+      .select("id")
+      .eq("user_id", userId)
+      .is("tension_after", null)
+      .order("created_at", { ascending: false })
+      .limit(1)) as unknown as Array<{ id: string }> | null;
+
+    const id = rows?.[0]?.id;
+    if (!id) return false;
+
+    done("anchorLatestVent", await this.db
+      .from("vents")
+      .update({ mood_score: mood, tension_after: tensionAfter })
+      .eq("id", id)
+      .eq("user_id", userId));
+    return true;
+  }
+
   async insertVent(vent: NewVent): Promise<void> {
     done("insertVent", await this.db.from("vents").insert(vent));
   }

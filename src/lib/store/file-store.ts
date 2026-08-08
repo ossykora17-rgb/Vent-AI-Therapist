@@ -162,6 +162,20 @@ export class FileStore implements Store {
     });
   }
 
+  async anchorLatestVent(userId: string, mood: number, tensionAfter: number): Promise<boolean> {
+    let hit = false;
+    await this.write((db) => {
+      const target = db.vents
+        .filter((v) => v.user_id === userId && v.tension_after === null)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+      if (!target) return;
+      target.mood_score = mood;
+      target.tension_after = tensionAfter;
+      hit = true;
+    });
+    return hit;
+  }
+
   async deleteVent(userId: string, ventId: string): Promise<void> {
     await this.write((db) => {
       db.vents = db.vents.filter((v) => !(v.id === ventId && v.user_id === userId));
