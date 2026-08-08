@@ -830,6 +830,78 @@ check("15e The voice mask shifts far enough to break recognition", () => {
   );
 });
 
+// ── 15f. the house counts, and never says you are the only one ────────────
+//
+// A circle keeps nothing, so the product has no community layer at all — and
+// a lonely screen that says "0 people this week" is worse than a silent one.
+// Every floor here exists to stop a number being printed that would land on
+// somebody at 2am as confirmation they are alone.
+const { whatIsCarried, CARRYING_FLOOR, TAG_FLOOR, WINDOW_MS, carryingWord } =
+  await app("src/lib/community/carrying.ts");
+
+check("15f The house counts what it holds, and stays quiet below the floor", () => {
+  const NOW = Date.parse("2026-08-08T06:00:00Z");
+  const row = (tag, daysAgo, i) => ({
+    id: `c${i}`,
+    user_id: `u${i}`,
+    user_message: "x",
+    ai_reply: "y",
+    real_world_tag: tag,
+    intent_type: "vent",
+    tension_before: null,
+    tension_after: null,
+    created_at: new Date(NOW - daysAgo * 86_400_000).toISOString(),
+  });
+  const many = (tag, n, daysAgo = 1, o = 0) =>
+    Array.from({ length: n }, (_, i) => row(tag, daysAgo, o + i));
+
+  is(whatIsCarried([], NOW), null, "an empty house says nothing, never zero");
+  is(
+    whatIsCarried(many("economy", CARRYING_FLOOR - 1), NOW),
+    null,
+    "and below the floor it still says nothing",
+  );
+
+  // Enough rows overall, but no single pressure clears its own floor: a total
+  // with nothing nameable behind it is a number over blank space.
+  is(
+    whatIsCarried(
+      [...many("economy", 2), ...many("japa", 2, 1, 50), ...many("family", 2, 1, 60),
+       ...many("lonely", 2, 1, 70)],
+      NOW,
+    ),
+    null,
+    "a total with no pressure above its own floor is not printed",
+  );
+
+  const c = whatIsCarried(
+    [...many("economy", 7), ...many("family", 4, 2, 40), ...many("japa", 1, 1, 80)],
+    NOW,
+  );
+  ok(c !== null, "twelve sessions with two real pressures is a house");
+  is(c.total, 12, "the total counts every session in the window");
+  is(c.tags.length, 2, "and only the pressures that cleared TAG_FLOOR are named");
+  is(c.tags[0].tag, "economy", "ranked by how many are carrying it");
+  ok(
+    c.tags.every((t) => t.count >= TAG_FLOOR),
+    "nothing thinner than the tag floor is ever named",
+  );
+
+  // Last week is not this week. A window that quietly includes old rows makes
+  // a dead house look busy, which is the fake-activity failure this avoids.
+  is(
+    whatIsCarried(many("economy", 20, 9), NOW),
+    null,
+    "rows outside the seven-day window do not count",
+  );
+  is(WINDOW_MS, 7 * 24 * 60 * 60 * 1000, "the window is seven days");
+
+  // Plain words, not tag ids. "ai_job" on a public page is a database column.
+  is(carryingWord("ai_job"), "work", "tags are spoken in words, not in schema");
+  is(carryingWord("economy"), "money", "money is money");
+  is(carryingWord("unknown_tag"), "unknown_tag", "and an unmapped tag falls through intact");
+});
+
 // ── 16. the request the store actually sends ───────────────────────────────
 //
 // Two ways a URL was built wrong, both of which broke every read of `vents`
