@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { anonId } from "@/lib/anon";
 import { CHAIRS, tensionForChair } from "@/lib/vent/chairs";
+import { carryingWord } from "@/lib/community/carrying";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,26 @@ export function CirclesList() {
    * the next poll happened to repaint it. Now it ticks with the poll.
    */
   const [now, setNow] = React.useState(0);
+
+  /**
+   * What the house is carrying, counted.
+   *
+   * Fetched once rather than on the ten-second poll: it describes a week, and
+   * re-asking every ten seconds would be a scan per visitor per poll for a
+   * number that cannot have moved.
+   */
+  const [carrying, setCarrying] = React.useState<{
+    total: number;
+    tags: Array<{ tag: string; count: number }>;
+  } | null>(null);
+
+  React.useEffect(() => {
+    void fetch("/api/community")
+      .then((r) => r.json())
+      .then((d) => setCarrying(d.carrying ?? null))
+      // Silence on failure. The lobby simply does not mention it.
+      .catch(() => {});
+  }, []);
 
   const load = React.useCallback(async () => {
     try {
@@ -167,6 +188,44 @@ export function CirclesList() {
             >
               Open a circle
             </button>
+          </div>
+        )}
+
+        {/*
+          The house, when the room is empty.
+
+          A circle keeps nothing — that is the rule and it is right — which
+          leaves the lobby dead until somebody else happens to be awake. A
+          person arriving at 2am gets a screen implying they are the only one
+          who has ever felt this. They are not, and "am I the only one" is the
+          loneliest question anybody brings here.
+
+          So the room remembers nothing and the house remembers how many.
+          Counts by pressure, over a week, across everybody: no text, no
+          identity, nothing a stranger could not have guessed.
+
+          It renders under the lobby state rather than instead of it, so a live
+          circle is still the first thing you see. And it renders nothing at
+          all below the floor — never "0 this week", which is the one sentence
+          a lonely screen must not print.
+        */}
+        {carrying && !creating && (
+          <div className="mt-6 border-l border-gold/25 pl-5">
+            <p className="label-mono mb-2">This week, in the house</p>
+            <p className="max-w-[44ch] text-[15px] leading-[1.7]">
+              <span className="tabular font-semibold">{carrying.total}</span>{" "}
+              people sat down with something. Mostly{" "}
+              {carrying.tags.slice(0, 3).map((t, i, arr) => (
+                <React.Fragment key={t.tag}>
+                  {i > 0 && (i === arr.length - 1 ? " and " : ", ")}
+                  {carryingWord(t.tag)}
+                </React.Fragment>
+              ))}
+              .
+            </p>
+            <p className="mt-2 max-w-[44ch] text-[14px] leading-[1.6] text-ash">
+              Counts only. Nothing anybody said is kept, here or anywhere.
+            </p>
           </div>
         )}
 
