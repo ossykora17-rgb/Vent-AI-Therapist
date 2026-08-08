@@ -238,6 +238,10 @@ async function handlePOST(request: Request) {
     turnsToday,
     pattern,
     message: input.message,
+    // Free when there is no store and null on every failure inside the store,
+    // so a session simply opens knowing nothing — which is what it did before
+    // the Carver existed.
+    carve: store && userId ? await store.getCarve(userId) : null,
     opening: {
       object: input.openingObject,
       carrying: input.openingCarrying,

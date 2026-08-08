@@ -23,7 +23,7 @@ const { classify } = await app("src/lib/vent/intent.ts");
 const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS, ALL_TACTICS } =
   await app("src/lib/vent/tactics.ts");
 const { buildFlavour } = await app("src/lib/flavour/profile.ts");
-const { flavourBlock, openingBlock } = await app("src/lib/vent/prompt.ts");
+const { flavourBlock, openingBlock, carveBlock } = await app("src/lib/vent/prompt.ts");
 const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/vent/chairs.ts");
 const { selectMemory } = await app("src/lib/vent/memory.ts");
@@ -1235,7 +1235,7 @@ check("15j The authored corpus holds the scan to what it claims", () => {
 });
 
 // ── 15k. the Carver, and the campfire that costs nothing ──────────────────
-const { CARVER_SYSTEM, parseCarve, worthCarving, CARVE_FLOOR, CARVE_MAX_WORDS } =
+const { CARVER_SYSTEM, parseCarve, worthCarving, CARVE_FLOOR, CARVE_MAX_WORDS, CARVE_KEY } =
   await app("src/lib/vent/carve.ts");
 const { MYCELIUM } = await app("src/lib/circles/rules.ts");
 
@@ -1697,6 +1697,105 @@ check("21 The door's answers reach the room, and personality has one home", () =
     "onboarding renders the shared table rather than its own copy");
   ok(!/heavy_stone["']\s*,\s*["']Heavy stone/.test(onboarding),
     "the object labels are not duplicated in the component");
+});
+
+// ── 22. the carve is kept, read back, and erased with them ────────────────
+//
+// "No conversation memory" is the most common complaint against every product
+// in this category, and the ones that do have memory sell it as a
+// subscription and then lose it in a migration. This module existed, was
+// tested, and was wired to nothing at all — the answer to the category's
+// defining failure, sitting in the repo doing nothing.
+//
+// Wiring it puts one sentence about somebody's life into a database. So the
+// bounds are the feature, and every one of them is asserted here.
+await checkAsync("22 The carve is kept, read back, and erased with them", async () => {
+  is(CARVE_KEY, "carve", "one key, imported by both stores rather than typed twice");
+
+  // ── the bounds ──────────────────────────────────────────────────────────
+  ok(!worthCarving(2, false), "two exchanges is not a wound worth carving");
+  ok(worthCarving(CARVE_FLOOR, false), "three is the floor and it is reached");
+  ok(!worthCarving(20, true), "and a crisis anywhere in the session stops it outright");
+
+  // ── the contract on what comes back ─────────────────────────────────────
+  is(parseCarve("not json at all"), null, "prose is not a carve");
+  is(parseCarve('{"carve":"x","remembers":false}'), null,
+    "and a model that says it has nothing is believed");
+  is(parseCarve('{"carve":"","remembers":true}'), null, "an empty carve is no carve");
+  is(
+    parseCarve('{"carve":"one two three four five six seven eight nine","remembers":true}'),
+    null,
+    "nine words is a summary that got through, and it is refused",
+  );
+  const good = parseCarve(
+    'Here you go:\n```json\n{"carve":"pops sick / fear of being useless son","remembers":true}\n```',
+  );
+  ok(good && good.carve === "pops sick / fear of being useless son",
+    "a real carve survives fences and preamble");
+  ok(good && !/\/ /.test(good.carve.split(/\s+/).filter((w) => w === "/").join("")),
+    "and the slash is not counted as one of the eight words");
+
+  // ── read back as aim, never as a receipt ────────────────────────────────
+  is(carveBlock(null), null, "no carve means no block");
+  is(carveBlock("   "), null, "and neither does whitespace");
+  const block = carveBlock("pops sick / fear of being useless son");
+  ok(/Never quote it/.test(block), "the model is forbidden from quoting it back");
+  ok(/never tell them you remember/i.test(block),
+    "and forbidden from claiming to remember — the house rule outranks warmth");
+  ok(/may also be wrong/i.test(block),
+    "it is marked fallible, because it was written about them and not by them");
+
+  // ── the promise that makes it safe to hold at all ───────────────────────
+  //
+  // The carve lives outside `vents`, so a delete that cleared the transcript
+  // would leave standing the single most pointed row in the database — one
+  // sentence about somebody, after they asked to be gone.
+  const store = new FileStore(fs.mkdtempSync(path.join(os.tmpdir(), "mw-carve-")));
+  const uid = await store.ensureUser("carve-test-anon-id-0001");
+  is(await store.getCarve(uid), null, "a new person has no carve");
+  ok(await store.setCarve(uid, "money fear / firstborn who cannot say no"),
+    "a carve is written and the write says so");
+  is(await store.getCarve(uid), "money fear / firstborn who cannot say no",
+    "and it reads back exactly");
+  await store.setCarve(uid, "sharpened line");
+  is(await store.getCarve(uid), "sharpened line",
+    "writing again sharpens the one line rather than stacking a second");
+
+  await store.deleteAll(uid);
+  is(await store.getCarve(uid), null,
+    "and clearing their id takes the carve with it — not only the vents");
+
+  // ── the route's own bounds, as source ───────────────────────────────────
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/carve/route.ts"), "utf8");
+  ok(/worthCarving\(/.test(route), "the route applies the floor rather than trusting the caller");
+  ok(/intent_type === "crisis" \|\| r\.safety_flagged/.test(route),
+    "and reads crisis off the stored rows, not off the request");
+  ok(/carved: kept/.test(route),
+    "what it reports comes from the write's return value, not from a model answering");
+  ok(!/maxDuration = 60/.test(route), "it is not given the vent route's full budget");
+
+  // Which deployment shape makes this false? A malformed body returned 200
+  // with reason:"no_key" where a keyed deployment returned 422 — a status
+  // code that depended on the environment rather than the request, which is
+  // the 410-vs-501 bug wearing a third face. Validation goes first.
+  // The guard, not the import — `isModelConfigured` appears at the top of the
+  // file either way, so anchoring on the bare name passes on any ordering.
+  const validateAt = route.indexOf("bodySchema.safeParse");
+  const configAt = route.indexOf("if (!isModelConfigured)");
+  const storeAt = route.indexOf("if (!store)");
+  ok(validateAt !== -1 && configAt !== -1 && validateAt < configAt && validateAt < storeAt,
+    "a bad request is refused before any check on how this deployment is configured",
+    `parse@${validateAt} · store@${storeAt} · key@${configAt}`);
+
+  // The client must not announce it. Saying "I'll remember this" is exactly
+  // what WHAT YOU NEVER PROMISE forbids, and a toast would be the interface
+  // making the promise the model is banned from making.
+  const chat = fs.readFileSync(
+    path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
+  const carveCall = chat.slice(chat.indexOf('fetch("/api/carve"'));
+  ok(/void fetch\("\/api\/carve"/.test(chat), "the client fires it and does not wait");
+  ok(!/toast\(/.test(carveCall.slice(0, 400)),
+    "and nothing on screen claims it was remembered");
 });
 
 // ── 19. the credit policy, as something a script can fail ─────────────────

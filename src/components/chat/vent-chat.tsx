@@ -251,6 +251,29 @@ export function VentChat() {
     } catch {
       toast("Noted here — not saved.", "info");
     }
+
+    /*
+      The carve, fired and forgotten.
+
+      Rating the mood is the one unambiguous "this session is over" signal
+      this product gets, and it is the only moment there is something whole
+      enough to compress. Its own request rather than part of the PATCH
+      above, because that one is a person tapping a number and watching for
+      the drop — a model call hung off it would put five seconds between the
+      tap and the answer.
+
+      Deliberately unawaited and deliberately silent. Nothing on this screen
+      changes whether it succeeds or fails, nobody is told it happened, and
+      the server refuses it outright below three exchanges or anywhere near a
+      crisis turn. A carve that never happens costs nothing; a carve
+      announced would be the product promising to remember, which is the one
+      thing `WHAT YOU NEVER PROMISE` forbids.
+    */
+    void fetch("/api/carve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ anonId: anonId() }),
+    }).catch(() => {});
   }
 
   const drop =
