@@ -35,7 +35,12 @@ export const TABLE_CONTRACT: Readonly<Record<string, string>> = {
     "id,user_id,user_message,ai_reply,mood_score,tension_before,tension_after," +
     "language,duality_value,body_tapped,chair_picked,pressure_value,tactic_used," +
     "intent_type,real_world_tag,real_date_used,safety_flagged,created_at",
-  vent_feedback: "id,vent_id,rating,created_at",
+  // Not `vent_id`. There has never been such a column: 0002 creates this with
+  // user_id and anon_id, and `insertFeedback` writes exactly those. It was
+  // invented while writing this file from the row types instead of from the
+  // migration, and production named it within two runs — which is the check
+  // working on its author first, and the correct order for that to happen in.
+  vent_feedback: "id,user_id,anon_id,rating,message,created_at",
   circles:
     "id,creator_anon_id,tag,chair_picked,pressure_seeded,flavour,status," +
     "starts_at,ends_at,created_at",
