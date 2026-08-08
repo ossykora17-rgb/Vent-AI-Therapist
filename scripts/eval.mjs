@@ -776,6 +776,60 @@ check("15d The model is forbidden from promising what the product cannot keep", 
   );
 });
 
+// ── 15e. the voice that must not be recognisable ──────────────────────────
+//
+// Everything else in this product is anonymous by construction. Then a circle
+// opens a microphone and hands over a biometric. The shift maths is the kind
+// of thing nobody can hear is wrong — a ratio inverted or a sweep rate off by
+// a factor produces a voice that still sounds altered and is trivially
+// recognisable, and you find out when somebody is recognised.
+const { shiftRatio, sweepHz, WINDOW_S, maskMicrophone } =
+  await app("src/lib/voice/mask.ts");
+
+check("15e The voice mask shifts far enough to break recognition", () => {
+  const down = shiftRatio("deeper");
+  const up = shiftRatio("higher");
+
+  // Four semitones down is 2^(-4/12) ≈ 0.7937.
+  ok(Math.abs(down - 0.7937) < 0.001, "deeper is four semitones down", `${down}`);
+  ok(Math.abs(up - 1.2599) < 0.001, "higher is four semitones up", `${up}`);
+  ok(down < 1 && up > 1, "the two directions actually go in two directions");
+
+  // Under about three semitones a familiar voice is still placeable; past six
+  // everyone in the room converges on one cartoon and six people stop being
+  // distinguishable from each other, which is what a circle needs.
+  for (const [name, r] of [["deeper", down], ["higher", up]]) {
+    const semitones = Math.abs(12 * Math.log2(r));
+    ok(
+      semitones >= 3 && semitones <= 6,
+      `${name} lands in the band where recognition fails but a person remains`,
+      `${semitones.toFixed(2)} semitones`,
+    );
+  }
+
+  // The sweep rate is derived, never typed. delay crosses WINDOW_S at a speed
+  // of |1 - ratio|, so it resets |1 - ratio| / WINDOW_S times a second.
+  ok(
+    Math.abs(sweepHz(down) - Math.abs(1 - down) / WINDOW_S) < 1e-9,
+    "the sweep rate follows from the ratio and the window",
+  );
+  is(sweepHz(1), 0, "no shift means no sweep, and no division by zero");
+  ok(sweepHz(down) > 0 && sweepHz(down) < 10, "and it stays in audio-rate sanity", `${sweepHz(down)}`);
+
+  // 100ms of delay is the latency somebody actually feels in conversation.
+  ok(WINDOW_S <= 0.12, "the added latency stays under what a conversation notices");
+
+  // The rule this file lives by: it may fail to a silence, never to an
+  // unmasked person who believed they were masked. In node there is no
+  // AudioContext, which is exactly that failure, so it must return null
+  // rather than throw or hand back the raw stream.
+  is(
+    maskMicrophone({ getAudioTracks: () => [] }),
+    null,
+    "no AudioContext yields null — the caller publishes nothing, never the real voice",
+  );
+});
+
 // ── 16. the request the store actually sends ───────────────────────────────
 //
 // Two ways a URL was built wrong, both of which broke every read of `vents`

@@ -44,19 +44,41 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
 
   const roomRef = React.useRef<Room | null>(null);
   const sinkRef = React.useRef<HTMLDivElement>(null);
+  // The raw microphone and the audio graph masking it. Both have to be torn
+  // down by hand: disconnecting the room stops the published track, and leaves
+  // the real microphone open and the AudioContext running. A live mic light
+  // after you left the room is the single most alarming thing this app could
+  // do to somebody who came here to be unheard.
+  const micRef = React.useRef<MediaStream | null>(null);
+  const maskRef = React.useRef<{ stop: () => void } | null>(null);
+
+  const releaseAudio = React.useCallback(() => {
+    maskRef.current?.stop();
+    maskRef.current = null;
+    micRef.current?.getTracks().forEach((t) => t.stop());
+    micRef.current = null;
+  }, []);
 
   const leave = React.useCallback(async () => {
     await roomRef.current?.disconnect();
     roomRef.current = null;
+    releaseAudio();
     setStatus("idle");
     setVoices([]);
     setSpeaking([]);
     setSeat(null);
-  }, []);
+  }, [releaseAudio]);
 
   // Leaving the page is leaving the room. Without this the SFU holds a ghost
-  // participant and the seat looks occupied by somebody who is gone.
-  React.useEffect(() => () => void roomRef.current?.disconnect(), []);
+  // participant and the seat looks occupied by somebody who is gone — and the
+  // microphone stays open on a page nobody is looking at.
+  React.useEffect(
+    () => () => {
+      void roomRef.current?.disconnect();
+      releaseAudio();
+    },
+    [releaseAudio],
+  );
 
   async function join() {
     setStatus("joining");
@@ -118,14 +140,54 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
         })
         .on(RoomEvent.Disconnected, () => {
           roomRef.current = null;
+          // The SFU can drop us without `leave` ever running — a network
+          // change, a token expiry, the Keeper ending the room. The microphone
+          // has to close on that path too.
+          releaseAudio();
           setStatus("idle");
           setVoices([]);
           setSpeaking([]);
         });
 
       await room.connect(grant.url, grant.token);
-      // Microphone only. There is no camera call in this file, deliberately.
-      await room.localParticipant.setMicrophoneEnabled(true);
+
+      // Microphone only — there is no camera call in this file, deliberately.
+      //
+      // And never the raw microphone. Everything else about a circle is
+      // anonymous by construction; a voice is a biometric, and the person this
+      // is built for is usually talking about somebody who would recognise it.
+      // `maskMicrophone` shifts it four semitones before anything is
+      // published. See lib/voice/mask.ts for what that does and does not
+      // promise.
+      //
+      // The order matters: get the stream, mask it, publish the masked track.
+      // `setMicrophoneEnabled(true)` would publish the real one, so it is not
+      // used here and must not come back.
+      const mic = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      micRef.current = mic;
+
+      const { maskMicrophone } = await import("@/lib/voice/mask");
+      const masked = maskMicrophone(mic, "deeper");
+      if (!masked) {
+        // Fail to silence, never to an unmasked person who believed they were
+        // masked. They stay in the room and can still read and write.
+        mic.getTracks().forEach((t) => t.stop());
+        micRef.current = null;
+        setNotice(
+          "This browser can't disguise your voice, so the microphone stayed shut. The room is still here in text.",
+        );
+      } else {
+        maskRef.current = masked;
+        await room.localParticipant.publishTrack(masked.track, {
+          source: Track.Source.Microphone,
+        });
+      }
 
       setSeat(grant.identity);
       setVoices(identities(room));
@@ -141,6 +203,8 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
       );
       setStatus("error");
       roomRef.current = null;
+      // Whatever failed, the microphone does not stay open because of it.
+      releaseAudio();
     }
   }
 
@@ -175,7 +239,30 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
     const room = roomRef.current;
     if (!room) return;
     const next = !muted;
-    await room.localParticipant.setMicrophoneEnabled(!next);
+
+    // `setMicrophoneEnabled` manages LiveKit's *own* microphone track, and
+    // this room does not have one — the published track is the masked graph,
+    // published by hand. Calling it here did nothing to what the room hears
+    // and, worse, would have opened a second unmasked track to mute.
+    //
+    // Mute the publication that actually exists instead. Falling back to
+    // stopping the raw stream if there is no publication means the button is
+    // never a no-op: a mute control that silently fails is the one control in
+    // here that has to work.
+    // `audioTrackPublications` rather than a source comparison: this room
+    // publishes exactly one audio track and no video ever, so the first entry
+    // is it. That also avoids reaching for `Track.Source`, which is only in
+    // scope inside `join` — and CLAUDE.md's standing rule is to use the SDK's
+    // own enums rather than hand-written values, so the right move is to need
+    // neither.
+    const pub = [...room.localParticipant.audioTrackPublications.values()][0];
+
+    if (pub) {
+      if (next) await pub.mute();
+      else await pub.unmute();
+    } else {
+      micRef.current?.getAudioTracks().forEach((t) => (t.enabled = !next));
+    }
     setMuted(next);
   }
 
@@ -184,12 +271,33 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
   return (
     <div className="glass mt-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
+        {/*
+          Say that the voice is disguised, before they speak and while they
+          are speaking.
+
+          A safety feature nobody is told about is one nobody trusts, and the
+          decision this sentence changes — whether to say the true thing or the
+          safe one — is made in the two seconds before the join button. Putting
+          it in a settings panel would be the same as not having it.
+
+          The claim is deliberately bounded: "not recognisably yours" rather
+          than "anonymous". A fixed pitch shift raises the cost of recognition;
+          it does not make it impossible, and somebody who already suspects
+          will hear cadence and the story regardless. Overstating it here would
+          be the exact bug this codebase keeps removing, on the one screen
+          where being wrong has a person on the other end of it.
+        */}
         <div className="min-w-0">
           <p className="label-mono">Voice · audio only</p>
           <p className="mt-1 text-sm text-ash">
             {status === "live"
               ? `${voices.length} ${voices.length === 1 ? "voice" : "voices"} in the room. You are ${seat}.`
               : "No camera, ever. Your seat number is all anyone hears."}
+          </p>
+          <p className="mt-1 text-sm text-gold">
+            {status === "live"
+              ? "Your voice is pitched down — not recognisably yours."
+              : "Your voice is pitched down before it leaves your phone."}
           </p>
         </div>
 
