@@ -991,7 +991,8 @@ check("15f The house counts what it holds, and stays quiet below the floor", () 
 // with mumcy but i'm holding am for mind". Four clauses, every one
 // load-bearing, and a reply about mumcy — because mumcy was nearest the full
 // stop.
-const { scan, scanBlock, coverage, COVERAGE_FLOOR, SCOREABLE_MIN } =
+const { scan, scanBlock, coverage, COVERAGE_FLOOR, SCOREABLE_MIN,
+        coverageDrift, COVERAGE_SAMPLE_MIN, COVERAGE_MISS_RATE } =
   await app("src/lib/vent/scan.ts");
 
 check("15g The scan reads every clause, and coverage proves the reply did", () => {
@@ -1056,6 +1057,22 @@ check("15g The scan reads every clause, and coverage proves the reply did", () =
   // answers "6am to 10pm" with "sixteen hours" is better than one that
   // repeats it — so the floor sits where only a near-total miss trips it.
   ok(COVERAGE_FLOOR <= 0.34, "and the floor is low, because echo is not quality");
+
+  // The floor must *admit* a third, not sit a rounding above it.
+  //
+  // It was 0.34. The most common scoreable message has exactly three clauses,
+  // so a reply engaging one scored 0.3333… — less than 0.34, and failed by a
+  // constant whose own docstring says a third is the line. Every fixture reply
+  // it flagged was good. This is the assertion that stops it being rounded
+  // back the next time somebody wants a "tidier" number.
+  ok(!(1 / 3 < COVERAGE_FLOOR),
+    "a reply that engaged one clause of three is not below the floor",
+    `floor ${COVERAGE_FLOOR}`);
+  ok(coverage(
+    "everybody for my set don japa. i open instagram and na airport pictures. i dey here",
+    "Everybody gone, and the feed keeps showing you the door they used. Three things you'd miss, three you'd gain — written tonight, not felt.",
+  ).score >= COVERAGE_FLOOR,
+    "and a reply that transforms rather than echoes clears it");
 
   // Zero tokens, structurally: nothing here may become async.
   ok(!(scan("x") instanceof Promise), "the scan is synchronous — nothing to await, nothing to bill");
@@ -1796,6 +1813,110 @@ await checkAsync("22 The carve is kept, read back, and erased with them", async 
   ok(/void fetch\("\/api\/carve"/.test(chat), "the client fires it and does not wait");
   ok(!/toast\(/.test(carveCall.slice(0, 400)),
     "and nothing on screen claims it was remembered");
+});
+
+// ── 23. the coverage instrument finally does something ────────────────────
+//
+// `coverage()` computed a number, put it on the JSON response, and nothing
+// anywhere read it — the instrument for the category's most-complained-about
+// failure, measured and discarded on every vent. Wysa's reviews say it
+// "strayed completely from the conversation"; this is the thing that can see
+// that happening, and it was pointed at a field nobody read.
+//
+// The hard part is that the per-reply number must never be used as a grade.
+// Coverage measures lexical echo, so a reply that compresses — "Sixteen
+// hours." for "6am to 10pm" — scores zero and is *better*. Flag individual
+// low scores and the product learns to parrot. So the only honest use is a
+// rate, and both halves of that need proving: it has to fire on a real
+// regression, and it has to stay silent on good work.
+check("23 Coverage drift fires on a regression and stays quiet on good work", () => {
+  ok(COVERAGE_SAMPLE_MIN >= 8, "a rate needs a real sample behind it", `${COVERAGE_SAMPLE_MIN}`);
+  ok(COVERAGE_MISS_RATE > 0 && COVERAGE_MISS_RATE < 1, "and the trip rate is a fraction");
+
+  const long =
+    "my dad's test results came back and honestly i don't know, i've been in " +
+    "communication with mumcy but i'm holding am for mind";
+
+  // Echoing replies score high. Twelve of them is a healthy window.
+  const echoing = Array.from({ length: 12 }, () => ({
+    message: long,
+    reply: "Your dad's test results came back, and you've been in communication with mumcy while holding it for mind.",
+    tactic: "exact_mirror",
+  }));
+  is(coverageDrift(echoing), null, "a window of replies that engage the message says nothing");
+
+  // A reply answering the last noun only. This is the failure.
+  const lastNoun = { message: long, reply: "Mind.", tactic: "future_self" };
+  const broken = Array.from({ length: 12 }, () => ({ ...lastNoun }));
+  const drift = coverageDrift(broken);
+  ok(drift !== null, "a window of last-noun replies is a finding");
+  is(drift.sampled, 12, "every scoreable reply is in the denominator");
+  ok(drift.rate > COVERAGE_MISS_RATE, "and the rate clears the trip point", `${drift.rate}`);
+  ok(drift.worstTactic?.tactic === "future_self",
+    "the losing move is named, because that is the actionable handle");
+
+  // Below the sample floor it is one person and a rounding, not a rate.
+  is(coverageDrift(broken.slice(0, COVERAGE_SAMPLE_MIN - 1)), null,
+    "under the sample floor it has no opinion, however bad the replies are");
+
+  // One bad reply among good ones is noise, and noise must not wake anybody.
+  const mostlyGood = [...echoing, ...Array.from({ length: 2 }, () => ({ ...lastNoun }))];
+  is(coverageDrift(mostlyGood), null,
+    "two misses in fourteen is variance, not a regression");
+
+  // Short messages are not scoreable at all, so a window of them is not a
+  // window — this is what keeps "Tired." from ever counting as a miss.
+  const shorts = Array.from({ length: 20 }, () => ({
+    message: "i dey tired", reply: "Say more.", tactic: "exact_mirror",
+  }));
+  is(coverageDrift(shorts), null, "short messages never enter the denominator");
+
+  // A reply that never arrived is not a low score.
+  is(coverageDrift(Array.from({ length: 12 }, () => ({ message: long, reply: null }))), null,
+    "a missing reply is absent, not bad");
+
+  // ── one table, one truth ────────────────────────────────────────────────
+  //
+  // The rate lived inline in the heartbeat first. A suite asserting its own
+  // copy of a threshold passes while the loop regresses — the reason the
+  // chair tensions were consolidated in the first place.
+  const hb = fs.readFileSync(path.join(ROOT, "scripts/heartbeat-data.mjs"), "utf8");
+  ok(/coverageDrift\(scoreable\)/.test(hb), "the heartbeat calls the shared function");
+  ok(!/COVERAGE_MISS_RATE\s*=/.test(hb) && !/COVERAGE_SAMPLE_MIN\s*=/.test(hb),
+    "and holds no second copy of the thresholds");
+  ok(/coverage_drift:/.test(hb) && /skill: "data-quality"/.test(hb),
+    "the finding is routed to a skill, having passed the four-condition test");
+
+  // It must remain free. The whole heartbeat is forbidden from calling a model.
+  ok(!/generateReply|anthropic|openai/i.test(hb),
+    "and the heartbeat still makes no model call to produce it");
+
+  // ── the corpus that can actually falsify this ───────────────────────────
+  //
+  // Check 15j holds the 51 authored examples to the floor, and cannot catch a
+  // bad floor: those examples were written alongside the metric and the floor
+  // was tuned until they passed. A corpus fitted to a threshold will agree
+  // with any threshold it was fitted to.
+  //
+  // `scripts/fixtures` is older and was written for something else entirely,
+  // which is exactly what makes it evidence. Pointed at it, the metric called
+  // five of its nine scoreable replies failures — all at exactly 0.33, all of
+  // them good. That is what found the off-by-a-rounding floor.
+  //
+  // So the independent corpus is now a standing assertion: the drift detector
+  // must stay silent on replies nobody wrote to please it.
+  const fixture = JSON.parse(
+    fs.readFileSync(path.join(ROOT, "scripts/fixtures/vent.json"), "utf8"));
+  const independent = fixture.vents
+    .filter((v) => v.ai_reply)
+    .map((v) => ({ message: v.user_message, reply: v.ai_reply, tactic: v.tactic_used }));
+
+  const scoredCount = independent.filter(
+    (r) => coverage(r.message, r.reply).score !== null).length;
+  ok(scoredCount >= COVERAGE_SAMPLE_MIN,
+    "the independent corpus is big enough to be a real window", `${scoredCount} scoreable`);
+  is(coverageDrift(independent), null,
+    "and hand-written replies from a corpus this metric was never tuned on do not trip it");
 });
 
 // ── 19. the credit policy, as something a script can fail ─────────────────
