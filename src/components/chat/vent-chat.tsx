@@ -213,13 +213,37 @@ export function VentChat() {
           </nav>
         </div>
 
-        {memoryCount > 0 && (
-          <div className="mx-auto max-w-[640px] px-4 pb-3">
-            <p className="label-mono">
-              Remembers · {memoryCount} earlier{" "}
-              {memoryCount === 1 ? "carve" : "carves"}
-              {persisted === false && " · not saved yet"}
-            </p>
+        {/*
+          Two separate facts, and they were one line.
+
+          "not saved yet" was nested inside `memoryCount > 0`, so it could only
+          ever appear to somebody who already had history. A first-time user
+          whose very first message failed to persist saw nothing at all — no
+          mark, no notice, their words quietly dropped — and they are the
+          person it matters most to, because they have no reason yet to doubt
+          any of this.
+
+          That is "I've saved it, word for word" wearing a new coat: the app
+          failing to keep a promise, invisibly, to the person least able to
+          tell. It is the oldest bug in this repo and it was still here.
+
+          Stated calmly rather than as an alarm. Nothing is broken from where
+          they sit — the session works, the reply is real — and the only thing
+          that is not true is the part about it still being here tomorrow.
+        */}
+        {(memoryCount > 0 || persisted === false) && (
+          <div className="mx-auto flex max-w-[640px] flex-wrap items-center gap-x-2 px-4 pb-3">
+            {memoryCount > 0 && (
+              <p className="label-mono">
+                Remembers · {memoryCount} earlier{" "}
+                {memoryCount === 1 ? "carve" : "carves"}
+              </p>
+            )}
+            {persisted === false && (
+              <p className="label-mono text-gold">
+                Not saved — this session only
+              </p>
+            )}
           </div>
         )}
       </header>
