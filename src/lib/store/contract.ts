@@ -93,7 +93,7 @@ export function explainDbCode(code?: string | null): string | null {
     // error, which can only be reached after the JWT was accepted and the role
     // resolved. A bad key cannot be bad for one table and fine for seven.
     case "PGRST303":
-      return "the JWT was rejected (claims validation) — but sibling requests on the same key reached Postgres, so suspect a transient rather than the key";
+      return "clock skew, not schema — the key's `iat` reads as the future to the database, so whichever request lands inside the skew window is refused. It moves between tables run to run and clears on its own. Nothing to fix here";
     default:
       return null;
   }

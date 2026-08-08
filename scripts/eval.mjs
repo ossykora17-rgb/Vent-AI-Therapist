@@ -732,6 +732,50 @@ check("15c The pattern reaches the prompt, and is forbidden from being announced
   );
 });
 
+// ── 15d. the house rule, in the prompt the model is actually sent ─────────
+//
+// `CLAUDE.md` says never promise what the code cannot keep, and names the
+// worst bug this product shipped: a refusal that read "Your turn comes" to
+// people whose turn could never come. The same rule had never been given to
+// the model. A therapy-voiced LLM reaches for "I'll be here" and "we'll pick
+// this up next time" unprompted — promises nothing in this system can keep,
+// made to somebody at their lowest.
+check("15d The model is forbidden from promising what the product cannot keep", () => {
+  const prompt = buildSystemPrompt({
+    grounding: { date: "8 August 2026", time: "06:47", iso: "2026-08-08", lines: [] },
+    classification: { intent: "vent", realWorldTag: null, language: "en", body: null },
+    tactic: ALL_TACTICS[0],
+    ctx: { ...base },
+    memory: [],
+  });
+
+  ok(prompt.includes("WHAT YOU NEVER PROMISE"), "the rule is in the prompt at all");
+  ok(
+    /outranks sounding warm/i.test(prompt),
+    "and it is ranked above warmth, because that is the trade it exists to settle",
+  );
+  ok(/be here tomorrow|check in/i.test(prompt), "no promise of a tomorrow it does not have");
+  ok(
+    /clear their id in one tap/i.test(prompt),
+    "with the reason — deletion is a promise kept, so continuity cannot be one",
+  );
+  ok(
+    /never claim to have saved/i.test(prompt),
+    "and no claim to have saved anything, which something else decides",
+  );
+  ok(
+    /invent a fact|does not get written/i.test(prompt),
+    "silence beats a guess, stated to the model and not only to us",
+  );
+  ok(/never diagnose/i.test(prompt), "and it never names a condition");
+
+  // The one promise it is allowed is the one that is true.
+  ok(
+    /length of this exchange/i.test(prompt),
+    "what it may promise is bounded to what actually holds",
+  );
+});
+
 // ── 16. the request the store actually sends ───────────────────────────────
 //
 // Two ways a URL was built wrong, both of which broke every read of `vents`
