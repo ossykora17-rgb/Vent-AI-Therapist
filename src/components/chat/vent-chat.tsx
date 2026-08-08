@@ -53,6 +53,11 @@ export function VentChat() {
   const [tag, setTag] = React.useState<string | null>(null);
   const [tool, setTool] = React.useState<"breathing" | "journaling" | null>(null);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
+  const [opening, setOpening] = React.useState<{
+    object: string | null;
+    carrying: string | null;
+    putDown: string | null;
+  } | null>(null);
 
   React.useEffect(() => {
     if (!hasOnboarded()) setShowOnboarding(true);
@@ -63,6 +68,24 @@ export function VentChat() {
     // The chair is their opening tension reading — the drop is measured from it.
     setPressure(r.tension);
     setTensionBefore(r.tension);
+
+    /*
+      The other three answers, which used to end here.
+
+      This function read `r.tension` and let `object`, `carry` and `drop` fall
+      out of scope — so a person picked the shape of the thing, named what
+      they were carrying and what they came to put down, and the room opened
+      as though nobody had spoken. Thirty seconds of the least-defended things
+      anybody says here, collected and discarded in the same breath.
+
+      Held in state, not in localStorage, and that is deliberate. It is true
+      for this sitting. A word somebody tapped three weeks ago is not what
+      they are carrying tonight, and asserting it would be the same class of
+      wrong as a stale exchange rate: better to know nothing than to state
+      something that has quietly stopped being true.
+    */
+    setOpening({ object: r.object, carrying: r.carry, putDown: r.drop });
+
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
@@ -120,6 +143,9 @@ export function VentChat() {
           pressure,
           bodyTapped: body,
           mood,
+          openingObject: opening?.object ?? null,
+          openingCarrying: opening?.carrying ?? null,
+          openingPutDown: opening?.putDown ?? null,
         }),
       });
 

@@ -8,7 +8,7 @@ import {
 
 /**
  * Detection is pure local heuristics — no model call, so reading the user
- * costs nothing per message. The Trinity spends tokens; the Flavour Engine
+ * costs nothing per message. The one model call spends tokens; the detector
  * does not.
  */
 

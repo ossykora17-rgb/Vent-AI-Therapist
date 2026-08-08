@@ -4,6 +4,7 @@ import { getStore, type Store, type VentRow } from "@/lib/store";
 import { isModelConfigured } from "@/lib/env";
 import { answerFactual, groundNow } from "@/lib/vent/grounding";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
+import { CARRY_WORDS, OBJECT_IDS } from "@/lib/vent/chairs";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
 import { getEfficacy } from "@/lib/vent/efficacy";
 import { findPattern, type Pattern } from "@/lib/vent/pattern";
@@ -38,6 +39,21 @@ const bodySchema = z.object({
   pressure: z.number().min(0).max(100).nullish(),
   duality: z.number().min(0).max(100).nullish(),
   mood: z.number().int().min(1).max(10).nullish(),
+  /*
+    What onboarding collected, for the session it was collected in.
+
+    Enums, not strings. This is the only field on this route whose contents
+    reach a system prompt as prose rather than as a number or a tag, so the
+    wire carries an id and `@/lib/vent/chairs` owns the phrasing. A free-text
+    field here would be a client writing directly into the model's
+    instructions.
+
+    Nullish throughout: Escape is always available on that screen, and
+    somebody who skipped has answered nothing rather than answered wrong.
+  */
+  openingObject: z.enum(OBJECT_IDS as unknown as [string, ...string[]]).nullish(),
+  openingCarrying: z.enum(CARRY_WORDS as unknown as [string, ...string[]]).nullish(),
+  openingPutDown: z.enum(CARRY_WORDS as unknown as [string, ...string[]]).nullish(),
 });
 
 type Input = z.infer<typeof bodySchema>;
@@ -222,6 +238,11 @@ async function handlePOST(request: Request) {
     turnsToday,
     pattern,
     message: input.message,
+    opening: {
+      object: input.openingObject,
+      carrying: input.openingCarrying,
+      putDown: input.openingPutDown,
+    },
   });
 
   let reply: string;

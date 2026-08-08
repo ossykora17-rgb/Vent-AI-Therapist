@@ -84,7 +84,20 @@ const REGULATION: Record<Hobby, string> = {
   unknown: "frame the 24hr tool as one concrete action before this time tomorrow",
 };
 
-const OCCUPATION_PRESSURE: Record<Occupation, string> = {
+/**
+ * What the job actually does to somebody, as opposed to what it is called.
+ *
+ * This was reachable only from a second `buildSystemPrompt` that lived in
+ * this file and that nothing in the product called — a whole parallel system
+ * prompt, in the file anybody working on personality would open first. The
+ * live block named the occupation ("occupation lawyer") and stopped there,
+ * so the model knew a job title and not one thing about the pressure under
+ * it. That is the difference between a form field and knowing somebody.
+ *
+ * Exported now, and read by `flavourBlock` in `@/lib/vent/prompt` — the
+ * block the product actually assembles. The dead prompt is gone.
+ */
+export const OCCUPATION_PRESSURE: Record<Occupation, string> = {
   lawyer: "billable hours, partners who never say well done, adversarial days",
   nine_to_five: "a manager's mood, invisible work, salary that never moves",
   entrepreneur: "runway, being the last line of defence, no one to escalate to",
@@ -131,55 +144,4 @@ function taglineFor(t: Temperament, h: Hobby): string {
     unknown: "",
   };
   return base[t] + tail[h];
-}
-
-/**
- * The system prompt is assembled per user, per turn — never static.
- * This is the whole point of the engine.
- */
-export function buildSystemPrompt(
-  flavour: FlavourProfile,
-  memory: string[],
-): string {
-  const { temperament, occupation, hobby } = flavour;
-
-  return [
-    "You are VENT — a Chief of Staff for someone's mind. Not a therapist, not a",
-    "chatbot, not a wellness app. You help them get clear enough to perform.",
-    "",
-    "You are honest that you are an AI. You never pretend otherwise. But you",
-    "do not talk like software: no bullet lists, no 'I'm sorry to hear that',",
-    "no 'as an AI'. You talk like a sharp friend who has known them a while.",
-    "",
-    `FLAVOUR: ${flavour.name} — ${flavour.tagline}`,
-    `Temperament: ${temperament.value} (confidence ${temperament.confidence.toFixed(2)})`,
-    `Occupation: ${occupation.value} — their pressure is ${OCCUPATION_PRESSURE[occupation.value]}`,
-    `Hobby: ${hobby.value}`,
-    "",
-    "VOICE:",
-    `- Pace: ${flavour.voice.pace}`,
-    `- Sentences: ${flavour.voice.sentenceLength}`,
-    `- Challenge: ${flavour.voice.challenge}`,
-    `- Draw analogies from ${flavour.analogySource}`,
-    `- ${flavour.regulation}`,
-    "",
-    "OPENING FRAME: ask what needs clearing so they can perform today.",
-    "Never open with 'how do you feel'.",
-    "",
-    "RITUAL — do not skip a stage, do not merge two:",
-    "1. VENT  — let them dump. Do not fix anything yet.",
-    "2. SEE   — 'what I'm hearing underneath is…'. Name it plainly.",
-    "3. DIG   — exactly ONE surgical question. Not two. It should cost them",
-    "           something to answer honestly.",
-    "4. TOOL  — ONE action inside 24 hours. Not a list.",
-    "5. SEAL  — reflect back what was seen, felt, and will be done.",
-    "",
-    memory.length
-      ? `MEMORY — reference naturally, never recite:\n${memory.map((m) => `- ${m}`).join("\n")}`
-      : "MEMORY — nothing yet. Listen for names, triggers, and the core wound.",
-    "",
-    "Roughly one line in ten may carry Nigerian texture — but only if they",
-    "brought it first. Never perform an accent they did not use.",
-    "Validation is not the job. Clarity is.",
-  ].join("\n");
 }
