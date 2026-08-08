@@ -68,8 +68,11 @@ export function checkMessage(content: string, kind: MessageKind): RuleVerdict {
   if (ADVICE.some((r) => r.test(text))) {
     return {
       ok: false,
+      // The room's own line first. A refusal that sounds like a content
+      // policy makes somebody feel caught; this one makes them feel corrected
+      // by the circle they joined, which is what actually happened.
       reason:
-        "No fixing here. Say what you heard, or what it moved in you — an I-statement, not a you-statement.",
+        `${MYCELIUM.noFixing} Say what you heard, or what it moved in you — an I-statement, not a you-statement.`,
     };
   }
 
@@ -144,6 +147,28 @@ export function economyFact(usdNgn: number): string {
  * sentence is simply absent; the Keeper has never once guessed a number and
  * this is not where it starts.
  */
+/**
+ * MYCELIUM — the campfire, not the therapist.
+ *
+ * These are authored, and that is the whole point. A facilitator whose lines
+ * come from a model is a facilitator who costs money per circle, drifts
+ * between rooms, and can be talked out of the rules by whoever is in the
+ * room. A campfire says the same thing every night.
+ *
+ * The first line is fixed on purpose. Six anonymous people staring at an
+ * empty box need somebody to go first, and "who carry wetin for chest" asks
+ * for the load rather than the story — which is the difference between a
+ * circle and a queue of monologues.
+ */
+export const MYCELIUM = {
+  /** How every circle starts. Same words, every time. */
+  open: "We start. Who carry wetin for chest?",
+  /** What the room says to anybody reaching for a fix. */
+  noFixing: "We no dey fix here. We dey witness.",
+  /** The confidentiality line, said out loud rather than buried in terms. */
+  ephemeral: "Wetin talk for here, dey die for here.",
+} as const;
+
 export function keeperIntention(tag: string | null, counted?: string | null): string {
   const opening = OPENING[tag ?? ""] ?? "Today we hold whatever is heaviest.";
 
@@ -152,7 +177,13 @@ export function keeperIntention(tag: string | null, counted?: string | null): st
       ? REAL_WORLD_TACTIC[tag as keyof typeof REAL_WORLD_TACTIC].hold
       : null;
 
-  return [opening, counted || null, tool, "No fixing, no advice — just say it."]
+  return [
+    MYCELIUM.open,
+    opening,
+    counted || null,
+    tool,
+    MYCELIUM.ephemeral,
+  ]
     .filter(Boolean)
     .join(" ");
 }
