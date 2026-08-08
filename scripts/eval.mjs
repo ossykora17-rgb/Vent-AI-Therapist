@@ -798,6 +798,50 @@ check("16 The store asks PostgREST for something it can parse", () => {
   for (const t of touched) {
     ok(t in FULL_CONTRACT, `${t} is covered by the schema contract`);
   }
+
+  // Every column in the contract must exist in a migration.
+  //
+  // The contract was written from the row types rather than the SQL, and
+  // invented `vent_feedback.vent_id` — a column that has never existed. It
+  // reached production and the probe reported schema drift against a table
+  // that was perfectly fine. A checker that can be wrong about the thing it
+  // checks is worse than no checker, so this proves it against the DDL.
+  //
+  // Columns arrive two ways: in a CREATE TABLE body, and via ALTER TABLE ADD
+  // COLUMN afterwards. Reading only the first says circle_members is missing
+  // the three columns 0004 and 0005 add, which is how this nearly "fixed" a
+  // contract that was already correct.
+  const ddl = fs
+    .readdirSync(path.join(ROOT, "supabase/migrations"))
+    .filter((f) => f.endsWith(".sql"))
+    .map((f) => fs.readFileSync(path.join(ROOT, "supabase/migrations", f), "utf8"))
+    .join("\n");
+
+  const defined = {};
+  for (const m of ddl.matchAll(/create table if not exists public\.([a-z_]+)\s*\(([\s\S]*?)\n\);/g)) {
+    defined[m[1]] = m[2]
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith("--"))
+      .map((l) => /^([a-z_]+)\s+\S/.exec(l)?.[1])
+      .filter((c) => c && !["unique", "check", "primary", "foreign", "constraint"].includes(c));
+  }
+  for (const m of ddl.matchAll(/alter table (?:if exists )?public\.([a-z_]+)([\s\S]*?);/g)) {
+    for (const a of m[2].matchAll(/add column if not exists ([a-z_]+)/g)) {
+      (defined[m[1]] ??= []).push(a[1]);
+    }
+  }
+
+  for (const [table, cols] of Object.entries(FULL_CONTRACT)) {
+    const known = defined[table];
+    if (!ok(Array.isArray(known), `${table} is created by a migration`)) continue;
+    const invented = cols.split(",").filter((c) => !known.includes(c));
+    ok(
+      invented.length === 0,
+      `every ${table} column in the contract exists in the DDL`,
+      invented.join(", ") || undefined,
+    );
+  }
 });
 
 // ── 17. the number somebody calls in the worst hour of their life ─────────

@@ -35,7 +35,12 @@ export const TABLE_CONTRACT: Readonly<Record<string, string>> = {
     "id,user_id,user_message,ai_reply,mood_score,tension_before,tension_after," +
     "language,duality_value,body_tapped,chair_picked,pressure_value,tactic_used," +
     "intent_type,real_world_tag,real_date_used,safety_flagged,created_at",
-  vent_feedback: "id,vent_id,rating,created_at",
+  // Not `vent_id`. There has never been such a column: 0002 creates this with
+  // user_id and anon_id, and `insertFeedback` writes exactly those. It was
+  // invented while writing this file from the row types instead of from the
+  // migration, and production named it within two runs — which is the check
+  // working on its author first, and the correct order for that to happen in.
+  vent_feedback: "id,user_id,anon_id,rating,message,created_at",
   circles:
     "id,creator_anon_id,tag,chair_picked,pressure_seeded,flavour,status," +
     "starts_at,ends_at,created_at",
@@ -78,6 +83,17 @@ export function explainDbCode(code?: string | null): string | null {
       return "the request path was rejected — check NEXT_PUBLIC_SUPABASE_URL has no /rest/v1 suffix";
     case "PGRST100":
       return "the select list did not parse — a space in it asks for a column with a leading space";
+    // Group 3 is JWT, not SQL: "JWT claims validation or parsing failed", 401.
+    // Worth stating plainly because it looks like a table error in a list of
+    // table errors and is not one — the key is the problem, not the schema.
+    //
+    // What does not add up, and is left in the message rather than smoothed
+    // over: this fired for exactly one table out of eight in a single parallel
+    // batch on one client, while the others came back 42501 — a *Postgres*
+    // error, which can only be reached after the JWT was accepted and the role
+    // resolved. A bad key cannot be bad for one table and fine for seven.
+    case "PGRST303":
+      return "the JWT was rejected (claims validation) — but sibling requests on the same key reached Postgres, so suspect a transient rather than the key";
     default:
       return null;
   }
