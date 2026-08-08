@@ -78,6 +78,17 @@ export function explainDbCode(code?: string | null): string | null {
       return "the request path was rejected — check NEXT_PUBLIC_SUPABASE_URL has no /rest/v1 suffix";
     case "PGRST100":
       return "the select list did not parse — a space in it asks for a column with a leading space";
+    // Group 3 is JWT, not SQL: "JWT claims validation or parsing failed", 401.
+    // Worth stating plainly because it looks like a table error in a list of
+    // table errors and is not one — the key is the problem, not the schema.
+    //
+    // What does not add up, and is left in the message rather than smoothed
+    // over: this fired for exactly one table out of eight in a single parallel
+    // batch on one client, while the others came back 42501 — a *Postgres*
+    // error, which can only be reached after the JWT was accepted and the role
+    // resolved. A bad key cannot be bad for one table and fine for seven.
+    case "PGRST303":
+      return "the JWT was rejected (claims validation) — but sibling requests on the same key reached Postgres, so suspect a transient rather than the key";
     default:
       return null;
   }
