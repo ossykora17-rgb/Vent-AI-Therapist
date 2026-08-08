@@ -225,13 +225,35 @@ export function VentChat() {
       </header>
 
       <main id="main" className="mx-auto w-full max-w-[640px] flex-1 px-4 py-6">
+        {/*
+          An empty room should look empty.
+
+          This was a centred glass card — the same plate VENT's replies sit on,
+          so the greeting read as an answer to something nobody had said, and
+          the only centred element in a product that is otherwise all one
+          margin. Bold display at xl fought the VENT in the header for the
+          same job.
+
+          No plate now. Left, on the spine everything else uses, with air above
+          it. The room is waiting; that should feel like waiting rather than
+          like a notice.
+
+          And the second line does the one thing that actually helps somebody
+          who cannot start. The barrier is almost never courage — it is the
+          belief that this has to be composed first. So: it does not have to be
+          tidy, or finished, or true yet. Start in the middle. That sentence
+          costs nothing and is the difference between typing and closing the
+          tab.
+        */}
         {lines.length === 0 && !thinking && (
-          <div className="glass p-6 text-center">
-            <p className="font-display text-xl font-bold tracking-[-0.01em]">
+          <div className="py-6">
+            <p className="font-display text-[22px] leading-[1.3] tracking-[-0.01em]">
               Come in. Say small. Hear plenty.
             </p>
-            <p className="mt-2 text-sm leading-relaxed text-ash">
-              Nobody reads this but you and the machine. Carve your truth.
+            <p className="mt-3 max-w-[48ch] text-[15px] leading-[1.7] text-ash">
+              Nobody reads this but you and the machine. It does not have to be
+              tidy, or finished, or even true yet — start in the middle if that
+              is where you are.
             </p>
           </div>
         )}
