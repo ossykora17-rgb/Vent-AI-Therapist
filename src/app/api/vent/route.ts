@@ -330,7 +330,12 @@ async function handlePOST(request: Request) {
       // anybody assuming.
       coverage: (() => {
         const c = coverage(input.message, reply);
-        return { score: Number(c.score.toFixed(2)), missed: c.missed, floor: COVERAGE_FLOOR };
+        return {
+          // Null is a real answer and the common one — see SCOREABLE_MIN.
+          score: c.score === null ? null : Number(c.score.toFixed(2)),
+          missed: c.missed,
+          floor: COVERAGE_FLOOR,
+        };
       })(),
       tokensSpent,
       provider: answeredBy,

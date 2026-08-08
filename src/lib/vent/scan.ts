@@ -131,27 +131,69 @@ export function scan(message: string): Scan {
     return m ? m[0] : "";
   }).filter(Boolean);
 
-  const somatic = BODY.find(([, re]) => re.test(lower))?.[0] ?? null;
+  // Earliest mention, not table order.
+  //
+  // `BODY.find` returns HEAD before THROAT before CHEST no matter what the
+  // sentence emphasises — the exact bug `intent.ts` already had and had
+  // fixed, reintroduced here three weeks later in a new file. Reading
+  // position in their sentence is the only tie-break that is about them.
+  let somatic: Somatic | null = null;
+  let earliest = Infinity;
+  for (const [part, re] of BODY) {
+    const at = lower.search(re);
+    if (at !== -1 && at < earliest) {
+      earliest = at;
+      somatic = part;
+    }
+  }
 
   return { clauses, affect, effort, somatic };
 }
 
 export interface Coverage {
-  /** 0–1. What share of their clauses the reply actually touched. */
-  score: number;
+  /**
+   * 0–1, or **null for no opinion**.
+   *
+   * Null below `SCOREABLE_MIN` scored clauses, and it is the most important
+   * value here. Most messages are two clauses long; on those, one unechoed
+   * clause is 50% and two is 0%, which is noise wearing a decimal point.
+   * A metric that reports a number for every input reports nonsense for most
+   * of them.
+   */
+  score: number | null;
   /** The clauses that came back unanswered, in their words. */
   missed: string[];
   total: number;
 }
 
 /**
+ * Below this many scoreable clauses, there is no signal — only a small
+ * denominator producing confident-looking fractions.
+ *
+ * Found by writing 51 authored examples and scoring them: twelve "failed",
+ * and every one was a good reply on a short message. The examples falsified
+ * the metric on their first run, which is most of why they were worth
+ * writing.
+ */
+export const SCOREABLE_MIN = 3;
+
+/**
  * How much of what they said came back.
  *
  * A clause counts as reflected when the reply contains one of its content
- * words. That is deliberately shallow: this measures *attention*, not
- * comprehension, and a shallow measure that is honest beats a deep one that
- * is guessing. A reply can echo a word and still miss the point — but a reply
- * that echoes nothing has definitively missed the clause.
+ * words. This measures **lexical echo**, and it is critical to say what that
+ * is not: it is not quality, and a low score is not a bad reply.
+ *
+ * "work don finish me, i dey do 6am to 10pm" answered with "Sixteen hours."
+ * scores zero and is better than any reply that echoed the words back. A
+ * scorer taken as a quality signal would push the model toward parroting,
+ * which is the opposite of the voice — so this is never wired to
+ * regeneration and never shown to anybody as a grade.
+ *
+ * What it is good for: a long, multi-clause message that comes back with
+ * nothing of itself in it has almost certainly been answered by its last
+ * noun. That is the one failure this catches, and it is the one that
+ * prompted the whole file.
  *
  * Clauses of one content word are excluded from the denominator. Holding a
  * reply to "results" as a separate obligation is scoring noise.
@@ -159,7 +201,7 @@ export interface Coverage {
 export function coverage(message: string, reply: string): Coverage {
   const { clauses } = scan(message);
   const scored = clauses.filter((c) => c.keys.length >= 2);
-  if (scored.length === 0) return { score: 1, missed: [], total: 0 };
+  if (scored.length < SCOREABLE_MIN) return { score: null, missed: [], total: scored.length };
 
   const replyKeys = new Set(keysOf(reply));
   // Loose stemming, both directions: "holding" reflects "hold", "results"
@@ -179,14 +221,15 @@ export function coverage(message: string, reply: string): Coverage {
 }
 
 /**
- * Below this, the reply answered a different message.
+ * Below this, on a message long enough to score, something went wrong.
  *
- * Two thirds rather than everything. A good reply compresses — it will not
- * name every clause, and demanding it would produce a checklist read aloud,
- * which is the exact opposite of the voice. Missing a third is compression;
- * missing more than a third is not having read it.
+ * A third, not two thirds. The first draft of this file said 0.67 and it was
+ * wrong: a good reply compresses, transforms, and reaches for the better word
+ * — "sixteen hours" for "6am to 10pm" — and every one of those reads as a
+ * miss here. Set where only a reply that echoed almost nothing of a long
+ * message trips it, which is the single failure this can actually detect.
  */
-export const COVERAGE_FLOOR = 0.67;
+export const COVERAGE_FLOOR = 0.34;
 
 /** The scan, written for the model to run before it writes anything. */
 export function scanBlock(s: Scan): string | null {
