@@ -185,7 +185,16 @@ That gap has now produced the same bug seven times, wearing seven faces:
   broken road, from a probe that does not take the road: the same sentence as
   `models.retrieve`, two years of lessons apart.
 
-Nine findings, one mechanism: **the suite tests the shape its author is
+- A schema probe that could not read its own answer. The contract check sent
+  `head: true`, and a HEAD response has no body — so PostgREST's error JSON,
+  the object carrying `code` and `hint`, never arrived. It printed seven tables
+  failing and `[?] no hint` beside every one of them: a failure bucket with
+  nothing in it, inside the endpoint written to abolish failure buckets with
+  nothing in them. The heartbeat, doing an ordinary GET, had the whole error
+  the entire time. Two probes of the same database, one of them structurally
+  unable to see what it was looking at.
+
+Ten findings, one mechanism: **the suite tests the shape its author is
 standing in.** Checks 12, 14, 16 and 17 close instances — 14 stubs `fetch` and
 makes every provider failure that reached a real person fail a build instead;
 16 reads the store as text and fails any select list with a space in it; 17
@@ -195,7 +204,15 @@ than an instance: it found the second occurrence in the circles path
 immediately, one nobody had noticed.
 
 It still does not close the class, because the next face will be a shape
-nobody thought to stub. Only the question does. The ninth face is the sharpest
-version of it so far — the probe that says everything is fine is itself the
-thing standing in the wrong shape. Ask of `/api/health`, before trusting it:
-*is this asking as the identity that does the work?*
+nobody thought to stub. Only the question does. The ninth and tenth faces are
+the sharpest versions of it so far, and they are both about the probe rather
+than the thing probed: one asked as the wrong identity, the other asked in a
+shape that could not carry the answer back. Ask of `/api/health`, before
+trusting a word of it:
+
+*Is this asking as the identity that does the work, and can the reply it gets
+actually carry the failure?*
+
+A green light over a broken road is the oldest bug in this file. It has now
+arrived three times — `models.retrieve`, the anonymous probe, and the HEAD
+request — and every time the light was the part that was wrong.
