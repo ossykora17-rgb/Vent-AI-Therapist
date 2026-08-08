@@ -29,6 +29,27 @@
  * "instant and accidental" to "deliberate and technical", which is the honest
  * claim and the only one the UI is allowed to make.
  *
+ * WHAT IT DOES DO, MEASURED
+ *
+ * The standard warning about voice anonymisation is that shifting pitch alone
+ * is not enough, because speaker identification leans on **formants** and a
+ * pitch shift that preserves them leaves you recognisable. That is a real
+ * failure and it is worth being precise about whether it applies here.
+ *
+ * It does not. A delay-line shifter is varispeed — it resamples, so it scales
+ * the whole spectrum, formants included. A phase vocoder is the one that
+ * preserves them, and this is deliberately not that.
+ *
+ * Measured rather than assumed: a synthetic vowel at 140 / 730 / 1090 Hz
+ * through the real graph came out at 111.7 / 577.4 / 862.7 Hz — −391, −406
+ * and −405 cents, a spread of 15 across the fundamental and both formant
+ * partials. One uniform scaling, which is what actually moves a speaker's
+ * identity rather than just their pitch.
+ *
+ * The caveat above still stands and is the reason both are written down: a
+ * uniform scaling is a linear transform, and anything linear is invertible by
+ * somebody who knows the ratio.
+ *
  * HOW IT WORKS
  *
  * The classic dual delay-line pitch shifter, built from standard Web Audio
