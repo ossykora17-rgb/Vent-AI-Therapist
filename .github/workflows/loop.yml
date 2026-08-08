@@ -24,6 +24,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # Whether the deployment and the schema still agree. Printed rather than
+      # asserted: this step must never fail the loop, because a red schema is
+      # exactly when you most want the rest of the run to complete and report.
+      #
+      # It is here because the database is otherwise invisible from anywhere
+      # except the Supabase dashboard, and a schema edited in two places — the
+      # migrations and the SQL editor — drifts silently. `tableErrors` names
+      # the code and the fix per table.
+      - name: Ask production whether the schema still holds
+        continue-on-error: true
+        run: |
+          BASE="${VENT_URL:-https://vent-ai-therapist.vercel.app}"
+          curl -sS --max-time 60 "$BASE/api/health" -o health.json || exit 0
+          node -e '
+            const h = require("./health.json");
+            console.log(`commit ${h.commit} · database ${h.database} · ${h.tablesChecked ?? "?"} tables checked`);
+            console.log(`storage ${h.storage} · model ${h.model?.status} via ${h.model?.answeredBy || "nobody"}`);
+            for (const [t, e] of Object.entries(h.tableErrors || {})) {
+              console.log(`  ${t}: [${e.code ?? "?"}] ${e.hint ?? "no hint"}`);
+            }
+          '
+
       - name: Ask production what happened
         id: ask
         run: |

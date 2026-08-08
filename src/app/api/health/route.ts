@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { FULL_CONTRACT, explainDbCode } from "@/lib/store/contract";
 import { getStore } from "@/lib/store";
 import {
   isAnthropicConfigured,
@@ -25,13 +26,15 @@ export async function GET() {
     "not_configured";
   // Which tables answered and which did not — a migration that was never run
   // looks exactly like a wrong key unless the check says which.
-  let missingTables: string[] = [];
+  const missingTables: string[] = [];
   // Why they did not answer. "Missing" and "not allowed to read" are different
   // problems with the same symptom, and calling both of them missing sent this
   // hunting for a table that existed. PostgREST puts the difference in `code`
   // — 42P01/PGRST205 is absent, 42501 is a grant — and the actionable half in
   // `hint`, which literally spells out the GRANT statement to run.
   const tableErrors: Record<string, { code?: string; hint?: string }> = {};
+  // Which contract was checked, so a green health cannot mean "checked two".
+  const tablesChecked = Object.keys(FULL_CONTRACT).length;
 
   // Distinct from "unreachable" on purpose. A URL that does not parse is a
   // typo you fix in the dashboard in ten seconds; an unreachable database is
@@ -51,23 +54,30 @@ export async function GET() {
       // the product never takes is the green light over the broken road,
       // again: this file already learned it once with models.retrieve.
       const supabase = createAdminClient() ?? (await createClient());
-      // head+count touches the table without transferring rows. Both tables,
-      // because they come from different migrations and one being applied
-      // never implied the other.
-      const [a, b] = await Promise.all([
-        supabase!.from("profiles").select("id", { count: "exact", head: true }),
-        supabase!.from("vents").select("id", { count: "exact", head: true }),
-      ]);
-      database = a.error || b.error ? "unreachable" : "ok";
-      missingTables = [a.error && "profiles", b.error && "vents"].filter(Boolean) as string[];
-      for (const [name, res] of [["profiles", a], ["vents", b]] as const) {
-        if (res.error) {
-          tableErrors[name] = {
-            code: res.error.code ?? undefined,
-            hint: res.error.hint ?? undefined,
-          };
-        }
+      // Every table the product touches, with the exact columns it selects.
+      //
+      // Two tables was a sample, and a sample is how `vents` looked healthy
+      // while nine others were never checked at all. head:true means no rows
+      // cross the wire — this costs a round trip each and nothing else — and
+      // naming the columns means a renamed one is caught here rather than
+      // inside a route that degrades quietly.
+      const names = Object.keys(FULL_CONTRACT);
+      const results = await Promise.all(
+        names.map((t) =>
+          supabase!.from(t).select(FULL_CONTRACT[t], { count: "exact", head: true }),
+        ),
+      );
+
+      for (const [i, res] of results.entries()) {
+        if (!res.error) continue;
+        const name = names[i];
+        missingTables.push(name);
+        tableErrors[name] = {
+          code: res.error.code ?? undefined,
+          hint: res.error.hint ?? explainDbCode(res.error.code) ?? undefined,
+        };
       }
+      database = missingTables.length ? "unreachable" : "ok";
     } catch {
       database = "unreachable";
     }
@@ -115,6 +125,7 @@ export async function GET() {
       database,
       missingTables,
       tableErrors,
+      tablesChecked,
       // Which one actually answered, not which one is listed first.
       model: { id: probe.model ?? configuredProviders()[0]?.model ?? null, answeredBy: probe.answered, ...model },
       chain,
