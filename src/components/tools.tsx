@@ -65,16 +65,36 @@ export function Breathing({ onClose }: { onClose: () => void }) {
     <div className="glass mt-4 animate-slide-up p-5 text-center">
       <p className="label-mono mb-4">Breathing · {remaining}s left</p>
 
+      {/*
+        Breath, as light rather than as a widget.
+
+        This animated `width` and `height`, which is layout on every frame —
+        the most expensive way to move anything. On the mid-range Android most
+        of this audience is holding it stutters, and a breathing guide that
+        stutters is worse than none: you are asking somebody to put their
+        breath in time with something that cannot keep time.
+
+        `transform: scale()` on a fixed box is compositor-only. Same movement,
+        no layout, smooth on a cheap phone.
+
+        And it was a hard-edged ring with a 2px border — a UI control asking to
+        be looked at. A radial fall-off reads as light instead, which is the
+        one material this whole room is built from. It grows out of the same
+        gold as the light overhead, so the screen has one source and this is it
+        coming closer.
+      */}
       <div className="flex h-40 items-center justify-center">
         <div
           aria-hidden="true"
-          className="rounded-full border-2 border-gold bg-gold/10"
+          className="h-[136px] w-[136px] rounded-full"
           style={{
-            width: phase === "out" ? 72 : 136,
-            height: phase === "out" ? 72 : 136,
-            transitionProperty: "width, height",
+            background:
+              "radial-gradient(circle, rgb(var(--gold) / 0.55) 0%, rgb(var(--gold) / 0.18) 45%, rgb(var(--gold) / 0) 70%)",
+            transform: `scale(${phase === "out" ? 0.53 : 1})`,
+            transitionProperty: "transform",
             transitionDuration: `${duration}ms`,
             transitionTimingFunction: "ease-in-out",
+            willChange: "transform",
           }}
         />
       </div>

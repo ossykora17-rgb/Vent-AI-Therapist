@@ -348,8 +348,23 @@ export function VentChat() {
           </div>
         )}
 
-        {/* Tools appear only when the moment calls for them. */}
-        {!thinking && !gated && lines.length > 0 && tool === null && (
+        {/*
+          Tools appear when the moment calls for them — which is not the same
+          as "after they have spoken", and that is what this said.
+
+          `lines.length > 0` meant somebody could arrive, drag the pressure
+          slider to ninety, tap "chest", and be offered nothing at all until
+          they managed a sentence. The person who cannot find words yet is
+          precisely the person the 4·2·6 is for. Sixty seconds of breathing is
+          often what makes the first sentence possible.
+
+          The condition is gone rather than widened: `ToolRow` already returns
+          null when there is neither a breathing reason nor a journal prompt,
+          so it was the second opinion on a question it was better placed to
+          answer. Fresh load at pressure 50 with no body named still shows
+          nothing, because nothing has been signalled.
+        */}
+        {!thinking && !gated && tool === null && (
           <ToolRow
             showBreathing={shouldOfferBreathing(tag, pressure, body)}
             tag={tag}
