@@ -121,7 +121,7 @@ export function HistoryList() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/80 backdrop-blur-glass">
+      <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/92 backdrop-blur-glass">
         <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
           <div>
             <p className="label-mono leading-none">Mind Weave</p>

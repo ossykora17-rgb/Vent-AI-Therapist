@@ -71,7 +71,7 @@ export function MemoriesList() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/80 backdrop-blur-glass">
+      <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/92 backdrop-blur-glass">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-4">
           <div>
             <p className="label-mono">Mind Weave</p>

@@ -227,14 +227,25 @@ async function handlePOST(request: Request) {
   let reply: string;
   let tokensSpent = false;
   let answeredBy: string | null = null;
+  let keyless = false;
 
   if (!isModelConfigured) {
     // No key yet: still move the session forward rather than 500ing. The
     // selected tactic already exists — selecting one costs nothing — so when
     // it carries an authored room phrasing, that is a real move to offer
-    // instead of a shrug. What it may claim about saving depends on whether
-    // this deployment can. See noModelKeyReply.
-    reply = noModelKeyReply(Boolean(store && userId), tactic.hold);
+    // instead of a shrug.
+    //
+    // Only the body is set here. The sentence that claims a save is composed
+    // after the write, below, out of what the write returned — this passed
+    // `Boolean(store && userId)`, which is a claim about the deployment and
+    // not about the row. See noModelKeyReply.
+    //
+    // Empty when the tactic carries no hold, and empty is what gets stored:
+    // nothing was said, so nothing is recorded as having been said. It also
+    // keeps the status line out of the history that gets replayed to the
+    // model on later turns, once there is a key to replay it to.
+    keyless = true;
+    reply = tactic.hold ?? "";
   } else {
     try {
       // The chain, not one provider. A rate limit or an empty balance on the
@@ -297,6 +308,11 @@ async function handlePOST(request: Request) {
     store && userId
       ? await tryPersist(store, userId, input, classification, reply, tactic.id, grounding.iso)
       : false;
+
+  // Composed here and nowhere earlier, because the sentence it adds makes a
+  // claim about the line directly above it. `saved` is what `tryPersist`
+  // returned, not what the deployment looked capable of.
+  if (keyless) reply = noModelKeyReply(saved, tactic.hold);
 
   return NextResponse.json(
     {

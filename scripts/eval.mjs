@@ -441,11 +441,11 @@ check("12 A reply with no model key promises only what it can keep", () => {
   const kept = noModelKeyReply(true);
   const dropped = noModelKeyReply(false);
 
-  ok(/I've saved it, word for word/.test(kept),
-    "with a store behind it, it may say the words were kept");
-  ok(!/I've saved/.test(dropped),
-    "with no store, it never claims they were", dropped);
-  ok(/nothing here is being saved/.test(dropped),
+  ok(/it's kept, word for word/i.test(kept),
+    "with the write behind it, it may say the words were kept");
+  ok(!/\bkept, word for word\b/.test(dropped),
+    "with no write, it never claims they were", dropped);
+  ok(/nothing here is being kept/i.test(dropped),
     "it says so plainly instead of leaving them to assume");
   ok(kept.includes("Say the next part") && dropped.includes("Say the next part"),
     "either way the session keeps moving");
@@ -456,12 +456,51 @@ check("12 A reply with no model key promises only what it can keep", () => {
   const hold = REAL_WORLD_TACTIC.economy.hold;
   const withHold = noModelKeyReply(false, hold);
   ok(withHold.includes(hold), "an authored hold is offered rather than a shrug");
-  ok(!/I've saved/.test(withHold),
+  ok(!/\bkept, word for word\b/.test(withHold),
     "and it still does not claim a save it did not make", withHold);
   ok(noModelKeyReply(true, hold).includes("word for word"),
-    "with a store behind it, the same reply may say the words were kept");
-  ok(!noModelKeyReply(false, null).includes("That's the move"),
+    "with the write behind it, the same reply may say the words were kept");
+  ok(!noModelKeyReply(false, null).includes("one move, not a full read"),
     "a tactic with no authored hold invents nothing to fill the space");
+
+  // ── the operator's vocabulary is not the reader's ────────────────────────
+  //
+  // This shipped: "That's the move rather than a full answer — I'm running
+  // without my model key", rendered under somebody writing that their
+  // father's test results had come back. Nobody arrives here knowing what a
+  // model key is, and a machine narrating its own configuration to somebody
+  // who is frightened has made itself the subject. Found by screenshotting a
+  // real session, which is the only way it could have been found.
+  const OPERATOR = /\b(model key|api key|apikey|token|provider|endpoint|config|env var|deployment|database|server)\b/i;
+  for (const [label, text] of [["plain kept", kept], ["plain dropped", dropped],
+                               ["with hold", withHold]]) {
+    ok(!OPERATOR.test(text), `${label} speaks the reader's words, not the operator's`,
+      text.match(OPERATOR)?.[0]);
+  }
+  ok(!/rather than a full answer/i.test(withHold),
+    "and it never apologises for the authored move it just offered");
+
+  // ── the claim is composed after the write, not before it ─────────────────
+  //
+  // The strings above are only half of it. This function was called with
+  // `Boolean(store && userId)` — computed at the top of the handler, before
+  // anything had been written — so "I've saved it, word for word" printed
+  // whenever a store merely *existed*, including on every run where the
+  // insert then failed. A store existing is an intention. `tryPersist`
+  // returning true is an outcome. CLAUDE.md's second mechanism, inside the
+  // file whose docstring was about avoiding it.
+  //
+  // Order in the source is the invariant, and it is worth asserting because
+  // the fix is one line away from being undone by anybody tidying the branch
+  // back together.
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
+  const composed = route.lastIndexOf("noModelKeyReply(");
+  const wrote = route.indexOf("const saved =");
+  ok(composed > wrote && wrote !== -1,
+    "the route writes first and composes the saving claim second",
+    `noModelKeyReply@${composed} vs persist@${wrote}`);
+  ok(!/noModelKeyReply\(\s*(Boolean\(|store\b|!!)/.test(route),
+    "and it is never handed a claim about the deployment instead of the row");
 });
 
 // ── 13. more than one way to answer ────────────────────────────────────────
@@ -1485,6 +1524,74 @@ check("17 The crisis number exists once, and every surface reads that one", () =
     .filter((f) => fs.readFileSync(f, "utf8").includes("CRISIS_LINES"))
     .map((f) => path.relative(ROOT, f));
   ok(shown.length >= 6, "at least six surfaces import it", `${shown.length}: ${shown.join(", ")}`);
+});
+
+// ── 18. what a screenshot found and no unit test could ────────────────────
+//
+// Two bugs, one shape, both invisible in the code that contains them and both
+// obvious in a 360px render of an ordinary session.
+//
+// The composer is `sticky bottom-0`, so at any scroll position short of the
+// document's end it pins itself over the bottom of the transcript. The
+// auto-scroll after every reply called `scrollIntoView({block: "end"})` on a
+// sentinel, which by definition puts that sentinel's bottom edge exactly
+// where the composer is pinned. So the tail of every conversation landed
+// *underneath* the composer — including "Before you go", the closing
+// question, which is the last thing on the page. Production reports
+// `anchored: 0`; I read that as a copy problem and rewrote the question
+// twice. The question was fine. Almost nobody was ever shown it.
+//
+// And the toast stack was `bottom-0`, which on the chat page is where the
+// crisis line lives. "Anchored." sat on top of it for four seconds after
+// every rating — check 17 above is what guarantees that line exists, and
+// this is what guarantees it can be read.
+//
+// The class both belong to: **a bottom-anchored overlay that does not know
+// how tall the composer is.** The feedback pill had the same bug with a
+// hardcoded 232px and was fixed by measuring. `--composer-h` is that
+// measurement, and anything pinned to the bottom of a screen that has a
+// composer has to be positioned from it.
+check("18 Nothing pinned to the bottom lands on the crisis line", () => {
+  const walkTsx = (dir) =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) return walkTsx(full);
+      return e.name.endsWith(".tsx") ? [full] : [];
+    });
+
+  // A bottom-anchored fixed overlay, minus the full-screen ones: a modal
+  // backdrop covering everything is a different thing from a notification
+  // that quietly parks on top of a phone number for four seconds.
+  const offenders = [];
+  for (const file of walkTsx(path.join(ROOT, "src/components"))) {
+    const src = fs.readFileSync(file, "utf8");
+    for (const cls of src.match(/className=\{?"[^"]*"/g) ?? []) {
+      if (!/\bfixed\b/.test(cls) || /\binset-0\b/.test(cls)) continue;
+      if (!/\bbottom-(0|\[)/.test(cls)) continue;
+      if (cls.includes("var(--composer-h")) continue;
+      offenders.push(`${path.relative(ROOT, file)}: ${cls.slice(11, 90)}`);
+    }
+  }
+  ok(offenders.length === 0,
+    "every bottom-pinned overlay is positioned from the measured composer",
+    offenders.join(" | ") || undefined);
+
+  // And the auto-scroll has to land clear of it, which is a property of the
+  // sentinel rather than of the scroll call: `scrollIntoView` honours
+  // scroll-margin, and that is the only thing standing between the closing
+  // question and the underside of the composer.
+  const chat = fs.readFileSync(
+    path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
+  const sentinel = /ref=\{endRef\}[\s\S]{0,160}?scroll-mb-\[calc\(var\(--composer-h/.test(chat)
+    || /scroll-mb-\[calc\(var\(--composer-h[\s\S]{0,160}?ref=\{endRef\}/.test(chat);
+  ok(sentinel, "the scroll sentinel clears the composer by its measured height");
+  ok(/\bpb-\[\d+px\]/.test(chat),
+    "and the transcript ends in empty space rather than under the feedback pill");
+
+  // The measurement itself has to keep existing, or every calc above silently
+  // falls back to a guess — which is the 232px bug wearing a CSS variable.
+  ok(chat.includes("ResizeObserver") && chat.includes("--composer-h"),
+    "the composer publishes its real height, and keeps publishing it");
 });
 
 // ── 19. the credit policy, as something a script can fail ─────────────────

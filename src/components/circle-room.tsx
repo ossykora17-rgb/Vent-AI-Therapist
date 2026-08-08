@@ -217,7 +217,7 @@ export function CircleRoom({ id }: { id: string }) {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/80 backdrop-blur-glass">
+      <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/92 backdrop-blur-glass">
         <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
           <div className="min-w-0">
             <p className="label-mono flex flex-wrap items-center gap-x-2 gap-y-1 leading-none">
@@ -603,7 +603,7 @@ export function CircleRoom({ id }: { id: string }) {
       </main>
 
       {state?.joined && (
-        <footer className="sticky bottom-0 border-t border-line/10 bg-paper/85 backdrop-blur-glass">
+        <footer className="sticky bottom-0 border-t border-line/10 bg-paper/95 backdrop-blur-glass">
           <div className="mx-auto max-w-[640px] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
             {ruleError && (
               <p role="alert" className="mb-2 rounded-card border border-gold/50 p-3 text-[13px] leading-relaxed">

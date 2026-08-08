@@ -42,20 +42,47 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       <div
-        // Announced to screen readers; visually a stack of hard blocks.
         role="region"
         aria-live="polite"
         aria-label="Notifications"
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-2 p-3 sm:items-end sm:p-4"
+        /*
+          Lifted above the composer, because of what sits at the very bottom
+          of the chat page: the crisis line.
+
+          This was `bottom-0`, and a screenshot of an ordinary session showed
+          the success toast — "Anchored." — sitting squarely on top of the
+          crisis line for four seconds. The one string in this product that
+          must never be unreadable, covered by a confirmation that somebody
+          rated their mood.
+
+          `--composer-h` is the footer's measured height, published by the
+          chat composer's ResizeObserver. The +60px clears the feedback pill
+          that floats just above it. Both fall back to 0 and to a bare 60px
+          lift on pages with no composer, which is where this used to sit
+          flush and looked pasted on anyway.
+        */
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+var(--composer-h,0px)+60px)] z-[60] flex flex-col items-center gap-2 px-3 sm:items-end sm:px-4"
       >
         {toasts.map((t) => (
           <div
             key={t.id}
             className={cn(
               "pointer-events-auto flex w-full max-w-[380px] items-start gap-3",
-              "border-3 border-ink p-3 shadow-brut animate-slide-up",
-              // Error is the loud one: full black. Gold is never used here.
-              t.tone === "error" ? "bg-ink text-paper" : "bg-paper text-ink",
+              // Spoken in the room's voice, not the old brutalist one.
+              //
+              // This was a 3px black box with a hard drop shadow — a leftover
+              // from a visual language the two surfaces that actually raise
+              // toasts stopped using. In a screenshot it read as an alarm
+              // while the word inside it was "Anchored.": the single moment
+              // this product has to say *something worked*, rendered as a
+              // warning. Same plate as everything else now, with the gold
+              // edge the room uses to mark a good arrival.
+              "glass animate-slide-up border-l-2 p-3",
+              t.tone === "error"
+                ? "border-l-ink bg-ink/90 text-paper"
+                : t.tone === "success"
+                  ? "border-l-gold text-ink"
+                  : "border-l-line/30 text-ink",
             )}
           >
             <span
