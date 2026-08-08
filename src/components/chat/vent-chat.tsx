@@ -69,6 +69,33 @@ export function VentChat() {
   const nextId = React.useRef(0);
   const endRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
+  const footerRef = React.useRef<HTMLElement>(null);
+
+  /**
+   * Publish the composer's real height, so nothing has to guess it.
+   *
+   * The feedback button was pinned 232px from the bottom — a number somebody
+   * measured once. At 360px the disclaimer wraps to three lines and the
+   * footer is taller than that, so the button sat on top of the CHEST
+   * control: the thing you tap to say where it hurts, covered by a survey.
+   *
+   * A ResizeObserver rather than a one-off measurement, because this footer
+   * changes height on its own — the textarea grows to 32 lines, the crisis
+   * gate appears, the disclaimer rewraps on rotation.
+   */
+  React.useEffect(() => {
+    const el = footerRef.current;
+    if (!el) return;
+    const publish = () =>
+      document.documentElement.style.setProperty("--composer-h", `${Math.round(el.getBoundingClientRect().height)}px`);
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty("--composer-h");
+    };
+  }, []);
 
   React.useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -195,7 +222,9 @@ export function VentChat() {
       <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/80 backdrop-blur-glass">
         <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
           <div className="min-w-0">
-            <p className="label-mono leading-none">Mind Weave</p>
+            {/* nowrap: at 360px this wrapped to two lines and shoved the
+                title down, because the nav takes the rest of the row. */}
+            <p className="label-mono whitespace-nowrap leading-none">Mind Weave</p>
             <h1 className="truncate font-display text-2xl font-bold leading-tight tracking-[-0.02em]">
               VENT
             </h1>
@@ -532,7 +561,7 @@ export function VentChat() {
         <div ref={endRef} />
       </main>
 
-      <footer className="sticky bottom-0 border-t border-line/10 bg-paper/85 backdrop-blur-glass">
+      <footer ref={footerRef} className="sticky bottom-0 border-t border-line/10 bg-paper/85 backdrop-blur-glass">
         <div className="mx-auto max-w-[640px] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
           {/* Where it sits + how tight. Both feed the tactic choice. */}
           <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -552,9 +581,13 @@ export function VentChat() {
                 {b}
               </button>
             ))}
+            {/* "Mid" sat immediately right of HEAD / THROAT / CHEST and read
+                as a fourth body part — and MID is a real somatic region in
+                `lib/vent/scan.ts`, so the collision was not only visual. It
+                is the pressure reading, so it says a pressure word. */}
             <label className="ml-auto flex min-w-[140px] flex-1 items-center gap-2">
               <span className="label-mono shrink-0">
-                {pressure > 66 ? "Tight" : pressure > 33 ? "Mid" : "Loose"}
+                {pressure > 66 ? "Tight" : pressure > 33 ? "Some" : "Loose"}
               </span>
               <input
                 type="range"
