@@ -137,18 +137,38 @@ export function CircleRoom({ id }: { id: string }) {
   /**
    * The one thing worth keeping out of a circle: did the room work. The mood
    * reading, the drop, and the two words — no transcript, nothing anybody
-   * said. Fire-and-forget: a failed preference log must never block a seal.
+   * said.
+   *
+   * Record the close, and say which of the two promises actually held.
+   *
+   * This swallowed everything — no `res.ok` check, a bare catch, and a
+   * comment reasoning that "the seal already happened on their screen". It
+   * had not. The caller then fired "Sealed. Nothing here is kept." without
+   * awaiting this at all, so a 500 produced a success toast.
+   *
+   * Two separate promises live in that one sentence, and only one of them
+   * depends on this request:
+   *
+   *   "Sealed"               your close was recorded. Needs this to succeed.
+   *   "Nothing here is kept" the transcript is deleted on close by
+   *                          sweepIfOver, server-side, whichever request
+   *                          notices the transition first. True either way.
+   *
+   * So a failure here loses the mood and the carry/drop, and confidentiality
+   * still holds. Saying both at once made a real guarantee share a fate with
+   * one that had just failed.
    */
-  async function seal(drop: string) {
-    if (mood === null) return;
+  async function seal(drop: string): Promise<boolean> {
+    if (mood === null) return false;
     try {
-      await fetch(`/api/circles/${id}`, {
+      const r = await fetch(`/api/circles/${id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ anonId: me, mood, carry, drop }),
       });
+      return r.ok;
     } catch {
-      /* The seal already happened on their screen. */
+      return false;
     }
   }
 
@@ -503,8 +523,14 @@ export function CircleRoom({ id }: { id: string }) {
                           type="button"
                           onClick={() => {
                             setDropped(w);
-                            void seal(w);
-                            toast("Sealed. Nothing here is kept.", "success");
+                            void seal(w).then((sealed) =>
+                              toast(
+                                sealed
+                                  ? "Sealed. Nothing here is kept."
+                                  : "Your close didn't reach us. The room still ends and the transcript still goes.",
+                                sealed ? "success" : "info",
+                              ),
+                            );
                           }}
                           aria-pressed={dropped === w}
                           className={cn(
