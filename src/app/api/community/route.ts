@@ -43,7 +43,10 @@ export async function GET() {
     try {
       // A window, not everything. The question is "what is happening lately",
       // and scanning all history to answer it gets slower every day.
-      carrying = whatIsCarried(await store.recentVentsAcross(500));
+      // The limit is passed in, not just applied — otherwise `total` silently
+      // becomes the limit and the page states it as a fact.
+      const WINDOW = 500;
+      carrying = whatIsCarried(await store.recentVentsAcross(WINDOW), Date.now(), WINDOW);
     } catch {
       // A database that is down is not a community that is empty. Both say
       // nothing here, and neither says zero.

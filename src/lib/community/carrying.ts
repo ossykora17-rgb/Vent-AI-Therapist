@@ -44,6 +44,19 @@ export const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 export interface Carrying {
   /** People-sessions in the window, across every pressure. */
   total: number;
+  /**
+   * Whether the window hit the fetch limit, so `total` is a floor rather
+   * than a count.
+   *
+   * Found by looking at the page: it read "500 people sat down with
+   * something", and 500 is exactly `recentVentsAcross(500)`. Past that the
+   * number can never move again — a query limit rendered as a fact, and a
+   * suspiciously round one, which is what marketing filler looks like.
+   *
+   * A number that cannot go up is not a count. Say "more than" or say
+   * nothing.
+   */
+  truncated: boolean;
   /** Ranked, floored, never empty when present. */
   tags: Array<{ tag: string; count: number }>;
 }
@@ -60,6 +73,8 @@ export interface Carrying {
 export function whatIsCarried(
   vents: readonly VentRow[],
   now = Date.now(),
+  /** What the caller asked the store for, so truncation is detectable. */
+  fetchLimit?: number,
 ): Carrying | null {
   const since = now - WINDOW_MS;
   const recent = vents.filter((v) => {
@@ -83,7 +98,11 @@ export function whatIsCarried(
   // say. Better to stay quiet than to print "41 this week" over blank space.
   if (tags.length === 0) return null;
 
-  return { total: recent.length, tags };
+  return {
+    total: recent.length,
+    truncated: fetchLimit !== undefined && vents.length >= fetchLimit,
+    tags,
+  };
 }
 
 /** The plain words for a pressure. Shared with the pattern sentence. */

@@ -907,6 +907,21 @@ check("15f The house counts what it holds, and stays quiet below the floor", () 
   );
   is(WINDOW_MS, 7 * 24 * 60 * 60 * 1000, "the window is seven days");
 
+  // A total that equals the fetch limit is a floor, not a count. The page
+  // read "500 people sat down with something" and 500 was
+  // `recentVentsAcross(500)` — a query limit stated as a fact, and past it
+  // the number could never move again. Found by looking at the screen.
+  const capped = whatIsCarried(many("economy", 12), NOW, 12);
+  ok(capped.truncated, "a window that came back full is marked as a floor");
+  ok(
+    !whatIsCarried(many("economy", 12), NOW, 500).truncated,
+    "and a window with room left is not",
+  );
+  ok(
+    whatIsCarried(many("economy", 12), NOW).truncated === false,
+    "no limit given means no claim about truncation",
+  );
+
   // Plain words, not tag ids. "ai_job" on a public page is a database column.
   is(carryingWord("ai_job"), "work", "tags are spoken in words, not in schema");
   is(carryingWord("economy"), "money", "money is money");
