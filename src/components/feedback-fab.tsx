@@ -56,7 +56,17 @@ export function FeedbackFab() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="fixed bottom-[calc(env(safe-area-inset-bottom)+232px)] right-3 z-40 min-h-[44px] rounded-full border border-line/15 bg-card/80 px-4 text-xs font-medium shadow-glass-sm backdrop-blur-glass"
+          // Anchored to what the composer actually measures, not to 232px.
+          //
+          // That number was a guess at the footer's height, and at 360px the
+          // footer is taller than the guess — so this button sat on top of the
+          // CHEST control, over the thing somebody taps to say where it hurts.
+          // Screenshots at 360 were the only way to see it; the code reads
+          // fine.
+          //
+          // `--composer-h` is set by the footer from its own bounding box, so
+          // this cannot drift again when the disclaimer rewraps.
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+var(--composer-h,232px)+12px)] right-3 z-40 min-h-[44px] rounded-full border border-line/15 bg-card/80 px-4 text-xs font-medium shadow-glass-sm backdrop-blur-glass"
         >
           How we dey do?
         </button>
@@ -66,7 +76,7 @@ export function FeedbackFab() {
         <div
           role="dialog"
           aria-label="Feedback"
-          className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+232px)] z-40 mx-auto max-w-[380px]"
+          className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+var(--composer-h,232px)+12px)] z-40 mx-auto max-w-[380px]"
         >
           <div className="glass p-4">
             <p className="label-mono mb-3">How we dey do?</p>
