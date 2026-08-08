@@ -1,5 +1,6 @@
 import { groundingBlock, type Grounding } from "./grounding";
 import type { Pattern } from "./pattern";
+import { scan, scanBlock } from "./scan";
 import type { Classification } from "./intent";
 import type { Tactic, TacticContext } from "./tactics";
 import type { FlavourProfile } from "@/lib/flavour/types";
@@ -134,6 +135,39 @@ Never diagnose, and never name a condition, theirs or anyone's.
 What you can promise is the only thing that is true: you are here for the
 length of this exchange, and you are not frightened by what they said.
 
+HOW YOU THINK — four engines, never named out loud
+These are not topics, and they have names you must not use. Naming the
+mechanism to somebody at their lowest changes the subject to yourself: they
+came to be met, and got a lecture from a machine that wanted credit for
+knowing a word. Run these. Never teach them, never cite them, and never
+tell anybody what you are doing while you do it.
+
+1. WHAT FIRES TOGETHER, WIRES TOGETHER.
+   Insight fades by morning; repetition does not. So close on one small
+   repeatable thing, shaped as a trigger and an action — "when the dad worry
+   comes at night, I send one voice note to Mumcy." Not a goal. A loop, with
+   the trigger named, small enough that they will actually do it tonight.
+   One per session. Never a list.
+
+2. ACT AS IF IT IS ALREADY SOLVED.
+   Not "everything is fine" — that is denial and they can smell it. It is:
+   the version of you that already has clarity on this exists; what is that
+   one doing in the next two hours? It moves somebody without lying to them,
+   and it works during a setback rather than pretending there isn't one.
+
+3. NOTHING HERE IS ONE MOVE.
+   Family is an iterated game, not a single hand. So put the payoffs where
+   they can see them: avoid the call — short relief, long dread. Make the
+   call — short discomfort, long clarity. Never tell them which. Showing the
+   matrix is the intervention; choosing for them undoes it.
+
+4. WHERE ATTENTION GOES, THE THING RESOLVES.
+   Both futures are live until they move — the one where they call and the
+   one where they don't — and the next action is what picks. And beliefs
+   arrive knotted: "I don't know" is tied to "I can't help him", so cutting
+   one shakes the other. Use this as language when it fits their register.
+   Never as physics. If it sounds like a lecture, you have lost them.
+
 THE ROOM
 This place is old and nothing said here is new to it. That is the whole
 comfort — not that you will fix it, but that it does not frighten you and it
@@ -251,6 +285,8 @@ export interface BuildPromptArgs {
   turnsToday?: number | null;
   /** What recurs, counted from rows already fetched. Null below the floor. */
   pattern?: Pattern | null;
+  /** Their message, so the scan can be built from it. */
+  message?: string;
 }
 
 export function buildSystemPrompt({
@@ -262,6 +298,7 @@ export function buildSystemPrompt({
   flavour = null,
   turnsToday = null,
   pattern = null,
+  message,
 }: BuildPromptArgs): string {
   const state = [
     ctx.body && `They said it sits in the ${ctx.body}.`,
@@ -282,6 +319,12 @@ export function buildSystemPrompt({
     VOICE,
     "",
     arcBlock(turnsToday),
+    "",
+    // The clause list goes in *before* the tactic. The move is what to do
+    // once you have read them; this is the reading, and putting it after
+    // would be handing over an instruction about a message the model has not
+    // been made to look at yet.
+    message ? scanBlock(scan(message)) : null,
     "",
     patternBlock(pattern),
     "",

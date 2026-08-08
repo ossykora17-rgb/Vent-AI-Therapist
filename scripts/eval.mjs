@@ -902,6 +902,111 @@ check("15f The house counts what it holds, and stays quiet below the floor", () 
   is(carryingWord("unknown_tag"), "unknown_tag", "and an unmapped tag falls through intact");
 });
 
+// ── 15g. every clause, not the last noun ──────────────────────────────────
+//
+// The failure this closes, in the sentence that produced it: "my dad's test
+// results came back and honestly i don't know, i've been in communication
+// with mumcy but i'm holding am for mind". Four clauses, every one
+// load-bearing, and a reply about mumcy — because mumcy was nearest the full
+// stop.
+const { scan, scanBlock, coverage, COVERAGE_FLOOR } = await app("src/lib/vent/scan.ts");
+
+check("15g The scan reads every clause, and coverage proves the reply did", () => {
+  const MSG =
+    "my dad's test results came back and honestly i don't know, i've been in communication with mumcy but i'm holding am for mind";
+  const s = scan(MSG);
+
+  ok(s.clauses.length >= 4, "four clauses are found, not one sentence", `${s.clauses.length}`);
+  ok(
+    s.clauses.some((c) => /test results/i.test(c.text)),
+    "the results are their own clause",
+  );
+
+  // "Honestly" is never about a fact. It is a brace before exposure.
+  ok(
+    s.affect.some((a) => /vulnerability/i.test(a)),
+    "'honestly' is read as vulnerability, not as an adverb",
+  );
+  ok(
+    s.affect.some((a) => /guilt/i.test(a)),
+    "'i don't know' carries guilt, not just confusion",
+  );
+
+  // The most under-read signal in the corpus: somebody listing their coping
+  // as if it were nothing.
+  ok(s.effort.length > 0, "'i've been in communication' is read as active coping");
+
+  // Head-spin, not a shrug. The loop is running upstairs and cannot land.
+  is(s.somatic, "HEAD", "'i don't know' maps to HEAD");
+  is(scan("my chest is tight").somatic, "CHEST", "and a named chest maps to CHEST");
+  is(scan("dread sitting in my belle").somatic, "MID", "and dread sits in MID");
+
+  const block = scanBlock(s);
+  ok(/every clause is load-bearing/i.test(block), "the model is given the clauses numbered");
+  ok(/not the last noun/i.test(block), "and told the last noun is not where the weight is");
+  ok(
+    /Do not open with a name they mentioned/i.test(block),
+    "and told to open with the state, never the name",
+  );
+  ok(/coping, not nothing/i.test(block), "effort is named to the model as effort");
+
+  // The scorer. A reply that answers one clause of four must not pass.
+  const lazy = "Mumcy sounds like she is trying. What did she say?";
+  const whole =
+    "Results back, and you don't know — that not-knowing is doing the work of guilt. You've been in communication, which is more than nothing. And you're holding it for mind, alone. What would it cost to put one of those down tonight?";
+
+  const bad = coverage(MSG, lazy);
+  const good = coverage(MSG, whole);
+  ok(bad.score < COVERAGE_FLOOR, "a reply about the last noun fails the floor", `${bad.score}`);
+  ok(good.score >= COVERAGE_FLOOR, "a reply that carries the clauses passes", `${good.score}`);
+  ok(bad.missed.length > 0, "and the misses are named in their own words", bad.missed.join(" | "));
+
+  // Compression is not a miss. Demanding every clause back would produce a
+  // checklist read aloud, which is the opposite of the voice.
+  ok(COVERAGE_FLOOR < 1, "the floor allows compression rather than demanding recitation");
+
+  // Zero tokens, structurally: nothing here may become async.
+  ok(!(scan("x") instanceof Promise), "the scan is synchronous — nothing to await, nothing to bill");
+  ok(!(coverage("x y z", "a") instanceof Promise), "and so is the scorer");
+});
+
+// ── 15h. four engines, never named out loud ───────────────────────────────
+check("15h The engines run in the prompt and are never taught to anybody", () => {
+  const prompt = buildSystemPrompt({
+    grounding: { date: "8 August 2026", time: "07:00", iso: "2026-08-08", lines: [] },
+    classification: { intent: "vent", realWorldTag: null, language: "en", body: null },
+    tactic: ALL_TACTICS[0],
+    ctx: { ...base },
+    memory: [],
+    message: "i don't know and i'm tired",
+  });
+
+  ok(/fires together, wires together/i.test(prompt), "the repetition engine is in the prompt");
+  ok(/trigger and an action/i.test(prompt), "shaped as an implementation intention, not a goal");
+  ok(/one per session/i.test(prompt), "and one loop, never a list");
+
+  ok(/already has clarity/i.test(prompt), "the future-self move is there");
+  ok(/that is denial and they can smell it/i.test(prompt), "and it is fenced off from toxic positivity");
+
+  ok(/iterated game/i.test(prompt), "family is framed as iterated, not one-shot");
+  ok(
+    /Never tell them which/i.test(prompt),
+    "and the matrix is shown rather than decided — choosing for them undoes it",
+  );
+
+  ok(/Both futures are live/i.test(prompt), "superposition is used as language");
+  ok(/knotted|entangl/i.test(prompt), "and so is entanglement");
+
+  // The whole point: these are an operating system, not a syllabus. A person
+  // at their lowest being told the word "neuroplasticity" has just watched
+  // the machine change the subject to itself.
+  ok(
+    !/neuroplastic|quantum|hebbian|game theory/i.test(prompt),
+    "and none of the four is ever named to the person",
+  );
+  ok(/never named out loud/i.test(prompt), "the prompt says so in as many words");
+});
+
 // ── 16. the request the store actually sends ───────────────────────────────
 //
 // Two ways a URL was built wrong, both of which broke every read of `vents`
