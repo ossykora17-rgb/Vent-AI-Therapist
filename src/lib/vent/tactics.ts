@@ -265,6 +265,51 @@ const TACTICS: Tactic[] = [
     fits: (c) => c.ventCount >= 3,
     weight: (c) => 60 + Math.min(c.ventCount * 3, 25),
   },
+  // ── The three engines, as moves rather than as prose ────────────────────
+  //
+  // The prompt describes how to think. A tactic is *chosen*, logged, and
+  // scored by the efficacy loop — which is the difference between an idea the
+  // model might use and one the product measurably runs. These three are the
+  // engines made selectable, so they compete on evidence like everything else.
+  {
+    id: "iterated_game",
+    family: "relational",
+    instruction:
+      "This is not one move — it is a long game with somebody they will still know next year. Put both payoffs where they can see them: avoiding it buys short relief and long dread; doing it costs short discomfort and buys long clarity. Show the matrix. NEVER say which one to pick — choosing for them is what undoes it.",
+    hold: "This is a long game, not one hand. Hold both columns tonight: what avoiding buys you, and what it costs.",
+    // Family and duty, where one-shot thinking does the most damage — you
+    // cannot walk away from a mother the way you walk away from a deal.
+    fits: (c) =>
+      c.realWorldTag === "family" ||
+      /\b(mum|mummy|mumcy|mama|dad|daddy|papa|brother|sister|wife|husband|family|parents?)\b/.test(
+        c.message.toLowerCase(),
+      ),
+    weight: () => 84,
+  },
+  {
+    id: "future_self",
+    family: "cognitive",
+    instruction:
+      "Ask what the version of them that already has clarity on this would do in the next two hours. Not 'it will be fine' — they can smell that. The one who already solved it exists; what is that one doing before tonight?",
+    hold: "The version of you that already has clarity on this — what is that one doing in the next two hours?",
+    // Stuck, not distraught. This asks somebody to move, and asking a person
+    // in freefall to move is a demand dressed as a question.
+    fits: (c) =>
+      (c.pressure ?? 50) < 80 &&
+      (HOPELESS.test(c.message.toLowerCase()) || /\b(stuck|don'?t know|idk|i no know)\b/.test(c.message.toLowerCase())),
+    weight: () => 76,
+  },
+  {
+    id: "micro_loop",
+    family: "behavioral",
+    instruction:
+      "Close on one repeatable loop, shaped as a trigger and an action: 'when [the thing that starts it], I will [one small action].' Name the trigger. Make the action small enough that they will actually do it tonight. One loop — never a list. Repetition is what changes a groove; insight is gone by morning.",
+    hold: "One loop to carry out: when the thing starts tonight, you do one small thing. Name both before you go.",
+    // Late in a session, when something has actually been named — a loop
+    // handed over before anybody has said what they came to say is homework.
+    fits: (c) => c.ventCount >= 2,
+    weight: (c) => 64 + Math.min(c.ventCount * 2, 14),
+  },
   {
     id: "here_and_now",
     family: "relational",

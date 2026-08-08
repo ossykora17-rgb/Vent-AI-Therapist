@@ -1007,6 +1007,70 @@ check("15h The engines run in the prompt and are never taught to anybody", () =>
   ok(/never named out loud/i.test(prompt), "the prompt says so in as many words");
 });
 
+// ── 15i. the engines are moves, not prose ─────────────────────────────────
+//
+// A paragraph in the prompt is a suggestion. A tactic is chosen, logged, and
+// scored by the efficacy loop — so these three had to become selectable or
+// they were decoration. And a tactic that can never win its band is worse
+// than no tactic: it looks implemented and never runs.
+check("15i The three engines are selectable, and none of them is orphaned", () => {
+  const ids = new Set(ALL_TACTIC_IDS);
+  for (const id of ["iterated_game", "future_self", "micro_loop"]) {
+    ok(ids.has(id), `${id} is in the library`);
+  }
+
+  // Family is where one-shot thinking does the most damage: you cannot walk
+  // away from a mother the way you walk away from a deal.
+  is(
+    selectTactic({ ...base, message: "my mumcy keeps calling and i dont answer", recentTactics: [] }).id,
+    "iterated_game",
+    "a family message routes to the long game",
+  );
+
+  const game = ALL_TACTICS.find((t) => t.id === "iterated_game");
+  ok(/NEVER say which one to pick/i.test(game.instruction), "and the matrix is shown, never decided");
+  ok(/short relief/i.test(game.instruction) && /long clarity/i.test(game.instruction),
+    "with both payoffs named");
+
+  const future = ALL_TACTICS.find((t) => t.id === "future_self");
+  ok(/already has clarity/i.test(future.instruction), "the future-self move asks the right question");
+  ok(/can smell that/i.test(future.instruction), "and is fenced off from 'it will be fine'");
+  // Asking somebody in freefall to move is a demand dressed as a question.
+  ok(
+    !future.fits({ ...base, message: "i am stuck and i dont know", pressure: 95 }),
+    "and it does not fire at somebody in freefall",
+  );
+
+  const loop = ALL_TACTICS.find((t) => t.id === "micro_loop");
+  ok(/trigger and an action/i.test(loop.instruction), "the loop is a trigger and an action");
+  ok(/One loop — never a list/i.test(loop.instruction), "one, never a list");
+  ok(!loop.fits({ ...base, ventCount: 0 }), "and never on turn one — that would be homework");
+
+  // Reachability, swept rather than assumed. A weight change elsewhere could
+  // orphan any of these and nothing would say so.
+  const seen = new Set();
+  const messages = [
+    "i am stuck and i dont know",
+    "work is a lot lately",
+    "my mumcy calls and i dont answer",
+    "i feel hopeless about money",
+    "why bother nothing go change",
+  ];
+  for (const message of messages) {
+    for (let ventCount = 0; ventCount < 7; ventCount++) {
+      const recent = [];
+      for (let turn = 0; turn < 12; turn++) {
+        const t = selectTactic({ ...base, message, ventCount, recentTactics: [...recent] });
+        seen.add(t.id);
+        recent.push(t.id);
+      }
+    }
+  }
+  for (const id of ["iterated_game", "future_self", "micro_loop"]) {
+    ok(seen.has(id), `${id} is actually reachable, not just present`);
+  }
+});
+
 // ── 16. the request the store actually sends ───────────────────────────────
 //
 // Two ways a URL was built wrong, both of which broke every read of `vents`
