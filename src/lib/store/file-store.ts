@@ -4,7 +4,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { isExpired, MAX_SEATS } from "@/lib/circles/rules";
 import { TYPING_WINDOW_MS } from "@/lib/circles/presence";
-import { CARVE_KEY } from "@/lib/vent/carve";
 import type {
   CircleMemberRow, CircleMessageRow, CircleRow,
   NewVent, ProfilePatch, Store, VentRow,
@@ -25,6 +24,8 @@ interface UserRow {
   chair_picked: string | null;
   object_picked: string | null;
   onboarding_done: boolean;
+  /** Eight words for the wound. Mirrors vent_users.carve — see 0011. */
+  carve: string | null;
   created_at: string;
   last_seen_at: string;
 }
@@ -38,14 +39,6 @@ interface FeedbackRow {
   created_at: string;
 }
 
-interface MemoryRecord {
-  id: string;
-  user_id: string;
-  key: string;
-  value: string;
-  created_at: string;
-}
-
 interface Db {
   users: UserRow[];
   vents: VentRow[];
@@ -53,13 +46,11 @@ interface Db {
   circles: CircleRow[];
   circleMembers: CircleMemberRow[];
   circleMessages: CircleMessageRow[];
-  memories: MemoryRecord[];
 }
 
 const EMPTY: Db = {
   users: [], vents: [], feedback: [],
   circles: [], circleMembers: [], circleMessages: [],
-  memories: [],
 };
 
 export class FileStore implements Store {
@@ -111,6 +102,7 @@ export class FileStore implements Store {
           chair_picked: null,
           object_picked: null,
           onboarding_done: false,
+          carve: null,
           created_at: now,
           last_seen_at: now,
         };
@@ -187,30 +179,31 @@ export class FileStore implements Store {
     return hit;
   }
 
+  /*
+    The same shape as Postgres, on purpose.
+
+    This used a side `memories` collection while the Supabase store wrote to
+    `public.memories` — whose `user_id` is `references auth.users(id)`, an id
+    space anonymous venters are not in. The insert was rejected there and
+    accepted here: the feature worked locally and was dead in production,
+    which is the failure this whole repo is organised against.
+
+    One column on the person's own row, in both backends. A shape that cannot
+    diverge is worth more than a shape that is convenient in one of them.
+  */
   async getCarve(userId: string): Promise<string | null> {
-    const db = this.read();
-    return db.memories?.find((m) => m.user_id === userId && m.key === CARVE_KEY)?.value ?? null;
+    return this.read().users.find((u) => u.id === userId)?.carve?.trim() || null;
   }
 
-  async setCarve(userId: string, carve: string): Promise<boolean> {
+  async setCarve(userId: string, carve: string | null): Promise<boolean> {
+    let hit = false;
     await this.write((db) => {
-      db.memories ??= [];
-      // One row per person per key, same as the unique constraint upstream.
-      const existing = db.memories.find((m) => m.user_id === userId && m.key === CARVE_KEY);
-      if (existing) {
-        existing.value = carve;
-        existing.created_at = new Date().toISOString();
-      } else {
-        db.memories.push({
-          id: randomUUID(),
-          user_id: userId,
-          key: CARVE_KEY,
-          value: carve,
-          created_at: new Date().toISOString(),
-        });
-      }
+      const user = db.users.find((u) => u.id === userId);
+      if (!user) return;
+      user.carve = carve;
+      hit = true;
     });
-    return true;
+    return hit;
   }
 
   async deleteVent(userId: string, ventId: string): Promise<void> {
@@ -222,12 +215,10 @@ export class FileStore implements Store {
   async deleteAll(userId: string): Promise<void> {
     await this.write((db) => {
       db.vents = db.vents.filter((v) => v.user_id !== userId);
+      // The carve goes with them — it is a column on this row, so deleting
+      // the person deletes the sentence written about them. Nothing separate
+      // to remember, which is the point of putting it here.
       db.users = db.users.filter((u) => u.id !== userId);
-      // The carve goes with them. It is one sentence about somebody's life
-      // that they did not write, held outside the vents — so a delete that
-      // cleared the transcript and left this behind would leave the most
-      // pointed thing in the database standing after they asked to be gone.
-      db.memories = (db.memories ?? []).filter((m) => m.user_id !== userId);
     });
   }
 

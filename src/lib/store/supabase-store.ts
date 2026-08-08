@@ -2,7 +2,6 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isExpired, MAX_SEATS, TRANSCRIPT_TTL_MS } from "@/lib/circles/rules";
 import { TYPING_WINDOW_MS } from "@/lib/circles/presence";
-import { CARVE_KEY } from "@/lib/vent/carve";
 import { StoreUnavailableError } from "./errors";
 import type {
   CircleMemberRow, CircleMessageRow, CircleRow,
@@ -150,25 +149,25 @@ export class SupabaseStore implements Store {
    *
    * `maybeSingle` rather than `single`: no row is the ordinary case for
    * anybody who has never finished a session, and `single` treats it as an
-   * error. Wrapped besides, because this table came late — a deployment whose
-   * migrations stopped before 0006 has no `memories` at all, and the correct
-   * behaviour there is a room that opens knowing nothing, not a 500 on a
-   * vent.
+   * error. Wrapped besides, because this column came late — a deployment with
+   * 0011 pending answers `42703`, and the correct behaviour there is a room
+   * that opens knowing nothing, not a 500 on a vent.
    */
   async getCarve(userId: string): Promise<string | null> {
     try {
-      // No space after the comma. See FULL_SELECT.
       const { data, error } = await this.db
-        .from("memories")
-        .select("value")
-        .eq("user_id", userId)
-        .eq("key", CARVE_KEY)
+        .from("vent_users")
+        .select("carve")
+        .eq("id", userId)
         .maybeSingle();
       if (error) {
+        // 42703 is the column not existing yet — 0011 pending, which is a
+        // normal state and not a fault. The room opens knowing nothing.
         console.warn("[store] getCarve", error.code, error.message);
         return null;
       }
-      return (data as { value?: string } | null)?.value ?? null;
+      // Whitespace is not a carve. Normalised here so no caller has to.
+      return (data as { carve?: string | null } | null)?.carve?.trim() || null;
     } catch (e) {
       console.warn("[store] getCarve threw", e);
       return null;
@@ -176,20 +175,20 @@ export class SupabaseStore implements Store {
   }
 
   /**
-   * Upsert onto `unique (user_id, key)`, so the same person sharpens one line
+   * One column on the person's own row, so the same person sharpens one line
    * rather than accumulating a pile of them.
    *
    * Returns what happened. A carve that did not land must not be reported as
-   * kept — the same rule the no-key reply had to learn.
+   * kept — the same rule the no-key reply had to learn, and the reason this
+   * bug was survivable: with 0011 pending every write returns false and the
+   * product behaves exactly as it did before the Carver existed.
    */
-  async setCarve(userId: string, carve: string): Promise<boolean> {
+  async setCarve(userId: string, carve: string | null): Promise<boolean> {
     try {
       const { error } = await this.db
-        .from("memories")
-        .upsert(
-          { user_id: userId, key: CARVE_KEY, value: carve },
-          { onConflict: "user_id,key" },
-        );
+        .from("vent_users")
+        .update({ carve })
+        .eq("id", userId);
       if (error) {
         console.warn("[store] setCarve", error.code, error.message);
         return false;
@@ -203,27 +202,14 @@ export class SupabaseStore implements Store {
 
   async deleteAll(userId: string): Promise<void> {
     done("deleteAll", await this.db.from("vents").delete().eq("user_id", userId));
-    /*
-      The carve goes with them.
-
-      It lives outside `vents`, so a delete that cleared the transcript would
-      leave standing the single most pointed row in this database: one
-      sentence about somebody's life, that they did not write, after they
-      asked to be gone. "Clear my id" has to mean it.
-
-      Tolerated rather than asserted, and deliberately: on a deployment whose
-      migrations stopped before 0006 there is no `memories` table, and a
-      delete that 500s there would block the vents delete that does work. A
-      table that does not exist holds no carve, so nothing is left behind.
-    */
-    try {
-      const { error } = await this.db.from("memories").delete().eq("user_id", userId);
-      if (error) console.warn("[store] deleteAll:memories", error.code, error.message);
-    } catch (e) {
-      console.warn("[store] deleteAll:memories threw", e);
-    }
     // Clearing everything means clearing the person too. A half-done delete
     // is the one outcome this must never report as success.
+    //
+    // The carve needs no statement of its own now: it is a column on this
+    // row, so deleting the person deletes the sentence written about them.
+    // That is the argument for putting it here rather than in a side table —
+    // a separate row is a thing a future delete path can forget, and this one
+    // cannot be forgotten.
     done("deleteAll:user", await this.db.from("vent_users").delete().eq("id", userId));
   }
 

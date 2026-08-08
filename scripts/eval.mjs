@@ -1252,7 +1252,7 @@ check("15j The authored corpus holds the scan to what it claims", () => {
 });
 
 // ── 15k. the Carver, and the campfire that costs nothing ──────────────────
-const { CARVER_SYSTEM, parseCarve, worthCarving, CARVE_FLOOR, CARVE_MAX_WORDS, CARVE_KEY } =
+const { CARVER_SYSTEM, parseCarve, worthCarving, CARVE_FLOOR, CARVE_MAX_WORDS } =
   await app("src/lib/vent/carve.ts");
 const { MYCELIUM } = await app("src/lib/circles/rules.ts");
 
@@ -1727,7 +1727,40 @@ check("21 The door's answers reach the room, and personality has one home", () =
 // Wiring it puts one sentence about somebody's life into a database. So the
 // bounds are the feature, and every one of them is asserted here.
 await checkAsync("22 The carve is kept, read back, and erased with them", async () => {
-  is(CARVE_KEY, "carve", "one key, imported by both stores rather than typed twice");
+  /*
+    Where the carve lives, which is the part that was wrong.
+
+    It was written to `public.memories` — a sensible-looking key/value table
+    whose `user_id` is `references auth.users(id)`. Everybody venting here is
+    anonymous, and `ensureUser(anonId)` returns a `public.vent_users.id`: a
+    different table, a different id space. Postgres rejected every insert on
+    the foreign key. `FileStore` has no foreign keys and accepted all of them.
+
+    So the Carver worked perfectly in every place it was tested and was dead
+    in the only place it mattered — the shape its author was standing in,
+    exactly as CLAUDE.md describes, in the commit that shipped it.
+
+    One column on the row the anonymous person already owns. Asserted here
+    because a schema decision this quiet is not visible in any diff of the
+    code that uses it.
+  */
+  const contract = fs.readFileSync(path.join(ROOT, "src/lib/store/contract.ts"), "utf8");
+  ok(/vent_users: "[^"]*\bcarve\b/.test(contract),
+    "the carve is a column on vent_users, and in the contract so health sees it");
+
+  const supa = fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8");
+  const carveWrites = supa.slice(supa.indexOf("async setCarve"), supa.indexOf("async deleteAll"));
+  ok(/from\("vent_users"\)/.test(carveWrites) && !/from\("memories"\)/.test(carveWrites),
+    "and it is written to vent_users, never to the auth-scoped memories table");
+  ok(!/from\("memories"\)/.test(supa),
+    "nothing in this store touches memories — that table belongs to signed-in users");
+
+  const migration = fs.readFileSync(
+    path.join(ROOT, "supabase/migrations/0011_vent_user_carve.sql"), "utf8");
+  ok(/add column if not exists carve/.test(migration),
+    "0011 is additive and idempotent, so applying it twice is safe");
+  ok(/carve is null or char_length/.test(migration),
+    "and null is a legal value, because clearing the carve has to be possible");
 
   // ── the bounds ──────────────────────────────────────────────────────────
   ok(!worthCarving(2, false), "two exchanges is not a wound worth carving");
@@ -1778,6 +1811,21 @@ await checkAsync("22 The carve is kept, read back, and erased with them", async 
   is(await store.getCarve(uid), "sharpened line",
     "writing again sharpens the one line rather than stacking a second");
 
+  // Clearing one line without burning the whole history. Null, not "" — the
+  // column is `check (carve is null or char_length(carve) between 1 and 200)`,
+  // so an empty string is a constraint violation in Postgres and a perfectly
+  // happy value in FileStore: the same split that put this in the wrong table.
+  ok(await store.setCarve(uid, null), "the carve can be cleared on its own");
+  is(await store.getCarve(uid), null, "and it is gone");
+  const routeSrc = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
+  ok(/setCarve\(userId, null\)/.test(routeSrc),
+    "the delete path clears with null rather than an empty string");
+  ok(/searchParams\.get\("carve"\)/.test(routeSrc),
+    "and there is a door for that one line, anon-scoped like the rest");
+  ok(/carve: await store\.getCarve\(userId\)/.test(routeSrc),
+    "the person can read what was written about them before deciding");
+
+  await store.setCarve(uid, "money fear / firstborn who cannot say no");
   await store.deleteAll(uid);
   is(await store.getCarve(uid), null,
     "and clearing their id takes the carve with it — not only the vents");

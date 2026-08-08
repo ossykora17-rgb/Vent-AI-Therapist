@@ -38,15 +38,6 @@
  * message.
  */
 
-/**
- * The one key this product writes into `memories`.
- *
- * That table is general key/value with `unique (user_id, key)`. One constant,
- * imported by both stores, so a typo cannot quietly create a second row that
- * nothing ever reads — the failure mode of every string used in two places.
- */
-export const CARVE_KEY = "carve";
-
 /** Below this many exchanges, there is nothing whole enough to carve. */
 export const CARVE_FLOOR = 3;
 
