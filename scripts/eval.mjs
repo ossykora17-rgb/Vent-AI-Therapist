@@ -670,6 +670,7 @@ check("15b The reply knows where in the session it is, or says nothing", () => {
 // "Invalid path specified in request URL" for one of them and the same
 // sentence was misread three times.
 const { supabaseBase } = await app("src/lib/env.ts");
+const { FULL_CONTRACT } = await app("src/lib/store/contract.ts");
 
 check("16 The store asks PostgREST for something it can parse", () => {
   // A project URL is an origin. supabase-js appends /rest/v1 itself, so a
@@ -712,6 +713,21 @@ check("16 The store asks PostgREST for something it can parse", () => {
   const joins = [...store.matchAll(/\.join\(\s*"([^"]*)"\s*\)/g)].map((m) => m[1]);
   for (const j of joins) {
     is(j, ",", "a select list built by join uses a bare comma");
+  }
+
+  // The contract is a select list too, and health sends it verbatim.
+  for (const [table, cols] of Object.entries(FULL_CONTRACT)) {
+    ok(!/\s/.test(cols), `the ${table} contract carries no whitespace`, cols);
+    ok(cols.length > 0, `the ${table} contract names at least one column`);
+  }
+
+  // Every table the store touches has to be in the contract, or health is
+  // reporting green on a subset again — which is exactly how nine tables went
+  // unchecked while two looked fine.
+  const touched = [...new Set([...store.matchAll(/\.from\("([a-z_]+)"\)/g)].map((m) => m[1]))];
+  ok(touched.length >= 6, "the store's tables are found at all", touched.join(", "));
+  for (const t of touched) {
+    ok(t in FULL_CONTRACT, `${t} is covered by the schema contract`);
   }
 });
 
