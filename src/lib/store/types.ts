@@ -114,9 +114,11 @@ export interface Store {
   /**
    * The carve — eight words for the wound, from the last session that had one.
    *
-   * Narrow on purpose. `memories` is a general key/value table and a generic
-   * `get(key)` would invite anything to write anything into it; these two
-   * methods are the only door, and `CARVE_KEY` is the only key they use.
+   * One column on the person's own row — `vent_users.carve`, added in 0011 —
+   * so it is deleted with them and no delete path has to remember it exists.
+   * It was briefly written to `public.memories`, whose `user_id` references
+   * `auth.users(id)`: an id space anonymous venters are not in, so Postgres
+   * rejected every write while `FileStore` accepted them all.
    *
    * Null is the ordinary answer, not an error: no store, no row, a table that
    * is not there, a read that threw. Every one of those means the next
@@ -124,8 +126,18 @@ export interface Store {
    * existed. Nothing downstream is allowed to treat null as a failure.
    */
   getCarve(userId: string): Promise<string | null>;
-  /** Returns whether the row actually landed. Nothing may claim it did otherwise. */
-  setCarve(userId: string, carve: string): Promise<boolean>;
+  /**
+   * Write the carve, or clear it with null.
+   *
+   * Null rather than `""`: the column is
+   * `check (carve is null or char_length(carve) between 1 and 200)`, so an
+   * empty string is a constraint violation in Postgres and a perfectly happy
+   * value in `FileStore` — the same local-works/production-fails split that
+   * put the carve in the wrong table to begin with.
+   *
+   * Returns whether the row actually landed. Nothing may claim it did otherwise.
+   */
+  setCarve(userId: string, carve: string | null): Promise<boolean>;
 
   deleteAll(userId: string): Promise<void>;
 

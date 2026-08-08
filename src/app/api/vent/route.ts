@@ -405,6 +405,20 @@ async function handleGET(request: Request) {
   return NextResponse.json(
     {
       vents: await store.listVents(userId, HISTORY_LIMIT),
+      /*
+        The one sentence in here nobody wrote themselves.
+
+        `memories-list.tsx` says it plainly: long-term memory without a delete
+        button is not a feature. The Carver writes a line *about* a person, and
+        the page where they take their words back was the only place it could
+        honestly live — invisible memory is the thing every companion app is
+        rightly distrusted for.
+
+        It is anon-scoped like everything else on this route. `/api/memories`
+        cannot serve it: that endpoint is behind `requireUser()` and almost
+        nobody here is signed in.
+      */
+      carve: await store.getCarve(userId),
       persisted: true,
       storage: store.kind,
     },
@@ -430,6 +444,18 @@ async function handleDELETE(request: Request) {
 
   const userId = await store.findUserId(anonId);
   if (!userId) return NextResponse.json({ deleted: 0, persisted: true, storage: store.kind });
+
+  // The carve on its own. "Clear everything" already takes it, but a person
+  // who wants that one line gone should not have to burn their whole history
+  // to do it — the sentence they did not write is exactly the one they are
+  // most likely to want removed on its own.
+  if (url.searchParams.get("carve") === "1") {
+    await store.setCarve(userId, null);
+    return NextResponse.json(
+      { deleted: "carve", persisted: true, storage: store.kind },
+      { headers: { "cache-control": "no-store" } },
+    );
+  }
 
   if (ventId) await store.deleteVent(userId, ventId);
   else await store.deleteAll(userId);
