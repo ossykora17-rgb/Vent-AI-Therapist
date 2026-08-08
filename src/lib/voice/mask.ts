@@ -96,6 +96,51 @@ export function sweepHz(ratio: number): number {
   return distance < 1e-6 ? 0 : distance / WINDOW_S;
 }
 
+/**
+ * A sawtooth whose ramp really does span −1 to +1 across one period.
+ *
+ * `type = "sawtooth"` does not, and that is the whole reason this exists.
+ * The built-in waveforms are *normalized*, and the spec leaves the
+ * normalization to the implementation — Chromium scales the wave so its
+ * absolute peak is 1 **including Gibbs overshoot at the discontinuity**, which
+ * shrinks the linear part of the ramp. The delay's rate of change is that
+ * slope, and the pitch shift is that rate, so a browser's cosmetic choice
+ * about peak amplitude was silently deciding how far somebody's voice moved.
+ *
+ * Measured in Chromium on the real module: 220 Hz came out at 183 Hz going
+ * down and 266.5 Hz going up — 318 and 332 cents where 400 was asked for,
+ * the same 0.813 factor in both directions. A systematic amplitude error, not
+ * a sign or phase mistake.
+ *
+ * `disableNormalization` turns that off, so the coefficients mean what they
+ * say: the standard sawtooth series, amplitude exactly ±1 in the ramp, slope
+ * exactly 2 per period, in every browser rather than in this one.
+ *
+ * Calibrating a fudge factor against Chromium was the other option and it is
+ * the trap this repo is built around — a constant tuned to the shape its
+ * author is standing in, wrong on the first phone that normalizes differently
+ * and wrong invisibly, because nobody can hear four semitones versus three.
+ */
+const HARMONICS = 256;
+let cachedWave: { ctx: BaseAudioContext; wave: PeriodicWave } | null = null;
+
+function rampWave(ctx: BaseAudioContext): PeriodicWave {
+  if (cachedWave?.ctx === ctx) return cachedWave.wave;
+
+  const real = new Float32Array(HARMONICS + 1);
+  const imag = new Float32Array(HARMONICS + 1);
+  // s(t) = (2/π) Σ (−1)^(k+1) sin(2πkt)/k — the textbook sawtooth. Enough
+  // harmonics that the ramp is straight and the ringing stays pinned to the
+  // discontinuity, where the crossfade is already holding this line at zero.
+  for (let k = 1; k <= HARMONICS; k++) {
+    imag[k] = ((2 / Math.PI) * (k % 2 === 1 ? 1 : -1)) / k;
+  }
+
+  const wave = ctx.createPeriodicWave(real, imag, { disableNormalization: true });
+  cachedWave = { ctx, wave };
+  return wave;
+}
+
 export interface Mask {
   /** The track to publish in place of the raw microphone. */
   track: MediaStreamTrack;
@@ -145,14 +190,32 @@ export function maskMicrophone(
   // The two lines, half a cycle apart.
   const lines = [0, 0.5].map((phase) => {
     const delay = ctx.createDelay(WINDOW_S * 2);
-    // Start each line in the middle of its own sweep so neither begins at a
-    // discontinuity.
-    delay.delayTime.value = WINDOW_S * phase;
+    /*
+      The centre of the excursion, for both lines — not the line's phase.
+
+      This was `WINDOW_S * phase`, which is **zero** for the first line. An
+      oscillator connected to an AudioParam is summed with that param's value,
+      so line one's delay swung 0 ± WINDOW_S/2 — half of every cycle asking
+      for a negative delay, which `DelayNode` clamps to zero. Clamped delay is
+      no delay, and no delay is no pitch shift: for half of each cycle that
+      line published the microphone unchanged.
+
+      It cost about a fifth of the intended shift — 318 cents measured where
+      400 was asked for — and the ear reads that as a voice that is merely a
+      bit deeper rather than one you cannot place.
+
+      Phase between the two lines is a start-time offset and is applied below.
+      It was doing double duty here as a DC offset, and the two are not the
+      same thing: one decides *when* a line resets, this decides *where the
+      delay sits*, and it has to be WINDOW_S / 2 for both or the swing leaves
+      the legal range.
+    */
+    delay.delayTime.value = WINDOW_S / 2;
 
     // Sawtooth sweeps the delay across the window. Amplitude is half the
     // window because an oscillator swings both ways around its offset.
     const sweep = ctx.createOscillator();
-    sweep.type = "sawtooth";
+    sweep.setPeriodicWave(rampWave(ctx));
     sweep.frequency.value = hz;
     const sweepDepth = ctx.createGain();
     // Downward shift needs a lengthening delay, upward a shortening one.
@@ -174,13 +237,43 @@ export function maskMicrophone(
     return { sweep, shape, phase };
   });
 
-  // Phase offset by start time — half a period for the second line. Web Audio
-  // has no phase parameter, and starting late is the standard way to get one.
+  /*
+    Phase, by start time — Web Audio has no phase parameter, so starting an
+    oscillator late is the standard way to get one.
+    Two offsets are needed, and only one of them was here.
+
+    **Between the lines**: half a period, so one line is mid-sweep while the
+    other resets. That was correct.
+
+    **Between each line's sweep and its own crossfade**: a quarter period, and
+    this was missing. Web Audio's sawtooth starts at 0, climbs to +1 at T/2,
+    jumps to −1, and returns to 0 at T — so the discontinuity, the instant the
+    delay line snaps back and the audio tears, is at **T/2**. Its triangle
+    started at the same moment, and a triangle at T/2 is passing through
+    **zero**, which this maps to gain 0.5. So the line that was mid-tear was
+    playing at half volume instead of being muted, every single cycle, twice a
+    second.
+
+    Measured rather than reasoned about, in Chromium, on the real module: a
+    220 Hz tone came out with its dominant partial at 183 Hz — a 318-cent
+    shift where 400 was intended — and **the original 220 Hz still present,
+    only 10.6 dB down**. That second number is the one that matters. The whole
+    promise of this file is that a cousin cannot place the voice, and pitch is
+    the strongest cue a listener has. Publishing the unshifted fundamental at
+    a third of the amplitude is not a partial mask; it is the real voice with
+    a deeper one mixed over it.
+
+    A triangle is at −1, and this crossfade therefore at gain 0, a quarter
+    period before the sawtooth's jump. So the shape has to lead the sweep by
+    T/4 — done here by starting the sweep a quarter period later, which keeps
+    both oscillators starting within one period of each other.
+  */
   const t0 = ctx.currentTime + 0.02;
+  const quarter = 0.25 / hz;
   for (const { sweep, shape, phase } of lines) {
     const at = t0 + phase / hz;
-    sweep.start(at);
     shape.start(at);
+    sweep.start(at + quarter);
   }
 
   const track = destination.stream.getAudioTracks()[0];

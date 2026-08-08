@@ -883,6 +883,55 @@ check("15e The voice mask shifts far enough to break recognition", () => {
   is(sweepHz(1), 0, "no shift means no sweep, and no division by zero");
   ok(sweepHz(down) > 0 && sweepHz(down) < 10, "and it stays in audio-rate sanity", `${sweepHz(down)}`);
 
+  /*
+    Everything above is arithmetic about numbers this file exports, and every
+    one of it passed while the graph those numbers describe shifted a voice by
+    three semitones and published the original underneath it.
+
+    The module was finally run — in Chromium, a 220 Hz tone through the real
+    `maskMicrophone`, spectrum measured off the masked track. Three defects,
+    none of which any amount of reasoning about `shiftRatio` could have found:
+
+    1. The triangle crossfade sat 90° out of phase with the sawtooth's
+       discontinuity, so the line that was mid-tear played at half gain
+       instead of muted. **The unshifted voice came through at −10.6 dB** —
+       the failure this whole file exists to prevent.
+    2. The delay's DC offset was `WINDOW_S * phase`, which is zero for the
+       first line, so half of every cycle asked for a negative delay and got
+       clamped. Six spectral peaks instead of one.
+    3. `type = "sawtooth"` is *normalized*, and the spec leaves how to an
+       implementation. Chromium scales it to peak ±1 including Gibbs
+       overshoot, shrinking the ramp slope — and the ramp slope is the pitch
+       shift. Both directions came out at 0.813× the intended interval.
+
+    After: 220 Hz → 175.0 Hz down (−397 cents, one FFT bin off −400) and
+    277.2 Hz up (+400 exactly), a single peak each way, no residual.
+
+    A script with no browser cannot re-measure that. What it can do is fail
+    the three source-level shapes that produced it, so none of them comes back
+    quietly — which matters more here than anywhere else in this suite,
+    because nobody can *hear* three semitones where four was promised.
+  */
+  // Code only. The explanation of each of these fixes quotes the old broken
+  // form, so a checker that reads comments reports the bug it was just told
+  // about — which is exactly what happened to the accessible-name check two
+  // hours ago. Strip first, assert second.
+  const mask = fs
+    .readFileSync(path.join(ROOT, "src/lib/voice/mask.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "");
+
+  ok(/disableNormalization: true/.test(mask),
+    "the sweep runs on an un-normalized wave, not a browser's idea of ±1");
+  ok(!/type = "sawtooth"/.test(mask),
+    "the built-in sawtooth is not used — its ramp slope is implementation-defined");
+  ok(/delayTime\.value = WINDOW_S \/ 2/.test(mask),
+    "the delay sits at the centre of its excursion, so it never clamps at zero");
+  ok(/shape\.start\(at\)[\s\S]{0,80}sweep\.start\(at \+ quarter\)/.test(mask),
+    "the crossfade leads the sweep by a quarter period, so the tear happens at zero gain");
+  ok(/const quarter = 0\.25 \/ hz/.test(mask),
+    "and that quarter is derived from the sweep rate rather than typed");
+
   // 100ms of delay is the latency somebody actually feels in conversation.
   ok(WINDOW_S <= 0.12, "the added latency stays under what a conversation notices");
 
