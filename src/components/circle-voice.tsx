@@ -35,6 +35,11 @@ interface Props {
 export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
   const [status, setStatus] = React.useState<Status>("idle");
   const [error, setError] = React.useState<string | null>(null);
+  // Shut on arrival. See the push-to-talk comment below for why.
+  const [talking, setTalking] = React.useState(false);
+  const [latched, setLatched] = React.useState(false);
+  // Distinct from the two above: this is the Keeper closing your microphone,
+  // which is not yours to undo. Push-to-talk is a choice; this is governance.
   const [muted, setMuted] = React.useState(false);
   const [seat, setSeat] = React.useState<string | null>(null);
   const [voices, setVoices] = React.useState<string[]>([]);
@@ -184,9 +189,16 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
         );
       } else {
         maskRef.current = masked;
-        await room.localParticipant.publishTrack(masked.track, {
+        const publication = await room.localParticipant.publishTrack(masked.track, {
           source: Track.Source.Microphone,
         });
+        // Closed on arrival. A published track is live by default, so without
+        // this the room hears the first thing you say before you have decided
+        // to say it — which for somebody who just walked into a room of
+        // strangers is the worst possible first second.
+        await publication.mute();
+        setTalking(false);
+        setLatched(false);
       }
 
       setSeat(grant.identity);
@@ -235,36 +247,95 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
     }
   }
 
-  async function toggleMute() {
+  /**
+   * Open or close the microphone, once, in one place.
+   *
+   * `setMicrophoneEnabled` manages LiveKit's *own* microphone track and this
+   * room does not have one — the published track is the masked graph,
+   * published by hand. Calling it did nothing to what the room heard and
+   * would have opened a second, unmasked track.
+   *
+   * `audioTrackPublications` rather than a source comparison: this room
+   * publishes exactly one audio track and never any video, so the first entry
+   * is it. That also avoids `Track.Source`, which is only in scope inside
+   * `join` — and CLAUDE.md's standing rule is to use the SDK's own enums
+   * rather than hand-written values, so needing neither is the right answer.
+   *
+   * The raw-stream fallback means the control is never a no-op. A microphone
+   * control that silently fails is the one control in here that has to work.
+   */
+  const setOpen = React.useCallback(async (open: boolean) => {
     const room = roomRef.current;
     if (!room) return;
-    const next = !muted;
-
-    // `setMicrophoneEnabled` manages LiveKit's *own* microphone track, and
-    // this room does not have one — the published track is the masked graph,
-    // published by hand. Calling it here did nothing to what the room hears
-    // and, worse, would have opened a second unmasked track to mute.
-    //
-    // Mute the publication that actually exists instead. Falling back to
-    // stopping the raw stream if there is no publication means the button is
-    // never a no-op: a mute control that silently fails is the one control in
-    // here that has to work.
-    // `audioTrackPublications` rather than a source comparison: this room
-    // publishes exactly one audio track and no video ever, so the first entry
-    // is it. That also avoids reaching for `Track.Source`, which is only in
-    // scope inside `join` — and CLAUDE.md's standing rule is to use the SDK's
-    // own enums rather than hand-written values, so the right move is to need
-    // neither.
     const pub = [...room.localParticipant.audioTrackPublications.values()][0];
-
     if (pub) {
-      if (next) await pub.mute();
-      else await pub.unmute();
+      if (open) await pub.unmute();
+      else await pub.mute();
     } else {
-      micRef.current?.getAudioTracks().forEach((t) => (t.enabled = !next));
+      micRef.current?.getAudioTracks().forEach((t) => (t.enabled = open));
     }
-    setMuted(next);
-  }
+  }, []);
+
+  /*
+   * Hold to speak, and a latch for when you cannot hold anything.
+   *
+   * An open microphone in a six-seat room leaks more than a voice. A
+   * generator, the call to prayer, a street, somebody in the next room saying
+   * your actual name — ambient sound places a person as reliably as their
+   * voice does, and the mask does nothing about any of it. Six open mics also
+   * make a circle unlistenable, which is the ordinary reason every voice
+   * product ends up here.
+   *
+   * So the microphone is shut on arrival and opens while you hold the bar.
+   *
+   * The latch is not a convenience. Somebody crying cannot hold a button, and
+   * a product that requires steady hands from people at their worst has
+   * chosen the wrong default for the exact moment it exists for. Tap the lock
+   * and the mic stays open; it is one tap back.
+   */
+  const setTalkingSafely = React.useCallback(
+    (on: boolean) => {
+      setTalking(on);
+      void setOpen(on || latched);
+    },
+    [setOpen, latched],
+  );
+
+  const toggleLatch = React.useCallback(() => {
+    const next = !latched;
+    setLatched(next);
+    void setOpen(next || talking);
+  }, [latched, talking, setOpen]);
+
+  // Space is the hold key. Ignored while typing, so it never swallows a space
+  // in the message box — the transcript is right there and people use it.
+  React.useEffect(() => {
+    if (status !== "live") return;
+    const typing = (t: EventTarget | null) =>
+      t instanceof HTMLElement &&
+      (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || e.repeat || typing(e.target)) return;
+      e.preventDefault();
+      setTalkingSafely(true);
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || typing(e.target)) return;
+      setTalkingSafely(false);
+    };
+    // A tab-away with the key still down would otherwise leave it open.
+    const blur = () => setTalkingSafely(false);
+
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
+    };
+  }, [status, setTalkingSafely]);
 
   if (!enabled) return null;
 
@@ -305,14 +376,17 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
           {status === "live" && (
             <button
               type="button"
-              onClick={toggleMute}
-              aria-pressed={muted}
+              onClick={toggleLatch}
+              aria-pressed={latched}
+              disabled={muted}
+              title={latched ? "Close the microphone" : "Keep the microphone open"}
               className={cn(
                 "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
-                muted ? "border-line/40 bg-line/10" : "border-line/15",
+                latched ? "border-gold bg-gold/15" : "border-line/15",
+                muted && "opacity-40",
               )}
             >
-              {muted ? "Unmute" : "Mute"}
+              {latched ? "Open mic · on" : "Open mic"}
             </button>
           )}
           <button
@@ -329,6 +403,47 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
           </button>
         </div>
       </div>
+
+      {/*
+        The bar you hold to speak.
+
+        Full width and 64px tall because it is held with a thumb, often by
+        somebody who is not steady. Every pointer exit closes it — up, cancel,
+        and leave — so a finger sliding off the edge shuts the microphone
+        rather than leaving it open on a person who thinks they stopped.
+
+        `touch-none` stops the browser treating the press as a scroll gesture
+        and stealing the pointerup, which is the standard way this control
+        breaks on Android.
+      */}
+      {status === "live" && !muted && (
+        <div className="mt-4">
+          <button
+            type="button"
+            aria-pressed={talking || latched}
+            aria-label="Hold to speak"
+            onPointerDown={() => setTalkingSafely(true)}
+            onPointerUp={() => setTalkingSafely(false)}
+            onPointerCancel={() => setTalkingSafely(false)}
+            onPointerLeave={() => setTalkingSafely(false)}
+            className={cn(
+              "flex h-16 w-full touch-none select-none items-center justify-center rounded-card border text-[15px] font-semibold transition-all duration-200",
+              talking || latched
+                ? "border-gold bg-gold/20 text-ink"
+                : "border-line/20 text-ash",
+            )}
+          >
+            {latched
+              ? "Microphone open"
+              : talking
+                ? "Speaking — let go to stop"
+                : "Hold to speak"}
+          </button>
+          <p className="label-mono mt-2 text-center">
+            {latched ? "Tap “Open mic” to close it again" : "Or hold the space bar"}
+          </p>
+        </div>
+      )}
 
       {status === "live" && voices.length > 0 && (
         <ul className="mt-3 flex flex-wrap gap-2" aria-live="polite">
