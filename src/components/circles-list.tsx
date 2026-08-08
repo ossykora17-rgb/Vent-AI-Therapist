@@ -5,7 +5,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { anonId } from "@/lib/anon";
-import { CHAIRS, chairLabel, tensionForChair } from "@/lib/vent/chairs";
+import { CHAIRS, tensionForChair } from "@/lib/vent/chairs";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -137,12 +137,28 @@ export function CirclesList() {
           </div>
         )}
 
+        {/*
+          No plate, not centred — the same correction as the chat empty state.
+          An empty lobby should look like an empty lobby.
+
+          And it answers the question somebody actually has before sitting down
+          with five strangers, which is not "what is a circle" but "will anyone
+          know it was me". That answer belongs here, before the button, not
+          inside the room after they have committed.
+        */}
         {!loading && circles.length === 0 && !creating && (
-          <div className="glass mt-4 p-6 text-center">
-            <p className="font-display text-xl font-bold">Nobody is sitting yet.</p>
-            <p className="mt-2 text-sm leading-relaxed text-ash">
+          <div className="mt-6">
+            <p className="font-display text-[22px] leading-[1.3]">
+              Nobody is sitting yet.
+            </p>
+            <p className="mt-3 max-w-[46ch] text-[15px] leading-[1.7] text-ash">
               Six seats, forty-five minutes, no advice. Open one and someone
               carrying the same thing will find it.
+            </p>
+            <p className="mt-3 max-w-[46ch] text-[15px] leading-[1.7] text-ash">
+              You are a seat number, never a name. If you speak, your voice is
+              pitched down first — not recognisably yours. Nothing said in a
+              circle is kept after it closes.
             </p>
             <button
               type="button"
@@ -219,6 +235,20 @@ export function CirclesList() {
               : Math.max(0, Math.round((new Date(c.ends_at).getTime() - now) / 60000));
             return (
               <li key={c.id}>
+                {/*
+                  What a person needs to decide whether to sit down, and
+                  nothing about the stranger who opened it.
+
+                  This showed the opener's chair and their pressure reading —
+                  "Tight edge · pressure 72" — to everybody browsing the lobby.
+                  That is one person's tension score, published to strangers,
+                  in the product whose non-negotiable is anonymity. They chose
+                  it to seed a room, not to be described by it.
+
+                  It was not even useful: nobody picks a circle by another
+                  person's slider. They pick by what it is about, whether there
+                  is room, and how long is left.
+                */}
                 <Link href={`/circles/${c.id}`} className="glass block p-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <span aria-hidden="true" className="h-2 w-2 rounded-full bg-gold motion-safe:animate-pulse" />
@@ -226,13 +256,31 @@ export function CirclesList() {
                       {TAGS.find(([v]) => v === c.tag)?.[1] ?? "Anything"}
                     </span>
                     <span className="label-mono ml-auto">
-                      {c.seats}/6 · {mins ?? "—"} min left
+                      {mins ?? "—"} min left
                     </span>
                   </div>
-                  <p className="mt-2 text-[15px] leading-[1.6]">
-                    {chairLabel(c.chair_picked)} ·
-                    pressure {c.pressure_seeded ?? "—"}
-                  </p>
+
+                  {/* Six seats drawn as six seats. "3/6" is a fraction; this
+                      is a room you can see the shape of at a glance, and it
+                      says the thing that matters — whether there is space. */}
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="flex gap-1.5" aria-hidden="true">
+                      {Array.from({ length: 6 }, (_, i) => (
+                        <span
+                          key={i}
+                          className={cn(
+                            "h-1.5 w-6 rounded-full",
+                            i < c.seats ? "bg-gold" : "bg-line/15",
+                          )}
+                        />
+                      ))}
+                    </span>
+                    <span className="label-mono ml-auto">
+                      {c.seats === 6
+                        ? "full"
+                        : `${6 - c.seats} ${6 - c.seats === 1 ? "seat" : "seats"} open`}
+                    </span>
+                  </div>
                 </Link>
               </li>
             );
