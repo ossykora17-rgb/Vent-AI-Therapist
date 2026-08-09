@@ -20,6 +20,7 @@ import path from "node:path";
 import { app, ROOT } from "./app-imports.mjs";
 
 const { classify } = await app("src/lib/vent/intent.ts");
+const { groundNow } = await app("src/lib/vent/grounding.ts");
 const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS, ALL_TACTICS } =
   await app("src/lib/vent/tactics.ts");
 const { buildFlavour } = await app("src/lib/flavour/profile.ts");
@@ -766,11 +767,8 @@ check("15c The pattern reaches the prompt, and is forbidden from being announced
 
   const block = patternBlock(p);
   ok(block.includes("WHAT KEEPS BRINGING THEM BACK"), "the block is labelled for the model");
-  ok(/do not announce it/i.test(block), "and it is told, in words, not to say it");
-  ok(
-    /chart talking/i.test(block),
-    "with the reason — being counted is not the same as being known",
-  );
+  ok(/never goes in front of them/i.test(block),
+    "and the count in particular is kept away from them");
   ok(
     /most\s+valuable thing they will ever type/i.test(block),
     "and if they name it themselves, that is theirs",
@@ -787,6 +785,13 @@ check("15c The pattern reaches the prompt, and is forbidden from being announced
     pattern: p,
   });
   ok(built.includes("WHAT KEEPS BRINGING THEM BACK"), "and buildSystemPrompt carries it");
+  // The do-not-recite ban lives in CONTEXT_RULES now — one statement covering
+  // the pattern, the carve and the opening. Asserted where it has to be true:
+  // in the prompt the model is actually sent.
+  ok(/NEVER SAY IT BACK/.test(built),
+    "and the ban on reading it back rides along with it");
+  ok(/brought\s*\n?\s*this up four times/.test(built),
+    "with the counting example, so the ban is concrete rather than abstract");
   ok(
     !buildSystemPrompt({
       grounding: { date: "8 August 2026", time: "05:30", iso: "2026-08-08", lines: [] },
@@ -1834,11 +1839,20 @@ check("21 The door's answers reach the room, and personality has one home", () =
   });
   ok(/tangled/.test(full), "the object carries how it behaves, not just its name");
   ok(/guilt/.test(full) && /tiredness/.test(full), "both words reach the prompt");
-  ok(/Do not say it back/.test(full),
-    "and the model is forbidden from reading the form back to them");
-  ok(/tapped, not written/.test(full),
+  ok(/tapped rather than written/.test(full),
     "the low fidelity of a six-word list is stated, not hidden");
-  ok(/their sentence wins/.test(full),
+  // The recite ban and "their words win" are stated once, in CONTEXT_RULES,
+  // for all three assembled blocks — so they are asserted on the assembled
+  // prompt rather than on this block.
+  const withOpening = buildSystemPrompt({
+    grounding: { date: "8 August 2026", time: "05:30", iso: "2026-08-08", lines: [] },
+    classification: { intent: "vent", realWorldTag: null, language: "en", body: null },
+    tactic: ALL_TACTICS[0], ctx: { ...base }, memory: [],
+    opening: { object: "tight_knot", carrying: "Guilt", putDown: "Tiredness" },
+  });
+  ok(/NEVER SAY IT BACK/.test(withOpening),
+    "and the model is forbidden from reading the form back to them");
+  ok(/THEIR SENTENCE OUTRANKS/.test(withOpening),
     "and what they type outranks what they tapped");
 
   // A partial answer is the normal case, not an error case.
@@ -1973,11 +1987,19 @@ await checkAsync("22 The carve is kept, read back, and erased with them", async 
   is(carveBlock(null), null, "no carve means no block");
   is(carveBlock("   "), null, "and neither does whitespace");
   const block = carveBlock("pops sick / fear of being useless son");
-  ok(/Never quote it/.test(block), "the model is forbidden from quoting it back");
+  ok(/Never tell them you remember/.test(block),
+    "the model is forbidden from claiming to remember");
   ok(/never tell them you remember/i.test(block),
     "and forbidden from claiming to remember — the house rule outranks warmth");
-  ok(/may also be wrong/i.test(block),
+  const withCarve = buildSystemPrompt({
+    grounding: { date: "8 August 2026", time: "05:30", iso: "2026-08-08", lines: [] },
+    classification: { intent: "vent", realWorldTag: null, language: "en", body: null },
+    tactic: ALL_TACTICS[0], ctx: { ...base }, memory: [],
+    carve: "pops sick / fear of being useless son",
+  });
+  ok(/may simply\s*\n?\s*be wrong/.test(withCarve),
     "it is marked fallible, because it was written about them and not by them");
+  ok(/NEVER SAY IT BACK/.test(withCarve), "and quoting it back is banned");
 
   // ── the promise that makes it safe to hold at all ───────────────────────
   //
@@ -2149,6 +2171,100 @@ check("23 Coverage drift fires on a regression and stays quiet on good work", ()
     "the independent corpus is big enough to be a real window", `${scoredCount} scoreable`);
   is(coverageDrift(independent), null,
     "and hand-written replies from a corpus this metric was never tuned on do not trip it");
+});
+
+// ── 24. the prompt has a size, and nobody had ever looked at it ───────────
+//
+// Every check in this suite tests what the prompt *says*. None of them
+// noticed how big it had become. Measured for the first time: ~3,100 tokens
+// of system prompt on every real vent, sent before the person's own message
+// is even read.
+//
+// Two things were wrong with the shape, and I wrote one of them this session.
+// A quarter of the prompt was a single prohibition block, and `HOW THEY
+// WALKED IN` — three words somebody tapped off a list of six — had become the
+// second-largest thing in it, larger than WHO YOU ARE and HOW YOU SPEAK put
+// together. Nothing could have failed that, so it grew.
+//
+// This is the credit policy's blind spot too. Check 19 counts *how many*
+// model calls a vent costs and has never cared how large one is, which is
+// half the bill on a product whose whole economic argument is that most
+// messages never reach a model at all.
+check("24 The system prompt has a budget, and every block earns its place", () => {
+  const grounding = groundNow();
+  const message =
+    "my dad's test results came back and honestly i don't know, i've been in " +
+    "communication with mumcy but i'm holding am for mind";
+  const classification = classify(message);
+  const ctx = {
+    ...classification, message, pressure: 78, duality: null, mood: null,
+    ventCount: 6, recentTactics: ["exact_mirror", "thought_record"],
+  };
+  const tactic = selectTactic(ctx);
+
+  // Everything switched on at once: the most expensive turn this can produce.
+  const heaviest = buildSystemPrompt({
+    grounding, classification, tactic, ctx,
+    memory: Array.from({ length: 6 }, (_, i) => ({
+      user_message: "work don finish me and i never rest since monday, my chest dey tight",
+      ai_reply: "Sixteen hours.",
+      created_at: new Date(Date.now() - i * 86_400_000).toISOString(),
+      body_tapped: "chest", chair_picked: "tight_edge", mood_score: 4,
+    })),
+    flavour: buildFlavour([
+      "abeg partner shouted for chambers again, the brief is due",
+      "i missed gym, leg day gone",
+    ]),
+    turnsToday: 3,
+    pattern: { tag: "family", times: 4, spanDays: 12, dropHere: 12, dropElsewhere: 20 },
+    message,
+    opening: { object: "tight_knot", carrying: "Guilt", putDown: "Tiredness" },
+    carve: "pops sick / fear of being useless son",
+  });
+
+  // No tokenizer dependency — the gate has none and keeps none. Characters
+  // per token is stable enough for English prose to budget against, and a
+  // budget that is roughly right beats one that does not exist.
+  const tokens = Math.round(heaviest.length / 3.7);
+  const BUDGET = 3200;
+  ok(tokens <= BUDGET,
+    "the heaviest possible prompt stays inside its budget",
+    `${tokens} tokens vs ${BUDGET}`);
+
+  // A floor as well as a ceiling. If this collapses, a block stopped
+  // rendering and every reply quietly got worse with nothing failing.
+  ok(tokens > 1800, "and it has not silently lost half its content", `${tokens}`);
+
+  /*
+    The three assembled blocks share one set of rules rather than each
+    carrying its own.
+
+    They said the same three things — do not recite it, use it to aim, their
+    words outrank it — in three different long-form wordings. Repetition is
+    not reinforcement: one rule in three phrasings reads as three rules of
+    unclear priority, and it spends attention the person's message needs.
+  */
+  const src = fs.readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+  ok(/const CONTEXT_RULES = /.test(code), "the shared rules exist");
+  is((code.match(/Do not say it back|Never say it back|NEVER SAY IT BACK/g) ?? []).length, 1,
+    "and the do-not-recite rule is stated exactly once in the whole prompt");
+
+  // Nothing lost in the consolidation: all three prohibitions still reach a
+  // model that is handed any assembled context.
+  ok(/NEVER SAY IT BACK/.test(heaviest), "the recite ban survives");
+  ok(/LET IT AIM/.test(heaviest), "so does the aim rule");
+  ok(/THEIR SENTENCE OUTRANKS/.test(heaviest), "and so does their words winning");
+
+  // And a turn with no assembled context does not pay for rules about it.
+  const bare = buildSystemPrompt({
+    grounding, classification, tactic, ctx, memory: [], message,
+  });
+  ok(!/WHAT THE ROOM HANDS YOU/.test(bare),
+    "a turn with no carve, pattern or opening is not charged for their rules");
+  ok(Math.round(bare.length / 3.7) < tokens,
+    "a first-ever message costs less than a sixth session",
+    `${Math.round(bare.length / 3.7)} vs ${tokens}`);
 });
 
 // ── 19. the credit policy, as something a script can fail ─────────────────
