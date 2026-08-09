@@ -23,16 +23,82 @@ export type Language = "en" | "pidgin";
  * Checked before anything else and never sent to a model.
  * Ordering matters: a crisis message that also mentions work is still a crisis.
  */
+/*
+  This list caught nine phrasings and missed the ones people actually use.
+
+  Found by the first run of `npm run quality`, for zero tokens, on its first
+  three cases. All of these routed to `vent` and were answered with a generic
+  tactic instead of the crisis line:
+
+    "i don't want to be here anymore, i have been thinking about ending it"
+    "i no wan dey alive again, i don tire for this life"
+    "work is fine but honestly some days i think everyone would be
+     better off without me"
+    "i wan die"
+    "i don't want to live anymore"
+    "better off without me"
+    "no reason to go on"
+
+  The Pidgin gap is the worst of it. This product is Nigerian in root, its own
+  voice rules say people write in Pidgin, and **"i wan die" — the most direct
+  sentence available in the language — was a generic tactic.** The old list
+  required "want to die" in English, and had exactly two Pidgin patterns.
+
+  ## Passive ideation counts
+
+  Several of the additions are passive rather than active: wanting not to
+  exist, wanting not to wake up, believing people would be better off. Every
+  standard screening instrument treats those as positive, and they are how
+  most people say it first — the explicit sentence usually comes later, if it
+  comes at all. A router that waits for "kill myself" is waiting for the
+  version many people never write down.
+
+  ## On false positives
+
+  Routing here gates the session, which is a real cost to somebody who meant
+  something milder — and it is the right trade. The reply hands them a human
+  and says they are not alone; the miss hands somebody a breathing exercise.
+  These are kept to phrases whose plain reading is about not existing, not to
+  general despair: "i'm tired" and "i can't do this anymore" are deliberately
+  absent, because those are Tuesday for the person this is built for.
+*/
 const CRISIS = [
+  // ── active, explicit ─────────────────────────────────────────────────────
   /\bkill (myself|my self)\b/,
   /\bsuicide|suicidal\b/,
-  /\bwant to die\b/,
-  /\bend (my life|it all)\b/,
+  /\bwant(ing)? to die\b/,
+  /\bend (my life|it all|things)\b/,
+  /\b(thinking about|thought about|planning) end(ing)? it\b/,
   /\bhurt(ing)? myself\b/,
-  /\bmake e end\b/,
-  /\bno reason to (live|dey)\b/,
-  /\bbetter if i (was|were) (dead|gone)\b/,
+  /\bharm myself\b/,
   /\btake my (own )?life\b/,
+
+  // ── passive: not wanting to exist ────────────────────────────────────────
+  /\bdon'?t want to (be here|live|be alive|exist|wake up)\b/,
+  /\bdo not want to (be here|live|be alive|exist|wake up)\b/,
+  /\bnot want to be here\b/,
+  /\bno reason to (live|dey|go on|carry on|keep going)\b/,
+  /\bbetter (if i (was|were) (dead|gone)|off without me)\b/,
+  /\b(everyone|everybody|they'?d all) (would be |be |)better off without me\b/,
+  /\bwish i (was|were) (dead|gone|not here)\b/,
+  // Bare only. "I want to disappear" is passive ideation; "I want to
+  // disappear from that group chat" is a Tuesday, and the first draft of this
+  // line gated it — caught by the false-positive probes, which exist because
+  // a router that over-fires locks somebody out of the room for saying
+  // something ordinary.
+  /\bwant to disappear\b(?!\s+(from|off|out of|into)\b)/,
+
+  // ── Pidgin ───────────────────────────────────────────────────────────────
+  //
+  // "i wan die" is the sentence this list existed for and did not have.
+  /\bi (wan|won) die\b/,
+  /\bmake i die\b/,
+  /\bi no wan (dey alive|live|dey this world)\b/,
+  /\bno wan dey alive\b/,
+  /\bmake e end\b/,
+  /\bi wan comot for this world\b/,
+  /\btire for this life\b/,
+  /\bi no fit continue this life\b/,
 ];
 
 const FACTUAL = [

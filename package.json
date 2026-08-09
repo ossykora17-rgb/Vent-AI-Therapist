@@ -15,7 +15,8 @@
     "migrations": "node scripts/migrations.mjs",
     "heartbeat": "node scripts/heartbeat-data.mjs",
     "gate": "node scripts/heartbeat-data.mjs --gate",
-    "live-checks": "bash .github/live-checks.sh"
+    "live-checks": "bash .github/live-checks.sh",
+    "quality": "node scripts/quality.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

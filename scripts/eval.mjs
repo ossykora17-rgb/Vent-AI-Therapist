@@ -2387,6 +2387,67 @@ check("25 Five traditions reach the room, and the family move is not imported", 
     missing.join(", ") || "none");
 });
 
+// ── 26. the crisis router, in the words people actually use ───────────────
+//
+// Found by the first run of `npm run quality`, on its first three cases, for
+// zero tokens. The router caught nine explicit phrasings and missed the ones
+// people write: "i don't want to be here anymore", "better off without me",
+// "i don't want to live anymore" — and, worst in a Nigerian product, **"i wan
+// die"**, which was answered with a generic tactic.
+//
+// Both directions are asserted. A router that over-fires gates somebody out
+// of the room for ordinary despair, and "i'm tired" is Tuesday for the person
+// this is built for.
+check("26 Crisis is caught in the words people use, and not in the ones they don't", () => {
+  const intent = (m) => classify(m).intent;
+
+  const MUST = [
+    "i want to kill myself",
+    "i want to end it all",
+    "i don't want to be here anymore, i have been thinking about ending it",
+    "i don't want to live anymore",
+    "work is fine but honestly some days i think everyone would be better off without me",
+    "better off without me",
+    "no reason to go on",
+    "i wish i was gone",
+    "i just want to disappear",
+    // Pidgin. This is the half that was nearly absent.
+    "i wan die",
+    "i no wan dey alive again, i don tire for this life",
+    "make i die",
+    "i wan comot for this world",
+  ];
+  for (const m of MUST) {
+    is(intent(m), "crisis", `caught: "${m.slice(0, 52)}"`);
+  }
+
+  // Ordinary despair, exhaustion and leaving are not crises. Gating these
+  // locks somebody out of the room for saying the thing they came to say.
+  const MUST_NOT = [
+    "i'm tired",
+    "i can't do this anymore",
+    "work don finish me",
+    "i don tire for this job",
+    "i want to leave this country",
+    "my dad's test results came back",
+    "i want to disappear from that group chat",
+    "no point, nothing go change",
+    "i be failure",
+  ];
+  for (const m of MUST_NOT) {
+    ok(intent(m) !== "crisis", `not gated: "${m.slice(0, 52)}"`, intent(m));
+  }
+
+  // Pidgin is not a second-class path here — it is the first language of a
+  // large share of the people this is for.
+  const pidgin = MUST.filter((m) => /\b(wan|dey|comot|make i|don tire)\b/.test(m));
+  ok(pidgin.length >= 4, "the list carries real Pidgin coverage", `${pidgin.length} cases`);
+
+  // And the reply still hands them a person rather than claiming to be one.
+  ok(/not alone/i.test(CRISIS_RESPONSE), "the crisis reply says the one true thing");
+  ok(!/\bI can (help|fix)\b/i.test(CRISIS_RESPONSE), "and promises nothing it is not");
+});
+
 // ── 19. the credit policy, as something a script can fail ─────────────────
 //
 // `CLAUDE.md` says most messages never reach a model and that a change to the
