@@ -2637,6 +2637,82 @@ check("28 A lonely vent is offered a real room, or none at all", () => {
   ok(/invite && !gated/.test(chat), "and it is hidden once a crisis has gated the room");
 });
 
+// ── 29. the ceiling has two heights, and neither is a closed door ─────────
+//
+// Commandment 1 was audited for *language* and came back clean — no "out of
+// tokens", no "upgrade to continue". Nobody checked what actually happens at
+// the ceiling.
+//
+// Crisis returned above the limiter and always had. The layer underneath was
+// unguarded: somebody the depth router calls edge or grave — hopeless,
+// worthless, grieving, "i don tire" — who has typed a hundred messages in one
+// bad day got "Small small — breathe. Try again in a minute." The router knew.
+// It ran a hundred lines too late.
+check("29 The rate limiter knows who it is refusing", () => {
+  const route = fs
+    .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "");
+
+  // Order is the whole fix: the router has to run before the limiter.
+  const depthAt = route.indexOf("depthFor({");
+  const limitAt = route.indexOf("inDay >= dayCap");
+  ok(depthAt !== -1 && depthAt < limitAt,
+    "depth is decided before the limiter, not a hundred lines after it",
+    `depth@${depthAt} limit@${limitAt}`);
+
+  // Crisis still returns first, as it always has.
+  ok(route.indexOf('intent: "crisis"') < limitAt,
+    "and crisis returns above the limiter entirely");
+
+  // Two ceilings, both finite.
+  ok(/RATE_PER_DAY_EDGE = 250/.test(route), "the edge gets its own daily ceiling");
+  ok(/const dayCap = edge \? RATE_PER_DAY_EDGE : RATE_PER_DAY/.test(route),
+    "and which one applies is decided by the router");
+  ok(/const tooFast = !edge &&/.test(route),
+    "the per-minute limit does not apply at the edge — bursting is what distress looks like");
+
+  /*
+    The ceiling is decided by the message, never by a turn count.
+
+    The first draft upgraded to deep on `inDay >= 6` — the *daily* count,
+    where `depthFor` means a session's turns. Everybody with six messages in a
+    day became permanently deep: exempt from the per-minute limit and routed
+    to the expensive model. A broken limiter and a cost blowout in one line,
+    caught by an ordinary user sailing past twelve messages a minute.
+  */
+  const limitBlock = route.slice(route.indexOf("const edge ="), route.indexOf("const dayCap"));
+  ok(!/inDay >= 6/.test(limitBlock),
+    "the limiter is never reopened by a turn count");
+  ok(/history\.length >= 6/.test(route),
+    "the long-session upgrade survives, below the limiter, for routing only");
+
+  // And the refusal at the edge is not a closed door.
+  const refusal = route.slice(limitAt, limitAt + 700);
+  ok(/reply: CRISIS_RESPONSE/.test(refusal),
+    "somebody refused at the edge is handed a human, not a countdown");
+  ok(/Small small/.test(refusal),
+    "and an ordinary pause keeps its own voice, which reads like a pause");
+  ok(/gated: false/.test(refusal),
+    "the crisis lines are offered without locking the room — they were not in crisis, they were refused");
+
+  // Commandment 1, still: no paywall vocabulary anywhere a person can read.
+  const walk = (dir) =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) return walk(full);
+      return /\.tsx?$/.test(e.name) ? [full] : [];
+    });
+  const PAYWALL = /out of (tokens|credits)|upgrade to continue|limit reached|you have used your|as an AI\b/i;
+  const offenders = walk(path.join(ROOT, "src"))
+    .filter((f) => !/lib\/vent\/quality\.ts$/.test(f))
+    .filter((f) => PAYWALL.test(fs.readFileSync(f, "utf8")))
+    .map((f) => path.relative(ROOT, f));
+  ok(offenders.length === 0,
+    "nothing user-facing mentions tokens, upgrades or a limit",
+    offenders.join(", ") || undefined);
+});
+
 // ── 19. the credit policy, as something a script can fail ─────────────────
 //
 // `CLAUDE.md` says most messages never reach a model and that a change to the
