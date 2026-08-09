@@ -3494,6 +3494,110 @@ check("36 The room and the person do not sound the same", () => {
     share?.[1]);
 });
 
+// ── 38. the record, and what it refuses to say ────────────────────────────
+//
+// Arm 8 of the founder's manifesto: "last month you say you wan die, today you
+// dey laugh — make we thank God."
+//
+// The instinct is right and the delivery is not. Quoting somebody's crisis
+// sentence back to them, unannounced, is a re-exposure performed by the one
+// product they trusted not to do that. `pattern.ts` already quotes openings
+// back and already quotes only ordinary ones.
+//
+// So this quotes nothing. It counts two numbers the person set themselves —
+// the tension slider on the way in, the mood on the way out — and hands back
+// the sum. That loop has fed the tactic selector since it shipped and was
+// visible only to the machine; the one who supplied both ends never saw what
+// they added up to.
+//
+// A count a person supplied is the strongest honest claim this product can
+// make. It needs no adjectives and it is not allowed any.
+const { findTestimony, testimonySentence, TESTIMONY_FLOOR } =
+  await app("src/lib/vent/testimony.ts");
+
+check("38 The record counts what they gave, and stays quiet otherwise", () => {
+  const at = (d) => new Date(Date.UTC(2026, 6, d)).toISOString();
+  const sitting = (d, before, after) => ({
+    id: `v${d}`, user_id: "u", user_message: "the money", ai_reply: "ok",
+    created_at: at(d), tension_before: before, tension_after: after,
+    real_world_tag: "economy", mood_score: null, body_tapped: null,
+    tactic_used: "exact_mirror", intent_type: "vent",
+  });
+
+  // Nothing below the floor, and the floor is higher than the pattern's.
+  ok(TESTIMONY_FLOOR > 5,
+    "a trend costs more evidence than a recurrence", `${TESTIMONY_FLOOR} vs 5`);
+  const thin = Array.from({ length: TESTIMONY_FLOOR - 1 }, (_, i) =>
+    sitting(i + 1, 80, 40));
+  is(findTestimony(thin), null,
+    "seven perfect sittings still say nothing — a trend from too little is a horoscope");
+
+  // Unanchored rows cannot be counted at all, however many there are.
+  const unanchored = Array.from({ length: 30 }, (_, i) =>
+    sitting(i + 1, 80, null));
+  is(findTestimony(unanchored), null,
+    "a sitting with no ending was never measured, so it is not evidence");
+
+  /*
+    And it does not deliver a verdict when things are going badly.
+
+    Not because the truth is inconvenient — because "three of your eleven
+    sittings ended lighter" is a judgement handed down by a machine to
+    somebody already having a hard month, from two sliders that cannot know
+    why. A person in the middle of a bereavement shows small drops for months
+    and there is nothing wrong with them or with the room.
+  */
+  const bad = [
+    ...Array.from({ length: 8 }, (_, i) => sitting(i + 1, 70, 68)),
+    ...Array.from({ length: 3 }, (_, i) => sitting(i + 20, 70, 30)),
+  ];
+  is(findTestimony(bad), null,
+    "a bad month is not narrated back as a failing grade");
+
+  // A real record, said plainly.
+  const good = [
+    ...Array.from({ length: 9 }, (_, i) => sitting(i + 1, 78, 50)),
+    ...Array.from({ length: 2 }, (_, i) => sitting(i + 20, 60, 59)),
+  ];
+  const t = findTestimony(good);
+  ok(t, "eleven anchored sittings, nine of them lighter, is worth saying");
+  is(t.anchored, 11, "every anchored sitting is counted");
+  is(t.lighter, 9, "and only the ones that actually moved are called lighter");
+  is(t.typicalDrop, 28, "the middle drop is the median, not the mean");
+
+  const line = testimonySentence(t);
+  ok(/\b9\b/.test(line) && /\b11\b/.test(line) && /\b28\b/.test(line),
+    "the numbers are in the sentence", line);
+
+  /*
+    The tone rules, asserted on the string rather than trusted to the author.
+
+    No adjective, no exclamation, no congratulation, and above all no claim
+    that VENT is the reason. The drop happened; saying the room caused it is
+    the product taking credit for somebody's own week.
+  */
+  ok(!/[!]/.test(line), "nothing is being celebrated at them", line);
+  ok(!/\b(amazing|incredible|proud|congratulations|well done|great job|improving|progress)\b/i.test(line),
+    "no adjectives — the count is the claim", line);
+  ok(!/\b(we|vent|our|us|because of|thanks to|helped you)\b/i.test(line),
+    "and no claim of cause: it says the drop happened, never who did it", line);
+
+  /*
+    It must never contain anybody's words.
+
+    The whole reason this is a count and not a quotation. A crisis sentence
+    returned without warning is the failure mode this shape exists to avoid,
+    so the sentence is checked against a message that is in the input rows.
+  */
+  ok(!line.includes("the money"),
+    "no sentence of theirs is quoted back — this is the count, not the transcript");
+
+  const src = fs.readFileSync(path.join(ROOT, "src/lib/vent/testimony.ts"), "utf8");
+  ok(!/user_message/.test(src),
+    "the module cannot quote them, because it never reads what they wrote");
+  ok(!/fetch|generateReply|await /.test(src), "and it costs nothing to say");
+});
+
 // ── 37. a class that compiles to nothing ──────────────────────────────────
 //
 // `bg-paper/92` is not a Tailwind class. The default opacity scale runs in

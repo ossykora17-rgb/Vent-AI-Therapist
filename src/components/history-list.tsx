@@ -29,6 +29,7 @@ export function HistoryList() {
   const [query, setQuery] = React.useState("");
   const [minMood, setMinMood] = React.useState(1);
   const [openId, setOpenId] = React.useState<string | null>(null);
+  const [testimony, setTestimony] = React.useState<string | null>(null);
   const [pattern, setPattern] = React.useState<{
     sentence: string;
     dropHere: number | null;
@@ -46,6 +47,9 @@ export function HistoryList() {
         fetch(`/api/pattern?anonId=${encodeURIComponent(anonId())}`)
           .then((r) => r.json())
           .then((d) => {
+            if (!cancelled && d.testimonySentence) {
+              setTestimony(d.testimonySentence as string);
+            }
             if (!cancelled && d.pattern && d.sentence) {
               setPattern({ sentence: d.sentence, ...d.pattern });
             }
@@ -142,6 +146,35 @@ export function HistoryList() {
       </header>
 
       <main id="main" className="mx-auto w-full max-w-[640px] flex-1 px-4 py-5">
+        {/*
+          Whether it has been working, in the numbers they gave it themselves.
+
+          Every anchored sitting stores a tension the person set on the slider
+          on the way in and one derived from the mood they gave on the way out.
+          That loop has fed the tactic selector since it shipped and was
+          visible only to the machine — the one who supplied both numbers never
+          saw what they added up to.
+
+          The room's plate and the room's voice, because this is VENT speaking
+          rather than a statistic panel. Silent below the floor, silent when
+          the news is thin, and it never quotes anybody's worst sentence back
+          at them. See `lib/vent/testimony`.
+        */}
+        {testimony && (
+          <section className="presence arrive mb-5 p-6 sm:p-8">
+            <p className="nameplate mb-4">What has actually happened</p>
+            <p className="reply" data-numeric>
+              {testimony}
+            </p>
+            {/* The count is the claim. Anything past it is the product taking
+                credit for somebody else's week. */}
+            <p className="mt-3 text-[15px] leading-[1.6] text-ash">
+              You set both of those numbers. That is your own record, not a
+              score we gave you.
+            </p>
+          </section>
+        )}
+
         {/*
           The Pattern. Counted from their own rows, never generated — and only
           shown once there is enough to count, because a pattern claimed from
