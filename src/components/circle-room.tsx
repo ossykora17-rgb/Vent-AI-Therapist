@@ -420,7 +420,7 @@ export function CircleRoom({ id }: { id: string }) {
                       <p className="label-mono mb-1">
                         {m.mine ? "You" : `Seat ${m.seat}`} · heard
                       </p>
-                      <p className="text-[14px] leading-[1.6] text-ink/70">{m.content}</p>
+                      <p className="said text-[14px]">{m.content}</p>
                     </li>
                   );
                 }
@@ -430,7 +430,7 @@ export function CircleRoom({ id }: { id: string }) {
                   <li key={m.id} className="flex justify-end">
                     <div className="max-w-[85%] border-r-2 border-gold/40 pr-4 text-right sm:max-w-[75%]">
                       <p className="label-mono mb-1">You · {m.role}</p>
-                      <p className="text-[15px] leading-[1.6] text-ink/70">{m.content}</p>
+                      <p className="said">{m.content}</p>
                     </div>
                   </li>
                 ) : (

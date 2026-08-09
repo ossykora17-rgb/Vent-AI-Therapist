@@ -333,6 +333,23 @@
   }
 
   /*
+   * What the person said, in their own voice.
+   *
+   * The counterweight to `.reply`: the sans, a step down in size, and lighter
+   * on the page. Not because it matters less — because it has already been
+   * said, and the eye should be able to skim back over what it wrote and land
+   * on what came back.
+   *
+   * Written out as three utilities in the chat and twice more in the circle
+   * room, which is how "you" ended up two pixels different between the two
+   * surfaces nobody had put side by side.
+   */
+  .said {
+    @apply whitespace-pre-wrap text-[15px] leading-[1.65] text-ink/75;
+    text-wrap: pretty;
+  }
+
+  /*
    * What VENT says, set to be read slowly.
    *
    * Three or four sentences is not a chat message, it is a paragraph somebody
@@ -341,7 +358,31 @@
    * what makes an interface feel like it wants you to hurry up and finish.
    */
   .reply {
-    @apply leading-[1.75] tracking-[0.005em];
+    @apply font-display leading-[1.75] tracking-[0.005em];
+    /*
+      The two voices do not look the same, because they are not the same.
+      
+      Everything here was set in the sans — what you typed and what came
+      back, in one column, identical. That reads as a log. In a room you can
+      tell who is speaking before you hear a word, and the circles surface
+      already knows this: the Keeper's line has been set in the display face
+      since it was written. The private session was the one place the
+      distinction had never been drawn.
+      
+      So VENT speaks in Fraunces and you speak in Inter, which also makes
+      this reply and the Keeper's intention the same voice across both halves
+      of the product — one thing talking, in two rooms.
+      
+      `opsz` at 16, not the 96 the headings use. It is an optical size, not a
+      scale: at 96 the letterforms open up for a word seen across a room, and
+      at 16 they tighten the apertures and thicken the hairlines for a
+      paragraph read at arm's length on a phone. Setting a display axis on
+      body copy is the usual way a serif gets called unreadable. SOFT stays
+      low and WONK is off — the wonky axis swaps in the swashed forms, which
+      are charming in a headline and are a distraction in the middle of
+      somebody's worst hour.
+    */
+    font-variation-settings: "opsz" 16, "SOFT" 20, "WONK" 0;
     /* Fluid, so the measure holds at 360px and on a laptop without a
        breakpoint guessing which one somebody is on. */
     font-size: clamp(1rem, 0.95rem + 0.3vw, 1.0625rem);
