@@ -31,6 +31,27 @@ export const maxDuration = 60;
 
 const RATE_PER_MINUTE = 10;
 const RATE_PER_DAY = 100;
+
+/*
+  A second ceiling, for the nights the first one was never meant to catch.
+
+  Crisis returns above this and always has. What sat unguarded was the layer
+  underneath: somebody the depth router calls `edge` or `grave` — hopeless,
+  worthless, grieving, "i don tire" — who has typed a hundred messages in one
+  day. The router knew. It just ran a hundred lines too late, so they got
+  "Small small — breathe. Try again in a minute" and a closed door.
+
+  A hundred messages in a day is not abuse when somebody is at the edge; it is
+  what a bad night looks like from the inside. The per-minute limit goes
+  entirely for those turns, because bursting is the shape distress takes, and
+  the daily ceiling is raised rather than removed.
+
+  Raised, not removed, and finite on purpose. Somebody can pad a message with
+  "hopeless" to reach the higher tier, and that is a real and bounded cost —
+  250 turns against one anonymous id. The Final Law says burn the tokens
+  rather than refuse a person at the edge, and this is what that costs.
+*/
+const RATE_PER_DAY_EDGE = 250;
 const HISTORY_LIMIT = 100;
 
 const bodySchema = z.object({
@@ -77,6 +98,18 @@ async function handlePOST(request: Request) {
   const grounding = groundNow();
   const classification = classify(input.message);
   const store = getStore();
+
+  /*
+    Decided here, above the rate limiter, because it is free and because the
+    limiter needs it. `ventCount` is not known yet — that needs the store —
+    so a long session can still upgrade this below, and the upgrade only ever
+    goes one way.
+  */
+  let verdict = depthFor({
+    classification,
+    message: input.message,
+    pressure: input.pressure ?? null,
+  });
 
   // ── 1. CRISIS. Checked before anything else, never sent to a model. ──────
   if (classification.intent === "crisis") {
@@ -149,9 +182,50 @@ async function handlePOST(request: Request) {
         // for nothing rather than counting the same rows a second time.
         turnsToday = inDay;
 
-        if (inMinute >= RATE_PER_MINUTE || inDay >= RATE_PER_DAY) {
+        /*
+          The ceiling is decided by the message, and only by the message.
+
+          The first draft upgraded to `deep` here on `inDay >= 6` — the daily
+          count — where `depthFor` means a session's turns. Different scale
+          entirely: everybody with six messages in a day became permanently
+          deep, exempt from the per-minute limit, and routed to the expensive
+          model. A broken limiter and a cost blowout in one line, caught by
+          the ordinary user sailing past twelve messages a minute.
+
+          The long-session upgrade still happens; it moved below this block,
+          where it belongs. It should decide which model answers, never who is
+          allowed to speak.
+        */
+        const edge = verdict.depth === "deep";
+        const dayCap = edge ? RATE_PER_DAY_EDGE : RATE_PER_DAY;
+        // The per-minute limit does not apply at the edge. Bursting is what
+        // distress looks like from the inside, not what abuse looks like.
+        const tooFast = !edge && inMinute >= RATE_PER_MINUTE;
+
+        if (tooFast || inDay >= dayCap) {
+          /*
+            Never a dead end.
+
+            Somebody who has typed two hundred and fifty messages in a day
+            while the router keeps calling it `edge` is past what this product
+            can do for them, and the honest response to that is a human — not
+            "try again in a minute", which is the app closing a door on the
+            person least able to take it.
+
+            The ordinary refusal keeps its own voice. It is a pause, and it
+            reads like one.
+          */
           return NextResponse.json(
-            { error: "rate_limited", reply: "Small small — breathe. Try again in a minute." },
+            edge
+              ? {
+                  error: "rate_limited",
+                  reply: CRISIS_RESPONSE,
+                  crisis: { ...CRISIS_LINES, gated: false },
+                }
+              : {
+                  error: "rate_limited",
+                  reply: "Small small — breathe. Try again in a minute.",
+                },
             { status: 429, headers: { "cache-control": "no-store" } },
           );
         }
@@ -175,6 +249,13 @@ async function handlePOST(request: Request) {
       recentTactics = [];
       pattern = null;
     }
+  }
+
+  // Now that the store has answered, a long sitting can raise the depth.
+  // Routing only — the rate limiter has already made its decision above, on
+  // the message alone, and must not be reopened by a turn count.
+  if (verdict.depth === "fast" && history.length >= 6) {
+    verdict = { depth: "deep", reason: "long_session" };
   }
 
   const ctx: TacticContext = {
@@ -249,13 +330,6 @@ async function handlePOST(request: Request) {
       carrying: input.openingCarrying,
       putDown: input.openingPutDown,
     },
-  });
-
-  const verdict = depthFor({
-    classification,
-    message: input.message,
-    ventCount: history.length,
-    pressure: input.pressure ?? null,
   });
 
   let reply: string;
