@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export function SiteHeader({ children }: { children?: React.ReactNode }) {
   return (
-    <header className="sticky top-0 z-40 border-b border-line/10 bg-paper/70 backdrop-blur-glass">
+    <header className="sticky top-0 z-40 border-b border-line/10 bg-paper/95 backdrop-blur-glass">
       <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-3 px-4">
         <Link
           href="/"

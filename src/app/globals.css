@@ -67,6 +67,12 @@
     */
     --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
 
+    /*
+      What the corners of the room darken toward. Not black in light mode —
+      warm brown, so the marble goes to shadow rather than to soot.
+    */
+    --vignette: 74 58 44;
+
     color-scheme: light;
   }
 
@@ -89,6 +95,8 @@
     /* Less push in the dark: the ground is already near-black, and over-
        saturating a dark backdrop makes colour fringes at the blur radius. */
     --glass-saturate: 140%;
+    /* Black in the dark. There is nowhere warmer for it to go. */
+    --vignette: 0 0 0;
     color-scheme: dark;
   }
 
@@ -165,6 +173,31 @@
   }
 
   /* Everything real sits above the light. */
+  /*
+   * The corners of the room.
+   *
+   * There was already light from above and nothing holding the edges, so the
+   * page read as a lit surface rather than as a space you are inside. A
+   * vignette is the oldest trick there is for saying "this has walls", and at
+   * this strength it is below the threshold where anybody notices it — they
+   * notice that the middle is where the light is.
+   *
+   * Fixed rather than scrolled: walls do not move when you look down.
+   */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background: radial-gradient(
+      130% 100% at 50% 42%,
+      transparent 42%,
+      rgb(var(--vignette) / 0.05) 78%,
+      rgb(var(--vignette) / 0.11) 100%
+    );
+  }
+
   body > * {
     position: relative;
     z-index: 1;
@@ -259,6 +292,92 @@
       inset 0 1px 0 0 var(--glass-highlight),
       0 32px 80px -12px var(--shadow),
       0 0 0 1px rgb(var(--line) / 0.04);
+  }
+
+  /*
+   * Where the room speaks from.
+   *
+   * VENT's reply was a card — the same plate as every other card in the
+   * product, distinguished by a 2px gold rule. Correct, and it made the most
+   * important thing on the screen the visual equal of a settings panel.
+   *
+   * This is the same glass with a light source in it. The gold edge is no
+   * longer a border drawn on the left, it is light entering from the left and
+   * falling off inward, which is why the second inset shadow is 48px of blur
+   * pulled 32px back: near the edge it is bright, and four centimetres in it
+   * is gone. That is the difference between an office with a window and an
+   * office with a picture of a window.
+   *
+   * Deliberately not eerie. The founder asked for creepy and the honest read
+   * of that is *awe* — a cathedral is unsettling in the way a horror film is
+   * not. Unease is a thing you can do to somebody in a bad hour and it is not
+   * a thing you should do to somebody in a bad hour, so what is here is
+   * gravity: more light, more air, more weight, and more time.
+   */
+  .presence {
+    @apply rounded-card bg-card/[0.78];
+    backdrop-filter: blur(28px) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(28px) saturate(var(--glass-saturate));
+    box-shadow:
+      /* the lit edge itself */
+      inset 2px 0 0 0 rgb(var(--gold) / 0.55),
+      /* and the light falling off into the room */
+      inset 24px 0 48px -32px rgb(var(--gold) / 0.3),
+      inset 0 1px 0 0 var(--glass-highlight),
+      0 28px 70px -24px var(--shadow),
+      0 0 0 1px rgb(var(--line) / 0.06);
+  }
+
+  /*
+   * An answer takes a moment to arrive.
+   *
+   * Everything else on the screen settles in 400ms. This takes 720 and comes
+   * from slightly further away, so the reply lands after the eye has already
+   * gone looking for it. Somebody drawing breath before they answer you is
+   * the whole effect, and it is the cheapest presence in the file — it costs
+   * one keyframe and no bytes on the wire.
+   */
+  .arrive {
+    animation: arrive 720ms var(--ease-settle) both;
+  }
+
+  @keyframes arrive {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.994);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .arrive {
+      animation-duration: 1ms;
+    }
+  }
+
+  /*
+   * The nameplate.
+   *
+   * Wider tracking than `label-mono` and a hairline running off to the right,
+   * so the name reads as engraved on the room rather than as a field label
+   * above a value.
+   */
+  .nameplate {
+    @apply flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.22em] text-gold;
+  }
+
+  .nameplate::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      rgb(var(--gold) / 0.35),
+      transparent
+    );
   }
 
   /*
@@ -385,7 +504,15 @@
     font-variation-settings: "opsz" 16, "SOFT" 20, "WONK" 0;
     /* Fluid, so the measure holds at 360px and on a laptop without a
        breakpoint guessing which one somebody is on. */
-    font-size: clamp(1rem, 0.95rem + 0.3vw, 1.0625rem);
+    /*
+      Stepped up from clamp(1rem … 1.0625rem).
+
+      The visitor's line is 15px sans and this is now ~18px serif. That gap is
+      what says which of the two matters, and it does the work without
+      touching either colour — so the contrast floor is untouched, which
+      matters more here than any amount of atmosphere.
+    */
+    font-size: clamp(1.0625rem, 1rem + 0.45vw, 1.1875rem);
     max-width: 62ch;
     /* pretty stops a paragraph ending on one orphaned word — the thing that
        makes a considered layout look accidental. */

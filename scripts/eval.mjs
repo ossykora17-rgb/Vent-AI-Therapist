@@ -3435,6 +3435,106 @@ check("36 The room and the person do not sound the same", () => {
     share?.[1]);
 });
 
+// ── 37. a class that compiles to nothing ──────────────────────────────────
+//
+// `bg-paper/92` is not a Tailwind class. The default opacity scale runs in
+// fives, so 92 matches no step, produces no rule, and leaves the element with
+// `background-color: rgba(0, 0, 0, 0)` — which is exactly what a browser
+// reported when this was finally measured instead of read.
+//
+// It was on five sticky headers: the chat, the circle room, the circles
+// lobby, history and memory. Every scrollable surface in the product had a
+// completely transparent header, and every one of them looked correct sitting
+// at the top of an unscrolled page. Scroll, and the reply underneath read
+// straight through the wordmark — two layers of text at once.
+//
+// The second one was mine, from this session: `border-current/25` on the
+// spinner's track. `currentColor` is not an rgb triple, so it cannot take an
+// alpha modifier at all — the track never existed, and a lone spinning arc
+// looks enough like a spinner to pass a screenshot.
+//
+// Both fail the same way: silently, invisibly, and only under a condition
+// nobody screenshots.
+check("37 Every utility written actually compiles to something", () => {
+  const files = [];
+  (function walk(dir) {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.name.endsWith(".tsx")) files.push(full);
+    }
+  })(path.join(ROOT, "src"));
+
+  const UTIL = /\b((?:bg|text|border|ring|divide|from|to|via|fill|stroke|outline|shadow|placeholder|accent|caret|decoration)-[a-z][a-z-]*)\/(\d{1,3})\b/g;
+
+  /*
+    Inside a className, never in prose.
+
+    The first version of this scanned raw file text and duly failed on the
+    comment three files over explaining why `border-current/25` was wrong —
+    a check tripping over its own postmortem. Check 35 already had to learn
+    this; the lesson did not travel two hundred lines down the file.
+  */
+  const CLASSNAMES = /className=(?:"([^"]*)"|\{`([^`]*)`\}|\{cn\(([\s\S]{0,800}?)\)\})/g;
+
+  for (const f of files) {
+    const rel = path.relative(ROOT, f);
+    const text = fs.readFileSync(f, "utf8");
+    const classes = [...text.matchAll(CLASSNAMES)]
+      .map((m) => m[1] ?? m[2] ?? m[3] ?? "")
+      .join(" ");
+    for (const m of classes.matchAll(UTIL)) {
+      const [, base, opacity] = m;
+
+      /*
+        Tailwind's default opacity scale is 0 to 100 in steps of five, and
+        nothing else resolves. Anything between the steps needs the bracket
+        form — `bg-card/[0.78]` — which always compiles.
+
+        Mirrored here rather than read out of node_modules on purpose: the
+        gate has zero dependencies so a fresh worktree can run it with no
+        install, and this scale has not moved in the major version this
+        project is pinned to. If it ever does, this fails loudly on something
+        that works, which is the safe direction for a check to be wrong in.
+      */
+      ok(Number(opacity) % 5 === 0,
+        `${rel}: ${base}/${opacity} is a real Tailwind step`,
+        "not a multiple of 5 — use the bracket form, e.g. /[0.92]");
+
+      /*
+        `currentColor` and `transparent` are keywords, not channels. Tailwind
+        can only slot an alpha into a colour it defined as `rgb(... / <alpha>)`,
+        so an opacity modifier on either is dropped entirely.
+      */
+      ok(!/-(current|transparent|inherit)$/.test(base),
+        `${rel}: ${base}/${opacity} cannot carry an alpha`,
+        "currentColor is a keyword, not an rgb triple");
+    }
+  }
+
+  /*
+    And the headers specifically, because this is the one that shipped.
+
+    A sticky bar that content scrolls beneath needs a background opaque enough
+    to stop being read through. Blur alone does not do it — large high-
+    contrast type survives a 20px blur perfectly well, which is what made the
+    transparent version look almost plausible.
+  */
+  for (const f of files) {
+    const t = fs.readFileSync(f, "utf8");
+    for (const m of t.matchAll(/className="(sticky top-0[^"]*)"/g)) {
+      const cls = m[1];
+      const bg = cls.match(/\bbg-([a-z-]+)(?:\/(\d+))?\b/);
+      ok(bg, `${path.relative(ROOT, f)}: the sticky header has a background at all`, cls);
+      if (bg && bg[2]) {
+        ok(Number(bg[2]) >= 90,
+          `${path.relative(ROOT, f)}: the sticky header is opaque enough to scroll under`,
+          `bg-${bg[1]}/${bg[2]}`);
+      }
+    }
+  }
+});
+
 // ── 19. the credit policy, as something a script can fail ─────────────────
 //
 // `CLAUDE.md` says most messages never reach a model and that a change to the
