@@ -441,9 +441,7 @@ export function VentChat() {
                 <div className="max-w-[85%] border-r-2 border-gold/40 pr-4 text-right sm:max-w-[75%]">
                   <p className="label-mono mb-1.5">You</p>
                   {/* Their words, exactly as typed — line breaks and all. */}
-                  <p className="whitespace-pre-wrap text-[15px] leading-[1.65] text-ink/70">
-                    {line.text}
-                  </p>
+                  <p className="said">{line.text}</p>
                 </div>
               </li>
             ) : (
@@ -454,7 +452,10 @@ export function VentChat() {
                     line.crisis && "border-gold/60 border-l-gold",
                   )}
                 >
-                  <p className="label-mono mb-3">Vent</p>
+                  {/* Gold, where yours is ash. The label carries the same
+                      distinction the typeface does, for a glance too quick
+                      to register a letterform. */}
+                  <p className="label-mono mb-3 text-gold">Vent</p>
                   <p className="reply whitespace-pre-wrap">{line.text}</p>
                 </div>
               </li>
@@ -464,7 +465,7 @@ export function VentChat() {
           {thinking && (
             <li>
               <div className="glass border-l-2 border-l-gold/50 p-5">
-                <p className="label-mono mb-2">Vent</p>
+                <p className="label-mono mb-2 text-gold">Vent</p>
                 <p aria-live="polite" className="text-sm text-ash">
                   Thinking<span className="animate-pulse">…</span>
                 </p>
@@ -476,7 +477,7 @@ export function VentChat() {
         {/* Crisis gate — soft, never alarming, and it stops the session. */}
         {crisis && (
           <div className="glass mt-4 border-gold/60 p-4">
-            <p className="label-mono mb-3">You are not alone</p>
+            <p className="label-mono mb-3 text-gold">You are not alone</p>
             <div className="flex flex-col gap-2 sm:flex-row">
               <a
                 href={`tel:${crisis.nigeria.replace(/\s/g, "")}`}
@@ -547,8 +548,8 @@ export function VentChat() {
             href={`/circles/${invite.id}`}
             className="glass mt-6 block border-l-2 border-l-gold p-5 transition-colors duration-300 hover:border-l-gold/70"
           >
-            <p className="label-mono mb-2">Somewhere to say it out loud</p>
-            <p className="max-w-[46ch] text-[15px] leading-[1.7]">
+            <p className="label-mono mb-2 text-gold">Somewhere to say it out loud</p>
+            <p className="reply max-w-[46ch]">
               {invite.tag
                 ? `A circle is sitting with ${carryingWord(invite.tag)} right now.`
                 : "A circle is sitting right now."}{" "}
@@ -561,8 +562,10 @@ export function VentChat() {
 
         {askMood && (
           <div className="mt-6 border-l-2 border-gold pl-5">
-            <p className="label-mono mb-2">Before you go</p>
-            <p className="max-w-[42ch] text-[15px] leading-[1.7]">
+            <p className="label-mono mb-2 text-gold">Before you go</p>
+            {/* The room asking, so the room's voice. This is not chrome —
+                it is the last thing VENT says before somebody leaves. */}
+            <p className="reply max-w-[42ch]">
               Where did the weight land? Not how the day was — just this, now,
               against how you came in.
             </p>
@@ -642,7 +645,7 @@ export function VentChat() {
         */}
         {drop !== null && drop > 0 && (
           <div className="glass closing mt-6 border-l-2 border-l-gold p-5 sm:p-6">
-            <p className="label-mono mb-3">What you put down</p>
+            <p className="label-mono mb-3 text-gold">What you put down</p>
             <p className="flex items-baseline gap-3">
               <span className="tabular font-display text-[56px] font-bold leading-[0.9] tracking-[-0.03em]">
                 {drop}

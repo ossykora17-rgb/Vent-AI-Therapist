@@ -3349,6 +3349,92 @@ check("35 One design system, and its text is legible in both themes", () => {
   }
 });
 
+// ── 36. two voices, and you can tell them apart ───────────────────────────
+//
+// From the founder, on the chat surface: "the shrink bubble should be defined
+// with certain hue and typography for more effect — so even on the chatting
+// level, you and your shrink obviously sound and look different."
+//
+// They were set identically. What you typed and what came back sat in one
+// column in one typeface, which reads as a log rather than as somebody
+// answering. And the product already knew better: the circles surface has set
+// the Keeper's line in the display face since the day it was written. The
+// private session was the one place the distinction had never been drawn.
+//
+// The rule, now that there is one:
+//
+//   the room's voice   Fraunces, `.reply` — VENT, the Keeper, the mood ask,
+//                      the invitation. One thing talking, in two rooms.
+//   a person's voice   Inter — you, and the five other people in a circle.
+//                      Human beings are not set in the machine's face.
+//   what you said      `.said` — the sans, a step down, lighter on the page.
+//                      Not because it matters less; because it has already
+//                      been said and the eye should land on the answer.
+//
+// A screenshot cannot be asserted, but the classes can, and the thing that
+// would actually regress is somebody writing a sixth speaker treatment inline
+// instead of reaching for one of these.
+check("36 The room and the person do not sound the same", () => {
+  const css = fs.readFileSync(path.join(ROOT, "src/app/globals.css"), "utf8");
+
+  const reply = css.match(/\.reply\s*\{([\s\S]*?)\n  \}/);
+  ok(reply, ".reply is defined");
+  ok(/font-display/.test(reply[1]), "the room speaks in the display face");
+  ok(/font-variation-settings/.test(reply[1]),
+    "and at a set optical size rather than the heading's");
+  /*
+    `opsz` is an optical size, not a scale. The headings run it at 96, where
+    the letterforms open up for a word seen across a room; a paragraph read at
+    arm's length on a phone needs the apertures tight and the hairlines thick.
+    Inheriting 96 into body copy is the ordinary way a serif gets called
+    unreadable, so the value is asserted rather than assumed.
+  */
+  const opsz = reply[1].match(/"opsz"\s*(\d+)/);
+  ok(opsz && +opsz[1] <= 24,
+    "body copy is set at a text optical size, not a display one",
+    opsz ? `opsz ${opsz[1]}` : "unset");
+  ok(/"WONK"\s*0/.test(reply[1]),
+    "the swashed forms are off — charming in a headline, a distraction mid-sentence");
+
+  const said = css.match(/\.said\s*\{([\s\S]*?)\n  \}/);
+  ok(said, ".said is defined");
+  ok(!/font-display/.test(said[1]), "the person does not speak in the machine's face");
+  ok(/whitespace-pre-wrap/.test(said[1]),
+    "and their line breaks survive, exactly as typed");
+
+  /*
+    Both conversational surfaces reach for the shared classes.
+
+    They were three inline copies of `text-[15px] leading-[1.65] text-ink/70`
+    — which is how "you" ended up rendered two pixels apart between the chat
+    and the circle room, the two screens nobody had put side by side.
+  */
+  for (const f of ["src/components/chat/vent-chat.tsx", "src/components/circle-room.tsx"]) {
+    const t = fs.readFileSync(path.join(ROOT, f), "utf8");
+    ok(/className="said/.test(t), `${path.basename(f)} uses the shared person voice`);
+    ok(/className="reply|className={cn\(\s*"[^"]*reply|reply /.test(t),
+      `${path.basename(f)} uses the shared room voice`);
+    // The literal that used to be pasted about. If it comes back, so has the
+    // drift.
+    ok(!/text-\[15px\] leading-\[1\.65\] text-ink\/70/.test(t),
+      `${path.basename(f)} does not re-inline the person voice`);
+  }
+
+  /*
+    And a person in a circle is still a person.
+
+    The seat-N share is another human being typing, and setting them in the
+    display face would say the room was speaking. The distinction only means
+    something while it is only the room.
+  */
+  const room = fs.readFileSync(path.join(ROOT, "src/components/circle-room.tsx"), "utf8");
+  const share = room.match(/Seat \{m\.seat\} · \{m\.role\}[\s\S]{0,260}?<p className="([^"]*)"/);
+  ok(share, "the other-seat share is findable");
+  ok(!/font-display|reply/.test(share[1]),
+    "another person in the circle is set as a person, not as the room",
+    share?.[1]);
+});
+
 // ── 19. the credit policy, as something a script can fail ─────────────────
 //
 // `CLAUDE.md` says most messages never reach a model and that a change to the
