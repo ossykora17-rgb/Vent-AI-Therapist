@@ -55,6 +55,44 @@ export function flavourBlock(f: FlavourProfile | null): string | null {
     .join("\n");
 }
 
+/**
+ * The three rules that govern every assembled thing in this prompt.
+ *
+ * Measured before it was written: the whole system prompt is ~3,100 tokens on
+ * a real vent, and three separate blocks — what they tapped on the way in,
+ * what recurs across sessions, the line carried from last time — were each
+ * carrying their own long-form copy of the *same* three instructions. About
+ * 280 tokens of near-duplicate prose, and `HOW THEY WALKED IN` had grown into
+ * the second-largest block in the entire prompt while carrying three words
+ * somebody tapped off a list of six.
+ *
+ * Repetition is not reinforcement here. The same rule in three different
+ * wordings reads as three rules of unclear priority, and it spends attention
+ * that the person's actual message needs. Said once, in one place, it is
+ * shorter *and* sharper.
+ *
+ * Nothing was dropped. Every prohibition that was in those three blocks is in
+ * these three rules; only the essays are gone. Included solely when at least
+ * one of the blocks it governs is present, because a rule about context that
+ * was not assembled is pure weight.
+ */
+const CONTEXT_RULES = `WHAT THE ROOM HANDS YOU, AND WHAT YOU DO WITH IT
+Some of what follows is context assembled about this person rather than said
+by them. Three rules cover all of it and never change.
+
+1. NEVER SAY IT BACK. "You mentioned you're carrying guilt", "you've brought
+   this up four times", "last time you said…" — each is a file read aloud,
+   and it tells somebody they are being processed rather than heard.
+
+2. LET IT AIM THE ONE QUESTION YOU ASK. That is the entire use of it. The
+   ground has been covered, so start one layer under where you otherwise
+   would.
+
+3. THEIR SENTENCE OUTRANKS ALL OF IT. Every line was inferred, tapped off a
+   list, or written about them rather than by them, so any of it may simply
+   be wrong. The moment what they type points elsewhere, drop it on the spot
+   — no comment, and never ask them to reconcile the two.`;
+
 export interface MemoryRow {
   user_message: string;
   ai_reply: string | null;
@@ -274,16 +312,11 @@ export function patternBlock(p: Pattern | null): string | null {
 
   return `WHAT KEEPS BRINGING THEM BACK
 ${p.times} of their recent sessions have been about ${p.tag}, ${span}.${moving}
-You know this. They may never have said it out loud.
+You know this. They may never have said it out loud, and the number in
+particular never goes in front of them.
 
-Do not announce it. Do not open with it, do not offer it as an insight, and
-never put the number in front of them — "you've mentioned this ${p.times} times" is
-a chart talking, not a person, and it lands as being counted rather than being
-known. Let it change what you ask instead: the ground has been covered, so
-start one layer under where you otherwise would.
-
-If they name it themselves, that sentence is theirs and it is the most
-valuable thing they will ever type here. Hold still and let it land.`;
+If they name the pattern themselves, that sentence is theirs and it is the
+most valuable thing they will ever type here. Hold still and let it land.`;
 }
 
 /**
@@ -332,17 +365,8 @@ export function openingBlock(o?: Opening | null): string | null {
 
   return `HOW THEY WALKED IN
 ${lines.join("\n")}
-
-This is thirty seconds old and it is the only thing you know about them.
-
-Do not say it back. "You mentioned you're carrying guilt" is a form being
-read aloud, and it tells them the room was filing rather than listening. Let
-it aim the one question you ask, and nothing else.
-
-It was tapped, not written. Six words were offered and one was closest — the
-real thing may not have been on the list at all. The moment their own
-sentence points somewhere else, their sentence wins and this is discarded
-without comment.`;
+Thirty seconds old, tapped rather than written, and the only thing you know
+about them.`;
 }
 
 /**
@@ -369,17 +393,9 @@ export function carveBlock(carve?: string | null): string | null {
   return `WHAT YOU ALREADY KNEW
 "${carve.trim()}"
 
-That is the line carried from the last session that had one. It is why you
-do not start from zero.
-
-Never quote it, never allude to having it, and never tell them you remember.
-"Last time you said…" turns this into a receipt and turns them into a file.
-They can clear it in one tap and it will be gone, correctly — so it is not
-something to lean on out loud.
-
-It may also be wrong. It was written about them, not by them. If what they
-say tonight does not fit it, it is discarded on the spot, without comment and
-without asking them to reconcile the two.`;
+Carried from the last session that had one — it is why you do not start from
+zero. Never tell them you remember: they can clear it in one tap, so it is
+not something to lean on out loud.`;
 }
 
 export interface BuildPromptArgs {
@@ -440,14 +456,20 @@ export function buildSystemPrompt({
     // been made to look at yet.
     message ? scanBlock(scan(message)) : null,
     "",
-    // Before the pattern: what was carried across sessions is the oldest
-    // thing known, and everything after it is this week and tonight.
+    // The three rules, then the three things they govern — and only when at
+    // least one of them was actually assembled. A rule about context that is
+    // not present is pure weight, and this prompt is already ~3,100 tokens.
+    //
+    // Order is oldest to newest: what was carried across sessions, then what
+    // recurs across weeks, then what they tapped a minute ago.
+    [carveBlock(carve), patternBlock(pattern), openingBlock(opening)].some(Boolean)
+      ? CONTEXT_RULES
+      : null,
+    "",
     carveBlock(carve),
     "",
     patternBlock(pattern),
     "",
-    // After the pattern, before the flavour. What recurs across weeks
-    // outranks what they tapped a minute ago; both are only ever aim.
     openingBlock(opening),
     "",
     flavourBlock(flavour),
