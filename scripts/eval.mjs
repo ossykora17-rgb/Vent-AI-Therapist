@@ -3598,6 +3598,106 @@ check("38 The record counts what they gave, and stays quiet otherwise", () => {
   ok(!/fetch|generateReply|await /.test(src), "and it costs nothing to say");
 });
 
+// ── 39. thanksgiving, with no church in it ────────────────────────────────
+//
+// The founder, correcting an earlier reading: the religious language is
+// figurative, and it has to land for every religion, for atheists, and for
+// nobody. Thanksgiving is right; church is not.
+//
+// So gratitude, which is one of the most replicated findings in the
+// literature and belongs to every tradition and to none. The question is
+// "what held this week" — everybody has an answer to that, and nobody is
+// being addressed in somebody else's language.
+//
+// Deliberately NOT "what did VENT do for you". A product asking what it did
+// for you is fishing, and the answer belongs to their week rather than to us.
+//
+// And this is the one thing in the product safe to quote back at somebody.
+// `testimony.ts` counts rather than quotes and the carve is never shown to
+// them at all, both because a sentence returned unannounced is a
+// re-exposure. This one they wrote on purpose, while they were alright,
+// knowing it would be kept.
+check("39 What held is theirs, secular, and never confused with a crisis", () => {
+  const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
+  const history = fs.readFileSync(path.join(ROOT, "src/components/history-list.tsx"), "utf8");
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/held/route.ts"), "utf8");
+  const sql = fs.readFileSync(path.join(ROOT, "supabase/APPLY.sql"), "utf8");
+
+  /*
+    No church, in any direction.
+
+    Asserted over the strings a person actually reads rather than over the
+    file, so the reasoning in the comments is free to name what it is avoiding
+    and why. Both lists matter: naming one faith excludes the others, and
+    "the universe" excludes the people who came here from a mosque.
+  */
+  const FAITH = /\b(god|jesus|christ|allah|lord|church|mosque|pray(er|ing)?|bless(ed|ing)?|hallelujah|amen|scripture|holy|sin|soul|worship|congregation|tithe|the universe|manifest)\b/i;
+  const strings = [];
+  for (const src of [chat, history]) {
+    for (const m of src.matchAll(/(?:<p[^>]*>|<h\d[^>]*>)\s*([^<>{}][^<>]{8,180}?)\s*</g)) {
+      strings.push(m[1].replace(/\s+/g, " ").trim());
+    }
+    for (const m of src.matchAll(/placeholder="([^"]{4,})"/g)) strings.push(m[1]);
+  }
+  ok(strings.length > 10, "there are strings to check", `${strings.length}`);
+  for (const str of strings) {
+    const hit = str.match(FAITH);
+    ok(!hit, `no faith is named at anybody: "${str.slice(0, 60)}"`, hit?.[0]);
+  }
+
+  // The question is about their week, not about us.
+  const ask = chat.match(/What held this week\?[^<]*/);
+  ok(ask, "the question is asked");
+  ok(!/\bvent\b|\bwe\b|\bus\b|\bhelp(ed)?\b/i.test(ask[0]),
+    "and it asks about their week, not about what we did for them", ask?.[0]);
+
+  /*
+    A gentle question is still a question.
+
+    "What held this week" can be answered "nothing, I want to die." Filing
+    that as a gratitude note — silently, with a checkmark — would be the worst
+    thing this product could do with a sentence, so the crisis router runs on
+    the server where the note is written. `checkMessage` is on the server for
+    the same reason: curl walks around a client.
+  */
+  ok(/classify\(/.test(route) && /intent === "crisis"/.test(route),
+    "a note is routed for crisis before it is ever stored");
+  const crisisIdx = route.indexOf('intent === "crisis"');
+  const storeIdx = route.indexOf("addHeld");
+  ok(crisisIdx > 0 && crisisIdx < storeIdx,
+    "and routed BEFORE the write, not after it");
+  ok(/setCrisis|setGated/.test(chat.slice(chat.indexOf("submitHeld"))),
+    "and the client hands them the line rather than swallowing the answer");
+
+  // Written by them. A model must never author one, or quoting it back stops
+  // being safe.
+  ok(!/generateReply|CARVER_SYSTEM|providers/.test(route),
+    "no model authors a note — that is what makes it safe to show back");
+
+  /*
+    Said after the answer arrived, and only then.
+
+    The sharpest failure in CLAUDE.md is `void seal(w)` followed by "Sealed."
+    — a promise tied to a request nobody read. "Kept." waits for `saved`.
+  */
+  const submit = chat.slice(chat.indexOf("async function submitHeld"), chat.indexOf("async function submitHeld") + 1600);
+  ok(/await fetch\("\/api\/held"/.test(submit), "the note is actually sent");
+  ok(/data\?\.saved/.test(submit) && submit.indexOf("data?.saved") < submit.indexOf('toast("Kept'),
+    "and \"Kept.\" is said only after the server says it was");
+
+  // Storage, and the cap in one place.
+  ok(/vent_users[\s\S]{0,200}?add column if not exists held jsonb/.test(sql),
+    "the column exists in the SQL a person actually runs");
+  const types = fs.readFileSync(path.join(ROOT, "src/lib/store/types.ts"), "utf8");
+  ok(/export const HELD_CAP = \d+;/.test(types), "the cap is a named constant");
+  for (const backend of ["file-store.ts", "supabase-store.ts"]) {
+    const b = fs.readFileSync(path.join(ROOT, "src/lib/store", backend), "utf8");
+    ok(/HELD_CAP/.test(b), `${backend} trims to the shared cap rather than its own number`);
+  }
+  ok(/held/.test(fs.readFileSync(path.join(ROOT, "src/lib/store/contract.ts"), "utf8")),
+    "and the schema contract probes the column, so a missing one is loud");
+});
+
 // ── 37. a class that compiles to nothing ──────────────────────────────────
 //
 // `bg-paper/92` is not a Tailwind class. The default opacity scale runs in
