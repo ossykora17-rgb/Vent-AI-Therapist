@@ -32,7 +32,10 @@ export async function GET() {
   // hunting for a table that existed. PostgREST puts the difference in `code`
   // — 42P01/PGRST205 is absent, 42501 is a grant — and the actionable half in
   // `hint`, which literally spells out the GRANT statement to run.
-  const tableErrors: Record<string, { code?: string; hint?: string; message?: string }> = {};
+  const tableErrors: Record<
+    string,
+    { code?: string; hint?: string; message?: string; missingColumns?: string[] }
+  > = {};
   // Which contract was checked, so a green health cannot mean "checked two".
   const tablesChecked = Object.keys(FULL_CONTRACT).length;
 
@@ -90,6 +93,41 @@ export async function GET() {
           // what everybody already knew.
           message: res.error.message ?? undefined,
         };
+      }
+
+      /*
+        One missing column at a time is one deploy at a time.
+
+        PostgREST stops at the first column it cannot resolve, so a select
+        naming five columns reports exactly one of them however many are gone.
+        Production said `column vent_users.carve does not exist` and said
+        nothing whatsoever about `held`, which sits two positions later in the
+        same list — so the honest reading of that response was "at least one
+        of these is missing", and the way to find the rest was to fix carve,
+        redeploy, and ask again. Two round trips of a person's evening for one
+        answer the database already had.
+
+        So on 42703 only, re-ask column by column. It costs one request per
+        column of one broken table, on a path that is already reporting a
+        fault, and it turns the answer into the whole list.
+
+        This is the same failure the HEAD request was: a probe shaped so it
+        cannot carry back everything it found.
+      */
+      const drifted = names.filter(
+        (n, i) => results[i].error?.code === "42703",
+      );
+      for (const name of drifted) {
+        const cols = FULL_CONTRACT[name].split(",");
+        const per = await Promise.all(
+          cols.map((c) => supabase!.from(name).select(c).limit(0)),
+        );
+        const missingColumns = cols.filter(
+          (_, k) => per[k].error?.code === "42703",
+        );
+        if (missingColumns.length) {
+          tableErrors[name] = { ...tableErrors[name], missingColumns };
+        }
       }
       database = missingTables.length ? "unreachable" : "ok";
     } catch {
