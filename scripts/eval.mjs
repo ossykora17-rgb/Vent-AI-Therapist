@@ -2713,6 +2713,84 @@ check("29 The rate limiter knows who it is refusing", () => {
     offenders.join(", ") || undefined);
 });
 
+// ── 30. a room somebody would walk into ───────────────────────────────────
+//
+// The lobby showed "Money". "Leaving". "Work / AI". Correct, and a filing
+// system — a taxonomy of pressures rendered as a list you scroll past. Nobody
+// has ever wanted to join a taxonomy.
+//
+// "Broke But Building" is the same room. "3AM Overthinkers" is the same room.
+// The difference is that one of them sounds like people are inside it.
+const { roomName, allRoomNames } = await app("src/lib/circles/naming.ts");
+
+check("30 Rooms are named from facts, and never at somebody's expense", () => {
+  // WAT is UTC+1, so subtract an hour to land on a Lagos wall-clock hour.
+  const at = (h) => `2026-08-09T${String((h - 1 + 24) % 24).padStart(2, "0")}:30:00Z`;
+
+  is(roomName("social", at(3)), "3AM Overthinkers", "3am comparing is the overthinkers' room");
+  is(roomName("economy", at(13)), "Broke But Building", "money at noon has defiance in it");
+  is(roomName("economy", at(3)), "3AM Money Maths", "and the same pressure at 3am does not");
+  is(roomName("lonely", at(3)), "Night Owls", "alone at 3am is night owls");
+  is(roomName("lonely", at(13)), "On Your Own With It", "and alone at noon is not");
+  is(roomName(null, at(3)), "The 3AM Room", "an untagged room is still a room");
+
+  // Derived, deterministic, and never generated.
+  is(roomName("social", at(3)), roomName("social", at(3)), "the same room is always the same name");
+  ok(roomName("economy", at(3)) !== roomName("economy", at(13)),
+    "and the hour actually changes it");
+
+  /*
+    The heavy ones keep plain names at every hour.
+
+    A clever name is a small delight and it is not worth being clever at
+    somebody waiting on a diagnosis. `health` is deliberately identical around
+    the clock, and this asserts it rather than trusting the table to stay
+    that way.
+  */
+  const health = [0, 3, 9, 14, 19, 23].map((h) => roomName("health", at(h)));
+  is(new Set(health).size, 1, "health is never renamed by the clock", health.join(" / "));
+  is(health[0], "The Body And The Waiting", "and it is named plainly");
+
+  /*
+    Tone, over every name the function can produce.
+
+    Asserted across the whole surface rather than the six a test happened to
+    think of — the same reason the crisis list is checked in both directions.
+    A name that jokes about the thing people are carrying would be worse than
+    the taxonomy it replaced.
+  */
+  const names = allRoomNames();
+  ok(names.length >= 15, "the surface is real", `${names.length} names`);
+  for (const n of names) {
+    ok(n.length <= 30, `"${n}" fits a phone header`);
+    ok(!/[!?]/.test(n), `"${n}" is not shouting at anybody`);
+    ok(!/\b(lol|haha|vibes?|squad|gang|fam|crew)\b/i.test(n),
+      `"${n}" is not trying to be a nightclub`);
+    /*
+      No diagnosis, and that is the real line.
+
+      The first version of this rule banned second person, and it flagged "On
+      Your Own With It" — then would have flagged "Night Owls" and "3AM
+      Overthinkers" too, which are the best names here. A room title in the
+      second person is a description of a state, not a claim about a person.
+
+      What must never appear is a name that hands somebody a condition they
+      did not claim. The product does not diagnose anywhere else and a room
+      called "The Anxious" would do it on the way in.
+    */
+    ok(!/\b(depress|anxious|anxiety|bipolar|trauma(tised|tized)?|broken|damaged|victims?|sufferers?|patients?|addicts?)\b/i.test(n),
+      `"${n}" hands nobody a diagnosis on the way in`);
+  }
+
+  // Nothing invented. The name is a pure function of a tag and a timestamp,
+  // with no model anywhere near it — a model asked to name rooms would write
+  // better names and would eventually describe people who are not there.
+  const src = fs.readFileSync(path.join(ROOT, "src/lib/circles/naming.ts"), "utf8");
+  ok(!/fetch|generateReply|await /.test(src), "naming is pure and free");
+  ok(/Africa\/Lagos/.test(src),
+    "and 3am means 3am where the people are, not where the server woke up");
+});
+
 // ── 19. the credit policy, as something a script can fail ─────────────────
 //
 // `CLAUDE.md` says most messages never reach a model and that a change to the
