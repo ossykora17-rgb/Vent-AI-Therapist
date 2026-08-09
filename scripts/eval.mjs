@@ -2365,23 +2365,35 @@ check("25 Five traditions reach the room, and the family move is not imported", 
     .filter((id) => !everFits.has(id));
 
   /*
-    Two of the five never fit anything in the 51 authored examples, and that
-    is a finding about the corpus rather than about the tactics.
+    Closed. Ten examples were written for the two presentations the corpus had
+    none of — self-attack and hopelessness — and `defusion`,
+    `exception_finding` and `double_standard` all became reachable. That last
+    one predates every tactic added this session and had been invisible the
+    whole time.
 
-    It contains no self-attack — "i'm useless", "i be failure" — and no
-    hopelessness — "no point", "why bother". Those are two of the most common
-    presentations there are, and `double_standard`, which predates all of
-    this, is unreachable on the corpus for exactly the same reason. The
-    examples were written to exercise the scan and they inherited its blind
-    spots.
-
-    Recorded rather than asserted away. Closing it means writing examples, not
-    moving a threshold — so this allows the gap to shrink and fails if it
-    grows.
+    Asserted at zero now rather than "no worse than two". A gap that has been
+    closed should fail the moment it reopens.
   */
-  ok(missing.length <= 2,
-    "no more of the library is corpus-invisible than the two already known",
+  is(missing.length, 0,
+    "every tradition added is exercised by a real example",
     missing.join(", ") || "none");
+
+  /*
+    The wider sweep, fenced rather than claimed.
+
+    Ten tactics still fit nothing in the corpus. Some of that is honest —
+    `orienting` and `progressive_squeeze` are somatic tools chosen from
+    pressure and a tapped body part, not from language, so a text-only sweep
+    may never reach them. Others are real holes: `two_chair`, `ifs_parts` and
+    `externalization` are moves nobody has written an example for.
+
+    Recorded so it can shrink and cannot grow. Closing it means writing
+    examples, not lowering a number.
+  */
+  const invisible = ALL_TACTICS.filter((t) => !everFits.has(t.id)).map((t) => t.id);
+  ok(invisible.length <= 10,
+    "no more of the library is invisible to the corpus than already known",
+    `${invisible.length}: ${invisible.join(", ")}`);
   ok(!missing.includes("meaning_stance") && !missing.includes("ubuntu_frame"),
     "the two that matter most for this product are exercised by real examples",
     missing.join(", ") || "none");
