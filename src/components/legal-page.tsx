@@ -42,7 +42,7 @@ export function LegalPage({
         <div className="mt-6 flex flex-wrap gap-3">
           <Link
             href="/chat"
-            className="flex min-h-[48px] items-center rounded-card bg-gold px-6 text-sm font-semibold text-ink"
+            className="flex min-h-[48px] items-center rounded-card bg-gold px-6 text-sm font-semibold text-on-gold"
           >
             Come in
           </Link>

@@ -53,7 +53,7 @@ export default async function LandingPage() {
 
         <Link
           href="/chat"
-          className="mt-8 flex min-h-[52px] w-full max-w-[280px] items-center justify-center rounded-card bg-gold px-6 text-[15px] font-semibold text-ink shadow-glass transition-opacity duration-300 hover:opacity-90"
+          className="mt-8 flex min-h-[52px] w-full max-w-[280px] items-center justify-center rounded-card bg-gold px-6 text-[15px] font-semibold text-on-gold shadow-glass transition-opacity duration-300 hover:opacity-90"
         >
           Come in
         </Link>

@@ -26,6 +26,8 @@ const config: Config = {
       ash: rgb("ash"),
       gold: rgb("gold"),
       "gold-deep": rgb("gold-deep"),
+      // Theme-invariant, like the gold it sits on.
+      "on-gold": rgb("on-gold"),
       line: rgb("line"),
       // Preflight hardcodes theme('colors.gray.400') for ::placeholder.
       gray: { 400: rgb("ash") },
@@ -38,16 +40,23 @@ const config: Config = {
         display: ["var(--font-fraunces)", "Georgia", "serif"],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
-      borderWidth: { 3: "3px" },
-      ringWidth: { 3: "3px" },
+      /*
+        `borderWidth: 3` and the three `brut` shadows are gone, not unused.
+
+        A design system is singular only when the old one cannot be typed. As
+        long as `border-3` and `shadow-brut` resolved, the next component
+        written in a hurry would have reached for them — that is exactly how
+        this repo ended up with two languages meeting at the signup redirect,
+        where a person crossing that line saw a different product.
+
+        `ring-3` goes with them: the frosted system rings in gold at 2px
+        through `.focusable`, in one place, rather than per-component.
+      */
       borderRadius: { card: "18px" },
       backdropBlur: { glass: "20px" },
       boxShadow: {
         glass: "0 20px 60px var(--shadow)",
         "glass-sm": "0 8px 24px var(--shadow)",
-        brut: "4px 4px 0 0 rgb(var(--ink))",
-        "brut-sm": "2px 2px 0 0 rgb(var(--ink))",
-        "brut-lg": "8px 8px 0 0 rgb(var(--ink))",
         none: "none",
       },
       keyframes: {

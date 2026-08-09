@@ -87,7 +87,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           >
             <span
               aria-hidden="true"
-              className="mt-[2px] text-xs font-bold uppercase tracking-widest"
+              className="label-mono mt-[2px]"
             >
               {t.tone === "error" ? "!" : t.tone === "success" ? "✓" : "i"}
             </span>

@@ -220,7 +220,7 @@ export function CircleRoom({ id }: { id: string }) {
       <main id="main" className="flex min-h-dvh flex-col items-center justify-center px-4 text-center">
         <p className="font-display text-2xl font-bold">That circle has closed.</p>
         <p className="mt-2 text-sm text-ash">The words are already gone. That&apos;s the deal.</p>
-        <Link href="/circles" className="mt-6 flex min-h-[48px] items-center rounded-card bg-gold px-6 text-sm font-semibold text-ink">
+        <Link href="/circles" className="mt-6 flex min-h-[48px] items-center rounded-card bg-gold px-6 text-sm font-semibold text-on-gold">
           See open circles
         </Link>
       </main>
@@ -279,7 +279,7 @@ export function CircleRoom({ id }: { id: string }) {
               you need a person, now.
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <a href={`tel:${CRISIS_TEL}`} className="flex min-h-[44px] flex-1 items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-ink">
+              <a href={`tel:${CRISIS_TEL}`} className="flex min-h-[44px] flex-1 items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-on-gold">
                 Call {CRISIS_LINES.nigeria}
               </a>
               <a href={`tel:${EMERGENCY_TEL}`} className="flex min-h-[44px] flex-1 items-center justify-center rounded-card border border-line/20 px-4 text-sm font-semibold">
@@ -313,7 +313,7 @@ export function CircleRoom({ id }: { id: string }) {
                   aria-pressed={chair === c.id}
                   className={cn(
                     "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
-                    chair === c.id ? "border-gold bg-gold text-ink" : "border-line/15",
+                    chair === c.id ? "border-gold bg-gold text-on-gold" : "border-line/15",
                   )}
                 >
                   {c.label}
@@ -334,7 +334,7 @@ export function CircleRoom({ id }: { id: string }) {
               type="button"
               onClick={() => void join()}
               disabled={!consented || busy}
-              className="mt-4 min-h-[48px] w-full rounded-card bg-gold text-sm font-semibold text-ink disabled:opacity-40"
+              className="mt-4 min-h-[48px] w-full rounded-card bg-gold text-sm font-semibold text-on-gold disabled:opacity-40"
             >
               {busy ? "Taking a seat…" : "Take a seat"}
             </button>
@@ -475,7 +475,7 @@ export function CircleRoom({ id }: { id: string }) {
                           type="button"
                           onClick={() => setMood(n)}
                           aria-label={`Feeling ${n} out of 10`}
-                          className="h-11 w-11 rounded-full border border-line/15 text-sm font-semibold transition-colors duration-300 hover:bg-gold hover:text-ink"
+                          className="h-11 w-11 rounded-full border border-line/15 text-sm font-semibold transition-colors duration-300 hover:bg-gold hover:text-on-gold"
                         >
                           {n}
                         </button>
@@ -523,7 +523,7 @@ export function CircleRoom({ id }: { id: string }) {
                           aria-pressed={carry === w}
                           className={cn(
                             "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
-                            carry === w ? "border-gold bg-gold text-ink" : "border-line/15",
+                            carry === w ? "border-gold bg-gold text-on-gold" : "border-line/15",
                           )}
                         >
                           {w}
@@ -551,7 +551,7 @@ export function CircleRoom({ id }: { id: string }) {
                           aria-pressed={dropped === w}
                           className={cn(
                             "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
-                            dropped === w ? "border-gold bg-gold text-ink" : "border-line/15",
+                            dropped === w ? "border-gold bg-gold text-on-gold" : "border-line/15",
                           )}
                         >
                           {w}
@@ -710,7 +710,7 @@ export function CircleRoom({ id }: { id: string }) {
                   name. This way the name is stable and it is the right word.
                 */
                 aria-label="Say"
-                className="flex h-12 min-w-[64px] items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-ink disabled:opacity-40"
+                className="flex h-12 min-w-[64px] items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-on-gold disabled:opacity-40"
               >
                 {busy ? "…" : "Say"}
               </button>

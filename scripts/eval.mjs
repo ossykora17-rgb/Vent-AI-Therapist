@@ -3224,6 +3224,131 @@ check("34 Every page has a door into it, and every part is on the graph", () => 
   }
 });
 
+// ── 35. one design system, and it is readable ─────────────────────────────
+//
+// The product had two. Glass and a display serif on the anonymous half; 3px
+// ink borders, hard offset shadows and uppercase-everything on the account
+// half — and they met at the signup redirect, so a person crossing that line
+// saw a different product. Brutalism lost, because the frosted plate is the
+// voice everything the user actually came for is written in.
+//
+// The tokens for the losing system were deleted from the Tailwind config
+// rather than left unused. A design system is singular only when the old one
+// cannot be typed; while `border-3` and `shadow-brut` still resolved, the next
+// component written in a hurry would have reached for them.
+//
+// Then the contrast, which is the half nobody checks. Measured with a real
+// browser sampling rendered pixels, the old palette failed WCAG AA in
+// fourteen places — and two of them were not cosmetic:
+//
+//   --ash at 3.84:1     the product's entire second voice. Every label,
+//                       "Carve your truth.", most of the prose.
+//   bg-gold text-ink    2.21:1 in dark mode, on 25 surfaces — every primary
+//                       action in the product, including the button that
+//                       dials the crisis line. Gold is the same RGB in both
+//                       themes; --ink flips. So the foreground on gold had to
+//                       stop flipping, which is what --on-gold is.
+//
+// A browser cannot run in this suite — the gate has zero dependencies on
+// purpose. But every one of those failures lived in the token layer, and the
+// tokens are arithmetic.
+check("35 One design system, and its text is legible in both themes", () => {
+  const css = fs.readFileSync(path.join(ROOT, "src/app/globals.css"), "utf8");
+  const cfg = fs.readFileSync(path.join(ROOT, "tailwind.config.ts"), "utf8");
+
+  // The losing system, gone from the config and from every surface.
+  for (const dead of ["brut", "brut-sm", "brut-lg"]) {
+    ok(!new RegExp(`["']?${dead}["']?\\s*:`).test(cfg),
+      `the ${dead} shadow no longer exists to be typed`);
+  }
+  ok(!/borderWidth:\s*\{\s*3:/.test(cfg), "border-3 is gone from the theme");
+
+  const sources = [];
+  (function walk(dir) {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.(tsx?|css)$/.test(e.name)) sources.push(full);
+    }
+  })(path.join(ROOT, "src"));
+
+  for (const f of sources) {
+    const t = fs.readFileSync(f, "utf8");
+    // Inside a className, not inside the prose of a comment explaining this.
+    for (const m of t.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\}|\{cn\(([\s\S]{0,600}?)\)\})/g)) {
+      const cls = m[1] ?? m[2] ?? m[3] ?? "";
+      const bad = cls.match(/\b(?:border-[trbl]?-?3|ring-3|shadow-brut(?:-\w+)?|font-black)\b/);
+      ok(!bad, `${path.relative(ROOT, f)} speaks one language`, bad?.[0]);
+    }
+  }
+
+  /*
+    Contrast, from the tokens.
+
+    Both theme blocks, every pair that actually carries text. A browser is the
+    only thing that can check what a *rendered* pixel does, and it found these
+    — but they all resolve to two colours and a ratio, so the arithmetic keeps
+    them fixed without one.
+  */
+  const paletteOf = (selector) => {
+    const block = css.match(new RegExp(`${selector}\\s*\\{([\\s\\S]*?)\\n  \\}`));
+    ok(block, `the ${selector} palette is findable`);
+    const out = {};
+    for (const m of block[1].matchAll(/--([a-z-]+):\s*(\d+)\s+(\d+)\s+(\d+)\s*;/g)) {
+      out[m[1]] = [+m[2], +m[3], +m[4]];
+    }
+    return out;
+  };
+
+  const lum = (c) => {
+    const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+  };
+  const ratio = (a, b) => {
+    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  // `card` is opaque white in light and near-black in dark; `.glass` sits at
+  // 70% over the paper, so the true backdrop is between the two. Both ends
+  // are asserted, because text has to clear the floor at whichever it lands on.
+  const PAIRS = [
+    ["ash", "paper"], ["ash", "card"],
+    ["ink", "paper"], ["ink", "card"],
+    ["on-gold", "gold"],
+  ];
+
+  for (const selector of [":root", "\\.dark"]) {
+    const pal = paletteOf(selector);
+    const name = selector === ":root" ? "light" : "dark";
+    for (const [fg, bg] of PAIRS) {
+      ok(pal[fg] && pal[bg], `${name}: ${fg} and ${bg} are both defined`);
+      const r = ratio(pal[fg], pal[bg]);
+      ok(r >= 4.5, `${name}: ${fg} on ${bg} is readable`, `${r.toFixed(2)}:1`);
+    }
+    // Gold is the accent and is the same in both themes on purpose — that is
+    // the whole reason `on-gold` cannot flip with the theme.
+    is(pal.gold.join(","), "201,168,106", `${name}: gold is the same gold`);
+    is(pal["on-gold"].join(","), "26,26,26",
+      `${name}: what sits on gold does not flip with the theme`);
+  }
+
+  /*
+    And nothing paints theme-flipping ink onto a solid gold fill.
+
+    This was true on twenty-five surfaces — every send button, every chair
+    picker, the "take a seat", and the one that dials the crisis line.
+  */
+  for (const f of sources.filter((x) => x.endsWith(".tsx"))) {
+    const t = fs.readFileSync(f, "utf8");
+    for (const [i, line] of t.split("\n").entries()) {
+      if (/\bbg-gold\b(?!\/)/.test(line) && /\btext-ink\b/.test(line)) {
+        ok(false, `${path.relative(ROOT, f)}:${i + 1} puts flipping ink on solid gold`);
+      }
+    }
+  }
+});
+
 // ── 19. the credit policy, as something a script can fail ─────────────────
 //
 // `CLAUDE.md` says most messages never reach a model and that a change to the

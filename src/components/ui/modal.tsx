@@ -83,15 +83,15 @@ export function Modal({
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cn(
-          "relative z-10 w-full max-w-[440px] border-3 border-ink bg-paper",
-          "max-h-[90dvh] overflow-y-auto shadow-brut-lg",
+          "glass-raised relative z-10 w-full max-w-[440px]",
+          "max-h-[90dvh] overflow-y-auto",
           "animate-slide-up",
         )}
       >
-        <div className="flex items-start justify-between gap-3 border-b-3 border-ink p-4">
+        <div className="flex items-start justify-between gap-3 border-b border-line/10 p-4">
           <h2
             id={titleId}
-            className="text-base font-bold uppercase tracking-wide"
+            className="font-display text-[17px] font-bold tracking-[-0.01em]"
           >
             {title}
           </h2>
@@ -100,7 +100,7 @@ export function Modal({
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="-m-1 flex h-9 w-9 shrink-0 items-center justify-center border-3 border-ink bg-paper text-lg font-bold leading-none hover:bg-ink hover:text-paper"
+              className="pressable focusable -m-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-lg leading-none text-ash hover:bg-ink/5 hover:text-ink"
             >
               ×
             </button>
@@ -110,7 +110,7 @@ export function Modal({
         <div className="p-4 text-sm leading-relaxed">{children}</div>
 
         {footer && (
-          <div className="flex flex-col gap-2 border-t-3 border-ink p-4 sm:flex-row sm:justify-end">
+          <div className="flex flex-col gap-2 border-t border-line/10 p-4 sm:flex-row sm:justify-end">
             {footer}
           </div>
         )}

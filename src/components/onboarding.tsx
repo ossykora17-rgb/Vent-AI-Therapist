@@ -220,7 +220,7 @@ export function Onboarding({
                   aria-pressed={carry === w}
                   className={cn(
                     "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
-                    carry === w ? "border-gold bg-gold text-ink" : "border-line/15",
+                    carry === w ? "border-gold bg-gold text-on-gold" : "border-line/15",
                   )}
                 >
                   {w}

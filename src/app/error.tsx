@@ -19,7 +19,7 @@ export default function Error({
       id="main"
       className="flex min-h-dvh flex-col items-center justify-center px-4 text-center"
     >
-      <h1 className="text-3xl font-black uppercase tracking-tight">
+      <h1 className="font-display text-3xl font-bold tracking-[-0.02em]">
         Something broke
       </h1>
       <p className="mb-8 mt-3 max-w-sm text-sm leading-relaxed text-ash">

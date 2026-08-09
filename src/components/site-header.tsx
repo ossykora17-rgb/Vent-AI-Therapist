@@ -2,11 +2,11 @@ import Link from "next/link";
 
 export function SiteHeader({ children }: { children?: React.ReactNode }) {
   return (
-    <header className="sticky top-0 z-40 border-b-3 border-ink bg-paper">
+    <header className="sticky top-0 z-40 border-b border-line/10 bg-paper/70 backdrop-blur-glass">
       <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-3 px-4">
         <Link
           href="/"
-          className="-mx-2 flex min-h-[44px] items-center px-2 text-xl font-black uppercase tracking-tighter"
+          className="focusable -mx-2 flex min-h-[44px] items-center rounded-card px-2 font-display text-xl font-bold tracking-[-0.02em]"
           aria-label="Vent — home"
         >
           VENT<span className="text-ash">.</span>
@@ -19,9 +19,9 @@ export function SiteHeader({ children }: { children?: React.ReactNode }) {
 
 export function SiteFooter() {
   return (
-    <footer className="border-t-3 border-ink">
+    <footer className="border-t border-line/10">
       <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-6 text-xs sm:flex-row sm:items-center sm:justify-between">
-        <p className="font-bold uppercase tracking-widest">
+        <p className="label-mono">
           Vent © {new Date().getFullYear()}
         </p>
         <p className="max-w-md leading-relaxed text-ash">

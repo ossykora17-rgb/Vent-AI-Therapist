@@ -14,7 +14,7 @@ export default function SignupPage() {
 
       <main id="main" className="flex-1 px-4 py-10 sm:py-16">
         <div className="mx-auto w-full max-w-[420px]">
-          <h1 className="text-4xl font-black leading-tight tracking-tight">
+          <h1 className="font-display text-4xl font-bold leading-[1.1] tracking-[-0.02em]">
             Start venting.
           </h1>
           <p className="mb-8 mt-3 text-sm leading-relaxed text-ash">
@@ -22,7 +22,7 @@ export default function SignupPage() {
           </p>
 
           {!isSupabaseConfigured && (
-            <p className="mb-6 border-3 border-ink bg-ink p-3 text-sm text-paper">
+            <p className="glass mb-6 p-3 text-[14px] leading-[1.6] text-ash">
               Sign-up is disabled until Supabase keys are added to this
               deployment.
             </p>
@@ -30,7 +30,7 @@ export default function SignupPage() {
 
           <AuthForm mode="signup" action={signUp} />
 
-          <p className="mt-8 flex flex-wrap items-center gap-x-2 border-t-3 border-ink pt-6 text-sm">
+          <p className="mt-8 flex flex-wrap items-center gap-x-2 border-t border-line/10 pt-6 text-[14px]">
             Already have one?
             <Link
               href="/login"

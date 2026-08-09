@@ -60,7 +60,7 @@ export default async function DashboardPage() {
 
       <main id="main" className="flex-1 px-4 py-10">
         <div className="mx-auto max-w-5xl">
-          <h1 className="text-3xl font-black leading-tight tracking-tight sm:text-4xl">
+          <h1 className="font-display text-3xl font-bold leading-[1.1] tracking-[-0.02em] sm:text-4xl">
             Hello, {name}.
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-ash">
@@ -81,7 +81,7 @@ export default async function DashboardPage() {
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
               href="/chat"
-              className="inline-flex min-h-[52px] items-center justify-center rounded-card bg-gold px-6 text-[15px] font-semibold text-ink shadow-glass transition-opacity duration-300 hover:opacity-90"
+              className="inline-flex min-h-[52px] items-center justify-center rounded-card bg-gold px-6 text-[15px] font-semibold text-on-gold shadow-glass transition-opacity duration-300 hover:opacity-90"
             >
               Carve something
             </Link>
@@ -98,7 +98,7 @@ export default async function DashboardPage() {
               <CardTitle>Account</CardTitle>
               <CardBody>
                 <dl className="space-y-2">
-                  <div className="flex justify-between gap-3 border-b-3 border-ink pb-2">
+                  <div className="flex justify-between gap-3 border-b border-line/10 pb-2">
                     <dt className="text-xs font-bold uppercase tracking-widest">
                       Email
                     </dt>
@@ -141,8 +141,8 @@ export default async function DashboardPage() {
             Scaffolding copy outlives the scaffolding, and nothing in the suite
             could ever have caught a sentence that was merely out of date.
           */}
-          <div className="mt-4 border-3 border-ink bg-ink p-5 text-paper sm:p-6">
-            <p className="text-xs font-bold uppercase tracking-widest text-ash">
+          <div className="glass mt-4 p-5 sm:p-6">
+            <p className="label-mono">
               Your account changes nothing about the room
             </p>
             <p className="mt-2 max-w-xl leading-relaxed">
@@ -161,15 +161,15 @@ export default async function DashboardPage() {
 
 function StatusRow({ label, ok }: { label: string; ok: boolean }) {
   return (
-    <li className="flex items-center justify-between gap-3 border-b-3 border-ink pb-2 last:border-b-0 last:pb-0">
-      <span className="text-xs font-bold uppercase tracking-widest">
+    <li className="flex items-center justify-between gap-3 border-b border-line/10 pb-2 last:border-b-0 last:pb-0">
+      <span className="label-mono">
         {label}
       </span>
       <span
         className={
           ok
-            ? "border-3 border-ink bg-ink px-2 py-[2px] text-[11px] font-bold uppercase text-paper"
-            : "border-3 border-ash px-2 py-[2px] text-[11px] font-bold uppercase text-ash"
+            ? "rounded-full bg-gold/15 px-2.5 py-[3px] text-[11px] font-semibold uppercase tracking-[0.08em] text-ink"
+            : "rounded-full bg-ink/[0.06] px-2.5 py-[3px] text-[11px] font-semibold uppercase tracking-[0.08em] text-ash"
         }
       >
         {ok ? "Live" : "Pending"}

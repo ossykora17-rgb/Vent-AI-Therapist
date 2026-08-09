@@ -8,11 +8,65 @@
     --ink: 26 26 26;
     --paper: 254 252 248; /* warm marble */
     --card: 255 255 255;
-    --ash: 139 126 116; /* taupe */
+    /*
+      Taupe, darkened from 139/126/116 until it is actually readable.
+
+      The old value scored 3.84:1 on the marble — below the 4.5 floor for
+      normal text — and `text-ash` is not an accent here, it is most of the
+      prose: every label-mono, "Carve your truth.", the whole second voice of
+      the product. Measured with a browser sampling real rendered pixels, not
+      inferred from the token, which is why it survived this long: it looks
+      fine to anybody who is not squinting.
+
+      This app is read at 3am by somebody whose eyes are full. 4.51:1.
+    */
+    --ash: 126 115 106; /* taupe */
     --gold: 201 168 106;
     --gold-deep: 184 151 95;
+    /*
+      Gold is the same RGB in both themes, so anything sitting *on* gold must
+      be too. `bg-gold text-ink` is correct in light (7.70:1) and inverts in
+      dark, where --ink becomes near-white: 2.21:1, on the primary call to
+      action of the landing page. The one button the whole product points at
+      was unreadable in dark mode.
+    */
+    --on-gold: 26 26 26;
     --line: 26 26 26;
     --shadow: rgba(0, 0, 0, 0.08);
+
+    /*
+      Glass, properly.
+
+      A translucent div is not glass. Three things separate the two, and only
+      the first was here: blur, a *saturation* boost, and a lit top edge.
+
+      Saturation is the one everybody omits. Blur alone averages the colours
+      behind a panel toward grey, so a frosted card over a warm marble page
+      goes dishwater. Pushing saturation back up as it blurs is what real
+      frosted glass does to the light passing through it, and it is the whole
+      difference between a panel that sits *in* the page and one pasted onto
+      it.
+
+      The highlight is the edge catching the light from above. One pixel,
+      inset, brighter in light mode where the light source reads as a room
+      and dimmer in dark where it reads as a screen — a 50% white hairline on
+      charcoal is a scar, not a highlight.
+    */
+    --glass-tint: 255 255 255;
+    --glass-highlight: rgb(255 255 255 / 0.6);
+    --glass-inner: rgb(0 0 0 / 0.03);
+    --glass-saturate: 180%;
+
+    /*
+      One easing curve, in one place.
+
+      This exact cubic-bezier was written out as a literal in `.settle`, in
+      `.closing`, and in the Tailwind config's slide-up with slightly
+      different numbers. A design system with three nearly-identical easings
+      has no easing.
+    */
+    --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+
     color-scheme: light;
   }
 
@@ -23,8 +77,18 @@
     --ash: 168 155 144;
     --gold: 201 168 106;
     --gold-deep: 184 151 95;
+    /* Deliberately NOT flipped with the theme. See the light block. */
+    --on-gold: 26 26 26;
     --line: 255 255 255;
     --shadow: rgba(0, 0, 0, 0.4);
+    --glass-tint: 255 255 255;
+    /* An eighth of the light mode value. On charcoal, anything brighter
+       stops being a lit edge and becomes a drawn line. */
+    --glass-highlight: rgb(255 255 255 / 0.08);
+    --glass-inner: rgb(0 0 0 / 0.2);
+    /* Less push in the dark: the ground is already near-black, and over-
+       saturating a dark backdrop makes colour fringes at the blur radius. */
+    --glass-saturate: 140%;
     color-scheme: dark;
   }
 
@@ -161,10 +225,107 @@
 }
 
 @layer components {
-  /* Frosted plate. The one surface the whole product is built from. */
+  /*
+   * Frosted plate. The one surface the whole product is built from.
+   *
+   * Now with the two things it was missing: the saturation boost that keeps
+   * the marble warm through the blur, and the lit top edge that gives it a
+   * thickness. Nothing else changed — same radius, same tint, same shadow —
+   * because the plate was already right, it was just flat.
+   */
   .glass {
-    @apply rounded-card border bg-card/70 shadow-glass backdrop-blur-glass;
+    @apply rounded-card border bg-card/70 shadow-glass;
     border-color: rgb(var(--line) / 0.1);
+    backdrop-filter: blur(20px) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(20px) saturate(var(--glass-saturate));
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-highlight),
+      0 20px 60px var(--shadow);
+  }
+
+  /*
+   * The same glass, lifted.
+   *
+   * For the two things that sit *over* the page rather than in it — a modal
+   * and a toast. More blur because there is more behind them to quiet, and a
+   * longer shadow because the distance is the whole message.
+   */
+  .glass-raised {
+    @apply rounded-card border bg-card/85;
+    border-color: rgb(var(--line) / 0.14);
+    backdrop-filter: blur(32px) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(32px) saturate(var(--glass-saturate));
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-highlight),
+      0 32px 80px -12px var(--shadow),
+      0 0 0 1px rgb(var(--line) / 0.04);
+  }
+
+  /*
+   * Recessed. The one honest use of skeuomorphism in here.
+   *
+   * A field drawn as an outlined box is a rectangle you are told is a field.
+   * A field that is *sunk into* the surface is somewhere to put something,
+   * and a person reads that before they read the label. That is the whole of
+   * what skeuomorphism was ever good for — not fake leather and stitching,
+   * but making an affordance look like what it does.
+   *
+   * Deliberately not neumorphism. Soft-UI's twin light-and-dark emboss looks
+   * superb in a dribbble shot and has famously poor contrast, and the person
+   * this product is written for may be reading it at 3am with their eyes
+   * full. A style that trades legibility for surface is disqualified here
+   * before it is judged on taste.
+   */
+  .well {
+    @apply rounded-card border bg-paper/60;
+    border-color: rgb(var(--line) / 0.12);
+    box-shadow:
+      inset 0 2px 4px var(--glass-inner),
+      inset 0 1px 0 0 rgb(0 0 0 / 0.02);
+  }
+
+  /*
+   * Something that answers to a finger.
+   *
+   * The brutalist button did this well and physically: press, and the hard
+   * shadow collapsed as the button moved into the space it had been floating
+   * above. That instinct was right and it is kept — translated out of the
+   * 4px offset-block idiom into this one, where the travel is 1px and the
+   * shadow tightens rather than vanishing.
+   *
+   * Ten milliseconds down, so it lands with the finger, and a slow release,
+   * because that is what a real key does.
+   */
+  .pressable {
+    transition:
+      transform 140ms var(--ease-settle),
+      box-shadow 140ms var(--ease-settle),
+      background-color 140ms var(--ease-settle);
+  }
+
+  .pressable:active:not(:disabled) {
+    transform: translateY(1px);
+    transition-duration: 10ms;
+  }
+
+  /*
+   * The focus ring, once.
+   *
+   * `:focus-visible` rather than `:focus`, so a mouse click on a button does
+   * not paint a ring the person did not ask for while a Tab key still does.
+   */
+  .focusable:focus-visible {
+    outline: 2px solid rgb(var(--gold));
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pressable {
+      transition-duration: 1ms;
+    }
+    .pressable:active:not(:disabled) {
+      transform: none;
+    }
   }
 
   .label-mono {
