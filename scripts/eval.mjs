@@ -3789,6 +3789,63 @@ check("40 Weather is measured, and the rest of the news is not invented", () => 
     "and nobody is told how other people feel tonight");
 });
 
+// ── 41. the probe reports everything it found ─────────────────────────────
+//
+// The first real production /api/health this project has ever read said:
+//
+//   "missingTables": ["vent_users", "profiles"],
+//   "vent_users": { "code": "42703",
+//                   "message": "column vent_users.carve does not exist" }
+//
+// carve is 0011. It had never been applied. And the contract for that table
+// is `id,anon_id,carve,held,created_at` — so `held`, added in 0013, sits two
+// positions later in the same select and was not mentioned at all, because
+// PostgREST stops at the first column it cannot resolve.
+//
+// The honest reading of that response is "at least one of these is missing".
+// The way to learn the rest was to fix carve, redeploy, and ask again — two
+// round trips of somebody's evening for an answer the database already had.
+//
+// Same shape as the HEAD request that could not carry an error body: a probe
+// built so it cannot report everything it found. Third time in this file.
+check("41 A drifted table names every column it is missing", () => {
+  const health = fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8");
+
+  ok(/missingColumns/.test(health), "the answer has room for more than one column");
+  ok(/error\?\.code === "42703"/.test(health),
+    "and the re-ask is scoped to schema drift, not to every failure");
+
+  /*
+    Per column, not per table.
+
+    A single select naming every column is what produced the one-at-a-time
+    answer. The fallback has to ask about each column on its own or it learns
+    exactly as little as the request it is correcting.
+  */
+  ok(/cols\.map\(\(c\) => supabase!\.from\(name\)\.select\(c\)/.test(health),
+    "each column is asked about separately");
+  ok(/FULL_CONTRACT\[name\]\.split\(","\)/.test(health),
+    "and the columns come from the contract, not from a second list that can drift from it");
+
+  /*
+    Only on the failing path.
+
+    The happy case must stay one round trip per table. A health endpoint that
+    fires a request per column on every call is a health endpoint people turn
+    off.
+  */
+  const fallback = health.slice(health.indexOf("const drifted"));
+  ok(/names\.filter\(/.test(fallback),
+    "the expensive pass runs only for tables that actually drifted");
+  ok(health.indexOf("const drifted") > health.indexOf("for (const [i, res] of results.entries())"),
+    "after the cheap pass, never instead of it");
+
+  // And the contract still names both columns, so the next drift is caught.
+  const contract = fs.readFileSync(path.join(ROOT, "src/lib/store/contract.ts"), "utf8");
+  ok(/vent_users: "id,anon_id,carve,held,created_at"/.test(contract),
+    "the contract still asks for both of the columns production was missing");
+});
+
 // ── 37. a class that compiles to nothing ──────────────────────────────────
 //
 // `bg-paper/92` is not a Tailwind class. The default opacity scale runs in
