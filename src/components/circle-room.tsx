@@ -10,6 +10,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { useComposerHeight } from "@/lib/ui/use-composer-height";
+import { roomName } from "@/lib/circles/naming";
 
 interface Msg {
   id: string;
@@ -22,7 +23,16 @@ interface Msg {
 }
 
 interface RoomState {
-  circle: { id: string; tag: string | null; status: string; ends_at: string };
+  // `created_at` was already on the wire — the route returns the whole row —
+  // and only this type was narrow. The name needs the hour it opened, and
+  // deriving that from `ends_at` would misname a room opened at 4:50am.
+  circle: {
+    id: string;
+    tag: string | null;
+    status: string;
+    ends_at: string;
+    created_at: string;
+  };
   seats: number;
   maxSeats: number;
   role: "keeper" | "sharer" | "witness" | null;
@@ -243,8 +253,10 @@ export function CircleRoom({ id }: { id: string }) {
               </span>
               <span className="whitespace-nowrap">{state?.present ?? 0} here · {mins} min</span>
             </p>
+            {/* The room's name, not its filing category. Derived from the
+                tag and the hour it opened in Lagos — nothing generated. */}
             <h1 className="truncate font-display text-xl font-bold tracking-[-0.02em]">
-              {state?.circle.tag ?? "Anything"}
+              {state ? roomName(state.circle.tag, state.circle.created_at) : "…"}
             </h1>
           </div>
           <div className="flex items-center gap-2">

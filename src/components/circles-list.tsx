@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { anonId } from "@/lib/anon";
 import { CHAIRS, tensionForChair } from "@/lib/vent/chairs";
 import { carryingWord } from "@/lib/community/carrying";
+import { roomName } from "@/lib/circles/naming";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -14,6 +15,8 @@ import { cn } from "@/lib/utils";
 interface Circle {
   id: string;
   tag: string | null;
+  /** On the wire already — `listOpenCircles` returns the whole row. */
+  created_at: string;
   chair_picked: string | null;
   pressure_seeded: number | null;
   status: string;
@@ -316,6 +319,18 @@ export function CirclesList() {
                 <Link href={`/circles/${c.id}`} className="glass block p-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <span aria-hidden="true" className="h-2 w-2 rounded-full bg-gold motion-safe:animate-pulse" />
+                    {/*
+                      A room, not a filing category.
+
+                      This said "Money" — correct, and a taxonomy. Nobody has
+                      ever wanted to join a taxonomy. The name is derived from
+                      the tag and the hour it opened in Lagos, so nothing is
+                      invented: a room called Night Owls is named for the
+                      clock, not for people it has decided are night owls.
+                    */}
+                    <span className="text-[15px] font-medium">
+                      {roomName(c.tag, c.created_at)}
+                    </span>
                     <span className="label-mono">
                       {TAGS.find(([v]) => v === c.tag)?.[1] ?? "Anything"}
                     </span>
