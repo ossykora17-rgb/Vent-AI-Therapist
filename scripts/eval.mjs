@@ -1336,7 +1336,7 @@ check("15j The authored corpus holds the scan to what it claims", () => {
 // ── 15k. the Carver, and the campfire that costs nothing ──────────────────
 const { CARVER_SYSTEM, parseCarve, worthCarving, CARVE_FLOOR, CARVE_MAX_WORDS } =
   await app("src/lib/vent/carve.ts");
-const { MYCELIUM } = await app("src/lib/circles/rules.ts");
+const { MYCELIUM, containsAdvice } = await app("src/lib/circles/rules.ts");
 
 check("15k The Carver refuses a summary, and the campfire says its own words", () => {
   // A carve is the wound, not a case note. The distinction is the whole file.
@@ -2546,6 +2546,95 @@ check("27 The cheap path is cheap, and the edge gets everything", () => {
   const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
   ok(/depthBadge: tokensSpent \? depthBadge\(verdict\) : null/.test(route),
     "the badge is gated on a model call having happened");
+});
+
+// ── 28. the door between the two rooms ────────────────────────────────────
+//
+// This product had two surfaces and nothing between them. Somebody writing
+// "nobody knows this, i'm alone with it" got a real answer and was never told
+// a circle was open with free seats on the other side of the same app — the
+// loneliest sentence anybody types here, answered well, and the person left
+// exactly as alone as they arrived.
+//
+// It is data, never prose. A model told that circles exist can invent one, and
+// arriving at a room that was never there is worse than never being offered
+// it. Everything below is a row the server actually read.
+const { circleInvite, soundsAlone } = await app("src/lib/community/invite.ts");
+
+check("28 A lonely vent is offered a real room, or none at all", () => {
+  const NOW = Date.parse("2026-08-09T21:00:00Z");
+  const room = (over = {}) => ({
+    id: "c1", tag: "lonely", seats: 2,
+    created_at: new Date(NOW - 10 * 60_000).toISOString(),
+    ...over,
+  });
+
+  // Loneliness in the words people use — including the ones that never say it.
+  for (const m of [
+    "i feel so alone with this",
+    "nobody knows this about me",
+    "i never tell anybody, i just hold am for mind",
+    "i no get person wey i fit talk to",
+    "i don't have anyone to talk to",
+  ]) {
+    ok(soundsAlone(m), `heard as alone: "${m.slice(0, 42)}"`);
+  }
+  ok(!soundsAlone("traffic was mad today and my oga shouted"),
+    "and an ordinary bad day is not");
+
+  // A real room, with real seats and real time left.
+  const got = circleInvite("i feel so alone with this", [room()], "lonely", NOW);
+  ok(got !== null, "a lonely vent with an open circle gets the door");
+  is(got.seatsOpen, 4, "the seat count is real, from the row");
+  ok(got.minutesLeft > 8 && got.minutesLeft <= 45, `and so is the clock`, `${got.minutesLeft}`);
+
+  // ── silence beats a guess, in every direction ────────────────────────────
+  is(circleInvite("i feel so alone", [], "lonely", NOW), null,
+    "no circles means no offer, never an empty invitation");
+  is(circleInvite("traffic was mad today", [room()], null, NOW), null,
+    "and an ordinary vent is not sent to a support group");
+  is(circleInvite("i feel so alone", [room({ seats: 6 })], "lonely", NOW), null,
+    "a full room is not offered — that is the turn-that-never-comes bug in a doorway");
+  is(
+    circleInvite("i feel so alone", [room({
+      created_at: new Date(NOW - 40 * 60_000).toISOString(),
+    })], "lonely", NOW),
+    null,
+    "and a room with five minutes left is a closing door, not an invitation",
+  );
+  is(
+    circleInvite("i feel so alone", [room({
+      created_at: new Date(NOW - 60 * 60_000).toISOString(),
+    })], "lonely", NOW),
+    null,
+    "an expired circle is never offered",
+  );
+
+  // Same pressure first — sitting with people holding the same weight is the
+  // whole value — but any open room beats none at 2am.
+  const mixed = [room({ id: "money", tag: "economy" }), room({ id: "same", tag: "japa" })];
+  is(circleInvite("i feel alone with this", mixed, "japa", NOW).id, "same",
+    "a room about the same pressure is preferred");
+  ok(circleInvite("i feel alone with this", mixed, "health", NOW) !== null,
+    "and with no match, an open room is still better than nothing");
+
+  // ── the model is never told any of this ──────────────────────────────────
+  const prompt = fs.readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8");
+  ok(!/circleInvite|circles? (is|are) (open|sitting)/i.test(prompt),
+    "the system prompt says nothing about circles — a model told they exist can invent one");
+
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
+  ok(/circleInvite: invite/.test(route), "the route attaches it as data");
+  // The crisis path returns long before this. Somebody handed a helpline is
+  // not being redirected to a room of strangers.
+  ok(route.indexOf("intent: \"crisis\"") < route.indexOf("circleInvite("),
+    "and crisis returns before any invitation is assembled");
+
+  // It is an offer, not a prescription — this room does not fix people.
+  const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
+  ok(!containsAdvice(chat.slice(chat.indexOf("Somewhere to say it out loud"), chat.indexOf("Somewhere to say it out loud") + 700)),
+    "the invitation contains no advice");
+  ok(/invite && !gated/.test(chat), "and it is hidden once a crisis has gated the room");
 });
 
 // ── 19. the credit policy, as something a script can fail ─────────────────

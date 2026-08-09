@@ -15,6 +15,7 @@ import { noModelKeyReply } from "@/lib/vent/fallback";
 import { MAX_TOKENS, classifyModelError, modelFailureReply } from "@/lib/vent/model";
 import { generateReply } from "@/lib/vent/providers";
 import { depthFor, depthBadge } from "@/lib/vent/depth";
+import { circleInvite, soundsAlone } from "@/lib/community/invite";
 import { buildFlavour } from "@/lib/flavour/profile";
 import { withStore } from "@/lib/http/with-store";
 
@@ -346,6 +347,38 @@ async function handlePOST(request: Request) {
       ? await tryPersist(store, userId, input, classification, reply, tactic.id, grounding.iso)
       : false;
 
+  /*
+    The door to the peer room, opened only when there is one.
+
+    This product has two surfaces and had no bridge between them: somebody
+    writing "nobody knows this, i'm alone with it" got a real answer and was
+    never told a circle was open with free seats on the other side of the same
+    app.
+
+    Read here rather than described to the model. A model told that circles
+    exist can invent one — a tag, a time, a seat count — and arriving at a room
+    that was never there is worse than never being offered it. This is rows the
+    server actually read, and it costs the prompt nothing.
+
+    Only when they sound alone, only when a real room has a real seat with real
+    time left, and never after a crisis turn — that path returned long ago,
+    because somebody handed a helpline is not being redirected to strangers.
+  */
+  let invite = null;
+  if (store && soundsAlone(input.message)) {
+    try {
+      invite = circleInvite(
+        input.message,
+        await store.listOpenCircles(),
+        classification.realWorldTag,
+      );
+    } catch {
+      // A circles table that is down is not an invitation to nothing. The
+      // vent already succeeded; this stays silent.
+      invite = null;
+    }
+  }
+
   // Composed here and nowhere earlier, because the sentence it adds makes a
   // claim about the line directly above it. `saved` is what `tryPersist`
   // returned, not what the deployment looked capable of.
@@ -402,6 +435,8 @@ async function handlePOST(request: Request) {
       */
       depth: verdict.depth,
       depthBadge: tokensSpent ? depthBadge(verdict) : null,
+      /** A real open room, or null. Never prose — the UI renders a link. */
+      circleInvite: invite,
       provider: answeredBy,
       persisted: saved,
       storage: store?.kind ?? "none",
