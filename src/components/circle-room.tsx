@@ -231,7 +231,7 @@ export function CircleRoom({ id }: { id: string }) {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/92 backdrop-blur-glass">
+      <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/95 backdrop-blur-glass">
         <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
           <div className="min-w-0">
             <p className="label-mono flex flex-wrap items-center gap-x-2 gap-y-1 leading-none">
@@ -395,10 +395,14 @@ export function CircleRoom({ id }: { id: string }) {
                 if (m.kind === "keeper_prompt") {
                   return (
                     <li key={m.id} className="py-4 text-center">
-                      <p className="label-mono mb-2 text-gold">Keeper · pattern</p>
-                      <p className="mx-auto max-w-[46ch] font-display text-[17px] leading-[1.55] tracking-[0.01em]">
-                        {m.content}
+                      <p className="label-mono mb-3 tracking-[0.22em] text-gold">
+                        Keeper · pattern
                       </p>
+                      {/* `.reply`, so the Keeper and VENT are audibly the same
+                          thing in two rooms. Left unplated and centred: the
+                          room speaking without walls around it, which is the
+                          one place that reads as more present, not less. */}
+                      <p className="reply mx-auto">{m.content}</p>
                     </li>
                   );
                 }
@@ -406,9 +410,9 @@ export function CircleRoom({ id }: { id: string }) {
                 if (m.kind === "guardian") {
                   return (
                     <li key={m.id}>
-                      <div className="rounded-card border border-gold/45 bg-gold/5 p-4">
-                        <p className="label-mono mb-1 text-gold">Guardian</p>
-                        <p className="text-[15px] leading-[1.6]">{m.content}</p>
+                      <div className="presence arrive p-5 sm:p-6">
+                        <p className="nameplate mb-3">Guardian</p>
+                        <p className="reply">{m.content}</p>
                       </div>
                     </li>
                   );
