@@ -2448,6 +2448,84 @@ check("26 Crisis is caught in the words people use, and not in the ones they don
   ok(!/\bI can (help|fix)\b/i.test(CRISIS_RESPONSE), "and promises nothing it is not");
 });
 
+// ── 27. cheap for the ordinary, everything for the edge ───────────────────
+//
+// "Fast, cheap models for 80% of chats" and "auto-switch to maximum
+// intelligence for trauma and suicide risk" are one mechanism, not two. Most
+// vents are ordinary and a small model answers them well; the rare ones where
+// somebody is at the edge get the best thing available, and the saving from
+// the first pays for the second.
+//
+// Deciding costs nothing — a regex pass over an already-classified message.
+// This product does not spend a model call to size a model call.
+const { depthFor, depthBadge } = await app("src/lib/vent/depth.ts");
+
+check("27 The cheap path is cheap, and the edge gets everything", () => {
+  const d = (message, extra = {}) =>
+    depthFor({ classification: classify(message), message, ...extra });
+
+  // The layer just above the crisis list: not there yet, or there and not
+  // written down. Cost does not get a vote on these.
+  for (const m of [
+    "i feel completely hopeless and empty, nothing matters anymore",
+    "i don tire, e don do me, nothing dey sweet again",
+    "my grandmother died last month and i still have not told anybody",
+    "my dad's test results came back",
+    "he used to hit me and i never told anyone",
+    "i had a panic attack on the bus this morning",
+    "i am thinking of quitting my job and moving abroad",
+  ]) {
+    is(d(m).depth, "deep", `deep: "${m.slice(0, 46)}"`);
+  }
+
+  // Pidgin is not a second-class path. Half the EDGE list is Pidgin because
+  // the person this is built for often writes it first.
+  is(d("i don tire, e don do me").reason, "edge", "Pidgin despair reaches the edge list");
+
+  // The ordinary 80%. If these route deep the router is decorative and the
+  // free tier stops being affordable.
+  for (const m of [
+    "traffic was mad today and i reached late again",
+    "my oga shouted for the meeting and i just kept quiet",
+    "fuel don double again this month",
+    "i miss gym since monday",
+  ]) {
+    is(d(m).depth, "fast", `fast: "${m.slice(0, 46)}"`);
+  }
+
+  // Cheap signals that are worth the better model anyway.
+  is(d("work was long", { ventCount: 8 }).reason, "long_session",
+    "still typing at turn eight is not a light evening");
+  is(d("work was long", { pressure: 95 }).reason, "pressure",
+    "and neither is ninety-five on the slider");
+
+  // Omitting depth must never downgrade anybody. The default is the
+  // expensive, safe one — a forgotten field cannot quietly buy a worse reply.
+  const providers = fs.readFileSync(path.join(ROOT, "src/lib/vent/providers.ts"), "utf8");
+  ok(/call\.depth === "fast"/.test(providers),
+    "the chain reorders only when a turn is explicitly fast");
+  ok(/FAST_FIRST/.test(providers), "and there is an authored cheap-first order");
+
+  // Failover is untouched: a fast turn that exhausts the cheap end still
+  // reaches everything. Nobody is refused an answer to save money.
+  ok(/const usable = live\.length \? live : all/.test(providers),
+    "every configured provider is still in the pool on both paths");
+
+  // ── the badge tells the truth or says nothing ───────────────────────────
+  is(depthBadge({ depth: "fast", reason: "ordinary" }), null,
+    "no badge on the cheap path — one that is always lit is decoration");
+  ok(depthBadge({ depth: "deep", reason: "grave" }),
+    "a real deep turn says so, so somebody can see the product fighting for them");
+  is(depthBadge({ depth: "deep", reason: "crisis" }), null,
+    "and never on a crisis turn — a helpline does not need a banner about infrastructure");
+
+  // Shown only when a model actually answered. A badge over the authored
+  // fallback would be a receipt for something that did not happen.
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
+  ok(/depthBadge: tokensSpent \? depthBadge\(verdict\) : null/.test(route),
+    "the badge is gated on a model call having happened");
+});
+
 // ── 19. the credit policy, as something a script can fail ─────────────────
 //
 // `CLAUDE.md` says most messages never reach a model and that a change to the

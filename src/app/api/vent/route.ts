@@ -14,6 +14,7 @@ import { MEMORY_TURNS, memoryFetchSize, selectMemory } from "@/lib/vent/memory";
 import { noModelKeyReply } from "@/lib/vent/fallback";
 import { MAX_TOKENS, classifyModelError, modelFailureReply } from "@/lib/vent/model";
 import { generateReply } from "@/lib/vent/providers";
+import { depthFor, depthBadge } from "@/lib/vent/depth";
 import { buildFlavour } from "@/lib/flavour/profile";
 import { withStore } from "@/lib/http/with-store";
 
@@ -249,6 +250,13 @@ async function handlePOST(request: Request) {
     },
   });
 
+  const verdict = depthFor({
+    classification,
+    message: input.message,
+    ventCount: history.length,
+    pressure: input.pressure ?? null,
+  });
+
   let reply: string;
   let tokensSpent = false;
   let answeredBy: string | null = null;
@@ -279,6 +287,10 @@ async function handlePOST(request: Request) {
       const answered = await generateReply({
         system: systemPrompt,
         maxTokens: MAX_TOKENS,
+        // Cheap for the ordinary 80%, everything for the edge. Decided by a
+        // regex pass over a message that is already classified — this product
+        // does not spend a model call to size a model call.
+        depth: verdict.depth,
         messages: [
           ...history.flatMap((h) =>
             h.ai_reply
@@ -379,6 +391,17 @@ async function handlePOST(request: Request) {
         };
       })(),
       tokensSpent,
+      /*
+        Shown only when it is true, and never on a crisis turn.
+
+        The commandment asks for a "God Mode Active" badge so somebody can see
+        the product fighting for them, and that is worth showing — honestly.
+        Null on the fast path rather than a second label, because a badge that
+        is always lit is decoration, and one that names a model that did not
+        answer is a receipt for something that did not happen.
+      */
+      depth: verdict.depth,
+      depthBadge: tokensSpent ? depthBadge(verdict) : null,
       provider: answeredBy,
       persisted: saved,
       storage: store?.kind ?? "none",

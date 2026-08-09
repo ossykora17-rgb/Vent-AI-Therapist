@@ -23,6 +23,16 @@ export interface ProviderCall {
   system: string;
   messages: Array<{ role: "user" | "assistant"; content: string }>;
   maxTokens: number;
+  /**
+   * How much brain this message earns, from `depthFor` in `./depth`.
+   *
+   * Reorders the chain rather than swapping models inside a provider: the
+   * failover, the dead-provider skipping and the discovery logic are all
+   * unchanged, and a fast turn simply starts at the cheap end. Omitted means
+   * `deep`, so nothing that forgets to pass it silently gets downgraded — the
+   * default has to be the expensive, safe one.
+   */
+  depth?: "fast" | "deep";
 }
 
 export interface Provider {
@@ -367,6 +377,18 @@ export interface Answered {
  * If every configured provider fails, the last verdict is thrown so the route
  * still names a real cause rather than a guess.
  */
+/**
+ * Cheap-first providers, for the ordinary 80%.
+ *
+ * Small Llamas on Groq and Cerebras answer a normal vent well and cost a
+ * fraction of a frontier model. The ordering is a preference, not a
+ * restriction: everything configured is still tried, and a fast turn that
+ * exhausts the cheap end falls through to the same providers a deep turn
+ * starts at. Nobody is refused an answer to save money — that is the point of
+ * the whole file.
+ */
+const FAST_FIRST = ["cerebras", "groq", "openrouter", "gemini", "anthropic"];
+
 export async function generateReply(call: ProviderCall): Promise<Answered> {
   const all = configuredProviders();
   if (!all.length) throw new ProviderError(401, "no provider configured");
@@ -375,7 +397,18 @@ export async function generateReply(call: ProviderCall): Promise<Answered> {
   // leaves nothing, try everything anyway — a stale note is a worse reason to
   // refuse somebody than a slow answer.
   const live = all.filter((p) => !isDead(p.id));
-  const providers = live.length ? live : all;
+  const usable = live.length ? live : all;
+
+  // Ordinary vents start cheap; anything the router called deep keeps the
+  // chain's authored order, which leads with the strongest model.
+  const providers =
+    call.depth === "fast"
+      ? [...usable].sort(
+          (a, b) =>
+            (FAST_FIRST.indexOf(a.id) === -1 ? 99 : FAST_FIRST.indexOf(a.id)) -
+            (FAST_FIRST.indexOf(b.id) === -1 ? 99 : FAST_FIRST.indexOf(b.id)),
+        )
+      : usable;
 
   const fellThrough: Answered["fellThrough"] = [];
   let last: unknown = new ProviderError(502, "no provider attempted");
