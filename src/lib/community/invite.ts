@@ -43,7 +43,7 @@ import type { CircleRow } from "@/lib/store";
  * for the version most people never write.
  */
 const ALONE = [
-  /\b(lonely|alone|isolat|by myself|on my own)\b/,
+  /\b(lonely|alone|by myself|on my own)\b|\b(isolat)/,
   /\bnobody (knows|understands|to talk to|dey)\b/,
   /\bno ?body to (talk|tell)\b/,
   /\bi (never|no dey) tell (anybody|anyone|nobody)\b/,

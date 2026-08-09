@@ -21,7 +21,7 @@ import { app, ROOT } from "./app-imports.mjs";
 
 const { classify } = await app("src/lib/vent/intent.ts");
 const { groundNow } = await app("src/lib/vent/grounding.ts");
-const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS, ALL_TACTICS } =
+const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS, ALL_TACTICS, nothingCanMove } =
   await app("src/lib/vent/tactics.ts");
 const { buildFlavour } = await app("src/lib/flavour/profile.ts");
 const { flavourBlock, openingBlock, carveBlock } = await app("src/lib/vent/prompt.ts");
@@ -2789,6 +2789,260 @@ check("30 Rooms are named from facts, and never at somebody's expense", () => {
   ok(!/fetch|generateReply|await /.test(src), "naming is pure and free");
   ok(/Africa\/Lagos/.test(src),
     "and 3am means 3am where the people are, not where the server woke up");
+});
+
+// ── 31. the moves that are wrong at a deathbed ────────────────────────────
+//
+// `meaning_stance` carried a comment saying "above every problem-solving move
+// — when this fits, the others are wrong", and a weight cannot say that. It
+// wins one contest, once. On turn two of a terminal diagnosis the three-turn
+// block took it out of the running and the runner-up spoke: `iterated_game`,
+// offering to show somebody whose father was dying *the payoff matrix*. With a
+// real-world tag it never even got that far — `rw_economy` outranked it
+// outright, so "my dad is dying and the hospital bill is 2 million" was
+// answered with the money-choke tool.
+//
+// A veto is not a weight, and this is the check that keeps it one.
+check("31 When nothing can move, the moves that assume it can are gone", () => {
+  const UNFIXABLE = [
+    ["a diagnosis", "my dad's test results came back. it's terminal. nothing i can do"],
+    ["the bill too", "my dad is dying and the hospital bill is 2 million"],
+    ["after it", "the burial finished and the house is quiet now"],
+    ["pidgin", "my mama, e don go. i never talk am to anybody"],
+    ["the baby", "we lost the baby at 5 months. i cant look at her"],
+    ["the word itself", "i have been grieving since march and nobody says her name"],
+  ];
+
+  for (const [label, msg] of UNFIXABLE) {
+    ok(nothingCanMove(msg), `${label}: recognised as unfixable`, msg);
+  }
+
+  /*
+    And not on an ordinary bad Tuesday.
+
+    `lost` is the trap: "I lost my job" is a pressure with real moves
+    available, and vetoing them would leave somebody who needs a plan being
+    breathed at. Every bereavement pattern pins `lost` to the person beside
+    it.
+  */
+  for (const m of [
+    "i lost my job today and i haven't told anybody",
+    "i lost my phone for danfo this morning",
+    "lagos traffic is killing me",
+    "my boss is impossible and i want to quit",
+    "i lost 200k on that investment",
+  ]) {
+    ok(!nothingCanMove(m), `an ordinary bad day stays ordinary`, m);
+  }
+
+  /*
+    The survivors have to outnumber the block, or the veto starves.
+
+    `selectTactic` refuses the last three tactics used. If the safe pool were
+    ever three or fewer, turn four would have nothing left and would fall
+    through to whatever the fallback found — which is the exact failure this
+    check exists to prevent, arriving by a different door.
+  */
+  const safe = ALL_TACTICS.filter((t) => t.holdsWhenNothingMoves);
+  ok(safe.length > 3, "more survivors than the three-turn block can eat",
+    `${safe.length}: ${safe.map((t) => t.id).join(", ")}`);
+
+  /*
+    Absent means no, and these two families are definitionally the ones that
+    assume something can move. If a later change flags one, it is either a
+    mistake or a family that needs renaming — either way it stops here.
+  */
+  for (const t of safe) {
+    ok(t.family !== "cognitive" && t.family !== "behavioral",
+      `${t.id} is not a thinking-trap or homework move`, t.family);
+    ok(!t.id.startsWith("rw_"),
+      `${t.id} is not a real-world coping tool`);
+  }
+
+  /*
+    The behaviour, over six turns and both shapes.
+
+    Six because the block holds three and the interesting turns are the ones
+    after it fills — turn two is where this shipped broken, and turn four is
+    where the stale fallback takes over and ignores `fits` entirely. That
+    fallback searches the pool, which is why the veto is applied to the pool
+    and not to the eligible list.
+  */
+  for (const [label, message] of UNFIXABLE) {
+    for (const tag of [null, "economy", "family", "health"]) {
+      const recent = [];
+      for (let turn = 1; turn <= 6; turn++) {
+        const t = selectTactic({
+          kind: "vent", crisis: false, realWorldTag: tag, body: null,
+          language: "en", message, pressure: 70, duality: null, mood: 2,
+          ventCount: turn, recentTactics: [...recent],
+        });
+        ok(t.holdsWhenNothingMoves === true,
+          `${label} + ${tag ?? "no tag"}, turn ${turn}: ${t.id} still holds when nothing moves`,
+          t.instruction.slice(0, 90));
+        recent.push(t.id);
+      }
+    }
+  }
+
+  // The two that actually shipped, pinned by name so the regression is
+  // unmistakable rather than merely covered.
+  const dying = {
+    kind: "vent", crisis: false, body: null, language: "en",
+    message: "my dad is dying and the hospital bill is 2 million",
+    pressure: 70, duality: null, mood: 2,
+  };
+  is(selectTactic({ ...dying, realWorldTag: null, ventCount: 1, recentTactics: [] }).id,
+    "meaning_stance", "turn one says plainly that nothing here can be fixed");
+  ok(selectTactic({ ...dying, realWorldTag: null, ventCount: 2, recentTactics: ["meaning_stance"] }).id
+      !== "iterated_game",
+    "turn two does not offer a payoff matrix for a dying father");
+  ok(selectTactic({ ...dying, realWorldTag: "economy", ventCount: 1, recentTactics: [] }).id
+      !== "rw_economy",
+    "and the hospital bill does not outrank the father");
+});
+
+// ── 32. one tag list, in five places ──────────────────────────────────────
+//
+// `grief` had to be added to a SQL constraint, a zod enum, a dropdown, an
+// opening line and a naming table before a single person could join the room.
+// Four out of five leaves a tag that is offered and then rejected by the
+// database, or accepted and shown with no name — the "one table, one truth"
+// failure with a UI on top of it.
+check("32 Every circle tag exists everywhere a circle tag is read", () => {
+  const sql = fs.readFileSync(path.join(ROOT, "supabase/APPLY.sql"), "utf8");
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/circles/route.ts"), "utf8");
+  const list = fs.readFileSync(path.join(ROOT, "src/components/circles-list.tsx"), "utf8");
+
+  // The constraint the database will actually enforce — the last one written
+  // for `circles.tag` wins, so read that rather than 0003's original.
+  const constraints = [...sql.matchAll(/circles[\s\S]{0,400}?tag\s+in\s*\(([^)]*)\)/g)];
+  ok(constraints.length > 0, "the circles tag constraint is findable in APPLY.sql");
+  const dbTags = new Set(
+    [...constraints[constraints.length - 1][1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]),
+  );
+
+  const zod = route.match(/tag:\s*z[\s\S]{0,200}?\.enum\(\[([^\]]*)\]\)/);
+  ok(zod, "the route validates the tag against a list");
+  const apiTags = new Set([...zod[1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1]));
+
+  const uiBlock = list.match(/const TAGS = \[([\s\S]*?)\] as const;/);
+  ok(uiBlock, "the dropdown has a list");
+  const uiTags = new Set([...uiBlock[1].matchAll(/\["([a-z_]+)",/g)].map((m) => m[1]));
+
+  ok(dbTags.has("grief"), "the database will accept a grief circle",
+    [...dbTags].join(","));
+
+  for (const t of uiTags) {
+    ok(apiTags.has(t), `"${t}" is offered in the UI and accepted by the route`);
+    ok(dbTags.has(t), `"${t}" is offered in the UI and accepted by the database`);
+    /*
+      Every tag needs both a sentence and a name. A tag with neither is a
+      dropdown entry that opens a room called "Open Room" and greets nobody.
+    */
+    ok(keeperIntention(t, null).length > 40, `"${t}" opens with something to say`);
+    const named = roomName(t, "2026-08-09T12:30:00Z");
+    ok(named && named !== "Open Room", `"${t}" gets its own name, not the fallback`, named);
+  }
+
+  /*
+    And `grief` stops at the circles boundary.
+
+    A real-world tag selects a coping tool at weight 95 — "the one call you
+    have been avoiding", "one thing you fit do for danfo". There is no such
+    line for a burial, and writing one would be exactly the mistake check 31
+    exists to catch. The private session recognises bereavement from the words
+    themselves and needs no tag at all.
+  */
+  ok(!("grief" in REAL_WORLD_TACTIC),
+    "grief is a room people choose, not a coping tool the app assigns");
+  is(keeperIntention("grief", null).includes("Today we hold somebody who is gone."), true,
+    "the grief room opens by saying it");
+});
+
+// ── 33. the tense people actually write in ────────────────────────────────
+//
+// `depth.ts` has carried this comment since the day it was written:
+//
+//   "Stems, not bare words. The first draft used \bquit\b and missed
+//    'quitting' ... A word boundary after a verb root is the most common way
+//    a regex quietly stops matching the tense people actually write in."
+//
+// It is directly above `IRREVERSIBLE`, which gets it right. The two lists
+// immediately above IT did not, and neither did four other files. Eleven
+// stems sat inside `\b(...)\b` groups where the trailing boundary made them
+// unmatchable by anything a person would type:
+//
+//   griev, diagnos, separat, molest, divorc  → a bereavement or a diagnosis
+//                                              routed to the CHEAP model
+//   compar                                   → the entire "comparing" tag was
+//                                              reachable only by brand name
+//   isolat                                   → in three files, including the
+//                                              loneliness → circles bridge
+//   procrastinat                             → the only form anybody writes
+//   dissociat, perform, responsib            → tactic gates that never opened
+//
+// None of it was detectable by reading, because every one of those regexes
+// looks correct. So this asserts the behaviour instead: real sentences, in the
+// tense people send them in, reaching the routing they were written for.
+//
+// This closes the instances. It does not close the class — that needs a
+// dictionary this repo does not have, and the honest thing is to say so
+// rather than to imply a scan is happening that is not.
+check("33 A stem still matches the tense people write in", () => {
+  const TAGGED = [
+    ["i keep comparing myself to everybody on there", "social"],
+    ["i compared my life to hers again last night", "social"],
+    ["i have been isolating for weeks now", "lonely"],
+    ["i isolated myself all month and nobody noticed", "lonely"],
+    ["i am relocating to canada in march", "japa"],
+    ["thinking of emigrating next year", "japa"],
+    ["she was diagnosed last tuesday", "health"],
+    ["the diagnosis came back and i have not told anybody", "health"],
+  ];
+  for (const [msg, tag] of TAGGED) {
+    is(classify(msg).realWorldTag, tag, `"${msg.slice(0, 40)}…" is ${tag}`);
+  }
+
+  /*
+    The expensive model, for the people the cost argument does not get a vote
+    over. Each of these routed cheap until check 31 went looking.
+  */
+  const DEEP = [
+    "i have been grieving since march",
+    "my mum was diagnosed in march",
+    "we are separating after nine years",
+    "i am getting divorced and i cannot say it out loud",
+    "he molested me when i was small",
+    "it was traumatic and i still dream about it",
+    "we are mourning her still",
+  ];
+  for (const msg of DEEP) {
+    const d = depthFor({ classification: classify(msg), message: msg });
+    is(d.depth, "deep", `"${msg.slice(0, 40)}…" gets the best model`, d.reason);
+  }
+
+  /*
+    And the tactic gates, which fail silently rather than loudly: a gate that
+    never opens looks exactly like a tactic that lost the weight contest.
+  */
+  const GATED = [
+    ["i have been procrastinating on it for a month", "micro_action"],
+    ["i keep isolating myself from everybody", "opposite_action"],
+  ];
+  for (const [message, wanted] of GATED) {
+    const eligible = ALL_TACTICS.filter((t) => t.fits({
+      kind: "vent", crisis: false, realWorldTag: null, body: null, language: "en",
+      message, pressure: 50, duality: null, mood: 5, ventCount: 2, recentTactics: [],
+    }));
+    ok(eligible.some((t) => t.id === wanted),
+      `"${message.slice(0, 40)}…" opens the ${wanted} gate`,
+      eligible.map((t) => t.id).join(", "));
+  }
+
+  // The bridge to a real room reads the same word in the same tense.
+  ok(soundsAlone("i have been isolating myself since january"),
+    "and somebody isolating is heard as alone");
 });
 
 // ── 19. the credit policy, as something a script can fail ─────────────────

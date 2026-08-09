@@ -142,6 +142,9 @@ const OPENING: Record<string, string> = {
   traffic: "Today we hold the hours the road takes.",
   climate: "Today we hold the heat and what it wears down.",
   health: "Today we hold the body and the waiting.",
+  // No verb that implies anybody here is working on it. The room is for
+  // saying the person's name out loud, which is the whole of the task.
+  grief: "Today we hold somebody who is gone.",
 };
 
 /**

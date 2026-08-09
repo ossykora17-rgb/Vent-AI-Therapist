@@ -102,6 +102,15 @@ const NAMES: Record<string, Partial<Record<Band, string>> & { any?: string }> = 
   health: {
     any: "The Body And The Waiting",
   },
+  /*
+    The founder's own phrase, and it is the right one — plain, true, and it
+    says the thing instead of gesturing at it. Nothing clever will ever be
+    written here. A person looking for this room at 3am should recognise it
+    instantly and should not have to decode a nickname to be sure.
+  */
+  grief: {
+    any: "Just Lost Someone",
+  },
 };
 
 /** When there is no tag at all. Honest: the room is about whatever arrives. */

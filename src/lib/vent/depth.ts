@@ -50,12 +50,25 @@ const EDGE = [
 
 /** Loss, harm, and the things that do not undo. */
 const GRAVE = [
-  /\b(died|dead|death|passed away|funeral|burial|grief|griev)\b/,
-  /\b(cancer|diagnos|terminal|stroke|hospital|test results?|ICU)\b/,
-  /\b(abuse|abused|assault|raped|rape|molest|beat me|hit me|violent)\b/,
-  /\b(divorce|separat|custody|miscarriage|lost the baby)\b/,
+  /\b(died|dead|death|passed away|funeral|burial|grief)\b/,
+  /\b(cancer|terminal|stroke|hospital|test results?|ICU)\b/,
+  /\b(assault|raped|rape|beat me|hit me|violent)\b/,
+  /\b(custody|miscarriage|lost the baby)\b/,
   /\b(fired|sacked|evicted|deported|visa (refused|denied))\b/,
-  /\b(trauma|flashback|nightmares?|panic attack)\b/,
+  /\b(flashback|nightmares?|panic attack)\b/,
+  /*
+    Stems, and they were trapped inside the groups above until check 31 found
+    them. `IRREVERSIBLE` twenty lines down documents this exact trap and the
+    lesson never crossed the gap to its own neighbours: `griev\b` matches
+    neither "grieving" nor "grief", `diagnos\b` matches neither "diagnosed"
+    nor "diagnosis", and `separat\b`, `molest\b` and `divorce\b` all miss the
+    past tense — which is the only tense any of them is ever written in.
+
+    So "my mum was diagnosed in March" and "I have been grieving since
+    March" both routed to the cheap model. Not a wrong answer: a worse one,
+    to the two people in this list who most needed the better one.
+  */
+  /\b(griev(e|es|ed|ing)|diagnos|abus|molest|separat|divorc|trauma|bereave|mourn)/,
 ];
 
 /** A decision that cannot be walked back. */
