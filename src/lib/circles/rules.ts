@@ -152,6 +152,35 @@ const OPENING: Record<string, string> = {
  * feeling — the caller passes it only when a real rate came back, and passes
  * nothing at all when it did not.
  */
+/**
+ * Lagos, said as a fact.
+ *
+ * The rule this follows is `economyFact`'s: hand over the number and refuse
+ * to interpret it. "Rain dey fall, sorry your day spoil" decides how somebody
+ * feels about their own weather; "it is raining, and it is 34 out there"
+ * hands them a fact they can do what they like with.
+ *
+ * `feelsC` rather than `tempC` in the heat sentence, because the felt
+ * temperature is the one the person is standing in — thirty-one degrees at
+ * ninety per cent humidity is not thirty-one degrees to them. The measured
+ * number is kept for the caller and deliberately not narrated: two
+ * temperatures in one sentence is a weather report, and this is a room.
+ *
+ * Returns null when there is nothing worth saying. An ordinary Lagos
+ * afternoon is not news, and the surface's rule everywhere else is that an
+ * unremarkable reading is an absent sentence, not a filler one.
+ */
+export function weatherFact(feelsC: number, rainMm: number): string | null {
+  if (rainMm > 0) {
+    return `Rain dey fall outside, and it feels like ${feelsC}° out there. That is the day you are having, not a mood.`;
+  }
+  if (feelsC >= 34) {
+    return `It feels like ${feelsC}° out there. Heat makes everything louder than it is — that is the number, not a mood.`;
+  }
+  // Nothing to say. Silence beats filler.
+  return null;
+}
+
 export function economyFact(usdNgn: number): string {
   return `The dollar is ₦${usdNgn.toLocaleString("en-NG")} today — that is the number, not a mood.`;
 }

@@ -28,7 +28,7 @@ const { flavourBlock, openingBlock, carveBlock } = await app("src/lib/vent/promp
 const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/vent/chairs.ts");
 const { selectMemory } = await app("src/lib/vent/memory.ts");
-const { checkMessage, economyFact, keeperIntention, keeperReflection, roleForSeat } =
+const { checkMessage, economyFact, weatherFact, keeperIntention, keeperReflection, roleForSeat } =
   await app("src/lib/circles/rules.ts");
 const { PRESENCE_WINDOW_MS, TYPING_WINDOW_MS, isPresent, isTyping, presenceOf, shouldTouch } =
   await app("src/lib/circles/presence.ts");
@@ -3696,6 +3696,97 @@ check("39 What held is theirs, secular, and never confused with a crisis", () =>
   }
   ok(/held/.test(fs.readFileSync(path.join(ROOT, "src/lib/store/contract.ts"), "utf8")),
     "and the schema contract probes the column, so a missing one is loud");
+});
+
+// ── 40. the fifth window, and the four it will not open ───────────────────
+//
+// Commandment 7: be on the same page with the user about today. Weather,
+// economy, world events, culture, local news.
+//
+// Weather is the best idea in it and the only one built. It is genuinely
+// local, it needs no key, being wrong about it costs almost nothing, and the
+// product already had a `climate` room whose tool said "heat makes everything
+// feel worse than it is" — true, generic, and unprovable to the person
+// reading it. A measured felt-temperature turns that into something the room
+// and the person are both standing in.
+//
+// The other three are declined on purpose and the check pins the refusal,
+// because the next person to read the manifesto will reach for them:
+//
+//   world events   "You see wetin happen for Gaza? E heavy" — unprompted, to
+//                  somebody in distress who may have family there, or who may
+//                  have come here precisely to not think about it. Naming a
+//                  war is taking a position, and a product that says silence
+//                  beats a guess cannot editorialise about one.
+//   football       "Man U lose again 😂" landing under a message about being
+//                  broke is a tonal catastrophe no scheduler can avoid.
+//   "most people   an invented claim about other people's feelings, which is
+//    dey anxious    the Keeper-inventing-a-pattern bug wearing a clock.
+//    on Sunday"
+check("40 Weather is measured, and the rest of the news is not invented", () => {
+  const src = fs.readFileSync(path.join(ROOT, "src/lib/external/sources.ts"), "utf8");
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/route.ts"), "utf8");
+
+  ok(/export async function weatherContext/.test(src), "the fifth window exists");
+  ok(/open-meteo\.com/.test(src), "on a source that needs no key, like the other four");
+  ok(/latitude=6\.5244&longitude=3\.3792/.test(src),
+    "Lagos, hardcoded — the browser is never asked where somebody is");
+  ok(/cached<WeatherContext>\("weather", HOUR/.test(src),
+    "cached an hour: a six-hour-old 'it is hot' said into a downpour is the stale reading these windows exist to avoid");
+
+  /*
+    Every failure is an absent sentence, never an estimate — the rule the
+    other four already follow.
+  */
+  ok(/if \(typeof tempC !== "number" \|\| typeof feelsC !== "number"\) return null;/.test(src),
+    "a malformed reading is nothing, not a plausible number");
+
+  // The sentence hands over a number and refuses to interpret it.
+  const rain = weatherFact(29, 2.4);
+  const hot = weatherFact(37, 0);
+  const mild = weatherFact(28, 0);
+  ok(rain && /29°/.test(rain), "rain is reported with the felt temperature", rain);
+  ok(hot && /37°/.test(hot), "and so is heat", hot);
+  is(mild, null,
+    "an ordinary Lagos afternoon is silence, not filler about the weather");
+  for (const line of [rain, hot]) {
+    ok(/not a mood\.$/.test(line),
+      "the sentence says it is a number and not a feeling", line);
+    ok(!/\b(sorry|unfortunately|sadly|hope|spoil|ruin)\b/i.test(line),
+      "and never decides how somebody feels about their own weather", line);
+  }
+
+  /*
+    Felt, not measured, in the sentence a person reads.
+
+    31° at ninety per cent humidity is not 31° to the person standing in it,
+    and two temperatures in one line is a weather report rather than a room.
+  */
+  ok(/weatherFact\(sky\.value\.feelsC, sky\.value\.rainMm\)/.test(route),
+    "the room is handed what it feels like, not what the thermometer says");
+  ok(/circle\.tag === "climate" \? await weatherContext\(\) : null/.test(route),
+    "and only the room it belongs to pays for the fetch");
+
+  /*
+    The three refusals, asserted as an absence.
+
+    A check for something that is not there is weak on its own — so this is
+    paired with the comment above, and with the fact that adding any of them
+    means deleting an assertion that names why.
+  */
+  const surfaces = ["src/lib/external/sources.ts", "src/lib/circles/rules.ts",
+    "src/lib/vent/prompt.ts", "src/components/chat/vent-chat.tsx"];
+  const NEWS = /\b(gaza|ukraine|israel|palestin|election results?|newsapi|gnews|headlines?)\b/i;
+  for (const f of surfaces) {
+    const t = fs.readFileSync(path.join(ROOT, f), "utf8");
+    // Comments explaining the refusal are the point; a fetch is not.
+    const code = t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    const hit = code.match(NEWS);
+    ok(!hit, `${f} does not bring a war into somebody's bad hour`, hit?.[0]);
+  }
+  ok(!/most people (are|dey)/i.test(
+    fs.readFileSync(path.join(ROOT, "src/lib/circles/rules.ts"), "utf8")),
+    "and nobody is told how other people feel tonight");
 });
 
 // ── 37. a class that compiles to nothing ──────────────────────────────────
