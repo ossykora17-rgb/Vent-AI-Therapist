@@ -480,7 +480,7 @@ export function VentChat() {
             <div className="flex flex-col gap-2 sm:flex-row">
               <a
                 href={`tel:${crisis.nigeria.replace(/\s/g, "")}`}
-                className="flex min-h-[44px] flex-1 items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-ink"
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-on-gold"
               >
                 Call {crisis.nigeria}
               </a>
@@ -573,7 +573,7 @@ export function VentChat() {
                   type="button"
                   onClick={() => submitMood(n)}
                   aria-label={`${n} out of 10, where 1 is heaviest`}
-                  className="tabular h-11 w-11 rounded-full border border-line/15 text-sm font-semibold transition-colors duration-300 hover:border-gold hover:bg-gold hover:text-ink"
+                  className="tabular h-11 w-11 rounded-full border border-line/15 text-sm font-semibold transition-colors duration-300 hover:border-gold hover:bg-gold hover:text-on-gold"
                 >
                   {n}
                 </button>
@@ -714,7 +714,7 @@ export function VentChat() {
                 className={cn(
                   "min-h-[44px] rounded-full border px-4 text-xs font-mono uppercase tracking-[0.1em] transition-colors duration-300",
                   body === b
-                    ? "border-gold bg-gold text-ink"
+                    ? "border-gold bg-gold text-on-gold"
                     : "border-line/15 text-ash",
                 )}
               >
@@ -773,7 +773,7 @@ export function VentChat() {
               onClick={() => void send(draft)}
               disabled={!draft.trim() || thinking || gated}
               aria-label="Send"
-              className="flex h-12 min-w-[64px] items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-ink transition-opacity duration-300 disabled:opacity-40"
+              className="flex h-12 min-w-[64px] items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-on-gold transition-opacity duration-300 disabled:opacity-40"
             >
               {thinking ? "…" : "Send"}
             </button>

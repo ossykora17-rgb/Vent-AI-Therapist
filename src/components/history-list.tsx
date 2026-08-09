@@ -229,7 +229,7 @@ export function HistoryList() {
             )}
             <Link
               href="/chat"
-              className="mt-5 inline-flex min-h-[48px] items-center rounded-card bg-gold px-6 text-sm font-semibold text-ink"
+              className="mt-5 inline-flex min-h-[48px] items-center rounded-card bg-gold px-6 text-sm font-semibold text-on-gold"
             >
               Come in
             </Link>

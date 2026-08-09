@@ -82,7 +82,7 @@ export function AuthForm({
       {state.message && (
         <p
           role="status"
-          className="border-3 border-ink bg-paper p-3 text-sm font-medium leading-snug shadow-brut-sm"
+          className="glass border-l-2 border-l-gold p-3 text-[14px] leading-[1.6]"
         >
           {state.message}
         </p>

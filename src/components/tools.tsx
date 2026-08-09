@@ -149,7 +149,7 @@ export function Journaling({
             if (text.trim()) onSubmit(text.trim());
           }}
           disabled={!text.trim()}
-          className="min-h-[44px] flex-1 rounded-card bg-gold px-4 text-sm font-semibold text-ink disabled:opacity-40"
+          className="min-h-[44px] flex-1 rounded-card bg-gold px-4 text-sm font-semibold text-on-gold disabled:opacity-40"
         >
           Save it
         </button>

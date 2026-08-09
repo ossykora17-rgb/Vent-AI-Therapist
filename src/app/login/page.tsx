@@ -26,7 +26,7 @@ export default function LoginPage({
 
       <main id="main" className="flex-1 px-4 py-10 sm:py-16">
         <div className="mx-auto w-full max-w-[420px]">
-          <h1 className="text-4xl font-black leading-tight tracking-tight">
+          <h1 className="font-display text-4xl font-bold leading-[1.1] tracking-[-0.02em]">
             Welcome back.
           </h1>
           <p className="mb-8 mt-3 text-sm leading-relaxed text-ash">
@@ -34,20 +34,20 @@ export default function LoginPage({
           </p>
 
           {notice && (
-            <p className="mb-6 border-3 border-ink bg-paper p-3 text-sm font-medium shadow-brut-sm">
+            <p className="glass mb-6 border-l-2 border-l-gold p-3 text-[14px] leading-[1.6]">
               {notice}
             </p>
           )}
 
           {!isSupabaseConfigured && (
-            <p className="mb-6 border-3 border-ink bg-ink p-3 text-sm text-paper">
+            <p className="glass mb-6 p-3 text-[14px] leading-[1.6] text-ash">
               Auth is disabled until Supabase keys are added to this deployment.
             </p>
           )}
 
           <AuthForm mode="login" action={signIn} next={searchParams.next} />
 
-          <p className="mt-8 flex flex-wrap items-center gap-x-2 border-t-3 border-ink pt-6 text-sm">
+          <p className="mt-8 flex flex-wrap items-center gap-x-2 border-t border-line/10 pt-6 text-[14px]">
             No account?
             <Link
               href="/signup"

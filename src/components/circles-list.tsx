@@ -192,7 +192,7 @@ export function CirclesList() {
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="mt-5 min-h-[48px] w-full rounded-card bg-gold px-6 text-sm font-semibold text-ink"
+              className="mt-5 min-h-[48px] w-full rounded-card bg-gold px-6 text-sm font-semibold text-on-gold"
             >
               Open a circle
             </button>
@@ -253,7 +253,7 @@ export function CirclesList() {
                   aria-pressed={tag === v}
                   className={cn(
                     "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
-                    tag === v ? "border-gold bg-gold text-ink" : "border-line/15",
+                    tag === v ? "border-gold bg-gold text-on-gold" : "border-line/15",
                   )}
                 >
                   {label}
@@ -271,7 +271,7 @@ export function CirclesList() {
                   aria-pressed={chair === seat.id}
                   className={cn(
                     "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
-                    chair === seat.id ? "border-gold bg-gold text-ink" : "border-line/15",
+                    chair === seat.id ? "border-gold bg-gold text-on-gold" : "border-line/15",
                   )}
                 >
                   {seat.label}
@@ -284,7 +284,7 @@ export function CirclesList() {
                 type="button"
                 onClick={() => void create()}
                 disabled={busy}
-                className="min-h-[48px] flex-1 rounded-card bg-gold px-4 text-sm font-semibold text-ink disabled:opacity-40"
+                className="min-h-[48px] flex-1 rounded-card bg-gold px-4 text-sm font-semibold text-on-gold disabled:opacity-40"
               >
                 {busy ? "Opening…" : "Open it — 45 min"}
               </button>

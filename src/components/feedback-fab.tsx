@@ -91,7 +91,7 @@ export function FeedbackFab() {
                   aria-pressed={rating === n}
                   className={cn(
                     "h-11 flex-1 rounded-card border text-sm font-semibold transition-colors duration-300",
-                    rating >= n ? "border-gold bg-gold text-ink" : "border-line/15",
+                    rating >= n ? "border-gold bg-gold text-on-gold" : "border-line/15",
                   )}
                 >
                   {n}
@@ -116,7 +116,7 @@ export function FeedbackFab() {
                 type="button"
                 onClick={() => void submit()}
                 disabled={!rating || sending}
-                className="min-h-[44px] flex-1 rounded-card bg-gold px-4 text-sm font-semibold text-ink disabled:opacity-40"
+                className="min-h-[44px] flex-1 rounded-card bg-gold px-4 text-sm font-semibold text-on-gold disabled:opacity-40"
               >
                 {sending ? "Sending…" : "Send"}
               </button>
