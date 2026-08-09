@@ -2381,17 +2381,27 @@ check("25 Five traditions reach the room, and the family move is not imported", 
   /*
     The wider sweep, fenced rather than claimed.
 
-    Ten tactics still fit nothing in the corpus. Some of that is honest —
-    `orienting` and `progressive_squeeze` are somatic tools chosen from
-    pressure and a tapped body part, not from language, so a text-only sweep
-    may never reach them. Others are real holes: `two_chair`, `ifs_parts` and
-    `externalization` are moves nobody has written an example for.
+    Seven tactics still fit nothing in the corpus, down from ten. The three
+    that were real holes — `two_chair`, `ifs_parts` and `externalization` —
+    have examples now, and all three became eligible.
+
+    What is left is mostly honest. `orienting` and `progressive_squeeze` are
+    somatic tools chosen from a pressure reading and a tapped body part rather
+    than from language, so a text-only sweep may never reach them at all;
+    `behavioral_activation` and `opposite_action` are the same shape. Those
+    need a different kind of fixture, not another example.
+
+    Note what this measures: eligibility, not selection. A tactic can fit a
+    corpus message and still lose the turn to a higher-weighted move — the
+    three added here mostly lose to `rw_family` and `duality_slider`, which is
+    correct, because the rotation is what makes second place reachable. The
+    claim is that the trigger is exercised, not that the move wins.
 
     Recorded so it can shrink and cannot grow. Closing it means writing
     examples, not lowering a number.
   */
   const invisible = ALL_TACTICS.filter((t) => !everFits.has(t.id)).map((t) => t.id);
-  ok(invisible.length <= 10,
+  ok(invisible.length <= 7,
     "no more of the library is invisible to the corpus than already known",
     `${invisible.length}: ${invisible.join(", ")}`);
   ok(!missing.includes("meaning_stance") && !missing.includes("ubuntu_frame"),
