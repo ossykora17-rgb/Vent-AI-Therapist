@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
 import { findPattern, patternSentence, PATTERN_FLOOR } from "@/lib/vent/pattern";
+import { findTestimony, testimonySentence } from "@/lib/vent/testimony";
 import { withStore } from "@/lib/http/with-store";
 
 export const dynamic = "force-dynamic";
@@ -19,18 +20,29 @@ async function handleGET(request: Request) {
   }
 
   const store = getStore();
-  if (!store) return NextResponse.json({ pattern: null, floor: PATTERN_FLOOR });
+  if (!store) return NextResponse.json({ pattern: null, testimony: null, floor: PATTERN_FLOOR });
 
   const userId = await store.findUserId(anonId);
-  if (!userId) return NextResponse.json({ pattern: null, floor: PATTERN_FLOOR });
+  if (!userId) return NextResponse.json({ pattern: null, testimony: null, floor: PATTERN_FLOOR });
 
   const vents = await store.listVents(userId, 200);
   const pattern = findPattern(vents);
+  /*
+    Same rows, same request, no second round trip.
+
+    Both of these are arithmetic over the list already in hand — what keeps
+    coming back, and whether it has been going anywhere. Fetching twice for
+    two sums over one array would be the kind of cost nobody notices until
+    the bill arrives.
+  */
+  const testimony = findTestimony(vents);
 
   return NextResponse.json(
     {
       pattern,
       sentence: pattern ? patternSentence(pattern) : null,
+      testimony,
+      testimonySentence: testimony ? testimonySentence(testimony) : null,
       floor: PATTERN_FLOOR,
       counted: vents.length,
     },
