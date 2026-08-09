@@ -45,6 +45,25 @@ const CROSSTALK = [
   /\bshut up\b/i,
 ];
 
+/**
+ * The advice half, on its own.
+ *
+ * `checkMessage` is circle governance and bundles two rules that are not the
+ * same rule. Advice is banned everywhere in this product — the private room
+ * and the circle both refuse to fix people. Cross-talk is circle-only: it
+ * exists because five other people are listening, and "your fault" there is
+ * one member blaming another.
+ *
+ * In a one-to-one session "you" is the entire voice, and "that one no be your
+ * fault" is one of the most useful sentences available to somebody carrying
+ * something they did not begin. The quality graders learned that by flagging
+ * exactly that line in an authored reply, so they take this and leave the
+ * cross-talk rule where it belongs.
+ */
+export function containsAdvice(text: string): boolean {
+  return ADVICE.some((r) => r.test(text.trim()));
+}
+
 export interface RuleVerdict {
   ok: boolean;
   /** Shown to the person verbatim — it has to teach, not scold. */

@@ -1,4 +1,4 @@
-import { checkMessage } from "@/lib/circles/rules";
+import { containsAdvice } from "@/lib/circles/rules";
 import { coverage, COVERAGE_FLOOR } from "./scan";
 import { CARRY_WORDS, OBJECTS } from "./chairs";
 
@@ -171,8 +171,23 @@ export function gradeReply(
   }
 
   // ── the rules the product already enforces elsewhere ─────────────────────
-  const verdict = checkMessage(reply, "share");
-  if (!verdict.ok) add("advice", "fatal", verdict.reason ?? "advice or cross-talk");
+  /*
+    The advice rule only — not the whole of circle governance.
+
+    This called `checkMessage(reply, "share")`, which also enforces
+    cross-talk: `/(you|your) (problem|fault|issue)/`. That rule exists because
+    a circle has five other people in it and "your fault" there is one member
+    blaming another. A private session has one person, "you" is the entire
+    voice, and "that one no be your fault" is one of the most useful sentences
+    available to somebody carrying something they did not begin.
+
+    Found by the dry run flagging exactly that line in a new authored reply.
+    A grader that imports a rule from the wrong room teaches the model to stop
+    saying the right thing.
+  */
+  if (containsAdvice(reply)) {
+    add("advice", "fatal", "advice — this room does not fix people");
+  }
 
   for (const re of PROMISES) {
     const m = reply.match(re);
