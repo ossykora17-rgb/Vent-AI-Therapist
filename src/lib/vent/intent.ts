@@ -139,14 +139,17 @@ const META = [
 
 const REAL_WORLD: Array<[Exclude<RealWorldTag, null>, RegExp]> = [
   ["economy", /\b(fuel|subsidy|petrol|inflation|cost of living|price|expensive|broke|money no dey|salary no dey)\b/],
-  ["japa", /\b(japa|relocat|visa|ielts|abroad|emigrat|leave the country|move out|canada|uk)\b/],
+  ["japa", /\b(japa|visa|ielts|abroad|leave the country|move out|canada|uk)\b|\b(relocat|emigrat|migrat)/],
   ["ai_job", /\b(ai (go |will )?(take|replace)|lose my job to|automat|redundan|ai dey take)\b/],
-  ["social", /\b(instagram|tiktok|twitter|snapchat|compar|everyone else|their life|online)\b/],
+  // `compar\b` matched nothing a person has ever typed — not "comparing",
+  // not "compared", not "comparison" — so the comparing tag has been reachable
+  // only through a brand name since it was written.
+  ["social", /\b(instagram|tiktok|twitter|snapchat|everyone else|their life|online)\b|\b(compar)/],
   ["family", /\b(firstborn|first born|mother|mama|father|papa|family pressure|church|relatives|black sheep)\b/],
-  ["lonely", /\b(lonely|alone|nobody|no friend|isolat|by myself)\b/],
+  ["lonely", /\b(lonely|alone|nobody|no friend|by myself)\b|\b(isolat)/],
   ["traffic", /\b(traffic|danfo|hold ?up|lagos road|commute|third mainland|go slow)\b/],
   ["climate", /\b(heat|flood|hot|climate|rain no stop|too hot)\b/],
-  ["health", /\b(sick|hospital|health|body dey pain|test result|diagnos)\b/],
+  ["health", /\b(sick|hospital|health|body dey pain|test result)\b|\b(diagnos)/],
 ];
 
 const PIDGIN = [

@@ -104,10 +104,32 @@ function readSignals() {
 }
 
 // ── find the work ──────────────────────────────────────────────────────────
-const db = readJson(path.join(DATA_DIR, "vent.json"), null);
-if (!db) {
+/*
+  No store is a real state, and it is not the same answer for both halves.
+
+  The watching half genuinely has nothing to do: no vents, no circles, no
+  ratings, nothing to find. The objective gate reads none of that — the
+  selector, the eval, both pipelines and live-verify are pure — so a missing
+  store says nothing whatsoever about whether a diff is safe.
+
+  It used to exit 0 here regardless, which made `npm run gate` print one
+  friendly line and report success having run absolutely nothing. And the
+  configuration that hits it is not exotic: `.data/` is gitignored, so a fresh
+  `git worktree` never has a store — which is the exact hand-off this script
+  prints thirty lines further down, and the one CLAUDE.md advertises as
+  running the whole suite with no install.
+
+  A green light over a broken road, in the thing whose entire job is to be the
+  light. Now the gate runs on an empty store and says which half it ran.
+*/
+const store = readJson(path.join(DATA_DIR, "vent.json"), null);
+if (!store && !GATE) {
   console.log(`heartbeat: no store at ${path.relative(ROOT, DATA_DIR)}/vent.json — nothing to watch.`);
   process.exit(0);
+}
+const db = store ?? { vents: [], circles: [], feedback: [] };
+if (!store) {
+  console.log(`heartbeat: no store — the watch half has nothing to read. Gate below is the whole answer.`);
 }
 
 const state = readJson(STATE_FILE, {

@@ -34,6 +34,10 @@ const TAGS = [
   ["traffic", "The road"],
   ["climate", "Heat"],
   ["health", "Health"],
+  // Last in the list, and the only one that is a fact rather than a pressure.
+  // It sat outside the taxonomy for as long as the taxonomy existed, so people
+  // carrying it filed themselves under "Alone".
+  ["grief", "Someone died"],
 ] as const;
 
 export function CirclesList() {

@@ -25,6 +25,22 @@ export interface Tactic {
   /** Higher wins among eligible tactics. */
   weight: (ctx: TacticContext) => number;
   /**
+   * True only if this move is still right when nothing about the situation
+   * can change.
+   *
+   * Almost everything here quietly assumes something can move — a thought can
+   * be tested, a defence named, one small action taken tonight. None of that
+   * is true of a terminal diagnosis or a burial, and reaching for it tells the
+   * person you did not understand what they said.
+   *
+   * Absent means no, and that default is the point. The assumption is so
+   * nearly universal in this file that forgetting the flag has to keep a new
+   * tactic *away* from somebody's deathbed rather than send it there. Opt in
+   * deliberately, and only after reading the instruction back as if it were
+   * said out loud to somebody whose father died on Tuesday.
+   */
+  holdsWhenNothingMoves?: boolean;
+  /**
    * The same move, phrased for a room rather than one person. A Keeper opens
    * a circle with this, so the intention and the private session draw on one
    * library instead of drifting into two.
@@ -58,7 +74,7 @@ const SELF_CRITIC = /\b(useless|stupid|failure|worthless|i'?m bad|i no good|weak
 const PARTS = /\b(part of me|one side|half of me|i want to but|i wan but)\b/;
 const AVOIDANT = /\b(i'?m fine|it'?s fine|nothing|idk|i don'?t know|no be anything)\b/;
 const HOPELESS = /\b(no point|hopeless|why bother|nothing go change|e no go better)\b/;
-const WITHDRAW = /\b(isolat|withdraw|stay in|lock myself|no wan see anybody|hide)\b/;
+const WITHDRAW = /\b(stay in|lock myself|no wan see anybody|hide)\b|\b(isolat|withdraw)/;
 const ANGER = /\b(angry|vex|furious|mad|pissed|rage)\b/;
 
 /*
@@ -80,8 +96,49 @@ const ANGER = /\b(angry|vex|furious|mad|pissed|rage)\b/;
  * somebody whose father is dying is the app failing to understand what it was
  * told.
  */
-const UNFIXABLE =
-  /\b(dying|died|death|passed away|cancer|diagnos|terminal|test results?|stroke|hospital|nothing i can do|out of my hands|can'?t change|e don happen)\b/;
+const UNFIXABLE = [
+  /\b(dying|died|death|passed away|cancer|terminal|test results?|stroke|hospital)\b/,
+  /\b(nothing i can do|out of my hands|can'?t change|e don happen)\b/,
+  // A stem, and it needs no trailing boundary. `diagnos\b` matched neither
+  // "diagnosed" nor "diagnosis" — the only two forms it exists for — so this
+  // list has never once fired on a diagnosis that did not also say "cancer".
+  /\b(diagnos|palliativ|hospice|terminally)/,
+];
+
+/**
+ * The other half of the unfixable: it already happened.
+ *
+ * The list above is written for the diagnosis — the thing arriving. A burial
+ * is the same category and shared almost none of its words, so a person three
+ * weeks after their mother's funeral, writing "the burial finished and the
+ * house is quiet now", matched nothing and got offered a micro action.
+ *
+ * `lost` is deliberately never bare. "I lost my job" and "I lost my phone"
+ * are Tuesdays, and the whole file's habit is that a word which means two
+ * things has to be pinned by the word beside it.
+ */
+const BEREAVED = [
+  /\b(funeral|burial|wake ?keeping|grief)\b/,
+  // `griev` alone would take "grievance", which is an HR word and a Tuesday.
+  /\b(griev(e|es|ed|ing)|mourn|bereave|bur(y|ied|ying))/,
+  /\b(lost (my|our|her|his|their) (mum|mummy|mum?cy|mother|dad|daddy|father|papa|mama|son|daughter|child|baby|brother|sister|wife|husband|friend|granny|grandma|grandpa|grandmother|grandfather))\b/,
+  /\b(miscarriage|miscarried|stillborn|still ?birth|lost the baby)\b/,
+  /\b(widow)/,
+  // Pidgin. "E don go" is how it is actually said, and no English list has it.
+  /\b((e|she|he|dem) don go|don pass away|we don bury|dem don bury|e don finish)\b/,
+];
+
+/**
+ * One question, asked in one place: can anything here move?
+ *
+ * Exported because the selector and the eval must not each keep their own
+ * copy — a suite that asserts against its own regex passes while the product
+ * regresses. Same reason the crisis list is imported rather than restated.
+ */
+export function nothingCanMove(message: string): boolean {
+  const m = message.toLowerCase();
+  return UNFIXABLE.some((re) => re.test(m)) || BEREAVED.some((re) => re.test(m));
+}
 
 /**
  * Obligation to people. Ubuntu, and the reason it is here.
@@ -98,7 +155,17 @@ const UNFIXABLE =
  * the problem — then asks the question nobody asks them: who is holding you.
  */
 const OBLIGATION =
-  /\b(family|mama|papa|mumcy|mummy|daddy|firstborn|first born|siblings?|brother|sister|send money|black tax|everybody depend|they depend|responsib|breadwinner|house people)\b/;
+  /\b(family|parents?|mum|mummy|mumcy|mama|mother|dad|daddy|papa|father|firstborn|first born|siblings?|brother|sister|send money|black tax|everybody depend|they depend|breadwinner|house people)\b|\b(responsib)/;
+/*
+  The bare relation words were missing — `daddy` was here and `dad` was not,
+  `mummy` and not `mum`, no `mother`, no `father`, no `parents`. `iterated_game`
+  three blocks up has always had them, so "my dad is dying" reached the payoff
+  matrix and never reached the one move written to ask who is holding them.
+
+  Widening this does not disturb the ordering check 15i guards: `ubuntu_frame`
+  is 82 and `iterated_game` is 84, so everywhere they now both fit, the long
+  game still wins and this stays reachable through the three-turn rotation.
+*/
 
 /** Wanting change and not doing it. Motivational interviewing. */
 const STUCK_INTENT =
@@ -114,6 +181,8 @@ const TACTICS: Tactic[] = [
     hold: "Say the two heaviest words again, out loud. Then name where in the body they sit.",
     fits: (c) => c.ventCount <= 1 || c.pressure !== null && c.pressure > 60,
     weight: (c) => (c.ventCount <= 1 ? 90 : 40),
+    // Saying their own words back promises nothing and fixes nothing.
+    holdsWhenNothingMoves: true,
   },
   {
     id: "emotional_naming",
@@ -123,6 +192,8 @@ const TACTICS: Tactic[] = [
     hold: "Name the one underneath the anger. Not the loud one — the one beneath it.",
     fits: has(ANGER),
     weight: () => 75,
+    // The emotion under the loud one is there whether or not anything moves.
+    holdsWhenNothingMoves: true,
   },
   {
     id: "normalization",
@@ -132,6 +203,9 @@ const TACTICS: Tactic[] = [
     hold: "Nothing is wrong with you for feeling this. Anybody shaped the same way would.",
     fits: has(/\b(crazy|mad|only me|am i normal|something wrong with me)\b/),
     weight: () => 80,
+    // "Anybody would feel this" is the most useful sentence there is after a
+    // death, and the one people are least often given.
+    holdsWhenNothingMoves: true,
   },
 
   // ── Cognitive — a thinking trap, not a feeling problem ───────────────────
@@ -193,6 +267,8 @@ const TACTICS: Tactic[] = [
     hold: "Four seconds in, six out, drop the shoulder. Once, now, before the next sentence.",
     fits: (c) => c.body !== null,
     weight: (c) => (c.pressure !== null && c.pressure > 70 ? 88 : 72),
+    // The body is still carrying it. Breathing is care, not a solution.
+    holdsWhenNothingMoves: true,
   },
   {
     id: "grounding_54321",
@@ -200,8 +276,10 @@ const TACTICS: Tactic[] = [
     instruction:
       "5 things you see, 4 you touch, 3 you hear, 2 you smell, 1 you taste — have them call it out now.",
     hold: "Five you can see, four you can touch, three you can hear. Out loud, now.",
-    fits: has(/\b(panic|numb|blank|floating|not real|dissociat|idk|i don'?t know)\b/),
+    fits: has(/\b(panic|numb|blank|floating|not real|idk|i don'?t know)\b|\b(dissociat)/),
     weight: () => 80,
+    // Numb and blank *is* acute grief. This is the move written for it.
+    holdsWhenNothingMoves: true,
   },
   {
     id: "progressive_squeeze",
@@ -211,6 +289,8 @@ const TACTICS: Tactic[] = [
     hold: "Fist tight for five, then let go. Notice the difference. That is the whole task.",
     fits: (c) => (c.pressure ?? 0) > 70,
     weight: () => 66,
+    // Purely physical. Claims nothing about the situation at all.
+    holdsWhenNothingMoves: true,
   },
   {
     id: "orienting",
@@ -220,6 +300,8 @@ const TACTICS: Tactic[] = [
     hold: "Look slow to the left, slow to the right. Where did your eyes want to stop?",
     fits: has(/\b(anxious|on edge|jumpy|can'?t settle|watching|scared)\b/),
     weight: () => 64,
+    // Where do the eyes want to rest. Nothing is being solved.
+    holdsWhenNothingMoves: true,
   },
 
   // ── Duality — two parts pulling ─────────────────────────────────────────
@@ -238,7 +320,7 @@ const TACTICS: Tactic[] = [
     instruction:
       "Find the young part carrying the rule — \"if I don't perform I'm not loved\" — and ask how old it is.",
     hold: "Find the rule you have been keeping. Then ask how old you were when you learned it.",
-    fits: has(/\b(perform|prove|earn|not enough|never good enough|since i was)\b/),
+    fits: has(/\b(prove|earn|not enough|never good enough|since i was)\b|\b(perform)/),
     weight: () => 76,
   },
   {
@@ -258,7 +340,9 @@ const TACTICS: Tactic[] = [
     instruction:
       "One micro action, ten words or fewer, doable in under a minute. e.g. \"Send one text: 'I go late small.'\" Tell them to do it now.",
     hold: "One thing, under a minute, doable now. Ten words or fewer. Then go and do it.",
-    fits: has(/\b(avoid|procrastinat|putting off|haven'?t|can'?t start|no fit start)\b/),
+    // "procrastinating" is the only form anybody writes it in, and
+    // `procrastinat\b` could never match it.
+    fits: has(/\b(avoid|putting off|haven'?t|can'?t start|no fit start)\b|\b(procrastinat)/),
     weight: () => 80,
   },
   {
@@ -361,6 +445,8 @@ const TACTICS: Tactic[] = [
     hold: "Stop on this sentence. What is happening in your belly as you say it?",
     fits: has(ANALYTICAL),
     weight: () => 62,
+    // Pure presence — the belly right now, not a plan for the situation.
+    holdsWhenNothingMoves: true,
   },
   {
     id: "rupture_repair",
@@ -370,6 +456,8 @@ const TACTICS: Tactic[] = [
     hold: "You can stop here. Nothing is owed. The room stays open for whenever.",
     fits: (c) => AVOIDANT.test(c.message.toLowerCase()) && words(c.message) <= 6,
     weight: () => 85,
+    // Letting somebody go without a task is *more* right here, not less.
+    holdsWhenNothingMoves: true,
   },
 
   // ── five traditions the library was missing ───────────────────────────────
@@ -389,9 +477,17 @@ const TACTICS: Tactic[] = [
     instruction:
       "This one does not move, and you must not try to move it. Say plainly that nothing here can be fixed, so you are not going to pretend otherwise. Then ask the only question left: not what they can do about it, but who they want to be while it happens. Never offer them a meaning for it. Never say 'everything happens for a reason' or anything within a mile of it — they will leave and they will be right to.",
     hold: "Nothing here is fixable, and I am not going to pretend it is. Who do you want to be while it is happening?",
-    fits: has(UNFIXABLE),
-    // Above every problem-solving move. When this fits, the others are wrong.
+    fits: (c) => nothingCanMove(c.message),
+    /*
+      The weight is now the *second* thing that keeps this above a problem-
+      solving move, and it used to be the only thing — which is why the
+      comment that stood here ("when this fits, the others are wrong") was a
+      guarantee the code kept for exactly one turn. `selectTactic` vetoes the
+      fixing moves outright when nothing can move; this 92 only decides the
+      order among the survivors.
+    */
     weight: () => 92,
+    holdsWhenNothingMoves: true,
   },
 
   {
@@ -424,6 +520,13 @@ const TACTICS: Tactic[] = [
       a move that has never been read by anybody in a real room.
     */
     weight: () => 82,
+    /*
+      Possibly the most important line in the file after a death, and in a
+      Nigerian house especially: the bereaved is usually also the one running
+      the burial, feeding the visitors and holding everybody else up. "Who
+      holds you" is the question nobody in that room is asking them.
+    */
+    holdsWhenNothingMoves: true,
   },
 
   {
@@ -575,8 +678,31 @@ const PRIORITY_BAND = 95;
 export function selectTactic(ctx: TacticContext): Tactic {
   const blocked = new Set(ctx.recentTactics.slice(-3));
 
-  const pool: Tactic[] = [...TACTICS];
+  let pool: Tactic[] = [...TACTICS];
   if (ctx.realWorldTag) pool.push(REAL_WORLD_TACTIC[ctx.realWorldTag]);
+
+  /*
+    When nothing can move, the moves that assume it can are not outranked —
+    they are gone.
+
+    This used to be a weight. `meaning_stance` sat at 92 with a comment above
+    it saying "when this fits, the others are wrong", and a weight cannot say
+    that: it wins one contest, once. On turn two of a terminal diagnosis the
+    three-turn block took it out of the running and the runner-up spoke —
+    `iterated_game`, to somebody whose father was dying, offering to *show
+    them the payoff matrix*. And a real-world tag beat it outright at any
+    turn, so "my dad is dying and the hospital bill is 2 million" got the
+    money-choke tool. The comment was true and the code was not.
+
+    Filtered on the pool rather than on `eligible` on purpose. The stale
+    fallback at the bottom of this function searches `pool` and ignores
+    `fits` entirely, so a veto applied any later would be walked straight past
+    on the one turn it mattered most — the third one, when everything good has
+    already been said.
+  */
+  if (nothingCanMove(ctx.message)) {
+    pool = pool.filter((t) => t.holdsWhenNothingMoves);
+  }
 
   const rank = (t: Tactic) => {
     const base = t.weight(ctx);

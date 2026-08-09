@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 const createSchema = z.object({
   anonId: z.string().min(8).max(64),
   tag: z
-    .enum(["economy", "japa", "ai_job", "social", "family", "lonely", "traffic", "climate", "health"])
+    .enum(["economy", "japa", "ai_job", "social", "family", "lonely", "traffic", "climate", "health", "grief"])
     .nullish(),
   chairPicked: z.enum(["tight_edge", "sunk", "half_off"]).nullish(),
   pressure: z.number().min(0).max(100).nullish(),
