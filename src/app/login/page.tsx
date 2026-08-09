@@ -41,7 +41,8 @@ export default function LoginPage({
 
           {!isSupabaseConfigured && (
             <p className="glass mb-6 p-3 text-[14px] leading-[1.6] text-ash">
-              Auth is disabled until Supabase keys are added to this deployment.
+              Signing in is not open yet. You do not need it — nothing here
+              has ever asked who you are.
             </p>
           )}
 

@@ -242,7 +242,22 @@ export function HistoryList() {
           </p>
         )}
 
-        <ol className="mt-4 space-y-3">
+        {/*
+          A chronicle, not a table.
+
+          This was rows of identical glass cards with a mono timestamp set at
+          the same weight as the sentence under it — the heaviest things a
+          person has ever typed, rendered as search results. And the two
+          biggest controls on the page were "Export my data (JSON)" and
+          "Delete everything": admin, sitting where the content should be.
+
+          The thread runs down it now, the same spine as the session. In the
+          chat it means one sitting; here it means all of them, which is the
+          truer reading of the same line. Entries hang off it with no plate of
+          their own, so what you see going down the page is your own words,
+          in order, on a lit thread.
+        */}
+        <ol className="thread mt-5 space-y-7">
           {filtered.map((r) => {
             const open = openId === r.id;
             const drop =
@@ -251,14 +266,24 @@ export function HistoryList() {
                 : null;
 
             return (
-              <li key={r.id}>
-                <div className="glass p-4">
+              <li key={r.id} className="settle pl-5">
+                <div>
                   <button
                     type="button"
                     onClick={() => setOpenId(open ? null : r.id)}
                     aria-expanded={open}
-                    className="w-full min-h-[44px] text-left"
+                    className="focusable w-full min-h-[44px] rounded-card text-left"
                   >
+                    {/*
+                      The date is where you are, not what you came for — but
+                      it is demoted by size and order, never by opacity.
+
+                      The first version faded this row to 70%, which took the
+                      timestamp to 2.64:1 and the tags with it. That is the
+                      same rule the visitor's words in the chat are held to,
+                      broken in the same file that states it: recede by scale
+                      and position, never by legibility.
+                    */}
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="label-mono">
                         {new Date(r.created_at).toLocaleDateString("en-US", {
@@ -275,12 +300,7 @@ export function HistoryList() {
                       {r.real_world_tag && <Tag>{r.real_world_tag}</Tag>}
                       {r.body_tapped && <Tag>{r.body_tapped}</Tag>}
                     </div>
-                    <p
-                      className={cn(
-                        "mt-2 text-[15px] leading-[1.6]",
-                        !open && "line-clamp-2",
-                      )}
-                    >
+                    <p className={cn("said mt-2", !open && "line-clamp-2")}>
                       {r.user_message}
                     </p>
                   </button>
@@ -294,9 +314,9 @@ export function HistoryList() {
                       Reading your own session back should look like the
                       session. */}
                   {open && (
-                    <div className="mt-3 border-t border-line/10 pt-3">
-                      <div className="border-l-2 border-gold pl-4">
-                        <p className="label-mono mb-2">Vent</p>
+                    <div className="mt-4">
+                      <div className="presence p-5 sm:p-6">
+                        <p className="nameplate mb-3">Vent</p>
                         <p className="reply whitespace-pre-wrap">
                           {r.ai_reply ?? "—"}
                         </p>
@@ -333,18 +353,27 @@ export function HistoryList() {
         </ol>
 
         {rows.length > 0 && (
-          <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+          /*
+            Demoted on purpose.
+
+            These were two full-width bordered buttons directly under the last
+            entry — the largest, most deliberate-looking controls on a page
+            whose subject is what somebody has been carrying. Nobody arrives
+            here to export JSON. Both are still one tap and still meet the
+            44px floor; they have simply stopped competing with the words.
+          */
+          <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line/10 pt-5">
             <button
               type="button"
               onClick={exportJson}
-              className="min-h-[48px] flex-1 rounded-card border border-line/15 text-sm"
+              className="focusable min-h-[44px] rounded-card text-[13px] text-ash underline underline-offset-4"
             >
-              Export my data (JSON)
+              Export my data
             </button>
             <button
               type="button"
               onClick={() => void clearAll()}
-              className="min-h-[48px] flex-1 rounded-card border border-line/15 text-sm text-ash"
+              className="focusable min-h-[44px] rounded-card text-[13px] text-ash underline underline-offset-4"
             >
               Delete everything
             </button>
