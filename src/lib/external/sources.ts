@@ -5,7 +5,7 @@ import { env, isPerspectiveConfigured } from "@/lib/env";
 import { cached, type CacheEntry } from "./cache";
 
 /**
- * The outside world, four narrow windows onto it.
+ * The outside world, five narrow windows onto it.
  *
  * Rules that hold for every source here:
  *
@@ -158,6 +158,68 @@ export async function economyContext(): Promise<CacheEntry<EconomyContext> | nul
     const goldNgn = typeof xau === "number" && xau > 0 ? Math.round(usdNgn / xau) : null;
 
     return { usdNgn: Math.round(usdNgn), goldNgn, asOf: rates?.date ?? new Date().toISOString().slice(0, 10) };
+  });
+}
+
+export interface WeatherContext {
+  /** What the thermometer says, in Lagos. */
+  tempC: number;
+  /**
+   * What it feels like — humidity and wind folded in.
+   *
+   * The one that matters. Thirty-one degrees at ninety per cent humidity is
+   * not thirty-one degrees to the person standing in it, and the whole reason
+   * this window exists is so the room stops guessing at a heat it can measure.
+   */
+  feelsC: number;
+  /** Millimetres in the last hour. Rain in Lagos is a fact about your day. */
+  rainMm: number;
+  asOf: string;
+}
+
+interface OpenMeteoResponse {
+  current?: {
+    time?: string;
+    temperature_2m?: number;
+    apparent_temperature?: number;
+    precipitation?: number;
+  };
+}
+
+/**
+ * Lagos weather. The fifth window, and the most local one.
+ *
+ * Open-Meteo because it needs no key and no account — the same reason nothing
+ * else in this file does either. Coordinates are Lagos and hardcoded: this
+ * product is Nigerian in root, the browser is never asked for a location, and
+ * an `anon_id` is never traded for a more precise forecast.
+ *
+ * Hourly TTL. Weather changes, and a six-hour-old "it is hot" said into a
+ * downpour is exactly the stale-reading failure the other four windows exist
+ * to avoid.
+ */
+export async function weatherContext(): Promise<CacheEntry<WeatherContext> | null> {
+  return cached<WeatherContext>("weather", HOUR, "open-meteo.com", async () => {
+    const recorded = fixture<WeatherContext>("weather");
+    if (recorded) return recorded;
+
+    const r = await getJson<OpenMeteoResponse>(
+      "https://api.open-meteo.com/v1/forecast" +
+        "?latitude=6.5244&longitude=3.3792" +
+        "&current=temperature_2m,apparent_temperature,precipitation" +
+        "&timezone=Africa%2FLagos",
+    );
+    const tempC = r?.current?.temperature_2m;
+    const feelsC = r?.current?.apparent_temperature;
+    if (typeof tempC !== "number" || typeof feelsC !== "number") return null;
+
+    const rain = r?.current?.precipitation;
+    return {
+      tempC: Math.round(tempC),
+      feelsC: Math.round(feelsC),
+      rainMm: typeof rain === "number" && rain > 0 ? rain : 0,
+      asOf: r?.current?.time ?? new Date().toISOString(),
+    };
   });
 }
 

@@ -5,12 +5,12 @@ import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { tensionDrop, tensionNow } from "@/lib/vent/chairs";
 import { logPreference } from "@/lib/rlhf/log";
 import { presenceOf, shouldTouch } from "@/lib/circles/presence";
-import { economyContext } from "@/lib/external/sources";
+import { economyContext, weatherContext } from "@/lib/external/sources";
 import { isLivekitConfigured } from "@/lib/env";
 import { closeVoiceRoom } from "@/lib/voice/close";
 import { sweepIfOver } from "@/lib/circles/sweep";
 import {
-  MAX_SEATS, PHASE_LABEL, economyFact, keeperIntention, keeperReflection,
+  MAX_SEATS, PHASE_LABEL, economyFact, weatherFact, keeperIntention, keeperReflection,
   phaseFor, roleForSeat,
 } from "@/lib/circles/rules";
 import { withStore } from "@/lib/http/with-store";
@@ -73,7 +73,27 @@ async function handleGET(request: Request, { params }: Params) {
   // three-second timeout, and `null` when the rate is not known — in which
   // case the sentence is absent rather than approximated.
   const rate = circle.tag === "economy" ? await economyContext() : null;
-  const counted = rate ? economyFact(rate.value.usdNgn) : null;
+
+  /*
+    The heat room gets the actual heat.
+
+    `rw_climate` has always said "cold water on the face, heat makes
+    everything feel worse than it is" — true, generic, and unprovable to the
+    person reading it. A measured felt-temperature turns it into something the
+    room and the person are both standing in.
+
+    Same discipline as the rate, and the same three ways to say nothing: not
+    this room's tag, upstream unreachable, or a reading too ordinary to be
+    worth a sentence. `weatherFact` returns null for the third, so a mild
+    Tuesday produces silence rather than filler about the weather.
+  */
+  const sky = circle.tag === "climate" ? await weatherContext() : null;
+
+  const counted = rate
+    ? economyFact(rate.value.usdNgn)
+    : sky
+      ? weatherFact(sky.value.feelsC, sky.value.rainMm)
+      : null;
   const intention = keeperIntention(circle.tag, counted);
 
   // The Keeper speaks exactly twice, and each line is selected rather than
