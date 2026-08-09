@@ -10,6 +10,7 @@ import { Onboarding, hasOnboarded, type OnboardingResult } from "@/components/on
 import { Breathing, Journaling, ToolRow, shouldOfferBreathing } from "@/components/tools";
 import { anonId, queueVent } from "@/lib/anon";
 import { cn } from "@/lib/utils";
+import { carryingWord } from "@/lib/community/carrying";
 import { useComposerHeight } from "@/lib/ui/use-composer-height";
 
 type Body = "head" | "throat" | "chest";
@@ -34,6 +35,17 @@ interface VentResponse {
   /** Why the model did not answer, when it did not. Shown, not swallowed. */
   reason?: string;
   detail?: string | null;
+  /**
+   * A real open circle, assembled server-side from rows it actually read.
+   * Never prose: a model told that circles exist can invent one, and arriving
+   * at a room that was never there is worse than never being offered it.
+   */
+  circleInvite?: {
+    id: string;
+    tag: string | null;
+    seatsOpen: number;
+    minutesLeft: number;
+  } | null;
 }
 
 export function VentChat() {
@@ -54,6 +66,7 @@ export function VentChat() {
   const [tag, setTag] = React.useState<string | null>(null);
   const [tool, setTool] = React.useState<"breathing" | "journaling" | null>(null);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
+  const [invite, setInvite] = React.useState<VentResponse["circleInvite"]>(null);
   const [opening, setOpening] = React.useState<{
     object: string | null;
     carrying: string | null;
@@ -163,6 +176,10 @@ export function VentChat() {
       }
 
       setTag(data.realWorldTag ?? null);
+      // Null clears it. A room that has filled or closed since the last turn
+      // must stop being offered — an invitation to a full circle is the
+      // "your turn comes" bug wearing a doorway.
+      setInvite(data.circleInvite ?? null);
       if (typeof data.memoryUsed === "number") setMemoryCount(data.memoryUsed);
       if (typeof data.persisted === "boolean") setPersisted(data.persisted);
     } catch {
@@ -509,6 +526,39 @@ export function VentChat() {
           does not want to be measured tonight must not be held for it, and
           a forced rating is a worse number than no number.
         */}
+        {/*
+          The door to the other room, and only when there is one.
+
+          This product had two surfaces and nothing between them: somebody
+          writing "nobody knows this, i'm alone with it" got a real answer and
+          was never told a circle was open with free seats on the other side of
+          the same app. The loneliest sentence anybody types here, answered
+          well, and the person left exactly as alone as they arrived.
+
+          Everything in it is a fact the server read — the seats, the minutes,
+          the room. Nothing is generated, so nothing can be invented. It
+          disappears the moment the room fills or the store goes quiet.
+
+          An offer, not a prescription. "You should join a circle" is advice,
+          and this room does not fix people.
+        */}
+        {invite && !gated && (
+          <a
+            href={`/circles/${invite.id}`}
+            className="glass mt-6 block border-l-2 border-l-gold p-5 transition-colors duration-300 hover:border-l-gold/70"
+          >
+            <p className="label-mono mb-2">Somewhere to say it out loud</p>
+            <p className="max-w-[46ch] text-[15px] leading-[1.7]">
+              {invite.tag
+                ? `A circle is sitting with ${carryingWord(invite.tag)} right now.`
+                : "A circle is sitting right now."}{" "}
+              {invite.seatsOpen === 1 ? "One seat" : `${invite.seatsOpen} seats`} open,{" "}
+              {invite.minutesLeft} minutes left. Nobody has to know who you are.
+            </p>
+            <p className="label-mono mt-3">Take a seat →</p>
+          </a>
+        )}
+
         {askMood && (
           <div className="mt-6 border-l-2 border-gold pl-5">
             <p className="label-mono mb-2">Before you go</p>
