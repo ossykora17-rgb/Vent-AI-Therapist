@@ -5,8 +5,8 @@ import { TYPING_WINDOW_MS } from "@/lib/circles/presence";
 import { StoreUnavailableError } from "./errors";
 import type {
   CircleMemberRow, CircleMessageRow, CircleRow,
-  NewVent, ProfilePatch, Store, VentRow,
-} from "./types";
+  NewVent, ProfilePatch, Store, VentRow, HeldNote } from "./types";
+import { HELD_CAP } from "./types";
 
 /**
  * No spaces. PostgREST takes the select list verbatim into the query string,
@@ -183,6 +183,55 @@ export class SupabaseStore implements Store {
    * bug was survivable: with 0011 pending every write returns false and the
    * product behaves exactly as it did before the Carver existed.
    */
+  async getHeld(userId: string): Promise<HeldNote[]> {
+    try {
+      const { data, error } = await this.db
+        .from("vent_users")
+        .select("held")
+        .eq("id", userId)
+        .maybeSingle();
+      if (error) {
+        console.warn("[store] getHeld", error.code, error.message);
+        return [];
+      }
+      return Array.isArray(data?.held) ? (data.held as HeldNote[]) : [];
+    } catch (e) {
+      console.warn("[store] getHeld threw", e);
+      return [];
+    }
+  }
+
+  async addHeld(userId: string, text: string): Promise<boolean> {
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+    try {
+      /*
+        Read-modify-write, deliberately.
+
+        A jsonb append in SQL would be one round trip, and it would also need
+        the cap expressed in SQL — so the number would live in two places and
+        drift, which is the "one table, one truth" failure this file has had
+        before. Two trips for a note somebody writes once a week is not a cost
+        worth that.
+      */
+      const existing = await this.getHeld(userId);
+      const next = [{ text: trimmed, at: new Date().toISOString() }, ...existing]
+        .slice(0, HELD_CAP);
+      const { error } = await this.db
+        .from("vent_users")
+        .update({ held: next })
+        .eq("id", userId);
+      if (error) {
+        console.warn("[store] addHeld", error.code, error.message);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.warn("[store] addHeld threw", e);
+      return false;
+    }
+  }
+
   async setCarve(userId: string, carve: string | null): Promise<boolean> {
     try {
       const { error } = await this.db

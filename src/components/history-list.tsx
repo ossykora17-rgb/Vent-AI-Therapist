@@ -30,6 +30,7 @@ export function HistoryList() {
   const [minMood, setMinMood] = React.useState(1);
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [testimony, setTestimony] = React.useState<string | null>(null);
+  const [held, setHeld] = React.useState<Array<{ text: string; at: string }>>([]);
   const [pattern, setPattern] = React.useState<{
     sentence: string;
     dropHere: number | null;
@@ -44,6 +45,12 @@ export function HistoryList() {
       try {
         // Counted, not generated — see lib/vent/pattern. Runs beside the
         // history fetch because it costs nothing and is the reason to be here.
+        fetch(`/api/held?anonId=${encodeURIComponent(anonId())}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => {
+            if (!cancelled && Array.isArray(d?.held)) setHeld(d.held);
+          })
+          .catch(() => {}),
         fetch(`/api/pattern?anonId=${encodeURIComponent(anonId())}`)
           .then((r) => r.json())
           .then((d) => {
@@ -172,6 +179,38 @@ export function HistoryList() {
               You set both of those numbers. That is your own record, not a
               score we gave you.
             </p>
+          </section>
+        )}
+
+        {/*
+          What held, in their own words.
+
+          The one thing in this product safe to quote back at somebody. A
+          crisis sentence returned unannounced is a re-exposure — which is why
+          `testimony.ts` counts rather than quotes, and why the carve is never
+          shown to them at all. This is the inversion: they wrote it on
+          purpose, while they were alright, knowing it would be kept. Handing
+          it back on a bad Thursday is the whole point of having asked.
+
+          No religion in either direction. Everybody has an answer to "what
+          held" and nobody is being addressed in somebody else's language.
+        */}
+        {held.length > 0 && (
+          <section className="glass mb-5 p-5 sm:p-6">
+            <p className="label-mono mb-3">What held</p>
+            <ul className="space-y-3">
+              {held.map((h) => (
+                <li key={h.at} className="border-l-2 border-gold/40 pl-4">
+                  <p className="reply">{h.text}</p>
+                  <p className="label-mono mt-1">
+                    {new Date(h.at).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </p>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
 

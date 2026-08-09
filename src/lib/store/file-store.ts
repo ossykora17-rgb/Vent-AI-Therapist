@@ -6,8 +6,8 @@ import { isExpired, MAX_SEATS } from "@/lib/circles/rules";
 import { TYPING_WINDOW_MS } from "@/lib/circles/presence";
 import type {
   CircleMemberRow, CircleMessageRow, CircleRow,
-  NewVent, ProfilePatch, Store, VentRow,
-} from "./types";
+  NewVent, ProfilePatch, Store, VentRow, HeldNote } from "./types";
+import { HELD_CAP } from "./types";
 
 /**
  * Local development backend. A single JSON file, no dependency, no daemon.
@@ -28,6 +28,8 @@ interface UserRow {
   carve: string | null;
   created_at: string;
   last_seen_at: string;
+  /** What held, newest first. See `HELD_CAP`. */
+  held?: HeldNote[];
 }
 
 interface FeedbackRow {
@@ -231,6 +233,28 @@ export class FileStore implements Store {
   */
   async getCarve(userId: string): Promise<string | null> {
     return this.read().users.find((u) => u.id === userId)?.carve?.trim() || null;
+  }
+
+  async getHeld(userId: string): Promise<HeldNote[]> {
+    const user = this.read().users.find((u) => u.id === userId);
+    return Array.isArray(user?.held) ? user.held : [];
+  }
+
+  async addHeld(userId: string, text: string): Promise<boolean> {
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+    let hit = false;
+    await this.write((db) => {
+      const user = db.users.find((u) => u.id === userId);
+      if (!user) return;
+      const existing = Array.isArray(user.held) ? user.held : [];
+      // Newest first, and trimmed here rather than in the constraint — the
+      // cap is a product decision and lives with the other product decisions.
+      user.held = [{ text: trimmed, at: new Date().toISOString() }, ...existing]
+        .slice(0, HELD_CAP);
+      hit = true;
+    });
+    return hit;
   }
 
   async setCarve(userId: string, carve: string | null): Promise<boolean> {

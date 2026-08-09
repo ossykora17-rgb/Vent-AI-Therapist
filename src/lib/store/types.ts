@@ -72,6 +72,21 @@ export interface CircleMessageRow {
   created_at: string;
 }
 
+/**
+ * How many notes are kept.
+ *
+ * A single note is a nice moment; a handful is a record. Past about five it
+ * stops being something a person reads and becomes a list they scroll, which
+ * is the failure mode of every gratitude journal ever shipped.
+ */
+export const HELD_CAP = 5;
+
+/** One thing that held, and when they said so. */
+export interface HeldNote {
+  text: string;
+  at: string;
+}
+
 export interface Store {
   /** Which backend answered — surfaced in /api/health so it is never a guess. */
   readonly kind: "supabase" | "file";
@@ -138,6 +153,25 @@ export interface Store {
    * Returns whether the row actually landed. Nothing may claim it did otherwise.
    */
   setCarve(userId: string, carve: string | null): Promise<boolean>;
+
+  /**
+   * What held, in their own words — the other half of the carve.
+   *
+   * `vent_users.held` (0013), a jsonb array newest-first, capped in
+   * application code rather than in a constraint because a cap is a product
+   * decision that moves and a migration is a bad place to keep a moving
+   * number.
+   *
+   * Written only by the person and never by a model. That is what makes it
+   * the one thing in this product safe to quote back at them: they wrote it
+   * while they were alright, on purpose, for the version of them that is not.
+   *
+   * Same null discipline as the carve — an empty array is the ordinary
+   * answer, never an error.
+   */
+  getHeld(userId: string): Promise<HeldNote[]>;
+  /** Prepend one note, trimming to the cap. Returns whether it landed. */
+  addHeld(userId: string, text: string): Promise<boolean>;
 
   deleteAll(userId: string): Promise<void>;
 

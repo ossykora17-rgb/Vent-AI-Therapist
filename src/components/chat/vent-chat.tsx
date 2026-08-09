@@ -67,6 +67,10 @@ export function VentChat() {
   const [tool, setTool] = React.useState<"breathing" | "journaling" | null>(null);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
   const [invite, setInvite] = React.useState<VentResponse["circleInvite"]>(null);
+  /* Thanksgiving: asked on the way out, every seventh anchored sitting. */
+  const [askHeld, setAskHeld] = React.useState(false);
+  const [heldDraft, setHeldDraft] = React.useState("");
+  const [heldSaving, setHeldSaving] = React.useState(false);
   const [opening, setOpening] = React.useState<{
     object: string | null;
     carrying: string | null;
@@ -214,6 +218,15 @@ export function VentChat() {
     setTensionAfter(after);
 
     /*
+      Every seventh anchored sitting, and only then.
+
+      Weekly-ish for somebody who comes most days, rare for somebody who comes
+      once. Asking every time turns a question into a form field, and the one
+      thing that would kill this is it becoming something to get past.
+    */
+    if (memoryCount > 0 && (memoryCount + 1) % 7 === 0) setAskHeld(true);
+
+    /*
       Whether the card below is about to speak for this.
 
       A screenshot of the moment: the drop card rendering "35 points lighter
@@ -273,6 +286,56 @@ export function VentChat() {
 
   const drop =
     tensionBefore !== null && tensionAfter !== null ? tensionBefore - tensionAfter : null;
+
+  /*
+    What held — the counterweight to the carve, and the only thing in this
+    product safe to quote back at somebody later, because they wrote it on
+    purpose while they were alright.
+
+    Asked after the mood, never instead of it: the mood is the measurement and
+    this is the question, and putting a text box in front of the slider would
+    cost the measurement for a sentence somebody can always skip.
+
+    Deliberately not "what did VENT do for you". A product asking what it did
+    for you is fishing, and the answer belongs to their week, not to us.
+
+    No religion in it, in either direction. This has to land the same for a
+    Muslim, a Christian, a traditionalist and somebody who thinks all of it is
+    nonsense — so: what held. Everybody has an answer to that and nobody is
+    being addressed in somebody else's language.
+  */
+  async function submitHeld() {
+    const text = heldDraft.trim();
+    if (!text || heldSaving) return;
+    setHeldSaving(true);
+    try {
+      const res = await fetch("/api/held", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ anonId: anonId(), text }),
+      });
+      const data = res.ok ? await res.json().catch(() => null) : null;
+      // Waited for the answer, and read it. "Kept" is never said on the
+      // strength of having asked.
+      if (data?.crisis) {
+        setCrisis(CRISIS_LINES);
+        setGated(true);
+        setAskHeld(false);
+        return;
+      }
+      if (data?.saved) {
+        toast("Kept.", "success");
+        setAskHeld(false);
+        setHeldDraft("");
+      } else {
+        toast("Could not keep that one. Nothing else changed.", "info");
+      }
+    } catch {
+      toast("Could not keep that one. Nothing else changed.", "info");
+    } finally {
+      setHeldSaving(false);
+    }
+  }
 
   /* The room's first words in this sitting — the one reply that gets the
      illuminated capital. */
@@ -617,6 +680,49 @@ export function VentChat() {
               <span>1 · still heavy</span>
               <span>10 · lighter</span>
             </p>
+          </div>
+        )}
+
+        {askHeld && (
+          <div className="presence arrive mt-6 p-6 sm:p-8">
+            <p className="nameplate mb-4">One more thing</p>
+            <p className="reply max-w-[42ch]">
+              What held this week? Not the big thing — the small one that
+              carried you further than it should have.
+            </p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <label htmlFor="held-note" className="sr-only">
+                What held this week
+              </label>
+              <input
+                id="held-note"
+                value={heldDraft}
+                onChange={(e) => setHeldDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void submitHeld();
+                }}
+                maxLength={200}
+                placeholder="My sister called and I no need explain…"
+                className="well focusable min-h-[48px] flex-1 px-4 placeholder:text-ash/70"
+              />
+              <button
+                type="button"
+                onClick={() => void submitHeld()}
+                disabled={!heldDraft.trim() || heldSaving}
+                className="pressable focusable min-h-[48px] rounded-card bg-gold px-5 text-[15px] font-semibold text-on-gold disabled:opacity-40"
+              >
+                Keep it
+              </button>
+            </div>
+            {/* Skipping is a real answer and costs nothing. A question you
+                cannot decline is a form. */}
+            <button
+              type="button"
+              onClick={() => setAskHeld(false)}
+              className="focusable mt-3 min-h-[44px] text-[14px] text-ash underline underline-offset-4"
+            >
+              Nothing this week
+            </button>
           </div>
         )}
 
