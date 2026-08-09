@@ -23,8 +23,8 @@ export default function SignupPage() {
 
           {!isSupabaseConfigured && (
             <p className="glass mb-6 p-3 text-[14px] leading-[1.6] text-ash">
-              Sign-up is disabled until Supabase keys are added to this
-              deployment.
+              Accounts are not open yet. You do not need one — the whole
+              product works without a name, and always will.
             </p>
           )}
 

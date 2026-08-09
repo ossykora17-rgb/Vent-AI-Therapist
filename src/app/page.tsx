@@ -156,12 +156,29 @@ export default async function LandingPage() {
           </p>
         </div>
 
+        {/*
+          Written for the person in front of it, not for whoever deploys it.
+
+          This string and its three siblings only ever render in one
+          configuration: production with no Supabase env vars — which is
+          exactly what a fresh Vercel project is, and therefore the shape real
+          people were actually using. So the audience for "Supabase keys
+          aren't set on this deployment" was never an operator. It was
+          somebody at 2am being told about our vendor's configuration, and in
+          the circles lobby it went further and told them to run
+          `npm run local`.
+
+          What a person needs is what it means for them, and whether the thing
+          they came for still works. The operator already knows; they have
+          /api/health, the heartbeat and the deploy logs, none of which are on
+          this page.
+        */}
         {!isSupabaseConfigured && (
           <p className="glass mt-6 p-4 text-sm leading-relaxed">
-            <span className="label-mono">Setup pending</span>
+            <span className="label-mono">This device only</span>
             <br />
-            Supabase keys aren&apos;t set on this deployment, so sessions
-            won&apos;t persist between visits yet. Everything else works.
+            Nothing you say is being kept beyond this visit yet — close the tab
+            and it is gone. Everything else works exactly as it should.
           </p>
         )}
       </main>

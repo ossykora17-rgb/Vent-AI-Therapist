@@ -406,10 +406,10 @@ export function CirclesList() {
 
         {!persisting && (
           <p className="glass mt-4 p-4 text-sm leading-relaxed">
-            <span className="label-mono">Storage off</span>
+            <span className="label-mono">No rooms tonight</span>
             <br />
-            Circles need somewhere to live. Run locally with{" "}
-            <code>npm run local</code>, or add Supabase keys.
+            Circles cannot open on this deployment yet. The private session is
+            open and it is the better room for tonight anyway.
           </p>
         )}
       </main>
