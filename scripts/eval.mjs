@@ -3045,6 +3045,185 @@ check("33 A stem still matches the tense people write in", () => {
     "and somebody isolating is heard as alone");
 });
 
+// ── 34. every part has a door ─────────────────────────────────────────────
+//
+// Asked by the founder, using the product as an ordinary person for the first
+// time: "I'm seeing components everywhere, but how do they connect? Where do
+// they leave me to? I hope they aren't just there for show."
+//
+// They were not all connected. A walk of the built app with a cold browser
+// found:
+//
+//   /privacy and /terms  linked ONLY to each other — a closed loop with no
+//                        door into it from anywhere. The product's whole
+//                        promise is "nothing is kept", and the page that
+//                        documents it could not be reached by tapping.
+//   /circles             never mentioned on the landing page. The half of the
+//                        product with human beings in it was reachable only by
+//                        entering the chat and noticing a nav link, so the
+//                        person whose problem is being alone was the one
+//                        person never told other people were awake.
+//   /dashboard           where signing up lands you, with no link to the
+//                        product on it at all.
+//   totem.tsx            a finished component, imported by nobody, whose
+//                        animation class was never defined.
+//
+// None of that is visible in a diff. Every one of those files is well-written
+// on its own; what was missing was the edge between them. So this walks the
+// graph instead: pages, the components they pull in, and the hrefs those
+// components carry.
+check("34 Every page has a door into it, and every part is on the graph", () => {
+  const APP = path.join(ROOT, "src/app");
+
+  // route → file, for every page in the app router.
+  const routeOf = (file) => {
+    const r = path.dirname(path.relative(APP, file)).split(path.sep)
+      .filter((seg) => !seg.startsWith("(") && seg !== ".")
+      .join("/");
+    return "/" + r;
+  };
+  const pageFiles = [];
+  (function walk(dir) {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) { if (e.name !== "api") walk(full); }
+      else if (e.name === "page.tsx") pageFiles.push(full);
+    }
+  })(APP);
+
+  const routes = new Map(pageFiles.map((f) => [routeOf(f), f]));
+  ok(routes.has("/"), "there is a front door");
+
+  // Follow imports inside src/ so a page owns everything it renders.
+  const readSrc = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return ""; } };
+  const resolve = (spec) => {
+    if (!spec.startsWith("@/")) return null;
+    const base = path.join(ROOT, "src", spec.slice(2));
+    for (const c of [`${base}.tsx`, `${base}.ts`, path.join(base, "index.tsx"), path.join(base, "index.ts")]) {
+      if (fs.existsSync(c)) return c;
+    }
+    return null;
+  };
+  /*
+    A page renders inside its layouts, so they are part of it.
+
+    Without this the check reported `sw-register.tsx` as an orphan — it is
+    mounted in the root layout, which is to say it is on every page in the
+    product, which is the opposite of orphaned. A reachability check that
+    invents unreachability is worse than none.
+  */
+  const layoutsFor = (pageFile) => {
+    const out = [];
+    let dir = path.dirname(pageFile);
+    for (;;) {
+      const l = path.join(dir, "layout.tsx");
+      if (fs.existsSync(l)) out.push(l);
+      if (path.resolve(dir) === path.resolve(APP)) break;
+      dir = path.dirname(dir);
+    }
+    return out;
+  };
+
+  const closure = (entry) => {
+    const seen = new Set([entry, ...layoutsFor(entry)]);
+    const stack = [...seen];
+    while (stack.length) {
+      const f = stack.pop();
+      for (const m of readSrc(f).matchAll(/from\s+["'](@\/[^"']+)["']/g)) {
+        const r = resolve(m[1]);
+        if (r && !seen.has(r)) { seen.add(r); stack.push(r); }
+      }
+    }
+    return seen;
+  };
+
+  // Every internal destination a route can hand you: <Link href>, router
+  // pushes, and the redirects that carry you after signing in.
+  const exitsOf = (files) => {
+    const out = new Set();
+    for (const f of files) {
+      const t = readSrc(f);
+      for (const m of t.matchAll(/href=["'](\/[^"'#?]*)["']/g)) out.add(m[1]);
+      /*
+        `href={`/circles/${c.id}`}` is the only way anybody reaches a room, and
+        reading it up to the `$` yields "/circles/", which normalises back to
+        the lobby. The check then declared the room page unreachable and both
+        components inside it orphaned — three false findings from one greedy
+        stop character. The interpolation is the dynamic segment: keep it.
+      */
+      for (const m of t.matchAll(/href=\{`(\/[^`]*)`\}/g)) {
+        out.add(m[1].replace(/\$\{[^}]*\}/g, "\u0001"));
+      }
+      for (const m of t.matchAll(/(?:push|replace|redirect)\(\s*[`"'](\/[^`"'?$]*)/g)) out.add(m[1]);
+      for (const m of t.matchAll(/\[\s*["'](\/[a-z-]+)["']\s*,\s*["'][^"']+["']\s*\]/g)) out.add(m[1]);
+    }
+    return [...out];
+  };
+
+  // Auth actions are not a page, but they are how a real person reaches the
+  // signed-in half — a redirect is a door.
+  const authExits = exitsOf([path.join(ROOT, "src/app/auth/actions.ts")]);
+
+  const norm = (href) => {
+    const clean = href.replace(/\/+$/, "") || "/";
+    if (routes.has(clean)) return clean;
+    // /circles/<uuid> → /circles/[id]
+    const parts = clean.split("/");
+    for (const r of routes.keys()) {
+      const rp = r.split("/");
+      if (rp.length !== parts.length) continue;
+      if (rp.every((seg, i) =>
+        seg === parts[i] || (seg.startsWith("[") && parts[i]))) return r;
+    }
+    return null;
+  };
+
+  // Walk out from the front door.
+  const reached = new Set(["/"]);
+  const queue = ["/"];
+  const componentsUsed = new Set();
+  while (queue.length) {
+    const r = queue.shift();
+    const files = closure(routes.get(r));
+    for (const f of files) componentsUsed.add(f);
+    const exits = [...exitsOf(files), ...(r === "/login" || r === "/signup" ? authExits : [])];
+    for (const href of exits) {
+      const target = norm(href);
+      ok(target !== null || !href.startsWith("/") || href.startsWith("/api"),
+        `${r} links to ${href}, which is a real page`);
+      if (target && !reached.has(target)) { reached.add(target); queue.push(target); }
+    }
+  }
+
+  /*
+    Every page, reachable by tapping. No allowlist.
+
+    An exception list here would be the check quietly agreeing that some pages
+    are allowed to be unfindable, which is the exact condition it exists to
+    detect. If a page genuinely should not be linked, it should not be a page.
+  */
+  for (const r of routes.keys()) {
+    ok(reached.has(r), `a person can reach ${r} from the front door by tapping`,
+      `reached: ${[...reached].sort().join(" ")}`);
+  }
+
+  /*
+    And every component is on that graph.
+
+    `totem.tsx` was a finished, documented component — a black cube with a gold
+    eye and a `tired` state for somebody who has not vented by 9pm — imported
+    by nothing, with an `animate-blink` class no stylesheet ever defined. It
+    had been in the repo, rendering nowhere, for the product's whole life.
+  */
+  const built = fs.readdirSync(path.join(ROOT, "src/components"))
+    .filter((f) => f.endsWith(".tsx"))
+    .map((f) => path.join(ROOT, "src/components", f));
+  for (const f of built) {
+    ok(componentsUsed.has(f),
+      `${path.basename(f)} is rendered by a page somebody can get to`);
+  }
+});
+
 // ── 19. the credit policy, as something a script can fail ─────────────────
 //
 // `CLAUDE.md` says most messages never reach a model and that a change to the

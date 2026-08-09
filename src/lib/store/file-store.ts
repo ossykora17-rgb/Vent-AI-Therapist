@@ -57,6 +57,8 @@ export class FileStore implements Store {
   readonly kind = "file" as const;
   private readonly file: string;
   private cache: Db | null = null;
+  /** mtime of the file the cache was built from. See `read()`. */
+  private cachedAt = 0;
   /** Serialises writes so two concurrent requests cannot clobber the file. */
   private queue: Promise<void> = Promise.resolve();
 
@@ -64,8 +66,36 @@ export class FileStore implements Store {
     this.file = path.resolve(process.cwd(), dir, "vent.json");
   }
 
+  /*
+    Cached, but never staler than the file.
+
+    The cache used to be permanent: read once, keep forever. That was fine
+    while only route handlers touched the store, because they all share one
+    module instance and therefore one cache. The landing page now reads the
+    open circles during render, and a server component is a *different bundle*
+    — so its FileStore had its own cache, built the first time the page
+    rendered, and never saw a single circle created through /api/circles
+    afterwards. The front door said "Nobody is sitting right now" with two
+    rooms open, and stayed wrong until the server was restarted.
+
+    Not a production bug: SupabaseStore queries the database every read. It is
+    a local-shape bug, which makes it exactly the kind that gets shipped —
+    the author's own machine is the one place it is guaranteed to appear, and
+    the thing it does is quietly tell the truth-teller a lie.
+
+    An mtime stat per read is a syscall on a file this backend already reads
+    synchronously, and it makes the cache mean "what is on disk" instead of
+    "what was on disk once".
+  */
   private read(): Db {
-    if (this.cache) return this.cache;
+    let mtime = 0;
+    try {
+      mtime = fs.statSync(this.file).mtimeMs;
+    } catch {
+      // No file yet. Any cache we already hold is still the freshest truth.
+      if (this.cache) return this.cache;
+    }
+    if (this.cache && mtime === this.cachedAt) return this.cache;
     try {
       const raw = JSON.parse(fs.readFileSync(this.file, "utf8")) as Partial<Db>;
       // A file written before circles existed is missing those arrays.
@@ -73,6 +103,7 @@ export class FileStore implements Store {
     } catch {
       this.cache = structuredClone(EMPTY);
     }
+    this.cachedAt = mtime;
     return this.cache;
   }
 
@@ -85,6 +116,13 @@ export class FileStore implements Store {
       const tmp = `${this.file}.${process.pid}.tmp`;
       await fs.promises.writeFile(tmp, JSON.stringify(db, null, 2));
       await fs.promises.rename(tmp, this.file);
+      // The cache and the file agree right now; stamp it so the next read is
+      // not a needless re-parse of what this process just serialised.
+      try {
+        this.cachedAt = fs.statSync(this.file).mtimeMs;
+      } catch {
+        this.cachedAt = 0;
+      }
     });
     return this.queue;
   }

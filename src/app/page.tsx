@@ -2,8 +2,31 @@ import { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL } from "@/lib/vent/intent";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { isSupabaseConfigured } from "@/lib/env";
+import { getStore } from "@/lib/store";
+import { summariseOpen } from "@/lib/circles/open-now";
 
-export default function LandingPage() {
+export const dynamic = "force-dynamic";
+
+/**
+ * Read the rooms, and never let that failure reach the page.
+ *
+ * A landing page that 500s because the circles table is unhappy is a worse
+ * outcome than a landing page with no room line on it. Anything that goes
+ * wrong here degrades to `null`, which renders nothing.
+ */
+async function openRooms() {
+  try {
+    const store = getStore();
+    if (!store) return null;
+    return summariseOpen(await store.listOpenCircles());
+  } catch {
+    return null;
+  }
+}
+
+export default async function LandingPage() {
+  const rooms = await openRooms();
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="mx-auto flex h-16 w-full max-w-[640px] items-center justify-between px-4">
@@ -36,6 +59,52 @@ export default function LandingPage() {
         </Link>
 
         <p className="label-mono mt-3">Free · No account · Nothing to install</p>
+
+        {/*
+          The second door, and the one that was not here at all.
+
+          Everything above this is the private box. Circles — six seats, a
+          Keeper, forty-five minutes, every word deleted at the end — was
+          reachable only by entering the chat and noticing a nav link. So the
+          person whose actual problem is being alone, at the hour when it is
+          worst, was the one person never told that other people were awake.
+
+          Checked, not claimed. `summariseOpen` returns null when there is no
+          store, and this whole block disappears rather than painting a door
+          onto a deployment where circles do not work. When rooms are open it
+          names the real ones; when none are, it says so and still offers the
+          way in, because "nobody is sitting" is true and useful and an empty
+          lobby is not a broken one.
+        */}
+        {rooms && (
+          <div className="mt-10 max-w-[46ch] border-l border-gold/25 pl-5">
+            <p className="label-mono mb-2">Or don&apos;t do it alone</p>
+            {rooms.count > 0 ? (
+              <p className="text-[15px] leading-[1.7] text-ash">
+                <span className="font-display text-[17px] text-ink/85">
+                  {rooms.names.join(" · ")}
+                </span>
+                <br />
+                {rooms.count === 1 ? "One room is" : `${rooms.count} rooms are`}{" "}
+                open right now, {rooms.seatsOpen}{" "}
+                {rooms.seatsOpen === 1 ? "seat" : "seats"} between them. Six
+                people, forty-five minutes, then every word is deleted.
+              </p>
+            ) : (
+              <p className="text-[15px] leading-[1.7] text-ash">
+                Nobody is sitting right now. You can open a room and it waits
+                for whoever comes — six people, forty-five minutes, then every
+                word is deleted.
+              </p>
+            )}
+            <Link
+              href="/circles"
+              className="mt-3 inline-flex min-h-[44px] items-center text-[15px] font-semibold text-ink underline underline-offset-4"
+            >
+              {rooms.count > 0 ? "Take a seat →" : "Open a room →"}
+            </Link>
+          </div>
+        )}
 
         {/*
           This was three cards in a grid: Grounded, Remembers, Critical.
@@ -109,6 +178,23 @@ export default function LandingPage() {
             {CRISIS_LINES.emergency}
           </a>
           .
+        </p>
+        {/*
+          Terms and Privacy existed and linked only to each other — a closed
+          loop with no door into it from anywhere in the product. Every surface
+          states the promise ("nothing is recorded, every word deleted within
+          24 hours") as plain text, and the page that documents it could not be
+          reached by tapping. A promise a person cannot go and read is a
+          slogan.
+        */}
+        <p className="mt-3 text-[12px] text-ash">
+          <Link href="/privacy" className="underline underline-offset-2">
+            Privacy
+          </Link>
+          {" · "}
+          <Link href="/terms" className="underline underline-offset-2">
+            Terms
+          </Link>
         </p>
       </footer>
     </div>

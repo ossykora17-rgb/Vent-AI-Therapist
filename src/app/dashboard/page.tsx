@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Card, CardBody, CardTitle } from "@/components/ui/card";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -20,8 +21,20 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/dashboard");
 
-  // Single round trip for the two things this page shows.
-  const [{ data: profile }, { count: sessionCount }] = await Promise.all([
+  /*
+    Single round trip for the two things this page shows — and the errors are
+    kept now rather than destructured away, because the status panel below
+    used to report `Database: Live` as a hardcoded literal.
+
+    "A green light over a broken road is worse than no light" is the oldest
+    line in CLAUDE.md, and it was being rendered here as an actual light. This
+    is the one page in the product that draws status lamps, and two of the four
+    were painted on. Both answers below now come from a request that was
+    really made: the database says Live because it answered these two queries,
+    and auth says Live because `getUser` returned a user or we would have been
+    redirected to /login three lines up.
+  */
+  const [profileRes, sessionRes] = await Promise.all([
     supabase
       .from("profiles")
       .select("display_name, plan")
@@ -32,6 +45,10 @@ export default async function DashboardPage() {
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id),
   ]);
+
+  const profile = profileRes.data;
+  const sessionCount = sessionRes.count;
+  const databaseOk = !profileRes.error && !sessionRes.error;
 
   const name = profile?.display_name ?? user.email?.split("@")[0] ?? "you";
 
@@ -51,6 +68,30 @@ export default async function DashboardPage() {
               ? `${sessionCount} session${sessionCount === 1 ? "" : "s"} saved.`
               : "Nothing saved yet."}
           </p>
+
+          {/*
+            The way in, which this page did not have.
+
+            Signing up redirects here, so the moment of highest intent — a
+            person who has just made an account — landed on their own email
+            address and plan tier with no door to the product on it. The only
+            exit was the logo in the header, back to the landing page, to
+            start again. Two links, at the top, before the account admin.
+          */}
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              href="/chat"
+              className="inline-flex min-h-[52px] items-center justify-center rounded-card bg-gold px-6 text-[15px] font-semibold text-ink shadow-glass transition-opacity duration-300 hover:opacity-90"
+            >
+              Carve something
+            </Link>
+            <Link
+              href="/circles"
+              className="inline-flex min-h-[52px] items-center justify-center rounded-card px-6 text-[15px] font-semibold text-ink underline underline-offset-4"
+            >
+              Sit with people
+            </Link>
+          </div>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
             <Card>
@@ -79,7 +120,9 @@ export default async function DashboardPage() {
               <CardTitle>System</CardTitle>
               <CardBody>
                 <ul className="space-y-2">
-                  <StatusRow label="Database" ok />
+                  <StatusRow label="Database" ok={databaseOk} />
+                  {/* We are rendering this page, so `getUser` returned a user
+                      and the redirect above did not fire. Earned, not asserted. */}
                   <StatusRow label="Auth" ok />
                   <StatusRow label="AI" ok={isAnthropicConfigured} />
                   <StatusRow label="Payments" ok={isPaystackConfigured} />
@@ -88,13 +131,24 @@ export default async function DashboardPage() {
             </Card>
           </div>
 
+          {/*
+            This said "The venting session itself is the next build."
+
+            It was true on the day it was written and has been false for the
+            entire life of the product. It sat on the page a person lands on
+            the moment they finish signing up — so the single highest-intent
+            visitor VENT has was told, by VENT, that VENT did not exist yet.
+            Scaffolding copy outlives the scaffolding, and nothing in the suite
+            could ever have caught a sentence that was merely out of date.
+          */}
           <div className="mt-4 border-3 border-ink bg-ink p-5 text-paper sm:p-6">
             <p className="text-xs font-bold uppercase tracking-widest text-ash">
-              Next up
+              Your account changes nothing about the room
             </p>
             <p className="mt-2 max-w-xl leading-relaxed">
-              The foundation is live: auth, database, row-level security and the
-              design system. The venting session itself is the next build.
+              Sessions still carry no name, circles still delete every word when
+              they end, and you can still say the real thing. An account only
+              means this device is not the only place your history lives.
             </p>
           </div>
         </div>
