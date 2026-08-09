@@ -2267,6 +2267,126 @@ check("24 The system prompt has a budget, and every block earns its place", () =
     `${Math.round(bare.length / 3.7)} vs ${tokens}`);
 });
 
+// ── 25. the traditions the library was missing, and the one it got wrong ──
+//
+// The library already covered CBT, Gestalt, IFS, narrative, DBT, somatic,
+// person-centred and solution-focused. Five traditions had no move at all,
+// and they go in the selector rather than the prompt for a measured reason:
+// a tactic costs nothing until it is chosen, and the prompt costs ~3,035
+// tokens on every vent (check 24).
+//
+// Adding them surfaced something worse than an absence.
+check("25 Five traditions reach the room, and the family move is not imported", () => {
+  const at = (message, recentTactics = []) => {
+    const c = classify(message);
+    return selectTactic({
+      ...c, message, pressure: 70, duality: null, mood: null,
+      ventCount: 3, recentTactics,
+    }).id;
+  };
+
+  // Frankl. Every other tactic assumes something can move — a thought tested,
+  // a defence named, one action taken tonight. A father's diagnosis moves
+  // nothing, and offering a 4-6 second micro action there is the app failing
+  // to understand what it was told. Weighted above the problem-solvers.
+  is(at("my dad's test results came back and i don't know"), "meaning_stance",
+    "the unfixable gets the stance move, not a fix");
+
+  // de Shazer, Hayes, Miller & Rollnick. These sit behind an established
+  // move on the same trigger, which is correct — the three-turn rotation is
+  // what makes them reachable rather than redundant.
+  is(at("no point, nothing go change, why bother, e no go better"), "exception_finding",
+    "hopelessness gets asked for the hour it was less bad");
+  is(at("i am useless, i be failure", ["double_standard"]), "defusion",
+    "and self-attack gets distance from the sentence on the next turn");
+  is(at("i keep saying i go rest but i never rest", ["thought_record"]), "change_talk",
+    "and stated intent gets asked for their own reason, never given one");
+
+  /*
+    Ubuntu, and the thing this actually found.
+
+    `rw_family` is the highest-priority move this product has for family, at
+    95, outranking the entire general library. It said: "Firstborn pressure —
+    one boundary, ten words, to the person who needs to hear it."
+
+    That is imported anthropology. "Set a boundary" assumes a self that exists
+    prior to its relationships and is being encroached on; for a Lagos
+    firstborn sending money home, personhood is partly constituted by the
+    people they carry. Told to draw a line with their mother, that person
+    either dismisses the app as not understanding their life — the good
+    outcome — or takes the advice, damages something load-bearing, and carries
+    the guilt of that too.
+
+    The cost is still named. What changed is that the belonging stopped being
+    diagnosed as the fault.
+  */
+  const fam = ALL_TACTICS.find((t) => t.id === "rw_family");
+  ok(/do not call the obligation a problem/i.test(fam.instruction),
+    "the family move refuses to pathologise the obligation");
+  ok(/set boundaries|set a boundary/i.test(fam.instruction) &&
+     /do not .*(set boundaries|set a boundary)|not .*set boundaries/i.test(fam.instruction),
+    "and names the boundary prescription only to forbid it");
+  ok(/who do you lean on/i.test(fam.hold ?? ""),
+    "and turns the question around, which nobody does for a firstborn");
+  is(at("i send money house every month, i be firstborn"), "rw_family",
+    "a family-tagged vent gets it");
+  is(at("i be breadwinner for this house and i just tire", ["iterated_game"]), "ubuntu_frame",
+    "and obligation language with no family tag reaches the same stance in rotation");
+
+  /*
+    The structural gap underneath all of this.
+
+    Five tactics were added and three were born unreachable — shadowed by
+    higher-weighted moves on the same trigger — and the whole suite stayed
+    green. `ubuntu_frame` was genuinely dead at 82, losing to a game-theory
+    move at 84, and nothing said so.
+
+    A full reachability proof needs one probe per tactic and does not exist
+    yet; this is the bounded version. Every tactic must at least fit
+    *something* in the authored corpus, or it is a move nobody will ever
+    receive.
+  */
+  const corpus = fs
+    .readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+    .split("\n").filter(Boolean).map((l) => JSON.parse(l).input);
+
+  const everFits = new Set();
+  for (const message of corpus) {
+    const c = classify(message);
+    const ctx = {
+      ...c, message, pressure: 70, duality: 50, mood: null,
+      ventCount: 3, recentTactics: [],
+    };
+    for (const t of ALL_TACTICS) {
+      try { if (t.fits(ctx)) everFits.add(t.id); } catch { /* not eligible */ }
+    }
+  }
+  const missing = ["meaning_stance", "ubuntu_frame", "defusion", "exception_finding", "change_talk"]
+    .filter((id) => !everFits.has(id));
+
+  /*
+    Two of the five never fit anything in the 51 authored examples, and that
+    is a finding about the corpus rather than about the tactics.
+
+    It contains no self-attack — "i'm useless", "i be failure" — and no
+    hopelessness — "no point", "why bother". Those are two of the most common
+    presentations there are, and `double_standard`, which predates all of
+    this, is unreachable on the corpus for exactly the same reason. The
+    examples were written to exercise the scan and they inherited its blind
+    spots.
+
+    Recorded rather than asserted away. Closing it means writing examples, not
+    moving a threshold — so this allows the gap to shrink and fails if it
+    grows.
+  */
+  ok(missing.length <= 2,
+    "no more of the library is corpus-invisible than the two already known",
+    missing.join(", ") || "none");
+  ok(!missing.includes("meaning_stance") && !missing.includes("ubuntu_frame"),
+    "the two that matter most for this product are exercised by real examples",
+    missing.join(", ") || "none");
+});
+
 // ── 19. the credit policy, as something a script can fail ─────────────────
 //
 // `CLAUDE.md` says most messages never reach a model and that a change to the

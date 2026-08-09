@@ -61,6 +61,49 @@ const HOPELESS = /\b(no point|hopeless|why bother|nothing go change|e no go bett
 const WITHDRAW = /\b(isolat|withdraw|stay in|lock myself|no wan see anybody|hide)\b/;
 const ANGER = /\b(angry|vex|furious|mad|pissed|rage)\b/;
 
+/*
+  Five traditions the library did not have a move from.
+
+  The rest of this file already covers CBT, Gestalt, IFS, narrative, DBT,
+  somatic/polyvagal, person-centred and solution-focused. These are the gaps,
+  and they go here rather than into the system prompt on purpose: a tactic
+  costs nothing until it is selected, and the prompt costs ~3,035 tokens on
+  every single vent. Psychology belongs in the selector.
+*/
+
+/**
+ * The thing that cannot be fixed. Existential — Frankl, Yalom.
+ *
+ * Every other tactic in this file quietly assumes something can move: a
+ * thought can be tested, a defence named, one small action taken tonight. A
+ * parent's diagnosis moves nothing, and offering a 4-6 second micro action to
+ * somebody whose father is dying is the app failing to understand what it was
+ * told.
+ */
+const UNFIXABLE =
+  /\b(dying|died|death|passed away|cancer|diagnos|terminal|test results?|stroke|hospital|nothing i can do|out of my hands|can'?t change|e don happen)\b/;
+
+/**
+ * Obligation to people. Ubuntu, and the reason it is here.
+ *
+ * The history of psychology is overwhelmingly WEIRD — Western, Educated,
+ * Industrialised, Rich, Democratic — and its instinct with family obligation
+ * is to name it enmeshment and prescribe boundaries. For a Lagos firstborn
+ * sending money home, personhood genuinely is constituted through the people
+ * they are carrying: *umuntu ngumuntu ngabantu*. Telling them the obligation
+ * is the pathology is not neutral advice, it is a foreign anthropology, and
+ * it is why so much of this category reads as written for somebody else.
+ *
+ * So the move names the cost honestly and refuses to name the belonging as
+ * the problem — then asks the question nobody asks them: who is holding you.
+ */
+const OBLIGATION =
+  /\b(family|mama|papa|mumcy|mummy|daddy|firstborn|first born|siblings?|brother|sister|send money|black tax|everybody depend|they depend|responsib|breadwinner|house people)\b/;
+
+/** Wanting change and not doing it. Motivational interviewing. */
+const STUCK_INTENT =
+  /\b(i keep|i should|i need to stop|i have to stop|every time i say|i always say|i told myself|i for don)\b/;
+
 const TACTICS: Tactic[] = [
   // ── Validation — they need to be heard before anything else ──────────────
   {
@@ -328,6 +371,109 @@ const TACTICS: Tactic[] = [
     fits: (c) => AVOIDANT.test(c.message.toLowerCase()) && words(c.message) <= 6,
     weight: () => 85,
   },
+
+  // ── five traditions the library was missing ───────────────────────────────
+
+  {
+    id: "meaning_stance",
+    family: "narrative",
+    /*
+      Frankl, and the one situation every other tactic in this file gets
+      wrong. When a father's results come back, nothing can be reframed,
+      tested, activated or actioned — and reaching for any of those tells the
+      person you did not understand what they said. What is left is the only
+      freedom Frankl claimed was never taken: not what happens, but the
+      stance you take toward it. Asked, never asserted, because handing
+      somebody a meaning for their father's illness is obscene.
+    */
+    instruction:
+      "This one does not move, and you must not try to move it. Say plainly that nothing here can be fixed, so you are not going to pretend otherwise. Then ask the only question left: not what they can do about it, but who they want to be while it happens. Never offer them a meaning for it. Never say 'everything happens for a reason' or anything within a mile of it — they will leave and they will be right to.",
+    hold: "Nothing here is fixable, and I am not going to pretend it is. Who do you want to be while it is happening?",
+    fits: has(UNFIXABLE),
+    // Above every problem-solving move. When this fits, the others are wrong.
+    weight: () => 92,
+  },
+
+  {
+    id: "ubuntu_frame",
+    family: "relational",
+    /*
+      A person is a person through other persons. The Western instinct is to
+      call this enmeshment and prescribe boundaries; for somebody whose
+      personhood is genuinely constituted through the people they carry, that
+      is a foreign anthropology dressed as clinical advice.
+
+      Both halves are load-bearing. Name the weight as real — pretending it
+      is light is its own insult — and refuse to name the belonging as the
+      fault. Then ask the question nobody asks a firstborn.
+    */
+    instruction:
+      "Name the weight exactly and do not call the obligation a problem — that is who they are, not a symptom, and telling a firstborn to set boundaries with their mother is advice from a different world. Say the cost out loud without saying they should put it down. Then ask the question nobody asks them: everybody is held by them, so who holds them.",
+    hold: "You are carrying people, and that is not a fault to fix. Everybody leans on you — who do you lean on?",
+    fits: has(OBLIGATION),
+    /*
+      Below `iterated_game` (84), deliberately, after trying it above.
+
+      At 86 this displaced the long-game engine on every family message and
+      orphaned it — solving my shadowing problem by creating the same one
+      pointing the other way, which check 15i caught immediately. New moves
+      do not get to outrank established ones just because they are new.
+
+      Reachable the same way `defusion` and `change_talk` are: the three-turn
+      rotation. Second in line is not dead, and it is the honest position for
+      a move that has never been read by anybody in a real room.
+    */
+    weight: () => 82,
+  },
+
+  {
+    id: "defusion",
+    family: "cognitive",
+    /*
+      Hayes, and deliberately not `thought_record`. That one argues with the
+      content of the thought; this one changes the relationship to it. "I am
+      a failure" fought on its own terms concedes the premise that the
+      sentence is a verdict to be litigated. Six words of distance does more.
+    */
+    instruction:
+      "Do not argue with the sentence. Put one inch between them and it: they are not the thing they said, they are the one having the thought that they are. Say it back with that gap in it, in their own words, once. Never explain the technique, never use the word 'defusion' or 'thought' as jargon.",
+    hold: "You are not that sentence. You are the person hearing it. Say it again with 'I notice' in front.",
+    fits: has(SELF_CRITIC),
+    weight: () => 80,
+  },
+
+  {
+    id: "exception_finding",
+    family: "narrative",
+    /*
+      de Shazer. `miracle_question` imagines the problem gone; this finds the
+      hour it was already smaller, which is harder to dismiss because it
+      actually happened. The specific move against "nothing ever changes" —
+      one counter-example, in their own history, beats any argument.
+    */
+    instruction:
+      "They said nothing changes. Find the hour it was five per cent less bad — not a good day, just less bad — and make them tell you what was different about it. Who was there, what time, what they had eaten. Specifics only; a vague 'sometimes it's better' is not an exception and does not count.",
+    hold: "Find one hour this week it was even slightly less heavy. What was different about that hour?",
+    fits: has(HOPELESS),
+    weight: () => 80,
+  },
+
+  {
+    id: "change_talk",
+    family: "duality",
+    /*
+      Miller and Rollnick. The finding that made MI: an argument for change
+      made by the listener produces resistance, and the same argument made by
+      the person produces change. So the move is to shut up and let them make
+      it — which is also the only version compatible with a room that has
+      banned advice.
+    */
+    instruction:
+      "They have said what they should do. Do not agree with it, do not encourage it, and do not add a reason — every reason you supply is one they now have to defend against. Ask them for theirs instead: what makes this worth doing, in their words, and what would be different by Friday if it happened. Their sentence, not yours.",
+    hold: "You already said what you should do. Tell me why it matters to you — not to anybody else.",
+    fits: has(STUCK_INTENT),
+    weight: () => 74,
+  },
 ];
 
 /** One tailored coping move per real-world pressure, only when detected. */
@@ -352,10 +498,32 @@ export const REAL_WORLD_TACTIC: Record<Exclude<RealWorldTag, null>, Tactic> = {
     "Instagram is a highlight reel — one account to mute today.",
     "Hold your eyes today. One account, muted. That is the whole task.",
   ),
+  /*
+    This said: "Firstborn pressure — one boundary, ten words, to the person
+    who needs to hear it."
+
+    That is the highest-priority move this product has for family, at 95,
+    outranking the entire general library — and it is imported anthropology.
+    "Set a boundary" is the standard Western answer to obligation, and it
+    assumes a self that exists prior to its relationships and is being
+    encroached on. For a Lagos firstborn sending money home, personhood is
+    partly constituted *by* the people they carry: umuntu ngumuntu ngabantu.
+
+    Told to draw a line with their mother, that person does one of two
+    things. They dismiss the app as not understanding their life, which is
+    the good outcome. Or they take the advice, damage something load-bearing,
+    and carry the guilt of that too.
+
+    The cost is still named — pretending the weight is light is its own
+    insult, and the drop is what this product measures. What changes is that
+    the belonging stops being diagnosed as the fault, and the question turns
+    around: everybody leans on them, and nobody has ever asked who they lean
+    on.
+  */
   family: mk(
     "rw_family",
-    "Firstborn pressure — one boundary, ten words, to the person who needs to hear it.",
-    "Hold one line — ten words — for the person who needs to hear it.",
+    "Firstborn weight. Name what it costs them exactly, and do not call the obligation a problem or tell them to set a boundary — that is who they are, not a symptom, and it is advice from a different world. Then ask the question nobody asks them: everybody leans on them, so who do they lean on.",
+    "You are carrying people, and that is not a fault to fix. Everybody leans on you — who do you lean on?",
   ),
   lonely: mk(
     "rw_lonely",
