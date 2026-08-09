@@ -73,6 +73,17 @@
     */
     --vignette: 74 58 44;
 
+    /*
+      The thread's own alpha, because one number cannot serve both themes.
+
+      Set at 0.14 to match the other quiet ornament in the file, and measured
+      at 2x it was simply not there: gold over near-white marble at that alpha
+      moves the luminance by almost nothing, so the line existed in the DOM,
+      had the right geometry, and was invisible. Gold on charcoal is the
+      opposite problem — it reads immediately and 0.45 there would be a stripe.
+    */
+    --thread: rgb(var(--gold) / 0.5);
+
     color-scheme: light;
   }
 
@@ -97,6 +108,8 @@
     --glass-saturate: 140%;
     /* Black in the dark. There is nowhere warmer for it to go. */
     --vignette: 0 0 0;
+    /* Half the light value. Gold arrives on its own against charcoal. */
+    --thread: rgb(var(--gold) / 0.24);
     color-scheme: dark;
   }
 
@@ -329,6 +342,84 @@
   }
 
   /*
+   * The thread.
+   *
+   * Every AI chat on earth has the same silhouette: a centred column of
+   * alternating bubbles with a box at the bottom. Polish does not make a
+   * screenshot of that recognisable, because the shape is the thing people
+   * recognise and the shape is identical everywhere.
+   *
+   * So: one continuous line down the left of the whole session, dim between
+   * answers — and the room's plates carry a 2px lit gold edge at exactly this
+   * x-position, so where VENT speaks the thread *brightens*. It is not a
+   * decoration beside the conversation, it is the conversation's spine, and
+   * the reading of it is immediate: one unbroken sitting, lit where the room
+   * spoke.
+   *
+   * The visitor's notes are right-aligned and never touch it. That is the
+   * whole silhouette — a lit vertical on the left, glowing in segments, with
+   * small right-aligned notes floating clear of it. Nothing else looks like
+   * that.
+   */
+  .thread {
+    position: relative;
+  }
+
+  .thread::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    border-radius: 2px;
+    /* Fades at both ends so the session has no hard start or stop — it was
+       going on before you looked and it does not slam shut. */
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      var(--thread) 6%,
+      var(--thread) 94%,
+      transparent
+    );
+    pointer-events: none;
+  }
+
+  /*
+   * The illuminated capital.
+   *
+   * On the room's first words only. An illuminated initial is the oldest
+   * typographic signal there is for "something begins here, and it matters" —
+   * it is the actual ancestor of the cathedral this is reaching for, and it
+   * is one CSS pseudo-element.
+   *
+   * In ink, not gold. Gold is 2.26:1 on marble and this letter is part of a
+   * sentence somebody has to read, so the ornament is its scale and its
+   * letterform rather than its colour. Which is where the axes turned off for
+   * body copy come back: opsz 96 and WONK 1 are wrong for a paragraph and
+   * exactly right for one letter at fifty-eight pixels — this is the only
+   * place in the product where Fraunces gets to be swashed.
+   *
+   * Only the first reply. On every reply it would be a gimmick, and on a
+   * short reply it would be a joke, so the component gates it on both.
+   */
+  .illuminate::first-letter {
+    float: left;
+    font-size: 3.1em;
+    line-height: 0.8;
+    padding-right: 0.08em;
+    padding-top: 0.06em;
+    font-variation-settings: "opsz" 96, "SOFT" 40, "WONK" 1;
+    color: rgb(var(--ink));
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .illuminate::first-letter {
+      animation: settle 900ms var(--ease-settle) both;
+    }
+  }
+
+  /*
    * An answer takes a moment to arrive.
    *
    * Everything else on the screen settles in 400ms. This takes 720 and comes
@@ -364,9 +455,20 @@
    * Wider tracking than `label-mono` and a hairline running off to the right,
    * so the name reads as engraved on the room rather than as a field label
    * above a value.
+   *
+   * The text is ash, not gold, and that is a rule now rather than a taste:
+   *
+   *     gold is light and structure — edges, rules, fills, the lit spine.
+   *     ink and ash are language.
+   *
+   * Gold measures 2.26:1 on marble. It cannot legally carry text at any size
+   * in the light theme, and it was carrying seven of them, including a link
+   * and a whole sentence in the voice panel. The hairline below is what
+   * separates the room's name from the visitor's label — a stronger signal
+   * than a colour anyway, and one that survives being read.
    */
   .nameplate {
-    @apply flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.22em] text-gold;
+    @apply flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.22em] text-ash;
   }
 
   .nameplate::after {

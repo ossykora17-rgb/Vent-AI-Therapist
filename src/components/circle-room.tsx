@@ -395,7 +395,7 @@ export function CircleRoom({ id }: { id: string }) {
                 if (m.kind === "keeper_prompt") {
                   return (
                     <li key={m.id} className="py-4 text-center">
-                      <p className="label-mono mb-3 tracking-[0.22em] text-gold">
+                      <p className="label-mono mb-3 tracking-[0.22em]">
                         Keeper · pattern
                       </p>
                       {/* `.reply`, so the Keeper and VENT are audibly the same
@@ -461,7 +461,7 @@ export function CircleRoom({ id }: { id: string }) {
                   arrive slower than everything else and dimmed the room behind
                   it; the words themselves were still furniture.
                 */}
-                <p className="label-mono mb-2 text-gold">Closing</p>
+                <p className="label-mono mb-2">Closing</p>
                 <h2 className="mb-5 font-display text-[24px] leading-[1.2] tracking-[-0.01em]">
                   Where did you land?
                 </h2>

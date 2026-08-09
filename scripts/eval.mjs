@@ -3334,6 +3334,65 @@ check("35 One design system, and its text is legible in both themes", () => {
   }
 
   /*
+    Gold is light and structure. Ink and ash are language.
+
+    Gold measures 2.26:1 on marble — it fails the small-text floor of 4.5 and
+    the large-text floor of 3, which means it cannot legally carry a letter at
+    any size in the light theme. It was carrying seven: the nameplate above
+    every reply, the Keeper's label, the Closing label, a link on /memory and
+    a whole sentence in the voice panel.
+
+    That shipped, and the browser harness did not catch it, because the
+    harness walked pages and never walked a page with a *conversation on it* —
+    the nameplate only exists once a reply does. The most important surface in
+    the product was the one state never measured. The harness composites
+    translucent layers and sends a real vent now; this asserts the rule
+    itself, so the next one fails without a browser at all.
+
+    Decorative marks carry `aria-hidden` and are exempt: a gold separator dot
+    is not language.
+  */
+  for (const f of sources.filter((x) => x.endsWith(".tsx"))) {
+    const t = fs.readFileSync(f, "utf8");
+    for (const [i, line] of t.split("\n").entries()) {
+      if (!/\btext-gold\b(?!\/)/.test(line)) continue;
+      ok(/aria-hidden/.test(line),
+        `${path.relative(ROOT, f)}:${i + 1} does not set language in gold`,
+        line.trim().slice(0, 80));
+    }
+  }
+  {
+    const css = fs.readFileSync(path.join(ROOT, "src/app/globals.css"), "utf8");
+    const plate = css.match(/\.nameplate\s*\{([\s\S]*?)\n  \}/);
+    ok(plate && !/text-gold\b/.test(plate[1]),
+      "the nameplate is set in a colour that can be read");
+  }
+
+  /*
+    The silhouette.
+
+    Every AI chat has the same shape — a centred column of alternating bubbles
+    over a box. The thread is the one structural difference: a continuous lit
+    spine down the session that brightens where the room speaks, with the
+    visitor's notes floating clear of it on the right. If it ever stops being
+    a gradient with two theme values, it has gone back to being a border.
+  */
+  {
+    const css = fs.readFileSync(path.join(ROOT, "src/app/globals.css"), "utf8");
+    ok(/\.thread::before/.test(css), "the session has a spine");
+    ok(/--thread:/.test(css.match(/:root\s*\{([\s\S]*?)\n  \}/)?.[1] ?? ""),
+      "and it is tuned for light");
+    ok(/--thread:/.test(css.match(/\.dark\s*\{([\s\S]*?)\n  \}/)?.[1] ?? ""),
+      "and separately for dark — one alpha cannot serve both, which is how the first version rendered invisibly");
+    const illum = css.match(/\.illuminate::first-letter\s*\{([\s\S]*?)\n  \}/);
+    ok(illum, "the room's first words are illuminated");
+    ok(/"WONK"\s*1/.test(illum[1]),
+      "and the swash axis is on for the one letter that is display-scale");
+    ok(/color:\s*rgb\(var\(--ink\)\)/.test(illum[1]),
+      "in ink — gold cannot carry a letter, and this one is part of a sentence");
+  }
+
+  /*
     And nothing paints theme-flipping ink onto a solid gold fill.
 
     This was true on twenty-five surfaces — every send button, every chair

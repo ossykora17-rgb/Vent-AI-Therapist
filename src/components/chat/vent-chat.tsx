@@ -274,6 +274,10 @@ export function VentChat() {
   const drop =
     tensionBefore !== null && tensionAfter !== null ? tensionBefore - tensionAfter : null;
 
+  /* The room's first words in this sitting — the one reply that gets the
+     illuminated capital. */
+  const firstReplyId = lines.find((l) => l.speaker === "vent")?.id ?? null;
+
   return (
     <div className="flex min-h-dvh flex-col">
       {showOnboarding && <Onboarding onDone={completeOnboarding} />}
@@ -348,7 +352,7 @@ export function VentChat() {
               </p>
             )}
             {persisted === false && (
-              <p className="label-mono text-gold">
+              <p className="label-mono">
                 Not saved — this session only
               </p>
             )}
@@ -434,7 +438,7 @@ export function VentChat() {
           The asymmetry is the whole design. Restraint on one side, weight on
           the other, and silence in between.
         */}
-        <ol className="space-y-6">
+        <ol className="thread space-y-6 pl-0">
           {lines.map((line) =>
             line.speaker === "you" ? (
               /*
@@ -464,7 +468,23 @@ export function VentChat() {
                   {/* Engraved, not labelled — and gold where yours is ash,
                       for a glance too quick to register a letterform. */}
                   <p className="nameplate mb-4">Vent</p>
-                  <p className="reply whitespace-pre-wrap">{line.text}</p>
+                  {/*
+                    Illuminated on the room's first words only, and only when
+                    there is a paragraph for the capital to sit in. A drop cap
+                    on every reply is a gimmick; a drop cap on "Tired. Na" is
+                    a joke at somebody's expense.
+                  */}
+                  <p
+                    className={cn(
+                      "reply whitespace-pre-wrap",
+                      line.id === firstReplyId &&
+                        line.text.length >= 90 &&
+                        /^[A-Za-z]/.test(line.text) &&
+                        "illuminate",
+                    )}
+                  >
+                    {line.text}
+                  </p>
                 </div>
               </li>
             ),

@@ -365,7 +365,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
               ? `${voices.length} ${voices.length === 1 ? "voice" : "voices"} in the room. You are ${seat}.`
               : "No camera, ever. Your seat number is all anyone hears."}
           </p>
-          <p className="mt-1 text-sm text-gold">
+          <p className="mt-1 text-sm text-ink">
             {status === "live"
               ? "Your voice is pitched down — not recognisably yours."
               : "Your voice is pitched down before it leaves your phone."}

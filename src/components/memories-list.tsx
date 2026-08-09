@@ -103,7 +103,7 @@ export function MemoriesList() {
             <p className="mb-3 max-w-[46ch] leading-[1.7]">
               Memory belongs to an account, so it needs you signed in.
             </p>
-            <Link href="/login" className="text-gold underline underline-offset-4">
+            <Link href="/login" className="underline underline-offset-4">
               Sign in
             </Link>
           </div>
