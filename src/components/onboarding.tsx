@@ -126,7 +126,16 @@ export function Onboarding({
       // paper/80 just washed it out.
       className="fixed inset-0 z-50 flex items-end justify-center bg-ink/25 backdrop-blur-glass sm:items-center"
     >
-      <div className="glass m-3 w-full max-w-[440px] animate-slide-up p-5 shadow-glass">
+      {/*
+        The room, not a dialog.
+
+        This is the first thing VENT ever says to anybody, and it was set as a
+        `glass` card with `<h2>` headings — the only place in the product where
+        the room speaks and does not look like the room. Somebody's whole
+        impression of where they have arrived is formed here, thirty seconds
+        before they type the sentence they came to type.
+      */}
+      <div className="presence arrive m-3 w-full max-w-[440px] p-6 sm:p-8">
         {/*
           Three marks, not "Step 1 of 3".
           A counter tells you there is a form and how much of it is left, which
@@ -134,7 +143,8 @@ export function Onboarding({
           are without being told you are filling something in. The count is
           still announced to screen readers, where it is genuinely useful.
         */}
-        <div className="mb-5 flex items-center gap-2">
+        <p className="nameplate mb-4">Vent</p>
+        <div className="mb-6 flex items-center gap-2">
           <span className="sr-only">{`Question ${step + 1} of 3`}</span>
           {[0, 1, 2].map((i) => (
             <span
@@ -150,9 +160,7 @@ export function Onboarding({
 
         {step === 0 && (
           <>
-            <h2 className="font-display text-xl font-bold leading-snug tracking-[-0.01em]">
-              In my office, you pick where you sit. Which chair is you today?
-            </h2>
+            <h2 className="reply">In my office, you pick where you sit. Which chair is you today?</h2>
             <div className="mt-5 space-y-2">
               {CHAIRS.map(({ id: value, label, hint }) => (
                 <button
@@ -179,9 +187,7 @@ export function Onboarding({
 
         {step === 1 && (
           <>
-            <h2 className="font-display text-xl font-bold leading-snug tracking-[-0.01em]">
-              Pick the object for how you feel.
-            </h2>
+            <h2 className="reply">Pick the object for how you feel.</h2>
             <div className="mt-5 grid grid-cols-2 gap-2">
               {OBJECTS.map(({ id: value, label }) => (
                 <button
@@ -207,10 +213,22 @@ export function Onboarding({
 
         {step === 2 && (
           <>
-            <h2 className="font-display text-xl font-bold leading-snug tracking-[-0.01em]">
-              You&apos;re leaving. Wetin you go carry, wetin you go drop?
+            {/*
+              This said "You're leaving."
+
+              It is the circle's *closing* ritual — carry one, drop one — and
+              it is a good ritual, which is how it ended up transplanted onto
+              the front door and told somebody who had not typed a word yet
+              that they were on their way out. The mechanic stays, because
+              both answers reach the room's first reply through
+              `openingBlock`. Only the framing moves from departure to
+              arrival, which is where this person actually is.
+            */}
+            <h2 className="reply">
+              You just came in. Wetin you carry come, and wetin you wan drop
+              here?
             </h2>
-            <p className="label-mono mt-3">Carry one</p>
+            <p className="label-mono mt-4">Carrying</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {WORDS.map((w) => (
                 <button
@@ -228,7 +246,7 @@ export function Onboarding({
               ))}
             </div>
 
-            <p className="label-mono mt-4">Drop one</p>
+            <p className="label-mono mt-5">Leaving here</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {WORDS.filter((w) => w !== carry).map((w) => (
                 <button
