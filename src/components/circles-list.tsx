@@ -299,13 +299,27 @@ export function CirclesList() {
           </div>
         )}
 
-        <ol className="mt-4 space-y-3">
+        {/*
+          A corridor, not a card list.
+
+          The chat hangs off a lit thread and so does the chronicle; this was
+          the last surface still stacking bordered boxes, which is what every
+          other product's "rooms" screen looks like.
+
+          Deliberately NOT `.presence`. That plate means the room is
+          *speaking* — VENT, the Keeper, the Guardian — and putting it on a
+          lobby card would spend the one signal the product has for "something
+          is being said to you" on a directory entry. A circle here is a
+          place, so it gets the thread that means place and time, and its own
+          name at the size a name deserves.
+        */}
+        <ol className="thread mt-5 space-y-7">
           {circles.map((c) => {
             const mins = now === 0
               ? null
               : Math.max(0, Math.round((new Date(c.ends_at).getTime() - now) / 60000));
             return (
-              <li key={c.id}>
+              <li key={c.id} className="settle pl-5">
                 {/*
                   What a person needs to decide whether to sit down, and
                   nothing about the stranger who opened it.
@@ -320,7 +334,10 @@ export function CirclesList() {
                   person's slider. They pick by what it is about, whether there
                   is room, and how long is left.
                 */}
-                <Link href={`/circles/${c.id}`} className="glass block p-4">
+                <Link
+                  href={`/circles/${c.id}`}
+                  className="focusable block rounded-card py-1 transition-opacity duration-300 hover:opacity-80"
+                >
                   <div className="flex flex-wrap items-center gap-2">
                     <span aria-hidden="true" className="h-2 w-2 rounded-full bg-gold motion-safe:animate-pulse" />
                     {/*
@@ -332,9 +349,6 @@ export function CirclesList() {
                       invented: a room called Night Owls is named for the
                       clock, not for people it has decided are night owls.
                     */}
-                    <span className="text-[15px] font-medium">
-                      {roomName(c.tag, c.created_at)}
-                    </span>
                     <span className="label-mono">
                       {TAGS.find(([v]) => v === c.tag)?.[1] ?? "Anything"}
                     </span>
@@ -342,6 +356,14 @@ export function CirclesList() {
                       {mins ?? "—"} min left
                     </span>
                   </div>
+
+                  {/* The name at the size a name deserves. It was 15px and
+                      medium — the weight of a settings row — sitting between a
+                      status dot and a countdown, so the one human thing on the
+                      card read as its least important field. */}
+                  <p className="mt-1.5 font-display text-[19px] font-bold leading-[1.15] tracking-[-0.01em]">
+                    {roomName(c.tag, c.created_at)}
+                  </p>
 
                   {/* Six seats drawn as six seats. "3/6" is a fraction; this
                       is a room you can see the shape of at a glance, and it
