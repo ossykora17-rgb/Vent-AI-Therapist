@@ -41,6 +41,24 @@ export interface Provider {
   /** The model this provider will use, after env overrides. */
   model: string;
   configured: boolean;
+  /**
+   * Why it is not configured, when it is not.
+   *
+   * `configured: false` is a failure bucket with nothing in it. Production
+   * reported openrouter unconfigured while the dashboard plainly showed
+   * OPENROUTER_API_KEY set for Production — and there was no way, from the
+   * outside, to tell apart the three things that produce that same false:
+   *
+   *   missing  the variable does not exist in this runtime at all — wrong
+   *            name, wrong project, wrong environment, or never redeployed
+   *   blank    it exists and its value is empty or whitespace, which is what
+   *            saving the field without pasting into it leaves behind
+   *   present  it is there and this is not the problem
+   *
+   * Never the value, never a prefix, never a length. Those three words are
+   * the whole answer and none of them leaks a secret.
+   */
+  keyState: "missing" | "blank" | "present";
   send: (call: ProviderCall) => Promise<string>;
 }
 
@@ -200,6 +218,8 @@ export function openAiCompatible(
   baseUrl: string,
   apiKey: string,
   model: string,
+  /** The env var this key came from, so a false can say which kind. */
+  keyVar: string,
   prefer: string[] = ["flash", "chat", "instruct"],
   /** Ask a reasoning model not to think. See THINKING_BUDGET. */
   noThinking = false,
@@ -268,6 +288,7 @@ export function openAiCompatible(
       return resolved[id] ?? model;
     },
     configured: Boolean(apiKey),
+    keyState: keyStateOf(keyVar, apiKey),
     async send(call) {
       try {
         return await attempt(resolved[id] ?? model, call);
@@ -295,6 +316,7 @@ function anthropicProvider(): Provider {
     id: "anthropic",
     model: MODEL.anthropic,
     configured: Boolean(apiKey),
+    keyState: keyStateOf("ANTHROPIC_API_KEY", apiKey),
     async send({ system, messages, maxTokens }) {
       const client = new Anthropic({ apiKey });
       const completion = await client.messages.create({
@@ -324,24 +346,31 @@ export function allProviders(): Provider[] {
       "https://generativelanguage.googleapis.com/v1beta/openai",
       env.geminiApiKey,
       MODEL.gemini,
+      "GEMINI_API_KEY",
       ["flash", "gemini"],
       true,
     ),
-    openAiCompatible("groq", "https://api.groq.com/openai/v1", env.groqApiKey, MODEL.groq, [
-      "llama-3.3",
-      "llama",
-    ]),
+    openAiCompatible(
+      "groq",
+      "https://api.groq.com/openai/v1",
+      env.groqApiKey,
+      MODEL.groq,
+      "GROQ_API_KEY",
+      ["llama-3.3", "llama"],
+    ),
     openAiCompatible(
       "openrouter",
       "https://openrouter.ai/api/v1",
       env.openrouterApiKey,
       MODEL.openrouter,
+      "OPENROUTER_API_KEY",
     ),
     openAiCompatible(
       "cerebras",
       "https://api.cerebras.ai/v1",
       env.cerebrasApiKey,
       MODEL.cerebras,
+      "CEREBRAS_API_KEY",
     ),
   ];
 
@@ -354,6 +383,22 @@ export function allProviders(): Provider[] {
   // Named ones first in the order given; anything unnamed keeps its place after.
   const named = order.map((id) => table.find((p) => p.id === id)).filter(Boolean) as Provider[];
   return [...named, ...table.filter((p) => !order.includes(p.id))];
+}
+
+/**
+ * What the runtime actually holds for a key, without ever saying what it is.
+ *
+ * `env.ts` trims on read, so a whitespace-only value arrives here as "" and is
+ * indistinguishable from unset — which is exactly the confusion this reports
+ * its way out of. The raw `process.env` lookup is the only way to tell "never
+ * set" from "set to nothing".
+ */
+export function keyStateOf(
+  name: string,
+  trimmed: string | undefined,
+): "missing" | "blank" | "present" {
+  if (trimmed) return "present";
+  return process.env[name] === undefined ? "missing" : "blank";
 }
 
 /** Only the ones that could actually answer. */
