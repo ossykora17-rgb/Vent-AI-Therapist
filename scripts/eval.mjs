@@ -3844,6 +3844,44 @@ check("41 A drifted table names every column it is missing", () => {
   const contract = fs.readFileSync(path.join(ROOT, "src/lib/store/contract.ts"), "utf8");
   ok(/vent_users: "id,anon_id,carve,held,created_at"/.test(contract),
     "the contract still asks for both of the columns production was missing");
+
+  /*
+    A red light over a working road.
+
+    PGRST303 is JWT clock skew — the key's `iat` reads into the database's
+    future, so whichever request lands in that window is refused. It moves
+    between tables run to run and clears itself, and the hint has said
+    "nothing to fix here" since it was written.
+
+    It was landing in `missingTables` anyway, which set database to
+    "unreachable", which set status to "degraded", which returned 503. So the
+    service declared itself down over a timing wobble, and anything watching
+    — an uptime check, a status page, the founder opening it on his phone —
+    would have believed it.
+
+    Every other failure this endpoint has produced was a green light over a
+    broken road. This was the first one the other way round, and it is the
+    same bug wearing the opposite colour.
+  */
+  ok(/code === "PGRST303"/.test(health),
+    "clock skew is recognised as timing rather than schema");
+  const skewIdx = health.indexOf('code === "PGRST303"');
+  const pushIdx = health.indexOf("missingTables.push(name)");
+  ok(skewIdx > 0 && skewIdx < pushIdx,
+    "and it is diverted BEFORE it can be counted as a missing table");
+  ok(/const transient: Record</.test(health) && /\n      transient,/.test(health),
+    "it is still reported, in its own field — quiet is not the same as hidden");
+
+  /*
+    The status line and the HTTP code both read `database`, and `database`
+    only reads `missingTables`. So keeping skew out of that array is what
+    keeps a self-clearing wobble from paging somebody at 7am — asserted here
+    rather than trusted, because the two are four hundred lines apart.
+  */
+  ok(/database = missingTables\.length \? "unreachable" : "ok";/.test(health),
+    "database still turns on real drift only");
+  ok(/status: database === "unreachable" \? 503 : 200/.test(health),
+    "and 503 still follows database, so nothing else can reach it");
 });
 
 // ── 37. a class that compiles to nothing ──────────────────────────────────
