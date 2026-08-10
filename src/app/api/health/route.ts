@@ -36,6 +36,27 @@ export async function GET() {
     string,
     { code?: string; hint?: string; message?: string; missingColumns?: string[] }
   > = {};
+  /*
+    Errors that are about the moment, not about the schema.
+
+    PGRST303 is JWT clock skew: the key's `iat` reads a second or two into the
+    database's future, so whichever request lands inside that window is
+    refused. It moves table to table run to run and it clears on its own — the
+    hint attached to it has said "nothing to fix here" since the day it was
+    written.
+
+    It was being pushed into `missingTables` anyway, which set database to
+    "unreachable", which set status to "degraded", which returned **503**. So
+    a self-clearing timing wobble made the health endpoint declare the service
+    down — and anything watching it (an uptime check, a status page, a founder
+    opening it on his phone at 7am) would read a red light over a road that
+    was working perfectly.
+
+    Every other failure in this endpoint has been a green light over a broken
+    road. This is the first one the other way round, and it is the same bug:
+    the light was not telling the truth about the road.
+  */
+  const transient: Record<string, { code?: string; hint?: string }> = {};
   // Which contract was checked, so a green health cannot mean "checked two".
   const tablesChecked = Object.keys(FULL_CONTRACT).length;
 
@@ -82,6 +103,16 @@ export async function GET() {
       for (const [i, res] of results.entries()) {
         if (!res.error) continue;
         const name = names[i];
+
+        // Timing, not schema. Reported, never counted.
+        if (res.error.code === "PGRST303") {
+          transient[name] = {
+            code: res.error.code,
+            hint: res.error.hint ?? explainDbCode(res.error.code) ?? undefined,
+          };
+          continue;
+        }
+
         missingTables.push(name);
         tableErrors[name] = {
           code: res.error.code ?? undefined,
@@ -181,6 +212,8 @@ export async function GET() {
       database,
       missingTables,
       tableErrors,
+      // Present and self-clearing. Never affects `status` or the HTTP code.
+      transient,
       tablesChecked,
       // Which one actually answered, not which one is listed first.
       model: { id: probe.model ?? configuredProviders()[0]?.model ?? null, answeredBy: probe.answered, ...model },
