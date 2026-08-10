@@ -155,6 +155,10 @@ export async function GET() {
     provider: p.id,
     model: p.model,
     configured: p.configured,
+    // Which flavour of "no", when it is no. missing = the variable is not in
+    // this runtime at all; blank = it is there and empty, which is what saving
+    // the field without pasting leaves behind. Never the value.
+    keyState: p.keyState,
   }));
 
   const services = {
