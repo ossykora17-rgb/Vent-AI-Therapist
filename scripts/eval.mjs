@@ -592,6 +592,46 @@ await checkAsync("14 A provider's four real failures are handled, not passed on"
     ok(!calls.some((c) => c.endsWith("/models")),
       "a rate limit is not retried — the answer would be the same and the tier is finite");
 
+    /*
+      An optional hint must never be why a provider is unusable.
+
+      `reasoning_effort: "none"` asks a reasoning model to answer instead of
+      deliberate — it exists because one spent 217 tokens thinking and shipped
+      "Tired. Na" to somebody who had just said they were tired. The comment
+      on THINKING_BUDGET said it "is not honoured everywhere", and the
+      assumption under that was: not honoured means ignored.
+
+      It does not. Google's OpenAI-compatible layer rejects the value outright
+      — 400 INVALID_ARGUMENT, no field named — so production showed gemini
+      "unreachable" with a valid key and a live model, and a whole free
+      provider sat out of the chain on every message.
+    */
+    calls.length = 0;
+    const bodies = [];
+    globalThis.fetch = async (url, init) => {
+      calls.push(String(url));
+      bodies.push(JSON.parse(String(init?.body ?? "{}")));
+      return JSON.parse(String(init?.body)).reasoning_effort !== undefined
+        ? json(400, { error: { code: 400, message: "Request contains an invalid argument.", status: "INVALID_ARGUMENT" } })
+        : json(200, { choices: [{ message: { content: "answered anyway" }, finish_reason: "stop" }] });
+    };
+    const fussy = openAiCompatible("t-hint", "https://x", "k", "m", "T_KEY", ["flash"], true);
+    is(await fussy.send({ system: "s", messages: [], maxTokens: 220 }), "answered anyway",
+      "a rejected hint costs the hint, never the answer");
+    is(bodies.length, 2, "exactly one retry — the same call without the optional part");
+    ok(bodies[0].reasoning_effort === "none", "the first attempt did ask for no thinking");
+    ok(bodies[1].reasoning_effort === undefined, "and the second simply did not");
+    ok(!calls.some((c) => c.endsWith("/models")),
+      "a rejected parameter is not a retired model — nothing goes looking for a new id");
+
+    // And it is remembered, so the wasted round trip happens once ever rather
+    // than once per message.
+    bodies.length = 0;
+    is(await fussy.send({ system: "s", messages: [], maxTokens: 220 }), "answered anyway",
+      "the provider still answers on the next turn");
+    is(bodies.length, 1, "and does not pay for the rejected hint twice");
+    ok(bodies[0].reasoning_effort === undefined, "having learned it is refused here");
+
     // An empty completion is not a reply either.
     stub(() => json(200, { choices: [{ message: { content: "   " }, finish_reason: "stop" }] }));
     const blank = openAiCompatible("t-blank", "https://x", "k", "m");

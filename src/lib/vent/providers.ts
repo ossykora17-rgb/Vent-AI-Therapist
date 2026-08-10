@@ -224,9 +224,38 @@ export function openAiCompatible(
   /** Ask a reasoning model not to think. See THINKING_BUDGET. */
   noThinking = false,
 ): Provider {
+  /*
+    Whether this provider tolerates the thinking hint.
+
+    Per provider, remembered for the life of the process. The first 400 turns
+    it off and every call after that skips straight to the request that works,
+    so the fallback costs one wasted round trip ever rather than one per
+    message.
+  */
+  let hintRejected = false;
+
   const attempt = async (
     useModel: string,
     { system, messages, maxTokens }: ProviderCall,
+    /*
+      An optional tuning parameter must never be why a provider is unusable.
+
+      `reasoning_effort: "none"` is how a reasoning model is asked to answer
+      rather than deliberate — it exists because one shipped "Tired. Na" after
+      spending 217 tokens thinking. The comment on THINKING_BUDGET already
+      said it "is not honoured everywhere", and the assumption underneath that
+      was: not honoured means ignored.
+
+      It does not mean ignored. Google's OpenAI-compatible layer *rejects* the
+      value outright — `400 INVALID_ARGUMENT`, no field named — so a hint
+      meant to improve one answer was instead taking a whole free provider out
+      of the chain on every single message. Production showed gemini
+      "unreachable" with a 400 while the key was valid and the model was fine.
+
+      So: send it, and if the request comes back 400 while it was attached,
+      send the same request again without it. Optional means optional.
+    */
+    withHint = noThinking,
   ): Promise<string> => {
       const r = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
@@ -242,7 +271,7 @@ export function openAiCompatible(
           // Ask it not to think, and leave room in case it does anyway.
           max_tokens: Math.max(maxTokens, THINKING_BUDGET),
           temperature: 0.7,
-          ...(noThinking ? { reasoning_effort: "none" } : {}),
+          ...(withHint && !hintRejected ? { reasoning_effort: "none" } : {}),
           messages: [{ role: "system", content: system }, ...messages],
         }),
         // A model that reasons before it speaks needs longer than a normal
@@ -253,7 +282,18 @@ export function openAiCompatible(
       });
 
       const body = await r.text();
-      if (!r.ok) throw new ProviderError(r.status, `${r.status} ${body.slice(0, 300)}`);
+      if (!r.ok) {
+        // The one retry that is not a retry: the same call, minus the hint
+        // that was never required. Once only, and remembered.
+        if (r.status === 400 && withHint && !hintRejected) {
+          hintRejected = true;
+          console.warn(
+            `[providers] ${id}: rejected reasoning_effort, retrying without it`,
+          );
+          return attempt(useModel, { system, messages, maxTokens }, false);
+        }
+        throw new ProviderError(r.status, `${r.status} ${body.slice(0, 300)}`);
+      }
 
       let parsed: {
         choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
