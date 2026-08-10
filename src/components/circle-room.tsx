@@ -368,7 +368,16 @@ export function CircleRoom({ id }: { id: string }) {
                 between voices, and they need room around them to do it —
                 twelve pixels between an inscription and a share reads as a
                 list, which is what this was. */}
-            <ol className={cn("mt-4 space-y-5", state.phase === "close" && "receding")}>
+            {/*
+              The room's transcript on the same spine as everything else.
+
+              The chat hangs off it, the chronicle hangs off it, the lobby
+              hangs off it — and this, the one place where six people are
+              actually talking, was a plain stack. Here the thread means the
+              forty-five minutes: one sitting, lit where the room spoke, and
+              it recedes with the rest of the transcript at the close.
+            */}
+            <ol className={cn("thread mt-5 space-y-6 [&>li]:pl-5", state.phase === "close" && "receding")}>
               {/*
                 Four kinds of speech, four shapes.
 
