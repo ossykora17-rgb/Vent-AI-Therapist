@@ -48,12 +48,13 @@ export default function PrivacyPage() {
         When you vent, your message and your recent history are sent to an AI
         provider to generate the reply. This deployment may use any of{" "}
         <strong>Anthropic</strong>, <strong>Google</strong>,{" "}
-        <strong>Groq</strong>, <strong>DeepSeek</strong>,{" "}
+        <strong>Groq</strong>, <strong>Zhipu</strong>,{" "}
+        <strong>DeepSeek</strong>,{" "}
         <strong>OpenRouter</strong> or <strong>Cerebras</strong>: they are
         tried in order and the first one that answers is the one that sees it,
         so which company handles a given message depends on which are reachable
-        at that moment. DeepSeek is based in China; the others are in the
-        United States.
+        at that moment. Zhipu and DeepSeek are based in China; the others are
+        in the United States.
       </p>
       <p>
         Nothing identifying goes with it. No name, no email, no account — only

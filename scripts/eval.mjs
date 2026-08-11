@@ -3952,6 +3952,7 @@ check("42 Every provider in the chain is named on the privacy page", () => {
     anthropic: /Anthropic/,
     gemini: /Google/,
     groq: /Groq/,
+    zhipu: /Zhipu/,
     deepseek: /DeepSeek/,
     openrouter: /OpenRouter/,
     cerebras: /Cerebras/,

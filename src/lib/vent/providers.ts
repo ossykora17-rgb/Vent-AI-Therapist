@@ -92,6 +92,15 @@ const MODEL = {
     one in a room.
   */
   deepseek: process.env.VENT_MODEL_DEEPSEEK || "deepseek-chat",
+  /*
+    GLM-4-Flash. Free, not cheap — the distinction that matters here.
+
+    DeepSeek bills per token once the signup credit runs out; this one is
+    published as free on Zhipu's open platform. For a product being run with
+    no money at all, "free" and "cheap" are different categories, and the
+    chain should reach the free one first.
+  */
+  zhipu: process.env.VENT_MODEL_ZHIPU || "glm-4-flash",
 };
 
 /**
@@ -407,6 +416,26 @@ export function allProviders(): Provider[] {
       MODEL.groq,
       "GROQ_API_KEY",
       ["llama-3.3", "llama"],
+    ),
+    /*
+      Zhipu, immediately after groq, and that position is the whole point.
+
+      Groq is free and has been carrying every message. When it rate-limits —
+      and a free tier does — the next thing tried should be another free one
+      rather than a provider that bills. This is a product being run with no
+      money, so the order of this list is a budget decision, not a taste one.
+
+      OpenAI-compatible like the rest, so no new adapter. The endpoint is in
+      mainland China, so a request from Vercel's US region has further to
+      travel; the 50-second timeout upstream already covers it, and a slow
+      free answer beats a fast refusal.
+    */
+    openAiCompatible(
+      "zhipu",
+      "https://open.bigmodel.cn/api/paas/v4",
+      env.zhipuApiKey,
+      MODEL.zhipu,
+      "ZHIPU_API_KEY",
     ),
     /*
       DeepSeek, after the known-good free tier and before the empty seats.
