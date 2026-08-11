@@ -389,7 +389,14 @@ export function VentChat() {
     if (!offer) return;
     setAnswering(offer);
     setOffer(null);
-    setAskMood(false);
+    /*
+      The mood check is not cleared here, only hidden while this is open.
+
+      Clearing it read as tidy and cost the one number this product claims:
+      `askMood` is set on the turn that produced the offer, so `setAskMood(false)`
+      meant accepting a question silently cancelled the measurement for that
+      session. It comes back the moment the question is answered or left.
+    */
     setLines((l) => [
       ...l,
       { id: nextId.current++, speaker: "vent", text: offer.text },
@@ -811,17 +818,31 @@ export function VentChat() {
         {/*
           THE BREAKING ROOM — asked with the door held open.
 
-          The offer is the whole safety design made visible. Two buttons of the
-          same size, neither one styled as the answer the room wants: a gold
-          "Ask me" against a grey "not now" would be the interface leaning, and
-          somebody who feels leaned on has not consented. The no is a real
-          button with a real hit target, not a dismissible X in a corner.
+          The no is a real button — same size, same weight, same row, with the
+          same hit target — and not a dismissible X in a corner. It says "Not
+          tonight" rather than "No thanks", because that is what the code
+          actually does: `shut` is per-sitting and lives in state, so a no
+          tonight is a no tonight and nothing carries it forward for weeks.
+
+          The gold is a lean, and it is named here rather than denied. This
+          said "neither one styled as the answer the room wants" over a filled
+          gold primary against a plain outline, which was a claim about a
+          screen nobody had looked at. Looking at it is what found this, and
+          the wording changed rather than the claim being kept.
 
           It renders only when nothing else is competing. A heavy question
           stacked under a circle invitation and a mood slider is a menu, and
           the point of this room is that one question arrives on its own.
+
+          That last rule was written as `!askMood` and it meant this card
+          could never render at all: `askMood` is set on every vent turn, and
+          a vent turn is the only kind that produces an offer. The condition
+          was true of the code and false of anything a person would ever see —
+          which is why it went in the browser before it went in a commit. It
+          is the mood card that waits now, and it waits rather than being
+          cancelled.
         */}
-        {offer && !gated && !askMood && !answering && (
+        {offer && !gated && !answering && (
           <div className="presence arrive mt-6 p-6 sm:p-8">
             <p className="nameplate mb-4">The room asks</p>
             <p className="reply max-w-[42ch]">{offer.lines.invite}</p>
@@ -844,7 +865,9 @@ export function VentChat() {
           </div>
         )}
 
-        {askMood && (
+        {/* Waits while a heavy question is on the table, and returns after.
+            Never cleared by it — see `acceptBreaking`. */}
+        {askMood && !offer && !answering && (
           <div className="presence mt-6 p-6 sm:p-8">
             <p className="nameplate mb-4">Before you go</p>
             {/* The room asking, so the room's voice. This is not chrome —
@@ -932,7 +955,11 @@ export function VentChat() {
           answer. Fresh load at pressure 50 with no body named still shows
           nothing, because nothing has been signalled.
         */}
-        {!thinking && !gated && tool === null && (
+        {/* And not beside a heavy question. "Breathing 4·2·6" and
+            "Journalling prompt" under "I fit ask you something heavy?" is
+            three offers in one card's height — the menu this room exists not
+            to be. Seen in a screenshot, not in the source. */}
+        {!thinking && !gated && tool === null && !offer && !answering && (
           <ToolRow
             showBreathing={shouldOfferBreathing(tag, pressure, body)}
             tag={tag}

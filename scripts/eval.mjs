@@ -4245,6 +4245,33 @@ check("44 The Breaking Room is wired the way the module is written", () => {
   ok(/Leave it|leave it/.test(chat), "with a way out that is not answering");
 
   /*
+    And the card can actually render.
+
+    It was guarded `offer && !gated && !askMood && !answering`, which reads
+    like restraint and is a contradiction: `askMood` is set on every vent
+    turn, and a vent turn is the only kind that produces an offer. The
+    condition was true of the code and false of anything a person would ever
+    see — the entire feature was unreachable, and every assertion above this
+    one still passed.
+
+    No check can prove a React tree paints. This one holds the guard to the
+    two states it is allowed to name, which is the part that was wrong.
+  */
+  const card = chat.slice(chat.indexOf("{offer &&"), chat.indexOf("{offer &&") + 60);
+  ok(!/askMood/.test(card),
+    "the offer does not wait on a flag that is always set when it exists", card.trim());
+  ok(/\{askMood && !offer && !answering &&/.test(chat),
+    "it is the mood check that waits, and only while a question is on the table");
+  const accept = chat.slice(chat.indexOf("function acceptBreaking"));
+  // Comments stripped, or this reads the paragraph explaining the bug and
+  // reports the bug. The check is about the code.
+  const acceptCode = accept
+    .slice(0, accept.indexOf("function declineBreaking"))
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  ok(!/setAskMood\(false\)/.test(acceptCode),
+    "and accepting a question never cancels the measurement — it defers it");
+
+  /*
     ── the store ────────────────────────────────────────────────────────────
     The asked-list is the only thing standing between somebody and being asked
     the same question twice, so one id appears once however many times it is
