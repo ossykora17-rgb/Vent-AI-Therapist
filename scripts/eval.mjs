@@ -3982,6 +3982,133 @@ check("42 Every provider in the chain is named on the privacy page", () => {
     "crisis, dates and greetings are still stated as never leaving");
 });
 
+// ── 43. the breaking room, and the door it will not open ──────────────────
+//
+// Commandment 8, and it is the best idea in any of the manifestos sitting
+// next to the most dangerous instruction in any of them.
+//
+// The idea: people are not changed by being managed, they are changed by one
+// question nobody has asked them. True, and it is what every tradition in
+// `tactics.ts` is finally doing.
+//
+// The instruction: *"Crisis 8-10: use Level 5-6 questions to anchor them"* —
+// Level 6 opening with *"if you die today, wetin people go write for your
+// WhatsApp status?"*
+//
+// That is asking somebody in active crisis to rehearse their own death and
+// stage the reaction to it, inside the exact condition the crisis router
+// exists to hand to a human being. So the rule is inverted: high crisis does
+// not select gentler questions, it selects none. A gate, not a weight —
+// weights lose contests, and there is no acceptable turn on which this one
+// loses.
+const { QUESTIONS, WITHHELD, canOpen, nextQuestion, BREAKING_FLOOR, BREAKING_LINES } =
+  await app("src/lib/vent/breaking.ts");
+
+check("43 The breaking room stays shut on the people it could hurt", () => {
+  const base = { ventCount: 12, asked: [] };
+
+  /*
+    Crisis, in every phrasing the router knows. Not one of them opens it.
+  */
+  for (const m of [
+    "i want to kill myself",
+    "i wan die",
+    "i don't want to be here anymore",
+    "make i die",
+    "i no fit continue this life",
+  ]) {
+    is(canOpen({ ...base, message: m }), false,
+      `crisis closes the room: "${m}"`);
+    is(nextQuestion({ ...base, message: m }), null,
+      "and nothing is offered instead — the crisis line is the whole answer");
+  }
+
+  /*
+    And the unfixable, for a different reason. Somebody whose father is dying
+    does not need a question about who they are pretending to be;
+    `meaning_stance` is already the right move and is already selected.
+  */
+  for (const m of [
+    "my dad's test results came back, it's terminal",
+    "we buried her on saturday",
+  ]) {
+    is(canOpen({ ...base, message: m }), false,
+      `the unfixable closes it too: "${m.slice(0, 34)}…"`);
+  }
+
+  // Nobody opens up on turn one.
+  is(canOpen({ message: "the money is choking me", ventCount: 1, asked: [] }), false,
+    "a stranger is not asked something heavy");
+  ok(BREAKING_FLOOR >= 3, "and the floor is a real number of turns", `${BREAKING_FLOOR}`);
+
+  // On an ordinary heavy day, with a relationship behind it, it opens.
+  const ok1 = { message: "rent is due again and i never tell anybody", ventCount: 8, asked: [] };
+  is(canOpen(ok1), true, "an ordinary hard day, on turn eight, may be asked");
+  const q = nextQuestion(ok1);
+  ok(q, "and a question arrives");
+  is(q.depth, "surface", "starting shallow — depth is earned, not granted");
+
+  /*
+    One at a time, never the same wound twice running, never repeated.
+  */
+  const asked = [];
+  let ctx = { ...ok1, asked };
+  let lastRoom = null;
+  for (let i = 0; i < 12; i++) {
+    const next = nextQuestion({ ...ctx, asked: [...asked] });
+    if (!next) break;
+    ok(!asked.includes(next.id), `${next.id} is not asked twice`);
+    if (lastRoom && QUESTIONS.length > 4) {
+      ok(next.room !== lastRoom,
+        `two in a row are not the same wound (${next.room})`);
+    }
+    lastRoom = next.room;
+    asked.push(next.id);
+  }
+  ok(asked.length >= 6, "the bank is deep enough to keep going", `${asked.length}`);
+
+  /*
+    Nothing that rehearses a death, wishes a harm, or asks for a disclosure
+    this product cannot hold. Asserted over the text a person actually reads,
+    because that is the thing that can hurt them.
+  */
+  const FORBIDDEN = [
+    [/\b(die|death|dead|funeral|grave|bury|buried|coffin)\b/i, "rehearses a death"],
+    [/\bwish (make|say)?\s*\w*\s*(happen|harm|bad)\b/i, "invites a wished harm"],
+    [/\b(crime|catch you|enjoy .* pain)\b/i, "asks for an offence or a cruelty"],
+    [/\b(god|jesus|allah|church|mosque|pray(er|ing)?|sin|holy|scripture)\b/i, "assumes a faith"],
+    [/\b(vent|my advice|i go tell you the truth about yourself)\b/i, "makes the product the oracle"],
+  ];
+  for (const q2 of QUESTIONS) {
+    for (const [re, why] of FORBIDDEN) {
+      ok(!re.test(q2.text), `${q2.id} ${why}`, q2.text);
+    }
+  }
+
+  /*
+    The cuts are on the record rather than reverse-engineered from an absence.
+  */
+  for (const key of ["death_rehearsal", "wished_harm", "uncontainable_disclosure",
+                     "religion", "product_as_oracle", "fishing"]) {
+    ok(WITHHELD[key] && WITHHELD[key].length > 60,
+      `the ${key} cut is written down with its reason`);
+  }
+
+  /*
+    An invitation with an exit in it. Somebody who cannot decline has not
+    consented, and "you fit say no" is the difference between a question and
+    an interrogation.
+  */
+  ok(/say no/i.test(BREAKING_LINES.invite),
+    "the invitation says out loud that no is allowed", BREAKING_LINES.invite);
+  ok(BREAKING_LINES.declined.length > 0 && !/\?/.test(BREAKING_LINES.declined),
+    "and a no is answered without asking again");
+
+  // Free, like everything else that is not a vent.
+  const src = fs.readFileSync(path.join(ROOT, "src/lib/vent/breaking.ts"), "utf8");
+  ok(!/fetch|generateReply|await /.test(src), "the room costs nothing to open");
+});
+
 // ── 37. a class that compiles to nothing ──────────────────────────────────
 //
 // `bg-paper/92` is not a Tailwind class. The default opacity scale runs in
