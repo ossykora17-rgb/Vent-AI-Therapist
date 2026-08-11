@@ -61,6 +61,7 @@ export const env = {
   openrouterApiKey: s(process.env.OPENROUTER_API_KEY),
   cerebrasApiKey: s(process.env.CEREBRAS_API_KEY),
   deepseekApiKey: s(process.env.DEEPSEEK_API_KEY),
+  zhipuApiKey: s(process.env.ZHIPU_API_KEY),
   paystackSecretKey: s(process.env.PAYSTACK_SECRET_KEY),
   /** Perspective — the Guardian's second opinion on a message. */
   perspectiveApiKey: s(process.env.PERSPECTIVE_API_KEY),
@@ -133,7 +134,8 @@ export const isModelConfigured = Boolean(
     env.groqApiKey ||
     env.openrouterApiKey ||
     env.cerebrasApiKey ||
-    env.deepseekApiKey,
+    env.deepseekApiKey ||
+    env.zhipuApiKey,
 );
 export const isPerspectiveConfigured = Boolean(env.perspectiveApiKey);
 export const isLivekitConfigured = Boolean(
