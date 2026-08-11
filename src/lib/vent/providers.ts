@@ -82,6 +82,16 @@ const MODEL = {
   groq: process.env.VENT_MODEL_GROQ || "llama-3.3-70b-versatile",
   openrouter: process.env.VENT_MODEL_OPENROUTER || "meta-llama/llama-3.3-70b-instruct:free",
   cerebras: process.env.VENT_MODEL_CEREBRAS || "llama-3.3-70b",
+  /*
+    `deepseek-chat` (V3), not `deepseek-reasoner` (R1).
+
+    R1 thinks before it speaks, and this file already has a scar from that:
+    220 tokens of budget, 217 spent deliberating, three tokens of "Tired. Na"
+    handed to somebody who had just written that they were tired. The
+    reasoning variant would be the better model on a benchmark and the worse
+    one in a room.
+  */
+  deepseek: process.env.VENT_MODEL_DEEPSEEK || "deepseek-chat",
 };
 
 /**
@@ -397,6 +407,26 @@ export function allProviders(): Provider[] {
       MODEL.groq,
       "GROQ_API_KEY",
       ["llama-3.3", "llama"],
+    ),
+    /*
+      DeepSeek, after the known-good free tier and before the empty seats.
+
+      OpenAI-compatible, so it needs no new adapter — the same `fetch`, the
+      same bearer, the same shape. Placed below groq because groq is the one
+      that has actually been carrying every message, and an untested provider
+      does not get promoted above a working one on reputation.
+
+      Cheap is not free: DeepSeek bills per token after whatever signup credit
+      exists. `/api/health` will say `keyState:"present"` and whether it
+      answers; it will not say whether there is money behind it, and nothing
+      here should pretend otherwise.
+    */
+    openAiCompatible(
+      "deepseek",
+      "https://api.deepseek.com/v1",
+      env.deepseekApiKey,
+      MODEL.deepseek,
+      "DEEPSEEK_API_KEY",
     ),
     openAiCompatible(
       "openrouter",

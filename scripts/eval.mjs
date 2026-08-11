@@ -3924,6 +3924,63 @@ check("41 A drifted table names every column it is missing", () => {
     "and 503 still follows database, so nothing else can reach it");
 });
 
+// ── 42. the privacy page names whoever actually sees it ───────────────────
+//
+// It said "sent to Anthropic" — and had said so while every message for days
+// was answered by Groq. Anthropic's balance emptied, the chain moved on, and
+// the one page whose entire job is to say where somebody's words go was never
+// told.
+//
+// A confidentiality promise that names the wrong company is not a smaller
+// problem than naming none. This is the product whose front door says "nobody
+// knows it is you"; the list of who does see it has to be true.
+//
+// So the rule, enforced here rather than remembered: every provider in the
+// chain appears on the privacy page. Adding a provider without adding it to
+// that paragraph fails the build.
+check("42 Every provider in the chain is named on the privacy page", () => {
+  const privacy = fs.readFileSync(path.join(ROOT, "src/app/privacy/page.tsx"), "utf8");
+  // The prose a person reads, not the comment explaining it.
+  const prose = privacy.replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
+
+  /*
+    The company, not the provider id. Somebody reading a privacy page needs
+    the name on the company, and "groq" and "gemini" are not the same kind of
+    word — one is a firm, the other a model family whose firm is Google.
+  */
+  const COMPANY = {
+    anthropic: /Anthropic/,
+    gemini: /Google/,
+    groq: /Groq/,
+    deepseek: /DeepSeek/,
+    openrouter: /OpenRouter/,
+    cerebras: /Cerebras/,
+  };
+
+  for (const p of allProviders()) {
+    const named = COMPANY[p.id];
+    ok(named, `${p.id} has a company name to disclose`, "add it to COMPANY here");
+    if (named) {
+      ok(named.test(prose),
+        `${p.id} is named on the privacy page`,
+        "a provider that can see somebody's words has to appear there");
+    }
+  }
+
+  /*
+    And the mechanism, because a list alone implies all six see everything.
+    They do not: it is a chain, and exactly one of them sees any given
+    message.
+  */
+  ok(/first one that answers/i.test(prose),
+    "the page says it is a chain, not a broadcast");
+
+  // The three that never leave the server are still promised, and that
+  // promise is older and stronger than any of the above.
+  ok(/never sent to a model/i.test(prose),
+    "crisis, dates and greetings are still stated as never leaving");
+});
+
 // ── 37. a class that compiles to nothing ──────────────────────────────────
 //
 // `bg-paper/92` is not a Tailwind class. The default opacity scale runs in

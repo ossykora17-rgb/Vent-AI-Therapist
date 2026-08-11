@@ -29,12 +29,39 @@ export default function PrivacyPage() {
         through our server, which scopes each query to your anonymous id.
       </p>
 
+      {/*
+        Name who actually sees it, not who we planned for.
+
+        This said "sent to Anthropic" and had said so while every message for
+        days was in fact answered by Groq — Anthropic's balance is empty and
+        the chain moved on without telling the one page whose job is to say
+        where the words go. A confidentiality promise that names the wrong
+        company is not a smaller problem than naming none.
+
+        So: the whole list, and the honest mechanism. It is a chain, the first
+        one that answers wins, and which one that is changes with the hour. If
+        a provider is ever added, it is added here in the same commit — that
+        is the rule this paragraph exists to enforce on us.
+      */}
       <h2>Your words and the AI</h2>
       <p>
-        When you vent, your message and recent history are sent to Anthropic to
-        generate the reply. Questions about the date, greetings, and anything
-        flagged as a crisis are answered on our own server and are never sent to
-        a model.
+        When you vent, your message and your recent history are sent to an AI
+        provider to generate the reply. This deployment may use any of{" "}
+        <strong>Anthropic</strong>, <strong>Google</strong>,{" "}
+        <strong>Groq</strong>, <strong>DeepSeek</strong>,{" "}
+        <strong>OpenRouter</strong> or <strong>Cerebras</strong>: they are
+        tried in order and the first one that answers is the one that sees it,
+        so which company handles a given message depends on which are reachable
+        at that moment. DeepSeek is based in China; the others are in the
+        United States.
+      </p>
+      <p>
+        Nothing identifying goes with it. No name, no email, no account — only
+        the words and the anonymous id made on your own device.
+      </p>
+      <p>
+        Questions about the date, greetings, and anything flagged as a crisis
+        are answered on our own server and are never sent to a model at all.
       </p>
 
       <h2>Deleting it</h2>
