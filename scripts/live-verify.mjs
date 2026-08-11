@@ -187,6 +187,60 @@ async function main() {
     }
   }
 
+  /*
+    11 — the Breaking Room, against a running server.
+
+    Check 44 reads the route as text and can prove the crisis branch is
+    written above the write. It cannot prove the server *does* it, and this is
+    the one endpoint in the product where that distinction is somebody's
+    worst hour: a heavy question can be answered with a sentence that needs a
+    phone number, and filing it as an answer would be the worst thing this
+    product could do with anything anybody types.
+
+    So: ask the real server, and then ask it what it kept. The second half is
+    the part a source-reading check can never do — "it was refused" and "it
+    was refused and also not stored" are different claims, and only one of
+    them is the promise.
+
+    Written to hold in both deployment shapes. Without a store `saved` is
+    false and the GET is empty, and that is correct rather than a failure —
+    the assertions that are shape-independent (422 on an invented question,
+    `crisis:true`, and nothing crisis-shaped ever coming back) are asserted
+    always; the one that depends on a store is asserted against `hasDb`.
+  */
+  {
+    const CRISIS = "nothing held me, i want to die";
+    const REAL = "my brother, and i never tell am";
+
+    const invented = await post("/api/breaking", { anonId: ANON, q: "not_a_question", a: REAL });
+    const crisis = await post("/api/breaking", { anonId: ANON, q: "last_loved", a: CRISIS });
+    const crisisBody = await crisis.json().catch(() => ({}));
+    const kept = await post("/api/breaking", { anonId: ANON, q: "last_loved", a: REAL });
+    const keptBody = await kept.json().catch(() => ({}));
+
+    const back = await fetch(`${BASE}/api/breaking?anonId=${ANON}`).then((r) => r.json());
+    const answers = back.answers ?? [];
+    const stored = answers.map((x) => x.a).join(" | ");
+
+    const ok =
+      // A question nobody wrote is refused in every shape, store or no store.
+      invented.status === 422 &&
+      // The crisis answer is routed, and routed as a 200 rather than an error
+      // — the person is not being told their sentence was malformed.
+      crisis.status === 200 && crisisBody.crisis === true && crisisBody.saved === false &&
+      // And it is not in the record. This is the assertion the whole check is
+      // for: refused and not stored, not merely refused.
+      !stored.includes("want to die") &&
+      // An ordinary answer is kept when there is somewhere to keep it, and
+      // says so honestly when there is not.
+      keptBody.saved === hasDb &&
+      (hasDb ? answers.some((x) => x.a === REAL && x.text) : answers.length === 0);
+
+    record(11, "Breaking Room refuses and does not keep it", ok,
+      `invented=${invented.status} crisis=${crisisBody.crisis} saved=${keptBody.saved} ` +
+      `stored=${answers.length}${hasDb ? "" : " (no store)"}`);
+  }
+
   // 10 — degradation, read straight off health.
   record(10, "Keys / degradation", true,
     `storage=${health.storage} persisting=${hasDb} anthropic=${hasAi} — no 500s on any path above`);

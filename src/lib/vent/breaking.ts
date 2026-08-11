@@ -192,6 +192,20 @@ export interface BreakingContext {
 export const BREAKING_FLOOR = 4;
 
 /**
+ * And then at most once every this many turns.
+ *
+ * Enforced on the server rather than by the screen remembering it declined,
+ * because a question this size arriving on every turn is not depth — it is a
+ * door that will not stay shut, and the person it wears down fastest is the
+ * one having the worst week.
+ *
+ * A cadence is taste, not safety, and it is deliberately the last clause in
+ * `canOpen` for that reason: the gates above it are the ones that must never
+ * be relaxed by somebody tuning a number.
+ */
+export const BREAKING_EVERY = 4;
+
+/**
  * Whether the room may open at all.
  *
  * This is the safety model, and it is a gate rather than a weight. There is
@@ -205,10 +219,14 @@ export const BREAKING_FLOOR = 4;
  * selected.
  */
 export function canOpen(ctx: BreakingContext): boolean {
+  // ── the gates. None of these is a weight, and none of them is tuneable. ──
   if (ctx.ventCount < BREAKING_FLOOR) return false;
   if (classify(ctx.message).intent === "crisis") return false;
   if (nothingCanMove(ctx.message)) return false;
-  return QUESTIONS.some((q) => !ctx.asked.includes(q.id));
+  if (!QUESTIONS.some((q) => !ctx.asked.includes(q.id))) return false;
+
+  // ── and the cadence, which is taste. See `BREAKING_EVERY`. ───────────────
+  return (ctx.ventCount - BREAKING_FLOOR) % BREAKING_EVERY === 0;
 }
 
 /**
@@ -252,4 +270,14 @@ export const BREAKING_LINES = {
   waiting: "Take your time. I dey here.",
   received: "I see you. Thank you for trusting me with that one.",
   declined: "No wahala. E dey there when you ready.",
+  /*
+    When the answer did not land.
+
+    Separate from `received` and never softened into it. Somebody has just
+    written the hardest sentence of their week; being thanked for trusting the
+    room with something the room then dropped is the `"I've saved it, word for
+    word"` bug wearing its best clothes. It says what happened, and it says
+    the part that is still true — they said it, and saying it was the point.
+  */
+  unsaved: "I no fit keep that one — but you talk am, and that one still count.",
 } as const;

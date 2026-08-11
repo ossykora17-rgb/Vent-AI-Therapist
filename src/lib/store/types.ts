@@ -87,6 +87,37 @@ export interface HeldNote {
   at: string;
 }
 
+/**
+ * How many Breaking Room answers are kept.
+ *
+ * Higher than `HELD_CAP` because these are not interchangeable. A held note is
+ * one of a kind of thing; a breaking answer is the answer to *that* question,
+ * and dropping it loses the only record that the question was ever asked —
+ * which would let the room ask it again, of somebody who already paid to
+ * answer it once.
+ *
+ * The column constraint allows sixty. This is under it on purpose: the
+ * constraint is a ceiling that stops a bug, and this is the product decision,
+ * which is the thing that moves.
+ */
+export const BREAKING_CAP = 30;
+
+/**
+ * One heavy question, answered.
+ *
+ * `q` is the question id rather than its text — the wording of a question is
+ * ours and may be improved; what somebody said is theirs and never changes.
+ * Storing the text would freeze an old draft into their record and make an
+ * edit look like they answered something they never saw.
+ */
+export interface BreakingAnswer {
+  /** The `Question.id` from `lib/vent/breaking`. */
+  q: string;
+  /** Their words. Never a model's. */
+  a: string;
+  at: string;
+}
+
 export interface Store {
   /** Which backend answered — surfaced in /api/health so it is never a guess. */
   readonly kind: "supabase" | "file";
@@ -172,6 +203,40 @@ export interface Store {
   getHeld(userId: string): Promise<HeldNote[]>;
   /** Prepend one note, trimming to the cap. Returns whether it landed. */
   addHeld(userId: string, text: string): Promise<boolean>;
+
+  /**
+   * What they answered when the room asked something heavy — 0015.
+   *
+   * **Null and `[]` are different answers, and this is the whole reason this
+   * signature is not `Promise<BreakingAnswer[]>`.**
+   *
+   *   `[]`    read it; they have answered nothing yet
+   *   `null`  could not read it — no row, no column, a throw
+   *
+   * `getCarve` and `getHeld` can collapse those two, because a missing carve
+   * means a room that opens knowing nothing, which is exactly what it did
+   * before the carve existed. This cannot. The ids in this list are the only
+   * thing stopping a question being asked twice, so an unreadable column
+   * returned as `[]` makes every question look unasked — and a deployment
+   * with 0015 pending would offer the same question, fail to keep the answer,
+   * and offer it again on the next cadence turn, forever.
+   *
+   * A person asked the same question twice has learned the room was not
+   * listening the first time, and there is no recovering from that inside one
+   * session. So the caller must treat null as "do not open the room" rather
+   * than as "nothing here yet", and it can only do that if it can tell them
+   * apart. This is the `models.retrieve` lesson in the store: a probe whose
+   * failure and whose success return the same value is not a probe.
+   */
+  getBreaking(userId: string): Promise<BreakingAnswer[] | null>;
+  /**
+   * File one answer. Returns whether it landed.
+   *
+   * Never called with a model's words on either side: `q` is an id from a
+   * hand-written bank, `a` is what the person typed. Nothing in this pair was
+   * generated, so nothing in it can be invented.
+   */
+  addBreaking(userId: string, q: string, a: string): Promise<boolean>;
 
   deleteAll(userId: string): Promise<void>;
 

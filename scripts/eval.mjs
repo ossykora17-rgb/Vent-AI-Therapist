@@ -3880,10 +3880,22 @@ check("41 A drifted table names every column it is missing", () => {
   ok(health.indexOf("const drifted") > health.indexOf("for (const [i, res] of results.entries())"),
     "after the cheap pass, never instead of it");
 
-  // And the contract still names both columns, so the next drift is caught.
+  /*
+    And the contract still names both columns, so the next drift is caught.
+
+    Asserted per column rather than against the whole select list, which is
+    what this was and which failed the moment 0015 added a third one. That is
+    the same shape as the bug the check exists for: an assertion pinned to the
+    author's snapshot, failing on a change it has no opinion about. It should
+    say "carve and held are still asked for" — it should not say "and nothing
+    else ever will be".
+  */
   const contract = fs.readFileSync(path.join(ROOT, "src/lib/store/contract.ts"), "utf8");
-  ok(/vent_users: "id,anon_id,carve,held,created_at"/.test(contract),
-    "the contract still asks for both of the columns production was missing");
+  const ventUsers = contract.match(/vent_users: "([^"]+)"/)?.[1].split(",") ?? [];
+  for (const col of ["carve", "held"]) {
+    ok(ventUsers.includes(col),
+      `the contract still asks for ${col} — the column production was missing`);
+  }
 
   /*
     A red light over a working road.
@@ -4001,8 +4013,8 @@ check("42 Every provider in the chain is named on the privacy page", () => {
 // not select gentler questions, it selects none. A gate, not a weight —
 // weights lose contests, and there is no acceptable turn on which this one
 // loses.
-const { QUESTIONS, WITHHELD, canOpen, nextQuestion, BREAKING_FLOOR, BREAKING_LINES } =
-  await app("src/lib/vent/breaking.ts");
+const { QUESTIONS, WITHHELD, canOpen, nextQuestion, BREAKING_FLOOR, BREAKING_EVERY,
+        BREAKING_LINES } = await app("src/lib/vent/breaking.ts");
 
 check("43 The breaking room stays shut on the people it could hurt", () => {
   const base = { ventCount: 12, asked: [] };
@@ -4104,9 +4116,230 @@ check("43 The breaking room stays shut on the people it could hurt", () => {
   ok(BREAKING_LINES.declined.length > 0 && !/\?/.test(BREAKING_LINES.declined),
     "and a no is answered without asking again");
 
+  /*
+    And a cadence, so a door that may open does not open on every turn.
+
+    A question this size arriving after every message is not depth — it is a
+    door that will not stay shut, and the person it wears down fastest is the
+    one having the worst week. Asserted over a real span of turns rather than
+    at the two points the implementation happens to hit.
+  */
+  const opens = [];
+  for (let turn = 1; turn <= 20; turn++) {
+    if (canOpen({ message: "rent is due again and i never tell anybody", ventCount: turn, asked: [] })) {
+      opens.push(turn);
+    }
+  }
+  ok(opens.length > 0, "the room does open", `turns ${opens.join(", ")}`);
+  ok(opens.every((t) => t >= BREAKING_FLOOR), "never below the floor", `${opens[0]}`);
+  ok(opens.length <= Math.ceil(20 / BREAKING_EVERY),
+    "and not on every turn — asking is rationed", `${opens.length} of 20`);
+  for (let i = 1; i < opens.length; i++) {
+    ok(opens[i] - opens[i - 1] >= BREAKING_EVERY,
+      `at least ${BREAKING_EVERY} turns between asks (${opens[i - 1]} → ${opens[i]})`);
+  }
+  ok(BREAKING_EVERY >= 2, "and the gap is a real gap", `${BREAKING_EVERY}`);
+
+  /*
+    The cadence is taste; the gates are not. A crisis message must not open
+    the room on a turn the cadence likes, which is the interaction a modulo
+    invites somebody to get wrong later.
+  */
+  for (const turn of opens) {
+    is(canOpen({ message: "i want to kill myself", ventCount: turn, asked: [] }), false,
+      `crisis still closes it on an on-cadence turn (${turn})`);
+  }
+
   // Free, like everything else that is not a vent.
   const src = fs.readFileSync(path.join(ROOT, "src/lib/vent/breaking.ts"), "utf8");
   ok(!/fetch|generateReply|await /.test(src), "the room costs nothing to open");
+});
+
+// ── 44. and the wiring, which is where the room could still hurt somebody ──
+//
+// Check 43 holds the module: which questions exist, who they are refused to,
+// and how often. All of it is true of a function nobody calls.
+//
+// This is the other half — the four places between that function and a person,
+// each of which has a way of quietly undoing it:
+//
+//   the route   files an answer without checking the sentence in it
+//   the picker  moves to the client, where a crisis turn cannot stop it
+//   the screen  says "thank you for trusting me" over a write that failed
+//   the store   loses the asked-list, and the room re-asks what was answered
+//
+// Every one of those is a shape this repo has already shipped once under a
+// different name. The last one is the `"I've saved it, word for word"` bug and
+// the third is `void seal(w)`; they are here by name rather than by category
+// because a category is not a check.
+check("44 The Breaking Room is wired the way the module is written", () => {
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/breaking/route.ts"), "utf8");
+  const vent = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
+  const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
+  const types = fs.readFileSync(path.join(ROOT, "src/lib/store/types.ts"), "utf8");
+  const contract = fs.readFileSync(path.join(ROOT, "src/lib/store/contract.ts"), "utf8");
+  const sql = fs.readFileSync(path.join(ROOT, "supabase/APPLY.sql"), "utf8");
+
+  /*
+    ── the route ────────────────────────────────────────────────────────────
+    "Which of your parents hurt you pass" can be answered with the worst
+    sentence of somebody's life. Same rule as /api/held, and the ordering is
+    the whole of it: routed BEFORE the write, never flagged after it.
+  */
+  ok(/classify\(/.test(route) && /intent === "crisis"/.test(route),
+    "an answer is routed for crisis");
+  const crisisIdx = route.indexOf('intent === "crisis"');
+  const writeIdx = route.indexOf("addBreaking");
+  ok(crisisIdx > 0 && writeIdx > 0 && crisisIdx < writeIdx,
+    "and routed before it is stored, not after");
+  ok(!/generateReply|providers/.test(route), "no model is in this path at all");
+
+  // A caller does not get to invent a question. An id the bank does not know
+  // would sit in the asked-list forever and mean nothing to `nextQuestion`.
+  ok(/QUESTIONS\.some\([^)]*\)/.test(route) && /status: 422/.test(route),
+    "an unknown question id is refused");
+  const idCheck = route.indexOf("QUESTIONS.some");
+  ok(idCheck > 0 && idCheck < writeIdx, "before the write, like everything else");
+
+  /*
+    ── the picker ───────────────────────────────────────────────────────────
+    Chosen on the server, from a count and an asked-list the server read. A
+    client that picks its own question is a client that can ask somebody in
+    crisis about their father — `canOpen` is only a gate if the thing it gates
+    runs behind it.
+  */
+  ok(/nextQuestion\(/.test(vent), "the vent route is what picks the question");
+  ok(!/nextQuestion|QUESTIONS|BREAKING_FLOOR/.test(chat),
+    "and the screen never picks one, or imports the bank to try");
+  ok(!/from "@\/lib\/vent\/breaking"/.test(chat),
+    "the client does not pull the module in — it costs intent.ts and 33 tactics");
+  ok(/lines: BREAKING_LINES/.test(vent),
+    "so the room's own words come down the wire instead");
+
+  /*
+    ── the screen ───────────────────────────────────────────────────────────
+    `void seal(w)` followed by "Sealed. Nothing here is kept." is the sharpest
+    failure in CLAUDE.md: a sentence written before its answer arrived. "Thank
+    you for trusting me with that one" over a dropped answer is the same
+    sentence in the one place it would hurt most.
+  */
+  const answerFn = chat.slice(chat.indexOf("async function answerBreaking"));
+  const body = answerFn.slice(0, answerFn.indexOf("\n  function submit"));
+  ok(/await fetch\("\/api\/breaking"/.test(body), "the answer is actually sent");
+  ok(/data\?\.saved \? [\w.]*received : [\w.]*unsaved/.test(body),
+    "and which line they get is decided by the server's boolean");
+  ok(/lines\.unsaved/.test(body) && /catch/.test(body),
+    "a throw gets the honest line too, never the thank-you");
+  ok(body.indexOf("data?.saved") < body.indexOf("received"),
+    "the claim comes after the answer, not before it");
+  ok(/setCrisis|setGated/.test(body),
+    "and a crisis answer hands them the line rather than filing it");
+
+  // One composer, two destinations — and the box says which one it is on.
+  // Without that, somebody who accepted, got distracted, and came back types
+  // an unrelated vent straight into their own record as an answer.
+  ok(/if \(answering\) return void answerBreaking/.test(chat),
+    "while a question is open the composer answers it");
+  ok(/placeholder=\{answering \?/.test(chat),
+    "and the box says so, rather than looking identical either way");
+  ok(/Leave it|leave it/.test(chat), "with a way out that is not answering");
+
+  /*
+    ── the store ────────────────────────────────────────────────────────────
+    The asked-list is the only thing standing between somebody and being asked
+    the same question twice, so one id appears once however many times it is
+    answered — otherwise the cap evicts the record that it was ever asked.
+  */
+  ok(/export const BREAKING_CAP = \d+;/.test(types), "the cap is a named constant");
+  for (const backend of ["file-store.ts", "supabase-store.ts"]) {
+    const b = fs.readFileSync(path.join(ROOT, "src/lib/store", backend), "utf8");
+    ok(/addBreaking/.test(b) && /getBreaking/.test(b),
+      `${backend} implements both halves`);
+    ok(/filter\(\(e\) => e\.q !== q\)/.test(b),
+      `${backend} keeps one row per question, so an id is never evicted twice over`);
+    ok(/BREAKING_CAP/.test(b), `${backend} trims to the shared cap, not its own number`);
+    // Both backends distinguish the two answers, or they diverge — and a
+    // divergence here is a room that opens on a laptop and stays shut in
+    // production, which is the failure this whole repo is organised against.
+    ok(/getBreaking\(userId: string\): Promise<BreakingAnswer\[\] \| null>/.test(b),
+      `${backend} can say "could not read" as well as "nothing yet"`);
+  }
+
+  /*
+    ── unreadable is not empty ──────────────────────────────────────────────
+    The shape this feature would have shipped with, and the one it shares with
+    every entry in CLAUDE.md's list: a failure returning the same value as a
+    success.
+
+    `getBreaking` returning `[]` on a 42703 makes every question look unasked.
+    A deployment with 0015 pending would then offer the shallowest question,
+    fail to keep the answer, and offer the same question again on the next
+    cadence turn — forever. Somebody asked the same question twice has learned
+    the room was not listening the first time.
+
+    Production is what a fresh Vercel project is: the one configuration
+    nothing here runs. It is also the one this would have happened in.
+  */
+  ok(/BreakingAnswer\[\] \| null/.test(types),
+    "the interface itself distinguishes 'nothing yet' from 'could not read'");
+  ok(/answered === null/.test(vent),
+    "and the vent path keeps the room shut when the store cannot say");
+  const store = fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8");
+  const add = store.slice(store.indexOf("async addBreaking"));
+  ok(/existing === null/.test(add.slice(0, 900)),
+    "a write never overwrites a column it could not read");
+
+  /*
+    And the write reports the write.
+
+    An update whose `eq` matches no row is not an error in PostgREST — no rows
+    change, `error` is null, and a bare update returns true. "Thank you for
+    trusting me with that one" over a row that was never touched is `void
+    seal(w)` again, in the place it would cost the most.
+  */
+  for (const fn of ["addBreaking", "addHeld"]) {
+    const body = store.slice(store.indexOf(`async ${fn}`));
+    const upto = body.slice(0, body.indexOf("catch (e)"));
+    ok(/\.select\("id"\)/.test(upto),
+      `${fn} asks which rows it changed`);
+    ok(/\(data\?\.length \?\? 0\) > 0/.test(upto),
+      `${fn} returns that, not the absence of an error`);
+  }
+
+  // On vent_users, so `deleteAll` takes it with the person and no delete path
+  // has to remember a fourth place. Same argument as the carve and the held.
+  ok(/vent_users[\s\S]{0,400}?add column if not exists breaking jsonb/.test(sql),
+    "the column exists in the SQL a person actually runs");
+  ok(/vent_users: "[^"]*\bbreaking\b[^"]*"/.test(contract),
+    "and the contract names it, so /api/health notices a deployment without it");
+
+  /*
+    ── the hand-back ────────────────────────────────────────────────────────
+    The only reason these are stored. A question answered into a void is a
+    question that was never worth asking — worse than never asked, because now
+    they know the room was not listening. If nothing reads them back, the
+    migration's comment is a promise the code does not keep.
+  */
+  const history = fs.readFileSync(path.join(ROOT, "src/components/history-list.tsx"), "utf8");
+  ok(/fetch\(`\/api\/breaking\?anonId=/.test(history),
+    "the answers are read back somewhere a person can see them");
+  ok(/\{entry\.a\}/.test(history), "and it is their words that are shown");
+
+  /*
+    And gone when they say gone.
+
+    `deleteAll` drops the vent_users row, so every jsonb column on it goes
+    with the person — which is the whole argument for keeping them there. But
+    the screen kept rendering what it had already fetched, over a toast
+    reading "All cleared. Fresh start." A promise kept in the database and
+    broken on the screen is the one a person actually experiences.
+  */
+  const wipe = history.slice(history.indexOf("async function clearAll"));
+  const wipeBody = wipe.slice(0, wipe.indexOf("function exportJson"));
+  for (const cleared of ["setRows([])", "setHeld([])", "setAnswers([])", "setPattern(null)"]) {
+    ok(wipeBody.includes(cleared),
+      `"Delete everything" clears ${cleared.replace(/\(.*/, "")} on the screen too`);
+  }
 });
 
 // ── 37. a class that compiles to nothing ──────────────────────────────────

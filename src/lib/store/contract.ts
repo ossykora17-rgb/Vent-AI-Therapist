@@ -30,7 +30,7 @@
  * whitespace in it — including these.
  */
 export const TABLE_CONTRACT: Readonly<Record<string, string>> = {
-  vent_users: "id,anon_id,carve,held,created_at",
+  vent_users: "id,anon_id,carve,held,breaking,created_at",
   vents:
     "id,user_id,user_message,ai_reply,mood_score,tension_before,tension_after," +
     "language,duality_value,body_tapped,chair_picked,pressure_value,tactic_used," +

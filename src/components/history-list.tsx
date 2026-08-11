@@ -31,6 +31,10 @@ export function HistoryList() {
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [testimony, setTestimony] = React.useState<string | null>(null);
   const [held, setHeld] = React.useState<Array<{ text: string; at: string }>>([]);
+  /* The Breaking Room's answers, with the question each one belongs to. */
+  const [answers, setAnswers] = React.useState<
+    Array<{ q: string; a: string; at: string; text: string | null }>
+  >([]);
   const [pattern, setPattern] = React.useState<{
     sentence: string;
     dropHere: number | null;
@@ -43,15 +47,37 @@ export function HistoryList() {
     let cancelled = false;
     (async () => {
       try {
-        // Counted, not generated — see lib/vent/pattern. Runs beside the
-        // history fetch because it costs nothing and is the reason to be here.
-        fetch(`/api/held?anonId=${encodeURIComponent(anonId())}`)
+        /*
+          Three side reads, beside the history rather than before it.
+
+          Counted, not generated — see lib/vent/pattern. None of them blocks
+          the list, and each fails to silence on its own: a card with nothing
+          in it is the correct rendering of a question nobody has answered.
+
+          Separate statements, and they were not.
+
+          The first two ended in a comma, which made all three one expression
+          joined by the comma operator — legal, evaluated in order, and doing
+          the right thing by accident. Adding a fourth in the same style would
+          go on working right up until somebody put a `return` or an `await`
+          in the middle of it. Lint has been calling it "an expression" for as
+          long as it has been there.
+        */
+        void fetch(`/api/held?anonId=${encodeURIComponent(anonId())}`)
           .then((r) => (r.ok ? r.json() : null))
           .then((d) => {
             if (!cancelled && Array.isArray(d?.held)) setHeld(d.held);
           })
-          .catch(() => {}),
-        fetch(`/api/pattern?anonId=${encodeURIComponent(anonId())}`)
+          .catch(() => {});
+
+        void fetch(`/api/breaking?anonId=${encodeURIComponent(anonId())}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => {
+            if (!cancelled && Array.isArray(d?.answers)) setAnswers(d.answers);
+          })
+          .catch(() => {});
+
+        void fetch(`/api/pattern?anonId=${encodeURIComponent(anonId())}`)
           .then((r) => r.json())
           .then((d) => {
             if (!cancelled && d.testimonySentence) {
@@ -106,7 +132,26 @@ export function HistoryList() {
 
   async function clearAll() {
     if (!window.confirm("Delete every vent permanently? This cannot be undone.")) return;
+    /*
+      Everything read off that person, not just the list.
+
+      This cleared `rows` alone, and the four cards above it — what held, what
+      they answered, the pattern, the record — kept rendering their contents
+      over a toast that said "All cleared. Fresh start." The rows really were
+      gone: `deleteAll` drops the `vent_users` row and every jsonb column on
+      it goes with the person, which is the whole argument for keeping them
+      there. But the screen went on showing sentences it had already been told
+      to forget, until somebody reloaded.
+
+      "Delete everything" is a promise this product makes on its front page,
+      and a promise kept in the database and broken on the screen is the one a
+      person actually experiences. The state goes with the request.
+    */
     setRows([]);
+    setHeld([]);
+    setAnswers([]);
+    setPattern(null);
+    setTestimony(null);
     try {
       await fetch(`/api/vent?anonId=${encodeURIComponent(anonId())}`, { method: "DELETE" });
       // A full wipe makes them a new person here: drop the id AND the
@@ -204,6 +249,52 @@ export function HistoryList() {
                   <p className="reply">{h.text}</p>
                   <p className="label-mono mt-1">
                     {new Date(h.at).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/*
+          What they answered when the room asked something heavy.
+
+          The reason the answers are stored at all. A question answered into a
+          void is a question that was never worth asking — somebody wrote the
+          hardest sentence of their week and it went nowhere, which is worse
+          than never having been asked, because now they know the room was not
+          listening.
+
+          Safe to show back for exactly one reason, and it is the same reason
+          "what held" is: they wrote it, on purpose, to a question they were
+          asked and could decline. The carve is never shown to them because a
+          model wrote it. `testimony.ts` counts instead of quoting because
+          nobody chose to be quoted. This one they chose.
+
+          The question comes down with the answer rather than being stored
+          beside it — the wording is ours and may improve, and freezing an old
+          draft into somebody's record would make an edit of ours look like an
+          answer of theirs. A question we have since retired leaves `text`
+          null, and their words still show, because hiding what somebody said
+          behind a change we made to our own copy would be indefensible.
+        */}
+        {answers.length > 0 && (
+          <section className="glass mb-5 p-5 sm:p-6">
+            <p className="label-mono mb-3">What you answered</p>
+            <ul className="space-y-5">
+              {answers.map((entry) => (
+                <li key={entry.q} className="border-l-2 border-gold/40 pl-4">
+                  {entry.text && (
+                    <p className="mb-1 text-[15px] leading-[1.6] text-ash">
+                      {entry.text}
+                    </p>
+                  )}
+                  <p className="reply">{entry.a}</p>
+                  <p className="label-mono mt-1">
+                    {new Date(entry.at).toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
                     })}

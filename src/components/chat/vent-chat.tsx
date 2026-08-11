@@ -1,6 +1,6 @@
 "use client";
 
-import { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL } from "@/lib/vent/intent";
+import { CRISIS_LINES, CRISIS_RESPONSE, CRISIS_TEL, EMERGENCY_TEL } from "@/lib/vent/intent";
 import * as React from "react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -46,7 +46,29 @@ interface VentResponse {
     seatsOpen: number;
     minutesLeft: number;
   } | null;
+  /**
+   * One heavy question the server chose, or nothing.
+   *
+   * Chosen there and never here. `canOpen` refuses on a crisis turn, on the
+   * unfixable, to a stranger and off-cadence — and a screen that picked its
+   * own question would be a screen that can ask somebody whose father is
+   * dying who they are pretending to be. The wording comes down with it so
+   * this file imports nothing from the room's module.
+   */
+  breaking?: {
+    id: string;
+    text: string;
+    lines: {
+      invite: string;
+      waiting: string;
+      received: string;
+      declined: string;
+      unsaved: string;
+    };
+  } | null;
 }
+
+type BreakingOffer = NonNullable<VentResponse["breaking"]>;
 
 export function VentChat() {
   const { toast } = useToast();
@@ -71,6 +93,22 @@ export function VentChat() {
   const [askHeld, setAskHeld] = React.useState(false);
   const [heldDraft, setHeldDraft] = React.useState("");
   const [heldSaving, setHeldSaving] = React.useState(false);
+  /*
+    The Breaking Room, in three states and no more.
+
+    `offer`     the server chose a question and is asking permission
+    `answering` they said yes, and the composer now belongs to that question
+    `shut`      they said no, and nothing asks again this sitting
+
+    `shut` is per-sitting and lives in state rather than in localStorage,
+    deliberately. A no tonight is a no tonight — carrying it forward for weeks
+    would quietly retire the whole room on the strength of one bad evening,
+    which is the opposite of what a no means. The server's own cadence is what
+    stops it becoming a nag across sessions.
+  */
+  const [offer, setOffer] = React.useState<BreakingOffer | null>(null);
+  const [answering, setAnswering] = React.useState<BreakingOffer | null>(null);
+  const [shut, setShut] = React.useState(false);
   const [opening, setOpening] = React.useState<{
     object: string | null;
     carrying: string | null;
@@ -184,6 +222,9 @@ export function VentChat() {
       // must stop being offered — an invitation to a full circle is the
       // "your turn comes" bug wearing a doorway.
       setInvite(data.circleInvite ?? null);
+      // Same rule, and one more on top of it: a no ends the asking for this
+      // sitting, whatever the server offers next.
+      setOffer(shut ? null : data.breaking ?? null);
       if (typeof data.memoryUsed === "number") setMemoryCount(data.memoryUsed);
       if (typeof data.persisted === "boolean") setPersisted(data.persisted);
     } catch {
@@ -335,6 +376,119 @@ export function VentChat() {
     } finally {
       setHeldSaving(false);
     }
+  }
+
+  /*
+    THE BREAKING ROOM — accepted, declined, and answered.
+
+    The question arrives as a line in the conversation rather than a modal,
+    because it *is* the conversation at that moment. A dialog would make it an
+    interruption to dismiss; a line makes it something the room said.
+  */
+  function acceptBreaking() {
+    if (!offer) return;
+    setAnswering(offer);
+    setOffer(null);
+    setAskMood(false);
+    setLines((l) => [
+      ...l,
+      { id: nextId.current++, speaker: "vent", text: offer.text },
+    ]);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
+  /*
+    A no, answered once and never asked again tonight.
+
+    `declined` has no question mark in it and check 43 holds it to that: "you
+    sure?" after a no is the room refusing to hear the answer it just asked
+    for, and it is how a consent gesture becomes a pressure tactic.
+  */
+  function declineBreaking() {
+    if (!offer) return;
+    setLines((l) => [
+      ...l,
+      { id: nextId.current++, speaker: "vent", text: offer.lines.declined },
+    ]);
+    setOffer(null);
+    setShut(true);
+  }
+
+  /**
+   * Their answer, filed — or not, and said so either way.
+   *
+   * Zero tokens. Nothing here reaches a model: the question was hand-written,
+   * the reply is one of two fixed lines, and which of the two it is comes from
+   * the server's own boolean rather than from the request having been made.
+   */
+  async function answerBreaking(text: string) {
+    const answer = text.trim();
+    const question = answering;
+    if (!answer || !question || thinking) return;
+
+    setLines((l) => [...l, { id: nextId.current++, speaker: "you", text: answer }]);
+    setDraft("");
+    setThinking(true);
+    try {
+      const res = await fetch("/api/breaking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ anonId: anonId(), q: question.id, a: answer }),
+      });
+      const data = res.ok ? await res.json().catch(() => null) : null;
+
+      /*
+        The crisis check runs on the server, where the write is, and this is
+        the branch that proves why. A question about the parent who hurt you
+        can be answered with the worst sentence of somebody's life, and the
+        answer to that sentence is a phone number — never a thank-you and a
+        checkmark over a record quietly filed.
+      */
+      if (data?.crisis) {
+        setCrisis(CRISIS_LINES);
+        setGated(true);
+        setLines((l) => [
+          ...l,
+          { id: nextId.current++, speaker: "vent", text: CRISIS_RESPONSE, crisis: true },
+        ]);
+        return;
+      }
+
+      // Read what came back. "Thank you for trusting me with that" over a
+      // write that failed is the same sentence as "I've saved it, word for
+      // word" from a deployment with no store.
+      setLines((l) => [
+        ...l,
+        {
+          id: nextId.current++,
+          speaker: "vent",
+          text: data?.saved ? question.lines.received : question.lines.unsaved,
+        },
+      ]);
+    } catch {
+      setLines((l) => [
+        ...l,
+        { id: nextId.current++, speaker: "vent", text: question.lines.unsaved },
+      ]);
+    } finally {
+      setAnswering(null);
+      setThinking(false);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }
+
+  /**
+   * One composer, two destinations.
+   *
+   * While a heavy question is open the box belongs to that question, and what
+   * they type goes to `/api/breaking` rather than becoming a vent. It is not a
+   * vent: it is an answer to something the room asked, it costs no tokens, and
+   * routing it through the model would spend money to reply to a sentence that
+   * already has its reply written.
+   */
+  function submit(text: string) {
+    if (answering) return void answerBreaking(text);
+    return void send(text);
   }
 
   /* The room's first words in this sitting — the one reply that gets the
@@ -654,6 +808,42 @@ export function VentChat() {
           </a>
         )}
 
+        {/*
+          THE BREAKING ROOM — asked with the door held open.
+
+          The offer is the whole safety design made visible. Two buttons of the
+          same size, neither one styled as the answer the room wants: a gold
+          "Ask me" against a grey "not now" would be the interface leaning, and
+          somebody who feels leaned on has not consented. The no is a real
+          button with a real hit target, not a dismissible X in a corner.
+
+          It renders only when nothing else is competing. A heavy question
+          stacked under a circle invitation and a mood slider is a menu, and
+          the point of this room is that one question arrives on its own.
+        */}
+        {offer && !gated && !askMood && !answering && (
+          <div className="presence arrive mt-6 p-6 sm:p-8">
+            <p className="nameplate mb-4">The room asks</p>
+            <p className="reply max-w-[42ch]">{offer.lines.invite}</p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={acceptBreaking}
+                className="pressable focusable min-h-[48px] rounded-card bg-gold px-5 text-[15px] font-semibold text-on-gold"
+              >
+                Ask me
+              </button>
+              <button
+                type="button"
+                onClick={declineBreaking}
+                className="pressable focusable min-h-[48px] rounded-card border border-line/15 px-5 text-[15px] font-semibold"
+              >
+                Not tonight
+              </button>
+            </div>
+          </div>
+        )}
+
         {askMood && (
           <div className="presence mt-6 p-6 sm:p-8">
             <p className="nameplate mb-4">Before you go</p>
@@ -884,9 +1074,41 @@ export function VentChat() {
             </label>
           </div>
 
+          {/*
+            While a heavy question is open, the box says whose it is.
+
+            Without this the composer looks identical either way, and somebody
+            who accepted a question, got distracted, and came back would type
+            an unrelated vent straight into `/api/breaking` and have it filed
+            as their answer. One line, and a way out that is not "answer it".
+          */}
+          {answering && (
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <p className="label-mono">{answering.lines.waiting}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setAnswering(null);
+                  setShut(true);
+                  setLines((l) => [
+                    ...l,
+                    {
+                      id: nextId.current++,
+                      speaker: "vent",
+                      text: answering.lines.declined,
+                    },
+                  ]);
+                }}
+                className="focusable min-h-[44px] text-[14px] text-ash underline underline-offset-4"
+              >
+                Leave it
+              </button>
+            </div>
+          )}
+
           <div className="flex items-end gap-2">
             <label htmlFor="vent-input" className="sr-only">
-              Carve your truth
+              {answering ? "Your answer" : "Carve your truth"}
             </label>
             <textarea
               id="vent-input"
@@ -900,19 +1122,19 @@ export function VentChat() {
                   (e.key === "Enter" && (e.metaKey || e.ctrlKey))
                 ) {
                   e.preventDefault();
-                  void send(draft);
+                  submit(draft);
                 }
                 if (e.key === "Escape") setDraft("");
               }}
-              placeholder="Carve your truth…"
+              placeholder={answering ? "Answer am how e dey…" : "Carve your truth…"}
               disabled={gated}
               className="max-h-32 min-h-[48px] flex-1 resize-none rounded-card border border-line/15 bg-card/60 px-4 py-3 leading-[1.6] shadow-glass-sm backdrop-blur-glass placeholder:text-ash disabled:opacity-50"
             />
             <button
               type="button"
-              onClick={() => void send(draft)}
+              onClick={() => submit(draft)}
               disabled={!draft.trim() || thinking || gated}
-              aria-label="Send"
+              aria-label={answering ? "Send your answer" : "Send"}
               className="flex h-12 min-w-[64px] items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-on-gold transition-opacity duration-300 disabled:opacity-40"
             >
               {thinking ? "…" : "Send"}

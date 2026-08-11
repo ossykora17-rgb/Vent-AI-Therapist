@@ -5,8 +5,8 @@ import { TYPING_WINDOW_MS } from "@/lib/circles/presence";
 import { StoreUnavailableError } from "./errors";
 import type {
   CircleMemberRow, CircleMessageRow, CircleRow,
-  NewVent, ProfilePatch, Store, VentRow, HeldNote } from "./types";
-import { HELD_CAP } from "./types";
+  NewVent, ProfilePatch, Store, VentRow, HeldNote, BreakingAnswer } from "./types";
+import { BREAKING_CAP, HELD_CAP } from "./types";
 
 /**
  * No spaces. PostgREST takes the select list verbatim into the query string,
@@ -217,17 +217,102 @@ export class SupabaseStore implements Store {
       const existing = await this.getHeld(userId);
       const next = [{ text: trimmed, at: new Date().toISOString() }, ...existing]
         .slice(0, HELD_CAP);
-      const { error } = await this.db
+      // `.select("id")` for the same reason as `addBreaking`: an update that
+      // matched no row is not an error, so a bare update returns true and the
+      // screen says "Kept." over nothing. The one word is the difference
+      // between reporting the write and reporting the request.
+      const { data, error } = await this.db
         .from("vent_users")
         .update({ held: next })
-        .eq("id", userId);
+        .eq("id", userId)
+        .select("id");
       if (error) {
         console.warn("[store] addHeld", error.code, error.message);
         return false;
       }
-      return true;
+      return (data?.length ?? 0) > 0;
     } catch (e) {
       console.warn("[store] addHeld threw", e);
+      return false;
+    }
+  }
+
+  /**
+   * The Breaking Room's answers — 0015.
+   *
+   * Same wrapping as `getHeld`, and it earns it twice over: a deployment with
+   * 0015 pending answers `42703`, and this is read on the ordinary vent path
+   * rather than only when something is rendered. An unhandled throw here would
+   * turn a missing column into a failed vent.
+   *
+   * **Null on every failure, and never `[]`.** That distinction is the point:
+   * `[]` means they have answered nothing, null means this deployment cannot
+   * say. With 0015 pending the difference is a room that offers the same
+   * question every cadence turn forever versus a room that stays shut — see
+   * the `Store` interface for the whole argument.
+   *
+   * A missing row is null too. There is nowhere to write, so there is nothing
+   * to open a room over.
+   */
+  async getBreaking(userId: string): Promise<BreakingAnswer[] | null> {
+    try {
+      const { data, error } = await this.db
+        .from("vent_users")
+        .select("breaking")
+        .eq("id", userId)
+        .maybeSingle();
+      if (error) {
+        // 42703 is 0015 pending, which is a normal state on a deployment
+        // mid-migration and not a fault. It is still not an empty list.
+        console.warn("[store] getBreaking", error.code, error.message);
+        return null;
+      }
+      if (!data) return null;
+      return Array.isArray(data.breaking) ? (data.breaking as BreakingAnswer[]) : [];
+    } catch (e) {
+      console.warn("[store] getBreaking threw", e);
+      return null;
+    }
+  }
+
+  async addBreaking(userId: string, q: string, a: string): Promise<boolean> {
+    const answer = a.trim();
+    if (!q.trim() || !answer) return false;
+    try {
+      // Read-modify-write, for the same reason as `addHeld`: expressing the
+      // cap in SQL would put the number in two places, and one of them would
+      // eventually be wrong.
+      const existing = await this.getBreaking(userId);
+      // Unreadable is not empty. Writing `[their answer]` over a column this
+      // could not read would silently discard every earlier answer, which is
+      // worse than not keeping this one.
+      if (existing === null) return false;
+      const next = [
+        { q, a: answer, at: new Date().toISOString() },
+        // One row per question — see the FileStore for why the old one goes.
+        ...existing.filter((e) => e.q !== q),
+      ].slice(0, BREAKING_CAP);
+      /*
+        `.select("id")`, so this reports the write rather than the request.
+
+        An update whose `eq` matches nothing is not an error in PostgREST: no
+        rows change, `error` is null, and a bare update returns true from
+        here — "I see you. Thank you for trusting me with that one" over a row
+        that was never touched. Asking for the affected rows back is the only
+        way this function knows the difference, and it is one word.
+      */
+      const { data, error } = await this.db
+        .from("vent_users")
+        .update({ breaking: next })
+        .eq("id", userId)
+        .select("id");
+      if (error) {
+        console.warn("[store] addBreaking", error.code, error.message);
+        return false;
+      }
+      return (data?.length ?? 0) > 0;
+    } catch (e) {
+      console.warn("[store] addBreaking threw", e);
       return false;
     }
   }
