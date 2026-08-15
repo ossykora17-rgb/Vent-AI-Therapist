@@ -38,6 +38,7 @@ const { MYCELIUM: MYCELIUM_RULE } = await app("src/lib/circles/rules.ts");
 const { noModelKeyReply } = await app("src/lib/vent/fallback.ts");
 const { allProviders, configuredProviders, openAiCompatible } =
   await app("src/lib/vent/providers.ts");
+const { wasCutOff, MAX_TOKENS } = await app("src/lib/vent/model.ts");
 
 const BASE = (process.argv[2] || "").replace(/\/$/, "");
 
@@ -4676,6 +4677,115 @@ if (BASE) {
     }
   });
 }
+
+check("45 A reply is allowed to finish its sentence", () => {
+  /*
+    The bug this closes reached a real person mid-sentence: "...before
+    planning the next play. If you".
+
+    Nothing here could have caught it. Check 14 stubs `fetch`, which is the
+    right instrument for the OpenAI-compatible adapter and structurally blind
+    to the Anthropic one — that path goes through the SDK, so there is no
+    fetch to stub. And the live checks run with no ANTHROPIC_API_KEY, so the
+    adapter is never executed at all. The shape with no key is again the one
+    shape nothing runs.
+
+    So this check does not execute the adapter. It reads how the adapter is
+    *wired*, the way check 16 reads a select list rather than issuing the
+    query, and it asserts the shared rule against the real exported function
+    rather than a copy of it.
+  */
+  const src = fs.readFileSync(path.join(ROOT, "src/lib/vent/providers.ts"), "utf8");
+
+  /*
+    The Anthropic call, from `async send(` to the end of that object literal.
+    Scoped deliberately: `temperature` is legal in the OpenAI-compatible
+    adapter two hundred lines up, and a whole-file grep would fail on it.
+  */
+  const anthropic = src.slice(src.indexOf("function anthropicProvider"));
+  ok(anthropic.length > 0, "the Anthropic adapter is findable in providers.ts",
+    "renamed? this check is scoped to `function anthropicProvider`");
+  /*
+    Code only, comments stripped.
+
+    The first version of this failed on the comment *inside the call* that
+    explains why `temperature` was removed — a check tripping over its own
+    postmortem, which is precisely what check 37 says it learned and what
+    check 35 learned before that. Third time in one file. Scan what runs.
+  */
+  const call = anthropic
+    .slice(anthropic.indexOf("messages.create("), anthropic.indexOf("const text"))
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+
+  /*
+    Thinking must be stated, not left to the default.
+
+    This is the whole bug in one assertion. Omitting `thinking` does not mean
+    "no thinking" on claude-sonnet-5 and the Opus-5 family — it means
+    adaptive, which is on. max_tokens then caps the reasoning and the speech
+    together, and the person reads half a sentence. An adapter that does not
+    say which it wants has already chosen the expensive one.
+  */
+  ok(/thinking\s*:/.test(call),
+    "the Anthropic call states a `thinking` mode rather than inheriting the default",
+    "unset means adaptive on this model family — the reply is billed for reasoning and truncated by it");
+
+  /*
+    Sampling parameters are a 400 on this model family, not a nudge. A
+    refused request is invisible from the outside: the chain simply answers
+    from further down and every reply looks like somebody else's.
+  */
+  for (const param of ["temperature", "top_p", "top_k"]) {
+    ok(!new RegExp(`\\b${param}\\s*:`).test(call),
+      `the Anthropic call sends no ${param}`,
+      `non-default sampling parameters are rejected with a 400 on claude-sonnet-5 / the Opus 5 family`);
+  }
+
+  /*
+    Both adapters ask the same question, and neither keeps its own answer.
+    The OpenAI path had a local copy that only refused replies under twelve
+    words — a rule that reads as "a stub is bad" and means "a long reply cut
+    mid-sentence is fine". The reply that shipped was fifty-two words.
+  */
+  const guards = src.match(/wasCutOff\(/g) || [];
+  is(guards.length, 2, "both adapters call the shared wasCutOff()");
+  ok(!/finish_reason\s*===\s*"length"\s*&&/.test(src),
+    "no adapter re-implements the cut-off rule with its own extra condition",
+    "a second copy of this rule is how the guard passed while the product regressed");
+
+  // The ceiling has to leave room for the thing it is a ceiling on. Four warm
+  // sentences is ~150 tokens; 220 was the number that truncated in production.
+  ok(MAX_TOKENS >= 400, `MAX_TOKENS (${MAX_TOKENS}) leaves room for a whole reply`,
+    "a ceiling is not a purchase — unused headroom is never billed");
+
+  /*
+    And the rule itself, from the module the product imports.
+
+    A reply that hit the ceiling and still lands on a full stop is a complete
+    thought that ended at the edge; that one ships. Everything else is the
+    model being interrupted.
+  */
+  ok(wasCutOff("Spend five seconds noticing the room you are in. If you", true),
+    "a sentence cut mid-clause at the ceiling is refused");
+  /*
+    "Tired. Na" is the fragment from this file's own postmortem — 217 tokens
+    of silent reasoning, three tokens of reply, in front of somebody who had
+    just written that they were tired. It ends on "Na", not on a full stop,
+    so it is refused. Keeping it here by name means the rule is tested
+    against the sentence that caused it.
+  */
+  ok(wasCutOff("Tired. Na", true),
+    "the original truncated reply is refused, not published");
+  ok(wasCutOff("Na wa. That one heavy.", true) === false,
+    "a short reply that does land on a full stop still ships");
+  ok(wasCutOff("...before planning the next play. If you", false) === false,
+    "a reply that never hit the ceiling is never second-guessed");
+  ok(wasCutOff("Where did the weight land?", true) === false,
+    "a question mark ends a sentence too");
+  ok(wasCutOff('He said "the rent is due."', true) === false,
+    "so does a full stop inside a closing quote");
+});
 
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
