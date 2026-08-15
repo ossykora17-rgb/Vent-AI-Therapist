@@ -2277,6 +2277,30 @@ check("24 The system prompt has a budget, and every block earns its place", () =
   ok(tokens > 1800, "and it has not silently lost half its content", `${tokens}`);
 
   /*
+    Two things the prompt must never start doing, both of which arrived as
+    reasonable-sounding suggestions in a persona spec.
+
+    A crisis number belongs to a country. 988 is the US line and does not
+    dial from Lagos, so a prompt that hands it to somebody at their lowest
+    has given them a busy tone instead of a person. Check 17 makes the
+    Nigerian number impossible to hand-write; this makes a foreign one
+    impossible to introduce. Routing stays where it already is — local, free,
+    and ahead of the model.
+
+    And the product cannot call itself a therapist. Four US states now ban
+    AI-delivered therapy outright and four more regulate it; more to the
+    point, it is not true. The prompt may describe the training it writes
+    like — that is a simile, and the line under it disclaims plainly.
+  */
+  const FOREIGN_LINES = /\b(988|911|999|116 123|1-?800-?273-?8255)\b/;
+  ok(!FOREIGN_LINES.test(heaviest),
+    "the prompt hands out no crisis number from another country",
+    "crisis routing is local and imported — a US hotline is a busy tone from Lagos");
+  ok(!/\b(you are|i am) (a|the) (licensed )?(therapist|psychologist|counsell?or|shrink)\b/i.test(heaviest),
+    "and never tells the model it is a therapist",
+    "banned in four states, regulated in four more, and untrue in all of them");
+
+  /*
     The three assembled blocks share one set of rules rather than each
     carrying its own.
 
