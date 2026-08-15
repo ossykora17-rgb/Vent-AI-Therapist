@@ -36,6 +36,8 @@ const { guardianVerdict, THRESHOLD } = await app("src/lib/external/guardian.ts")
 // The campfire's own lines, imported once so no check keeps a copy of them.
 const { MYCELIUM: MYCELIUM_RULE } = await app("src/lib/circles/rules.ts");
 const { noModelKeyReply } = await app("src/lib/vent/fallback.ts");
+const { REFERRALS, STALE_AFTER_DAYS, HANDOFF_FLOOR, activeReferrals, pastWhatThisHolds, handoffLine } =
+  await app("src/lib/vent/referrals.ts");
 const { allProviders, configuredProviders, openAiCompatible } =
   await app("src/lib/vent/providers.ts");
 const { wasCutOff, MAX_TOKENS } = await app("src/lib/vent/model.ts");
@@ -5071,6 +5073,78 @@ check("49 The health probe asks as the identity that does the work", () => {
   */
   ok(!/head:\s*true/.test(code), "and it asks in a shape that can carry a failure",
     "head: true has no body, so the error object never arrives");
+});
+
+check("50 A referral nobody has dialled is never offered", () => {
+  /*
+    The state between an ordinary sitting and a crisis. Crisis routes to a
+    number locally, ahead of the model, and always will. This is the person
+    who is not in danger, comes back every week, and leaves exactly as heavy
+    as they arrived.
+
+    The trigger is their own anchored sittings, so it reads the same two
+    columns as the efficacy loop and the preference pipeline — the product
+    cannot hold two opinions about whether somebody is being helped.
+
+    And the payload is governed by the oldest rule here. A referral is a
+    phone number handed to somebody having a bad week; a number that has
+    changed is a dead line at the worst possible moment, and worse than
+    silence because they will not look twice. So nothing renders without a
+    date, and the entries in the file today are deliberately undated: they
+    were drafted from public listings, and a listing is not a dialled phone.
+  */
+  const now = new Date("2026-08-15T00:00:00Z");
+
+  ok(activeReferrals(now).length === 0,
+    "the drafted entries do not render, because nobody has verified them",
+    "an entry with no verifiedOn is a number nobody has dialled");
+  ok(REFERRALS.length > 0, "while the drafts themselves are there to be verified");
+
+  // The rule, exercised rather than asserted — the only way a staleness
+  // window ever gets tested is by moving the clock.
+  const one = { ...REFERRALS[0], tel: "0000000000", verifiedOn: "2026-08-01" };
+  const fresh = (r, at) => {
+    if (!r.verifiedOn) return false;
+    const age = (at.getTime() - Date.parse(r.verifiedOn)) / 86_400_000;
+    return age >= 0 && age <= STALE_AFTER_DAYS;
+  };
+  ok(fresh(one, now), "a freshly verified entry is offered");
+  ok(!fresh(one, new Date("2027-09-01T00:00:00Z")),
+    "and the same entry stops being offered once it goes stale",
+    `nothing is offered past ${STALE_AFTER_DAYS} days without being re-checked`);
+
+  /*
+    The trigger. Heavy is not the signal — stuck is. Somebody arriving at 90
+    and leaving at 40 every week is in pain and being helped, and telling them
+    this is not working would be false.
+  */
+  const row = (before, after) => ({
+    tension_before: before, tension_after: after,
+    user_message: "again", ai_reply: "…", real_world_tag: "economy",
+  });
+  const stuck = Array.from({ length: 6 }, () => row(70, 69));
+  const helped = Array.from({ length: 6 }, () => row(90, 40));
+
+  ok(pastWhatThisHolds(stuck), "six sittings that never move is the signal");
+  ok(!pastWhatThisHolds(helped),
+    "six heavy sittings that move fifty points is not",
+    "the signal is the absence of movement, not the presence of pain");
+  ok(!pastWhatThisHolds(stuck.slice(0, HANDOFF_FLOOR - 1)),
+    `under ${HANDOFF_FLOOR} anchored sittings it says nothing`,
+    "a pattern claimed from four data points is a horoscope");
+  ok(!pastWhatThisHolds([row(70, null), row(null, 20)]),
+    "and a sitting with only one reading is not counted at all");
+
+  /*
+    The sentence and the thing it points at ship together or not at all.
+    Naming somebody's stuckness and then handing them an empty list is the
+    cruellest version of this feature.
+  */
+  const h = pastWhatThisHolds(stuck);
+  is(handoffLine(h, []), null, "with nothing verified to offer, it stays quiet");
+  ok(typeof handoffLine(h, [one]) === "string" && !/you need|you should|therapy/i.test(handoffLine(h, [one])),
+    "and when it speaks it offers rather than prescribes",
+    "this product does not tell people what they need");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
