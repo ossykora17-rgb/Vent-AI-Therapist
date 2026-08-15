@@ -5027,6 +5027,52 @@ check("48 No screen says it happened without reading the answer", () => {
     "dropping it first strands undeleted rows behind a key nobody has");
 });
 
+check("49 The health probe asks as the identity that does the work", () => {
+  /*
+    The oldest bug in this repo, on its fourth arrival, in the endpoint built
+    to abolish it. CLAUDE.md lists three: `models.retrieve` reporting ok for a
+    week while every vent failed on billing; an anonymous probe reporting
+    `database: ok` under deny-by-default RLS; a HEAD request that could not
+    carry the error object it was asking for. All three are fixed in the file.
+
+    The fourth was hiding inside the fix for the second. The repair read
+    `createAdminClient() ?? (await createClient())` — and that `??` is the
+    anonymous client, restored, directly beneath a comment calling an
+    anonymous probe "the green light over the broken road, again".
+
+    It fired in a specific and very ordinary shape: a Supabase URL and an anon
+    key with no service-role key, which is what somebody has after pasting the
+    two values the dashboard shows first. `getStore()` builds only an admin
+    client, so that deployment persists nothing at all — and the probe fell
+    back to anon, received RLS's perfectly legitimate empty answer, and
+    reported the database healthy.
+
+    So the rule is not "use the admin client". It is that there is no second
+    client to fall back to. The only honest answers are "I asked as the
+    identity that does the work" and "I could not ask".
+  */
+  const src = fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+  ok(!/createAdminClient\(\)\s*\?\?/.test(code),
+    "the admin client has no fallback",
+    "`??` here substitutes a different role to get an answer — that is the bug, not the fix");
+  ok(!/\bcreateClient\b/.test(code),
+    "the anonymous server client is not reachable from this route at all",
+    "the strongest form of the rule: the wrong identity is not in scope");
+  ok(/no_service_key/.test(code),
+    "a probe that cannot run says so instead of reporting ok",
+    "configured, reachable, and unprobeable is its own state");
+
+  /*
+    And it still cannot go back to asking in a shape that drops the answer.
+    `head: true` returns no body, so PostgREST's error JSON — the object
+    carrying code and hint — never arrives.
+  */
+  ok(!/head:\s*true/.test(code), "and it asks in a shape that can carry a failure",
+    "head: true has no body, so the error object never arrives");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
