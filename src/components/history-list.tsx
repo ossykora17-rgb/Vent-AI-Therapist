@@ -118,15 +118,61 @@ export function HistoryList() {
     });
   }, [rows, query, minMood]);
 
+  /*
+    Deletion is the one promise this product cannot be loose about.
+
+    This said "Deleted." on the strength of having asked. It did not check
+    `res.ok`, so a 500 or a dropped connection reported success; and it never
+    read the body, which is the sharper half — the route answers 200 with
+    `deleted: 0` when there is no store and when the anon id is unknown. So in
+    the shape with no Supabase configured, which is what a fresh Vercel
+    project is and what real people were using, pressing delete removed the
+    row from the screen, said "Deleted.", deleted nothing, and handed it all
+    back on the next refresh.
+
+    The route was written carefully for this. Its own comment says every
+    caller should report from what it returns rather than from whether a store
+    was configured. This caller was the one that did not — and twelve lines
+    away in vent-chat.tsx the same fix already exists, with a comment saying
+    "Kept" is never said on the strength of having asked.
+
+    The row is now put back when the delete did not happen, because a screen
+    that hides what the database still holds is the lie that matters here.
+  */
   async function remove(id: string) {
+    const removed = rows.find((row) => row.id === id);
     setRows((r) => r.filter((row) => row.id !== id));
+    const restore = () => {
+      if (removed) setRows((r) => (r.some((x) => x.id === id) ? r : [removed, ...r]));
+    };
+
     try {
-      await fetch(`/api/vent?anonId=${encodeURIComponent(anonId())}&id=${id}`, {
+      const res = await fetch(`/api/vent?anonId=${encodeURIComponent(anonId())}&id=${id}`, {
         method: "DELETE",
       });
+      const body = res.ok ? await res.json().catch(() => null) : null;
+
+      if (!res.ok || !body) {
+        restore();
+        toast("Couldn't delete that. It is still here.", "error");
+        return;
+      }
+      // `deleted: 0` is the route being honest that it found nothing to
+      // delete — no store, or an anon id it has never seen.
+      if (!body.deleted) {
+        restore();
+        toast(
+          body.persisted === false
+            ? "Nothing was ever stored, so there was nothing to delete."
+            : "Couldn't delete that. It is still here.",
+          "info",
+        );
+        return;
+      }
       toast("Deleted.", "success");
     } catch {
-      toast("Couldn't delete that.", "error");
+      restore();
+      toast("Couldn't delete that. It is still here.", "error");
     }
   }
 
@@ -147,21 +193,67 @@ export function HistoryList() {
       and a promise kept in the database and broken on the screen is the one a
       person actually experiences. The state goes with the request.
     */
+    /*
+      And the order matters more than the clearing did.
+
+      This fired the request, never looked at the answer, and then removed
+      the anon id — which is the only key that reaches that person's rows.
+      So a wipe that failed left the data on the server *and* threw away the
+      one handle that could ever delete it. Silently, under "All cleared.
+      Fresh start."
+
+      Destroying the key to data you did not delete is strictly worse than
+      not deleting it. The id is dropped only once the server has said, in
+      the body rather than in a status code, that there was something and it
+      is gone.
+    */
+    const previous = { rows, held, answers, pattern, testimony };
     setRows([]);
     setHeld([]);
     setAnswers([]);
     setPattern(null);
     setTestimony(null);
+
+    const putBack = () => {
+      setRows(previous.rows);
+      setHeld(previous.held);
+      setAnswers(previous.answers);
+      setPattern(previous.pattern);
+      setTestimony(previous.testimony);
+    };
+
     try {
-      await fetch(`/api/vent?anonId=${encodeURIComponent(anonId())}`, { method: "DELETE" });
+      const res = await fetch(`/api/vent?anonId=${encodeURIComponent(anonId())}`, {
+        method: "DELETE",
+      });
+      const body = res.ok ? await res.json().catch(() => null) : null;
+
+      if (!res.ok || !body) {
+        putBack();
+        toast("Couldn't clear it. Everything is still here.", "error");
+        return;
+      }
+      if (!body.deleted) {
+        putBack();
+        toast(
+          body.persisted === false
+            ? "Nothing was ever stored, so there was nothing to clear."
+            : "Couldn't clear it. Everything is still here.",
+          "info",
+        );
+        return;
+      }
+
       // A full wipe makes them a new person here: drop the id AND the
       // onboarding flag, so the chair question seeds their tension again
       // rather than starting the next session at a meaningless default.
+      // Only now — before the answer, this line was destroying the key.
       localStorage.removeItem("mw-anon-id");
       localStorage.removeItem("mw-onboarded");
       toast("All cleared. Fresh start.", "success");
     } catch {
-      toast("Couldn't clear it all.", "error");
+      putBack();
+      toast("Couldn't clear it. Everything is still here.", "error");
     }
   }
 
@@ -491,9 +583,21 @@ export function HistoryList() {
                       <div className="mt-3 flex gap-2">
                         <button
                           type="button"
-                          onClick={() => {
-                            void navigator.clipboard.writeText(r.ai_reply ?? "");
-                            toast("Copied.", "success");
+                          /*
+                            `void` plus an unconditional toast is the same
+                            bug one size down. writeText rejects on a denied
+                            permission, an unfocused document, or an insecure
+                            context — and "Copied." was said either way, so
+                            somebody pastes nothing into a message they meant
+                            to send to a person.
+                          */
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(r.ai_reply ?? "");
+                              toast("Copied.", "success");
+                            } catch {
+                              toast("Couldn't copy — long-press to select it.", "info");
+                            }
                           }}
                           className="min-h-[44px] flex-1 rounded-card border border-line/15 text-sm"
                         >

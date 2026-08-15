@@ -4933,6 +4933,76 @@ check("47 The one who is already watching is not handed a mirror", () => {
   }
 });
 
+check("48 No screen says it happened without reading the answer", () => {
+  /*
+    The second of this project's two recurring mechanisms, and the one with
+    no gate on it. CLAUDE.md lists three faces already — `void seal(w)`
+    followed by "Sealed", `submitMood` toasting "Saved. That's the anchor."
+    with no request at all, and `persisted: false` nested where nobody saw
+    it. Each was fixed where it was found. None of them stopped the next one.
+
+    Four more were sitting in the app while that list was being written:
+    a delete that said "Deleted." without checking anything, a clipboard
+    write that said "Copied." on a promise it discarded, a feedback post
+    thanking people for ratings the rate limiter had just dropped, and a
+    full wipe that removed the anon id — the only key that reaches those
+    rows — before knowing whether the wipe happened.
+
+    So: a success toast standing downstream of a request has to have read
+    something. Deliberately coarse. It cannot tell a real check from a
+    decorative one, and it will not catch a claim phrased as a card instead
+    of a toast. What it does catch is the exact shape that has now shipped
+    seven times — ask, assume, announce.
+  */
+  const walk = (dir) =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) return walk(full);
+      return /\.tsx$/.test(e.name) ? [full] : [];
+    });
+
+  const offenders = [];
+  for (const file of walk(path.join(ROOT, "src"))) {
+    const lines = fs.readFileSync(file, "utf8").split("\n");
+    lines.forEach((line, i) => {
+      if (!/toast\(/.test(line) || !/"success"/.test(line)) return;
+      // The claim's neighbourhood: far enough back to hold the request it
+      // is reporting on, near enough not to borrow another function's check.
+      const from = Math.max(0, i - 30);
+      const before = lines.slice(from, i + 1).join("\n");
+      if (!/\bfetch\(/.test(before)) return; // nothing was asked; nothing to read
+      const read =
+        /\.ok\b/.test(before) ||
+        /\bstatus\b/.test(before) ||
+        /\b(body|data|d)\??\.(deleted|saved|anchored|ok)\b/.test(before);
+      if (!read) {
+        offenders.push(`${path.relative(ROOT, file)}:${i + 1}`);
+      }
+    });
+  }
+
+  is(offenders.length, 0,
+    "every success message downstream of a request has read the response",
+    offenders.join(", "));
+
+  /*
+    And the sharpest instance, asserted by name, because a heuristic above
+    should never be the only thing holding the worst case.
+
+    A failed wipe that has already dropped the anon id leaves the data on the
+    server with nothing left that can reach it. Destroying the key to data
+    you did not delete is worse than not deleting it, so the removal must sit
+    after the answer.
+  */
+  const history = fs.readFileSync(path.join(ROOT, "src/components/history-list.tsx"), "utf8");
+  const clear = history.slice(history.indexOf("async function clearAll"));
+  const dropId = clear.indexOf('removeItem("mw-anon-id")');
+  const readAnswer = clear.search(/if \(!res\.ok \|\| !body\)/);
+  ok(dropId > 0 && readAnswer > 0 && readAnswer < dropId,
+    "the anon id is dropped only after the server confirms the wipe",
+    "dropping it first strands undeleted rows behind a key nobody has");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

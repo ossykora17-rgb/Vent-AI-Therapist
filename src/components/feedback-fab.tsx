@@ -16,11 +16,30 @@ export function FeedbackFab() {
     if (!rating) return;
     setSending(true);
     try {
-      await fetch("/api/feedback", {
+      const res = await fetch("/api/feedback", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ anonId: anonId(), rating, message: message.trim() || undefined }),
       });
+
+      /*
+        The response was thrown away and the thanks was unconditional. The
+        feedback route rate-limits at five an hour and answers 429 — a limit
+        this project's own live check verifies — so the sixth rating in an
+        hour was dropped while the person was thanked for it. Ratings are the
+        input to the preference pipeline; silently losing them corrupts the
+        one place the product learns what is losing.
+      */
+      if (!res.ok) {
+        toast(
+          res.status === 429
+            ? "That's a few in a short time — try again in a bit."
+            : "Couldn't send that. Try again later.",
+          "info",
+        );
+        return;
+      }
+
       toast("Thank you. Na so we dey improve.", "success");
       setOpen(false);
       setRating(0);
