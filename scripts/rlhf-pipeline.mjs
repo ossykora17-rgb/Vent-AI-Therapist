@@ -190,6 +190,146 @@ function keeperVerdicts(signals) {
   }).sort((a, b) => b.drop - a.drop);
 }
 
+/**
+ * The outcome signal — what happened to them, not what they said about it.
+ *
+ * Everything above this line trains on a rating. A rating is an opinion about
+ * a reply, collected seconds after it, from somebody who is being polite to a
+ * machine. It is real signal and it stays. But this file already knows a
+ * better one and says so forty lines up, about circles: "the Keeper is judged
+ * on one number: did the room come down."
+ *
+ * That principle could never reach a vent, because until the anchor route
+ * existed no vent could carry an outcome — every insert wrote
+ * `tension_after: null`. Now one can. So the rule the circles half has always
+ * followed now applies to the surface that finally has the data.
+ *
+ * Three decisions this makes, each of which could reasonably have gone the
+ * other way, so each is written down rather than left in the arithmetic.
+ *
+ * ── Relief, not points ────────────────────────────────────────────────────
+ * A drop of 50 from 90 and a drop of 50 from 55 are not the same event. The
+ * first left them at 40, the second at 5. Scoring absolute points rewards
+ * replies that happen to catch people on their worst days, which is a
+ * property of the arrival, not the reply. So the score is the fraction of
+ * what they walked in carrying that they put down.
+ *
+ * ── Their own baseline before the cohort's ────────────────────────────────
+ * A self-report scale is not a ruler; it is a habit. Somebody who never rates
+ * above 6 is not lukewarm — 6 may be the top of their range, and "I dey
+ * manage" is a full sentence. Scoring that person against a cohort mean reads
+ * their restraint as failure and would teach the model to chase the loudest
+ * reporters. So once a person has enough sittings to have a baseline, they
+ * are scored against themselves.
+ *
+ * Three, because two points make a line through anything. Below that there is
+ * no baseline and the honest fallback is the cohort — stated, not hidden.
+ *
+ * ── A separate file ───────────────────────────────────────────────────────
+ * These pairs do not go in `dpo.jsonl`. An outcome and an opinion are
+ * different evidence and a trainer is entitled to weight them differently;
+ * blending them silently would make that impossible and would quietly let
+ * ratings outnumber outcomes forever, since ratings are cheap and outcomes
+ * are earned.
+ */
+const MIN_BASELINE = 3;
+/** Two sittings a hair apart are not a preference. Ten points of relief is. */
+const MIN_RELIEF_MARGIN = 0.1;
+
+/**
+ * Every sitting that carries both readings, scored.
+ *
+ * Same exclusions as the ratings join, for the same reasons: a vent only, a
+ * real reply only. `intent_type !== "vent"` is what keeps a crisis exchange
+ * out of the training set — that conversation hands somebody a phone number
+ * and must never become a preference about phrasing.
+ */
+function anchoredSittings(db) {
+  const rows = [];
+  for (const v of db.vents ?? []) {
+    if (v.intent_type !== "vent" || !v.ai_reply || PLACEHOLDER.test(v.ai_reply)) continue;
+    if (v.tension_before == null || v.tension_after == null) continue;
+    // Nothing to put down means nothing to measure. Not a failure — an
+    // absence, and an absence is not a zero.
+    if (v.tension_before <= 0) continue;
+    rows.push({
+      user: v.user_id,
+      prompt: v.user_message,
+      reply: v.ai_reply,
+      tactic: v.tactic_used,
+      domain: v.real_world_tag ?? "none",
+      before: v.tension_before,
+      after: v.tension_after,
+      drop: v.tension_before - v.tension_after,
+      relief: (v.tension_before - v.tension_after) / v.tension_before,
+      at: v.created_at,
+    });
+  }
+
+  // Their own baseline where there is one, the cohort's where there is not.
+  const byUser = new Map();
+  for (const r of rows) {
+    if (!byUser.has(r.user)) byUser.set(r.user, []);
+    byUser.get(r.user).push(r);
+  }
+  const cohort = mean(rows.map((r) => r.relief));
+  for (const r of rows) {
+    const own = byUser.get(r.user);
+    r.baseline = own.length >= MIN_BASELINE ? mean(own.map((x) => x.relief)) : cohort;
+    r.scaled = r.relief - r.baseline;
+    r.against = own.length >= MIN_BASELINE ? "self" : "cohort";
+  }
+  return rows;
+}
+
+/**
+ * Pairs, inside a domain, on the outcome.
+ *
+ * Domain-scoped for the reason the ratings pairs already are: comparing a
+ * money sitting to a family sitting teaches the model that one subject beats
+ * another, which is a topic and not a preference.
+ *
+ * A pair is only emitted when the two sittings are far enough apart to mean
+ * something. Where they are not, nothing is written — the same refusal the
+ * rest of this file makes about inventing a rejection.
+ */
+function outcomePairs(sittings) {
+  const out = [];
+  const groups = new Map();
+  for (const s of sittings) {
+    if (!groups.has(s.domain)) groups.set(s.domain, []);
+    groups.get(s.domain).push(s);
+  }
+
+  for (const [domain, rows] of groups) {
+    if (rows.length < MIN_SAMPLES * 2) continue;
+    const ranked = [...rows].sort((a, b) => b.scaled - a.scaled);
+    const half = Math.floor(ranked.length / 2);
+    const top = ranked.slice(0, half);
+    const bottom = ranked.slice(-half).reverse();
+
+    for (let i = 0; i < half; i++) {
+      const margin = top[i].scaled - bottom[i].scaled;
+      if (margin < MIN_RELIEF_MARGIN) continue;
+      out.push({
+        domain,
+        prompt: top[i].prompt,
+        chosen: top[i].reply,
+        rejected: bottom[i].reply,
+        chosen_tactic: top[i].tactic,
+        rejected_tactic: bottom[i].tactic,
+        chosen_relief: Number(top[i].relief.toFixed(3)),
+        rejected_relief: Number(bottom[i].relief.toFixed(3)),
+        chosen_drop: `${top[i].before}→${top[i].after}`,
+        rejected_drop: `${bottom[i].before}→${bottom[i].after}`,
+        margin: Number(margin.toFixed(3)),
+        scored_against: top[i].against,
+      });
+    }
+  }
+  return out.sort((a, b) => b.margin - a.margin);
+}
+
 function writeJsonl(file, rows) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
@@ -205,6 +345,8 @@ const byTactic = aggregate(joined, "tactic");
 const byDomain = aggregate(joined, "domain");
 const dpo = pairs(joined);
 const keeper = keeperVerdicts(signals);
+const sittings = anchoredSittings(db);
+const outcome = outcomePairs(sittings);
 
 const unpaired = joined.length - dpo.length * 2;
 const losingTactics = byTactic.filter((t) => t.n >= MIN_SAMPLES && t.mean < LOSING);
@@ -222,6 +364,9 @@ writeJsonl(path.join(OUT_DIR, "dpo.jsonl"), [
     domain: k.tag, prompt: `[CIRCLE:${k.tag}]`, rejected: k.line, tactic: REAL_WORLD_TACTIC[k.tag]?.id ?? null,
   })),
 ]);
+
+writeJsonl(path.join(OUT_DIR, "dpo-outcome.jsonl"),
+  outcome.map((p) => ({ kind: "outcome_pair", ...p })));
 
 const bar = (x, max = 5) => "█".repeat(Math.round((x / max) * 12)).padEnd(12, "·");
 
@@ -260,8 +405,31 @@ for (const p of dpo) {
 }
 console.log(`unpaired      ${Math.max(0, unpaired)} ratings with nothing to compare against — kept as-is, never invented`);
 
+/*
+  The outcome half. Reported separately from the ratings above on purpose —
+  they are different evidence, and a run where the two disagree is the most
+  interesting thing this file can show a person.
+*/
+console.log(`\nanchored      ${sittings.length} sittings carry both readings` +
+  (sittings.length
+    ? `, mean relief ${(mean(sittings.map((s) => s.relief)) * 100).toFixed(0)}% ` +
+      `(${sittings.filter((s) => s.against === "self").length} scored against their own baseline)`
+    : " — nothing to learn from yet, and nothing invented"));
+
+if (outcome.length) {
+  console.log(`\noutcome pairs ${outcome.length} — what happened to them, not what they said`);
+  for (const p of outcome) {
+    console.log(`  ${p.domain.padEnd(10)} +${(p.margin * 100).toFixed(0)}%  ` +
+      `${p.chosen_tactic} (${p.chosen_drop}) over ${p.rejected_tactic} (${p.rejected_drop})` +
+      `  vs ${p.scored_against}`);
+  }
+} else if (sittings.length) {
+  console.log(`outcome pairs 0 — too few sittings in any one domain, or too close to call`);
+}
+
 const outLabel = OUT_DIR.startsWith(ROOT) ? path.relative(ROOT, OUT_DIR) : OUT_DIR;
 console.log(`\nwrote         ${outLabel}/dpo.jsonl`);
+console.log(`              ${outLabel}/dpo-outcome.jsonl`);
 console.log(`${"─".repeat(66)}\n`);
 
 if (losingTactics.length === 0 && !keeper.some((k) => k.losing)) {
