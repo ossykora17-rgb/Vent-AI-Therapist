@@ -241,6 +241,95 @@ async function main() {
       `stored=${answers.length}${hasDb ? "" : " (no store)"}`);
   }
 
+  /*
+    12 — the efficacy loop, driven end to end.
+
+    This is the only claim the product makes about whether it helps, and it
+    had never been exercised by anything. The plumbing all exists — a PATCH
+    route, `anchorLatestVent` in both stores, the heartbeat's mean drop — and
+    every one of those pieces was written *because* the loop was found dead:
+    the closing question set React state, toasted "Saved. That's the anchor.",
+    and made no request, while every insert wrote `tension_after: null`.
+
+    It was repaired. Nothing then proved it stayed repaired. The eval suite
+    reads the route as text; the live checks send vents but never a pressure
+    reading and never a mood, so no run of this file has ever produced a
+    single anchored sitting. A regression to `tension_after: null` would have
+    left every check green — which is exactly the state the loop was in when
+    it was discovered broken the first time.
+
+    So drive the actual sequence a person drives: arrive with a reading, vent,
+    rate the way out, then ask the database what it kept. The last step is the
+    point. "The route answered `anchored: true`" and "the row now carries a
+    drop the heartbeat can read" are different claims, and only the second one
+    is the measurement.
+
+    Both shapes: with no store the honest answer is `anchored: false` with a
+    reason, and that is a pass, not a failure. The arithmetic — mood 7 becomes
+    tension 30 — is shape-independent and asserted always.
+  */
+  {
+    const BEFORE = 80;
+    const MOOD = 7;
+    const EXPECTED_AFTER = Math.round((10 - MOOD) * 10); // 30
+    const EXPECTED_DROP = BEFORE - EXPECTED_AFTER; // 50
+
+    /*
+      Its own identity, deliberately.
+
+      The first version of this reused the shared anonId and failed on its
+      very first run: check 9b exhausts the rate limit on purpose two checks
+      earlier, so the vent never landed, and the PATCH dutifully anchored an
+      *older* sitting — one with no entry reading. It reported
+      `anchored=true` and `stored null→30`, which is the whole bug this loop
+      was built to stop, reproduced by accident: a green claim over a
+      measurement that does not exist.
+
+      A check that inherits another check's leftovers is measuring the suite,
+      not the product.
+    */
+    const EFF = `${ANON}-eff`;
+    const posted = await post("/api/vent", {
+      anonId: EFF,
+      message: "rent due and i cannot tell anybody at home",
+      pressure: BEFORE,
+    });
+
+    const patch = await fetch(`${BASE}/api/vent`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ anonId: EFF, mood: MOOD }),
+    });
+    const body = await patch.json().catch(() => ({}));
+
+    // What the route claims.
+    const arithmetic = !hasDb || body.tensionAfter === EXPECTED_AFTER;
+    const claim = hasDb
+      ? body.anchored === true
+      : body.anchored === false && typeof body.reason === "string";
+
+    // What the record actually holds — the half a source-reading check and a
+    // 200 can both miss.
+    let row = null;
+    if (hasDb) {
+      const hist = await fetch(`${BASE}/api/history?anonId=${EFF}`).then((r) => r.json());
+      row = (hist.vents ?? []).find((v) => v.tension_after != null) ?? null;
+    }
+    const kept = hasDb
+      ? Boolean(row) &&
+        row.tension_before === BEFORE &&
+        row.tension_after === EXPECTED_AFTER &&
+        row.tension_before - row.tension_after === EXPECTED_DROP
+      : true;
+
+    record(12, "A sitting can be anchored, and the drop survives the round trip",
+      posted.status === 200 && patch.status === 200 && arithmetic && claim && kept,
+      hasDb
+        ? `vent=${posted.status} anchored=${body.anchored} after=${body.tensionAfter} ` +
+          `stored ${row ? `${row.tension_before}→${row.tension_after} = ${row.tension_before - row.tension_after} pts` : "NOTHING"}`
+        : `no store: vent=${posted.status} anchored=${body.anchored} reason=${body.reason} (correct)`);
+  }
+
   // 10 — degradation, read straight off health.
   record(10, "Keys / degradation", true,
     `storage=${health.storage} persisting=${hasDb} anthropic=${hasAi} — no 500s on any path above`);
