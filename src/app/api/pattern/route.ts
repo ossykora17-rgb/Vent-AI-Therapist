@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
 import { findPattern, patternSentence, PATTERN_FLOOR } from "@/lib/vent/pattern";
 import { findTestimony, testimonySentence } from "@/lib/vent/testimony";
+import { activeReferrals, handoffLine, pastWhatThisHolds } from "@/lib/vent/referrals";
 import { withStore } from "@/lib/http/with-store";
 
 export const dynamic = "force-dynamic";
@@ -37,12 +38,36 @@ async function handleGET(request: Request) {
   */
   const testimony = findTestimony(vents);
 
+  /*
+    Third sum over the same array, and the only one that can point somewhere
+    else.
+
+    It answers a different question from the other two. `pattern` says what
+    keeps coming back; `testimony` says what they have survived. This one asks
+    whether any of it is moving — and when the answer has been no for five
+    sittings, says so once and names people who do this properly.
+
+    `activeReferrals()` is what makes it safe to compute here. Anything
+    nobody has dialled and dated does not come back, so today this is
+    reliably null: the machine runs, the payload waits for a person. When the
+    first number is verified, this lights up on its own with no deploy.
+  */
+  const handoff = pastWhatThisHolds(vents);
+  const referrals = handoff ? activeReferrals() : [];
+  const handoffSentence = handoff ? handoffLine(handoff, referrals) : null;
+
   return NextResponse.json(
     {
       pattern,
       sentence: pattern ? patternSentence(pattern) : null,
       testimony,
       testimonySentence: testimony ? testimonySentence(testimony) : null,
+      // The sentence and the list travel together or not at all — naming
+      // somebody's stuckness and handing them an empty list is the cruellest
+      // version of this. `handoffSentence` is null unless `referrals` is not.
+      handoff: handoffSentence ? handoff : null,
+      handoffSentence,
+      referrals: handoffSentence ? referrals : [],
       floor: PATTERN_FLOOR,
       counted: vents.length,
     },

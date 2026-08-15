@@ -42,6 +42,16 @@ export function HistoryList() {
     firstWords: string | null;
     latestWords: string | null;
   } | null>(null);
+  /*
+    Set together or not at all. The route only sends a sentence when it also
+    has somewhere verified to point, so these two can never disagree — and
+    the card below reads the sentence, never the count, so it cannot render
+    a diagnosis with nothing under it.
+  */
+  const [handoff, setHandoff] = React.useState<{
+    sentence: string;
+    referrals: Array<{ org: string; what: string; tel?: string; label?: string; url?: string; hours?: string; free: boolean }>;
+  } | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -85,6 +95,9 @@ export function HistoryList() {
             }
             if (!cancelled && d.pattern && d.sentence) {
               setPattern({ sentence: d.sentence, ...d.pattern });
+            }
+            if (!cancelled && d.handoffSentence && d.referrals?.length) {
+              setHandoff({ sentence: d.handoffSentence, referrals: d.referrals });
             }
           })
           .catch(() => {});
@@ -207,12 +220,15 @@ export function HistoryList() {
       the body rather than in a status code, that there was something and it
       is gone.
     */
-    const previous = { rows, held, answers, pattern, testimony };
+    const previous = { rows, held, answers, pattern, testimony, handoff };
     setRows([]);
     setHeld([]);
     setAnswers([]);
     setPattern(null);
     setTestimony(null);
+    // The fifth card. The bug this whole block exists for was four cards
+    // still rendering over a toast that said "All cleared."
+    setHandoff(null);
 
     const putBack = () => {
       setRows(previous.rows);
@@ -220,6 +236,7 @@ export function HistoryList() {
       setAnswers(previous.answers);
       setPattern(previous.pattern);
       setTestimony(previous.testimony);
+      setHandoff(previous.handoff);
     };
 
     try {
@@ -403,6 +420,48 @@ export function HistoryList() {
           four data points is a horoscope. Everyone else in this category draws
           a mood line, which answers a question nobody was asking.
         */}
+        {/*
+          When this is bigger than a vent.
+
+          Rendered from `handoff.sentence` rather than from a count, because
+          the route only sends a sentence when it also has somewhere verified
+          to point. So this card cannot appear over an empty list — naming
+          somebody's stuckness and then offering nothing is the cruellest
+          version of this feature, and it is unreachable by construction.
+
+          Deliberately not styled as an alarm. It is not a warning and it is
+          not a diagnosis; it is a count they gave us, read back, next to
+          people who do this properly and do not charge.
+        */}
+        {handoff && (
+          <section className="glass settle mb-5 border-line/20 p-5 sm:p-6">
+            <p className="label-mono mb-3">Something to consider</p>
+            <p className="reply">{handoff.sentence}</p>
+            <ul className="mt-4 flex flex-col gap-3">
+              {handoff.referrals.map((r) => (
+                <li key={r.org} className="border-t border-line/10 pt-3">
+                  <p className="text-[15px] font-semibold">{r.org}</p>
+                  <p className="mt-1 text-[14px] leading-[1.55] text-ash">{r.what}</p>
+                  <p className="mt-1 text-[13px] text-ash">
+                    {r.tel && (
+                      <a href={`tel:${r.tel}`} className="underline underline-offset-2">
+                        {r.label ?? r.tel}
+                      </a>
+                    )}
+                    {r.url && !r.tel && (
+                      <a href={r.url} className="underline underline-offset-2" rel="noreferrer">
+                        {r.label ?? r.url}
+                      </a>
+                    )}
+                    {r.hours && <span> · {r.hours}</span>}
+                    {r.free && <span> · free</span>}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {pattern && (
           <section className="glass settle mb-5 border-gold/40 p-5 sm:p-6">
             <p className="label-mono mb-3">What keeps coming back</p>
