@@ -21,7 +21,7 @@ import { app, ROOT } from "./app-imports.mjs";
 
 const { classify } = await app("src/lib/vent/intent.ts");
 const { groundNow } = await app("src/lib/vent/grounding.ts");
-const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS, ALL_TACTICS, nothingCanMove } =
+const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS, ALL_TACTICS, nothingCanMove, caughtWatchingSelf } =
   await app("src/lib/vent/tactics.ts");
 const { buildFlavour } = await app("src/lib/flavour/profile.ts");
 const { flavourBlock, openingBlock, carveBlock } = await app("src/lib/vent/prompt.ts");
@@ -4865,6 +4865,72 @@ check("46 The always-visible line says it is an AI, and says it once", () => {
   const terms = fs.readFileSync(TERMS, "utf8");
   ok(/\bit is an ai\b/i.test(terms) || /\bAI\b/.test(terms),
     "the terms page discloses the AI too");
+});
+
+check("47 The one who is already watching is not handed a mirror", () => {
+  /*
+    The person this protects can see the whole pattern, name its origin, cite
+    the mechanism — and has not moved in two years. Research calls the
+    combination hyperreflexivity, and what sustains it is a belief rather
+    than a deficit: that thinking about it is how it gets solved. So every
+    pass feels like work.
+
+    Which made the library's honest answer to "I know exactly why I do this
+    and I still do it" a bug: `socratic` fires on ANALYTICAL at weight 70, so
+    the most fluent self-analysts in the product were reliably handed one
+    more question to take away and turn over.
+  */
+  const WATCHING = [
+    "I know exactly why I do this, it's an attachment thing from childhood, but I still do it every time",
+    "I understand that my self-sabotage is a defence mechanism and I'm very self-aware about it, yet nothing changes",
+    "My therapist said it's a trauma response and logically I get it, but I'm still stuck",
+    "I dey aware say na my childhood cause am, e no dey change anything",
+  ];
+  // Ordinary heaviness. A person venting is not a person analysing, and
+  // treating them as one would be its own kind of insult.
+  const PLAIN = [
+    "work don tire me, rent due and i no fit talk to anybody",
+    "i just dey vex today, everything dey heavy",
+    "my oga shouted at me in front of everyone and i wanted to disappear",
+  ];
+
+  for (const m of WATCHING) ok(caughtWatchingSelf(m), `caught: "${m.slice(0, 44)}…"`);
+  for (const m of PLAIN) {
+    ok(!caughtWatchingSelf(m), `not caught: "${m.slice(0, 44)}…"`,
+      "an ordinary vent must not be read as self-analysis");
+  }
+
+  // The three moves exist, and are their own family — filing them under
+  // "cognitive" would put them next to the moves they replace.
+  const observing = ALL_TACTICS.filter((t) => t.family === "observing").map((t) => t.id);
+  for (const id of ["insight_is_not_change", "postpone_the_loop", "felt_sense"]) {
+    ok(observing.includes(id), `${id} is in the observing family`);
+  }
+
+  /*
+    The assertion that matters: across a whole stuck conversation, not one
+    turn of it, nothing that asks them to think about the thought is ever
+    selected. One turn would prove almost nothing — the three-turn block
+    moves the selection every time, and the bug would simply arrive on turn
+    two.
+  */
+  const FEEDS_THE_LOOP = ["socratic", "thought_record", "double_standard"];
+  for (const m of WATCHING) {
+    const recent = [];
+    for (let turn = 1; turn <= 4; turn++) {
+      const t = selectTactic({
+        ...classify(m), message: m, pressure: 70, duality: null, mood: null,
+        ventCount: turn, recentTactics: [...recent], body: turn > 2 ? "chest" : null,
+      });
+      ok(!FEEDS_THE_LOOP.includes(t.id),
+        `turn ${turn} does not answer analysis with analysis (${t.id})`,
+        "handing insight to somebody drowning in insight is more water");
+      recent.push(t.id);
+    }
+    // And the first thing said is the true thing nobody says to them.
+    ok(recent[0] === "insight_is_not_change",
+      `opens by naming that the understanding did not move it (${recent[0]})`);
+  }
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
