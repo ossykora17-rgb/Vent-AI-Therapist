@@ -4787,6 +4787,86 @@ check("45 A reply is allowed to finish its sentence", () => {
     "so does a full stop inside a closing quote");
 });
 
+check("46 The always-visible line says it is an AI, and says it once", () => {
+  /*
+    Check 17 made the crisis *number* impossible to hand-write. The sentence
+    carrying that number was still typed out twice — chat footer and landing
+    footer — identical by luck, already drifted in whitespace. Same class of
+    bug, one layer up, and the check that caught the number could not see it.
+
+    It also omitted the disclosure that matters most. VENT says it out loud
+    when asked, and on the terms page. The line somebody actually reads at 2am
+    said only that Mind Weave is not a licensed therapist — true, and quiet
+    about the part a person is owed regardless of jurisdiction: the thing
+    answering is not a person.
+
+    As of 2026 four US states ban AI-delivered therapy outright and four more
+    require exactly this disclosure. That is not why the line is there — a
+    person deserves to know either way — but it does mean the omission was
+    the kind of thing that gets a product pulled rather than merely criticised.
+  */
+  const HOME = "src/components/disclaimer.tsx";
+  const raw = fs.readFileSync(path.join(ROOT, HOME), "utf8");
+
+  /*
+    Code only. The first draft of this check asserted against the raw file and
+    passed a mutation that stripped the disclosure out of the rendered
+    sentence — because the word "AI" still appeared in the comment above
+    explaining why the disclosure is there.
+
+    That is the third time in this file, and the second time in this session:
+    check 35 learned it, check 37 recorded learning it, check 45 has a comment
+    about learning it, and this one still did it. A prose explanation of a rule
+    is not the rule. Scan what runs.
+  */
+  const home = raw.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+  // The disclosure itself, in the one place it lives.
+  ok(/\bAI\b/.test(home), "the shared disclaimer says it is an AI");
+  ok(/not a person/i.test(home), "and that it is not a person");
+  ok(/not a licensed therapist/i.test(home), "and that it is not a licensed therapist");
+  ok(/not medical advice/i.test(home), "and that it is not medical advice");
+  ok(/CRISIS_TEL/.test(home) && /EMERGENCY_TEL/.test(home),
+    "and it reaches for the derived dial strings, never a typed number");
+
+  /*
+    Nobody else writes that sentence. A second copy is how the first one
+    drifted, and a surface that renders its own wording is a surface that can
+    quietly drop the disclosure — which is precisely what happened.
+  */
+  const walk = (dir) =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) return walk(full);
+      return /\.tsx$/.test(e.name) ? [full] : [];
+    });
+
+  const TERMS = path.join(ROOT, "src/app/terms/page.tsx");
+  const offenders = walk(path.join(ROOT, "src"))
+    .filter((f) => f !== path.join(ROOT, HOME) && f !== TERMS)
+    .filter((f) => /not a licensed therapist/i.test(fs.readFileSync(f, "utf8")))
+    .map((f) => path.relative(ROOT, f));
+
+  is(offenders.length, 0,
+    `only ${HOME} and the terms page write the disclaimer${offenders.length ? `: also ${offenders.join(", ")}` : ""}`);
+
+  /*
+    And both places a person can start from actually render it. A shared
+    component nobody mounts is a disclosure that does not exist — the same
+    failure as a health probe that does not take the road.
+  */
+  for (const surface of ["src/app/page.tsx", "src/components/chat/vent-chat.tsx"]) {
+    const text = fs.readFileSync(path.join(ROOT, surface), "utf8");
+    ok(/<Disclaimer\b/.test(text), `${surface} renders <Disclaimer />`,
+      "the footer is the line somebody reads at 2am — it cannot be optional");
+  }
+
+  // The terms page is allowed its own longer wording, but not a weaker one.
+  const terms = fs.readFileSync(TERMS, "utf8");
+  ok(/\bit is an ai\b/i.test(terms) || /\bAI\b/.test(terms),
+    "the terms page discloses the AI too");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
