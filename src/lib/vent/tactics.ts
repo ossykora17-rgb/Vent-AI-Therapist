@@ -13,7 +13,16 @@ export type TacticFamily =
   | "duality"
   | "behavioral"
   | "narrative"
-  | "relational";
+  | "relational"
+  /*
+    For the person who can already see it all and has not moved.
+
+    Its own family rather than a corner of "cognitive", because it is the
+    one family defined by what it refuses to do: it never adds an
+    interpretation. Filing it under cognitive would put it next to the
+    moves it exists to replace.
+  */
+  | "observing";
 
 export interface Tactic {
   id: string;
@@ -69,6 +78,98 @@ const words = (s: string) => s.trim().split(/\s+/).length;
 const has = (re: RegExp) => (c: TacticContext) => re.test(c.message.toLowerCase());
 
 const ANALYTICAL = /\b(because|therefore|the fact|statistic|logically|technically|percent)\b/;
+
+/*
+  Faith, as this market actually speaks it.
+
+  Deliberately wide across traditions and deliberately including Pidgin,
+  because the register that gets missed is never the formal one. It is
+  "na God go do am" and "I don dey pray since", not "I am experiencing a
+  crisis of faith".
+
+  `\bpray` rather than `\bprayer\b` catches praying, prayed, prayers. `chi`
+  is bounded tightly — it is a real Igbo concept and also three letters
+  inside a hundred English words.
+*/
+const FAITH =
+  /\b(god|allah|jesus|christ|lord|holy spirit|bible|quran|qur'an|koran|church|mosque|pastor|imam|priest|deacon|fellowship|prayer|pray(ing|ed|s)?|fast(ing|ed)?|anoint|blessing|blessed|testimony|faith|sin|repent|juju|chi|ori|orisha|babalawo|native doctor|shrine|ancestor)\b/;
+
+/*
+  Watching yourself, fluently, from a seat nothing reaches.
+
+  This is not somebody who cannot see the pattern. It is somebody who can
+  see it perfectly, name its origin, cite the mechanism — and has not moved
+  an inch in two years. The research calls the combination hyperreflexivity:
+  fusion and rumination as one thing, and it is a different animal from
+  avoidance. They are not hiding from the feeling. They are *narrating* it,
+  and the narration has become the place they live.
+
+  What keeps it running is a belief, not a deficit — that thinking about it
+  is how it gets solved. So understanding feels like progress, every pass
+  feels like work, and the person is genuinely productive at a task that
+  cannot finish.
+
+  Why this lands hard in Lagos in particular: the profile is the sharp,
+  well-read professional in a culture where open feeling is expensive and
+  competence is currency. Analysis is the socially permitted form of having
+  an emotion. "Let me explain what is happening to me" passes at a table
+  where "I am not okay" does not. So the smartest people get the most
+  fluent, and the most fluent get the most stuck, and everyone around them
+  reads it as being sorted.
+
+  The tell is not the analysis. It is the analysis *arriving with its own
+  conclusion already attached* — insight offered as a finished object, with
+  nothing asked of it.
+*/
+const SELF_NARRATION =
+  /\b(i know (that )?i|i know say|i sabi (say|why)|i dey aware|i understand why|i'm aware|i am aware|self[- ]aware|i've analy[sz]ed|i have analy[sz]ed|i reali[sz]e (that )?i|part of me knows|intellectually i|my therapist|attachment style|trauma response|childhood|coping mechanism|defen[cs]e mechanism|projecting|self[- ]sabotage)\b/;
+
+/*
+  The gap itself, said out loud. "I know … but I still —".
+
+  This is the strongest single signal in the whole detector, because it is
+  the person reporting the failure of their own method while using it.
+*/
+const INSIGHT_GAP =
+  /\b(i know|i sabi|i dey aware|i understand|i get it|i reali[sz]e|i'm aware|i am aware|even though i know|knowing this)\b[^.!?]{0,90}\b(but|still|and yet|yet i|anyway|regardless|e no dey change|e never change|nothing chang|i dey do am)/;
+
+/**
+ * Is this person watching themselves rather than being here?
+ *
+ * Exported for the same reason `nothingCanMove` is: the selector and the
+ * eval must not each keep a copy. A suite that asserts against its own regex
+ * passes while the product regresses.
+ */
+export function watchingConfidence(message: string): 0 | 1 | 2 {
+  const m = message.toLowerCase();
+  // They reported the failure of their own method while using it. Nothing
+  // else in the message is as informative as that.
+  if (INSIGHT_GAP.test(m)) return 2;
+  const markers = m.match(new RegExp(SELF_NARRATION, "g"))?.length ?? 0;
+  if (markers >= 2) return 2;
+  return markers >= 1 && (ANALYTICAL.test(m) || words(m) > 25) ? 1 : 0;
+}
+
+export function caughtWatchingSelf(message: string): boolean {
+  const m = message.toLowerCase();
+  if (INSIGHT_GAP.test(m)) return true;
+
+  /*
+    Analysis alone is not the condition — plenty of people reason their way
+    to something real. It is analysis *about oneself*, delivered whole.
+
+    Counting the markers rather than merely finding one, because the first
+    version wanted a marker plus either an analytical connective or length,
+    and missed "I understand that my self-sabotage is a defence mechanism and
+    I'm very self-aware about it, yet nothing changes" — nineteen words, no
+    "because", and three separate tells. Somebody reaching for two of these
+    in one breath is speaking the register; that is the signal, not the
+    sentence length.
+  */
+  const markers = m.match(new RegExp(SELF_NARRATION, "g"))?.length ?? 0;
+  if (markers >= 2) return true;
+  return markers >= 1 && (ANALYTICAL.test(m) || words(m) > 25);
+}
 const CATASTROPHE = /\b(always|never|everything|nothing|ruin|disaster|end of|i will fail|i go fail)\b/;
 const SELF_CRITIC = /\b(useless|stupid|failure|worthless|i'?m bad|i no good|weak)\b/;
 const PARTS = /\b(part of me|one side|half of me|i want to but|i wan but)\b/;
@@ -209,6 +310,88 @@ const TACTICS: Tactic[] = [
   },
 
   // ── Cognitive — a thinking trap, not a feeling problem ───────────────────
+  /*
+    The three moves for somebody watching themselves.
+
+    None of them interpret. That is the whole design: an interpretation is
+    another object for the watcher to pick up and turn over, and they are
+    already very good at that. Handing insight to somebody drowning in
+    insight is not help, it is more water.
+
+    They are ordered the way a person can actually receive them — name the
+    gap, then take the load off the thinking, then move something small.
+  */
+  {
+    id: "insight_is_not_change",
+    family: "observing",
+    /*
+      Say the true thing nobody says to them: the understanding is finished
+      and it did not work.
+
+      This has to be said without contempt. They did not fail at thinking —
+      they succeeded at it, completely, and the success is the trap. The
+      question at the end is the load-bearing part, and it is deliberately
+      one they cannot answer by understanding harder.
+    */
+    instruction:
+      "Tell them plainly that they already understand this, better than most people would — and that the understanding has not moved it, which is not their fault and is worth saying out loud. Do not add one new interpretation, not even a good one. End on the question that analysis cannot answer: what would they actually do tonight if they were never going to understand it? e.g. \"You don sabi this one finish. Wetin you go do tonight if the understanding no dey come?\"",
+    hold: "You already understand it. What would you do tonight if you never did?",
+    fits: (c) => caughtWatchingSelf(c.message),
+    /*
+      Both confident readings have to clear `exact_mirror`, which sits at 90
+      on turn one. That is the whole point of this tactic: the mirror is the
+      single thing this person has already had a thousand times, from every
+      friend who ever said "that sounds really hard". Saying their sharpest
+      words back to them is not contact here, it is the loop with better
+      manners.
+
+      A weak reading — one marker and a long sentence — stays below it. There
+      the mirror probably *is* the right move and this is a guess.
+    */
+    weight: (c) => [70, 86, 93][watchingConfidence(c.message)],
+    // It promises nothing and fixes nothing — it just stops pretending the
+    // next lap will be the one.
+    holdsWhenNothingMoves: true,
+  },
+  {
+    id: "postpone_the_loop",
+    family: "observing",
+    /*
+      Metacognitive therapy's actual move, and the counter-intuitive one:
+      the treatment for rumination is not better processing, it is less.
+      Not suppression — postponement. The thought is allowed, it simply is
+      not allowed *now*, and the belief that it must be handled immediately
+      is the thing being tested.
+
+      A named window matters. "Stop thinking about it" is a rule nobody can
+      keep and failing it becomes fresh evidence against themselves.
+    */
+    instruction:
+      "Do not solve it and do not explore it. Give them a time to think about it that is not now — a named window tomorrow, ten or fifteen minutes, and this exact worry is welcome in it. Make clear it is not banned, only postponed, and that nothing is lost by waiting because the thinking will keep. e.g. \"Park am. Tomorrow 7pm, fifteen minutes, e go still dey there.\"",
+    hold: "Not tonight. Tomorrow, fifteen minutes, and it will still be there.",
+    fits: (c) => caughtWatchingSelf(c.message) && c.ventCount >= 1,
+    weight: () => 80,
+  },
+  {
+    id: "felt_sense",
+    family: "observing",
+    /*
+      Gendlin. Go under the narrator.
+
+      The watcher lives in words, so the one place it cannot follow is the
+      part of the body that has not been worded yet. `body_map_drop_set`
+      asks where it sits; this asks something harder and more useful — what
+      it is like before there is a name for it, and it explicitly refuses
+      the tidy label, because a tidy label is how the watcher takes the
+      wheel back.
+    */
+    instruction:
+      "Take them under the words. Ask what the thing in their body is like before it has a name — its shape, weight, temperature, whether it moves. If they answer with a label like 'anxiety' or 'stress', gently say that is the word for it and ask what it is actually like. Never interpret what the sensation means. e.g. \"No be the name. Wetin e resemble — heavy? sharp? e dey move?\"",
+    hold: "Before the word for it: what is it like in there? Shape, weight, does it move?",
+    fits: (c) => caughtWatchingSelf(c.message),
+    weight: (c) => (c.body ? 88 : 76),
+    holdsWhenNothingMoves: true,
+  },
   {
     id: "socratic",
     family: "cognitive",
@@ -460,6 +643,53 @@ const TACTICS: Tactic[] = [
     holdsWhenNothingMoves: true,
   },
 
+  {
+    id: "faith_frame",
+    family: "narrative",
+    /*
+      The frame most of this market actually thinks in, and the one the
+      library had no move for.
+
+      `meaning_stance` is Frankl and it is the right answer when nothing can
+      move — a father's results, a death. But the ordinary register is not
+      terminal and it is everywhere: "I don dey pray since", "God's time is
+      the best", "I don't know if God is punishing me", "pastor said make I
+      fast". Without a move for it, a spiritual sentence got answered with a
+      cognitive worksheet — the WEIRD failure this file already names for
+      family obligation, unaddressed one domain over.
+
+      The clinical content is Pargament's religious coping, and specifically
+      the part that matters here: faith can be a place to rest, or it can
+      become one more examination somebody is failing. "If I had enough
+      faith this would have lifted by now" turns a comfort into a second
+      source of shame, on top of the thing that brought them. Naming that
+      without touching the theology is the whole move.
+
+      Four rules, and the reason each exists:
+
+      - Use only the name they used. God, Allah, chi, the universe. Never
+        introduce one, never swap one for another, never generalise it to
+        "your faith" — that is a stranger renaming the most personal thing
+        in the message.
+      - Never affirm and never doubt the belief. This product is not a
+        chaplain and it is not an atheist. Both readings lose half the room,
+        and the standard the Breaking Room already sets is that a line must
+        land for a Muslim, a Christian, a traditionalist and somebody who
+        thinks all of it is nonsense.
+      - Never prescribe practice. "Pray about it", "have you tried fasting",
+        "give it to God" — advice, presumption, and not ours to give.
+      - Never diagnose the belief as a coping mechanism. They did not ask.
+    */
+    instruction:
+      "They have brought their faith into this, so answer inside it rather than around it — using only the name they used for it, never one you introduce. Do not affirm it and do not question it; that is not what is being asked and both cost you the room. The one thing worth asking is what it is doing for them right now: whether it is somewhere they get to rest, or whether it has quietly become one more thing they are failing at — the enough-faith exam. Never prescribe practice, never say everything happens for a reason, never tell them what it means. e.g. \"You talk say you don dey pray since. When you pray about this one, e dey feel like rest, or e don turn another exam wey you dey fail?\"",
+    hold: "When you take this to God, is it somewhere to rest — or has it become one more thing to pass?",
+    fits: (c) => FAITH.test(c.message.toLowerCase()),
+    weight: () => 84,
+    // It asks nothing of the situation and nothing of the belief. When the
+    // ground is gone this still stands, because it only asks about now.
+    holdsWhenNothingMoves: true,
+  },
+
   // ── five traditions the library was missing ───────────────────────────────
 
   {
@@ -702,6 +932,29 @@ export function selectTactic(ctx: TacticContext): Tactic {
   */
   if (nothingCanMove(ctx.message)) {
     pool = pool.filter((t) => t.holdsWhenNothingMoves);
+  }
+
+  /*
+    Somebody already watching themselves does not get handed a mirror.
+
+    Same shape as the veto above, for the same reason: these are not moves
+    that merely rank lower here, they are moves that make it worse. Every one
+    of them is a request to think about the thought — which is the activity
+    the person cannot stop, performed with the app's blessing.
+
+    `socratic` was the live bug. It fires on ANALYTICAL at weight 70, so the
+    most fluent self-analysts in the product were reliably answered with one
+    more question to take away and turn over. Thirty-two tactics and the
+    library's honest response to "I know exactly why I do this and I still do
+    it" was to ask what the critical voice is trying to prove.
+
+    Kept deliberately small. `here_and_now` also fires on ANALYTICAL and
+    stays, because it goes to the belly rather than the argument — it was
+    always the right instinct, just outranked.
+  */
+  const FEEDS_THE_LOOP = new Set(["socratic", "thought_record", "double_standard"]);
+  if (caughtWatchingSelf(ctx.message)) {
+    pool = pool.filter((t) => !FEEDS_THE_LOOP.has(t.id));
   }
 
   const rank = (t: Tactic) => {

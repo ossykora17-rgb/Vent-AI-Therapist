@@ -16,6 +16,7 @@ import { MAX_TOKENS, classifyModelError, modelFailureReply } from "@/lib/vent/mo
 import { generateReply } from "@/lib/vent/providers";
 import { depthFor, depthBadge } from "@/lib/vent/depth";
 import { circleInvite, soundsAlone } from "@/lib/community/invite";
+import { BREAKING_LINES, nextQuestion, type Question } from "@/lib/vent/breaking";
 import { buildFlavour } from "@/lib/flavour/profile";
 import { withStore } from "@/lib/http/with-store";
 
@@ -453,6 +454,58 @@ async function handlePOST(request: Request) {
     }
   }
 
+  /*
+    THE BREAKING ROOM, offered — one question, and only when the room may ask.
+
+    Picked here rather than by the screen, and that is the entire safety model
+    of the feature. `canOpen` refuses on a crisis turn, refuses on the
+    unfixable, refuses to a stranger, and refuses off-cadence; a client that
+    chose its own question would be a client that can ask somebody whose
+    father is dying who they are pretending to be. So the server reads the
+    turn count and the asked-list it already owns, decides, and sends either
+    one question or nothing at all.
+
+    Never beside the circle invite. Two doors on one reply is not depth, it is
+    a menu — and the circle wins that contest every time, because somebody who
+    has just said they are alone needs a room with people in it more than they
+    need a hard question.
+
+    Deliberately after `tryPersist`: a question offered on a turn that was not
+    recorded would be asked again on the next one, since `turnsToday` is the
+    count this read.
+
+    And shut outright when the store cannot say what has been asked.
+
+    `getBreaking` returns null for that, distinct from `[]`, and the
+    distinction is load-bearing: a deployment with 0015 pending reads the
+    column as an error, and an error rendered as an empty list makes every
+    question look unasked. It would offer the shallowest question, fail to
+    keep the answer, and offer the same one again on the next cadence turn,
+    forever. Somebody asked the same question twice has learned the room was
+    not listening the first time.
+
+    So: no answer means no question. The room does not guess.
+  */
+  let breaking: Question | null = null;
+  if (store && userId && turnsToday !== null && !invite) {
+    try {
+      const answered = await store.getBreaking(userId);
+      breaking =
+        answered === null
+          ? null
+          : nextQuestion({
+              message: input.message,
+              // The count read before this vent was written, plus this one.
+              // Off by one against `canOpen`'s floor is a question arriving a
+              // turn early, which is the direction that matters here.
+              ventCount: turnsToday + 1,
+              asked: answered.map((entry) => entry.q),
+            });
+    } catch {
+      breaking = null;
+    }
+  }
+
   // Composed here and nowhere earlier, because the sentence it adds makes a
   // claim about the line directly above it. `saved` is what `tryPersist`
   // returned, not what the deployment looked capable of.
@@ -511,6 +564,24 @@ async function handlePOST(request: Request) {
       depthBadge: tokensSpent ? depthBadge(verdict) : null,
       /** A real open room, or null. Never prose — the UI renders a link. */
       circleInvite: invite,
+      /**
+       * One heavy question, chosen by the server, or null.
+       *
+       * Hand-written and picked from a fixed bank, so like the circle invite
+       * there is nothing here a model could have invented. The UI renders it
+       * as an offer with a visible no.
+       */
+      breaking: breaking && {
+        id: breaking.id,
+        text: breaking.text,
+        // The room's own words, sent rather than imported.
+        //
+        // `lib/vent/breaking` pulls in `classify` and `nothingCanMove`, which
+        // is `intent.ts` and the whole 33-tactic library — four short strings
+        // are not worth putting that in every visitor's first load. The same
+        // argument that keeps `livekit-client` inside the join handler.
+        lines: BREAKING_LINES,
+      },
       provider: answeredBy,
       persisted: saved,
       storage: store?.kind ?? "none",

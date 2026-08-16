@@ -21,7 +21,7 @@ import { app, ROOT } from "./app-imports.mjs";
 
 const { classify } = await app("src/lib/vent/intent.ts");
 const { groundNow } = await app("src/lib/vent/grounding.ts");
-const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS, ALL_TACTICS, nothingCanMove } =
+const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS, ALL_TACTICS, nothingCanMove, caughtWatchingSelf } =
   await app("src/lib/vent/tactics.ts");
 const { buildFlavour } = await app("src/lib/flavour/profile.ts");
 const { flavourBlock, openingBlock, carveBlock } = await app("src/lib/vent/prompt.ts");
@@ -36,8 +36,11 @@ const { guardianVerdict, THRESHOLD } = await app("src/lib/external/guardian.ts")
 // The campfire's own lines, imported once so no check keeps a copy of them.
 const { MYCELIUM: MYCELIUM_RULE } = await app("src/lib/circles/rules.ts");
 const { noModelKeyReply } = await app("src/lib/vent/fallback.ts");
+const { REFERRALS, STALE_AFTER_DAYS, HANDOFF_FLOOR, activeReferrals, pastWhatThisHolds, handoffLine } =
+  await app("src/lib/vent/referrals.ts");
 const { allProviders, configuredProviders, openAiCompatible } =
   await app("src/lib/vent/providers.ts");
+const { wasCutOff, MAX_TOKENS } = await app("src/lib/vent/model.ts");
 
 const BASE = (process.argv[2] || "").replace(/\/$/, "");
 
@@ -2276,6 +2279,30 @@ check("24 The system prompt has a budget, and every block earns its place", () =
   ok(tokens > 1800, "and it has not silently lost half its content", `${tokens}`);
 
   /*
+    Two things the prompt must never start doing, both of which arrived as
+    reasonable-sounding suggestions in a persona spec.
+
+    A crisis number belongs to a country. 988 is the US line and does not
+    dial from Lagos, so a prompt that hands it to somebody at their lowest
+    has given them a busy tone instead of a person. Check 17 makes the
+    Nigerian number impossible to hand-write; this makes a foreign one
+    impossible to introduce. Routing stays where it already is — local, free,
+    and ahead of the model.
+
+    And the product cannot call itself a therapist. Four US states now ban
+    AI-delivered therapy outright and four more regulate it; more to the
+    point, it is not true. The prompt may describe the training it writes
+    like — that is a simile, and the line under it disclaims plainly.
+  */
+  const FOREIGN_LINES = /\b(988|911|999|116 123|1-?800-?273-?8255)\b/;
+  ok(!FOREIGN_LINES.test(heaviest),
+    "the prompt hands out no crisis number from another country",
+    "crisis routing is local and imported — a US hotline is a busy tone from Lagos");
+  ok(!/\b(you are|i am) (a|the) (licensed )?(therapist|psychologist|counsell?or|shrink)\b/i.test(heaviest),
+    "and never tells the model it is a therapist",
+    "banned in four states, regulated in four more, and untrue in all of them");
+
+  /*
     The three assembled blocks share one set of rules rather than each
     carrying its own.
 
@@ -3880,10 +3907,22 @@ check("41 A drifted table names every column it is missing", () => {
   ok(health.indexOf("const drifted") > health.indexOf("for (const [i, res] of results.entries())"),
     "after the cheap pass, never instead of it");
 
-  // And the contract still names both columns, so the next drift is caught.
+  /*
+    And the contract still names both columns, so the next drift is caught.
+
+    Asserted per column rather than against the whole select list, which is
+    what this was and which failed the moment 0015 added a third one. That is
+    the same shape as the bug the check exists for: an assertion pinned to the
+    author's snapshot, failing on a change it has no opinion about. It should
+    say "carve and held are still asked for" — it should not say "and nothing
+    else ever will be".
+  */
   const contract = fs.readFileSync(path.join(ROOT, "src/lib/store/contract.ts"), "utf8");
-  ok(/vent_users: "id,anon_id,carve,held,created_at"/.test(contract),
-    "the contract still asks for both of the columns production was missing");
+  const ventUsers = contract.match(/vent_users: "([^"]+)"/)?.[1].split(",") ?? [];
+  for (const col of ["carve", "held"]) {
+    ok(ventUsers.includes(col),
+      `the contract still asks for ${col} — the column production was missing`);
+  }
 
   /*
     A red light over a working road.
@@ -4001,8 +4040,8 @@ check("42 Every provider in the chain is named on the privacy page", () => {
 // not select gentler questions, it selects none. A gate, not a weight —
 // weights lose contests, and there is no acceptable turn on which this one
 // loses.
-const { QUESTIONS, WITHHELD, canOpen, nextQuestion, BREAKING_FLOOR, BREAKING_LINES } =
-  await app("src/lib/vent/breaking.ts");
+const { QUESTIONS, WITHHELD, canOpen, nextQuestion, BREAKING_FLOOR, BREAKING_EVERY,
+        BREAKING_LINES } = await app("src/lib/vent/breaking.ts");
 
 check("43 The breaking room stays shut on the people it could hurt", () => {
   const base = { ventCount: 12, asked: [] };
@@ -4104,9 +4143,257 @@ check("43 The breaking room stays shut on the people it could hurt", () => {
   ok(BREAKING_LINES.declined.length > 0 && !/\?/.test(BREAKING_LINES.declined),
     "and a no is answered without asking again");
 
+  /*
+    And a cadence, so a door that may open does not open on every turn.
+
+    A question this size arriving after every message is not depth — it is a
+    door that will not stay shut, and the person it wears down fastest is the
+    one having the worst week. Asserted over a real span of turns rather than
+    at the two points the implementation happens to hit.
+  */
+  const opens = [];
+  for (let turn = 1; turn <= 20; turn++) {
+    if (canOpen({ message: "rent is due again and i never tell anybody", ventCount: turn, asked: [] })) {
+      opens.push(turn);
+    }
+  }
+  ok(opens.length > 0, "the room does open", `turns ${opens.join(", ")}`);
+  ok(opens.every((t) => t >= BREAKING_FLOOR), "never below the floor", `${opens[0]}`);
+  ok(opens.length <= Math.ceil(20 / BREAKING_EVERY),
+    "and not on every turn — asking is rationed", `${opens.length} of 20`);
+  for (let i = 1; i < opens.length; i++) {
+    ok(opens[i] - opens[i - 1] >= BREAKING_EVERY,
+      `at least ${BREAKING_EVERY} turns between asks (${opens[i - 1]} → ${opens[i]})`);
+  }
+  ok(BREAKING_EVERY >= 2, "and the gap is a real gap", `${BREAKING_EVERY}`);
+
+  /*
+    The cadence is taste; the gates are not. A crisis message must not open
+    the room on a turn the cadence likes, which is the interaction a modulo
+    invites somebody to get wrong later.
+  */
+  for (const turn of opens) {
+    is(canOpen({ message: "i want to kill myself", ventCount: turn, asked: [] }), false,
+      `crisis still closes it on an on-cadence turn (${turn})`);
+  }
+
   // Free, like everything else that is not a vent.
   const src = fs.readFileSync(path.join(ROOT, "src/lib/vent/breaking.ts"), "utf8");
   ok(!/fetch|generateReply|await /.test(src), "the room costs nothing to open");
+});
+
+// ── 44. and the wiring, which is where the room could still hurt somebody ──
+//
+// Check 43 holds the module: which questions exist, who they are refused to,
+// and how often. All of it is true of a function nobody calls.
+//
+// This is the other half — the four places between that function and a person,
+// each of which has a way of quietly undoing it:
+//
+//   the route   files an answer without checking the sentence in it
+//   the picker  moves to the client, where a crisis turn cannot stop it
+//   the screen  says "thank you for trusting me" over a write that failed
+//   the store   loses the asked-list, and the room re-asks what was answered
+//
+// Every one of those is a shape this repo has already shipped once under a
+// different name. The last one is the `"I've saved it, word for word"` bug and
+// the third is `void seal(w)`; they are here by name rather than by category
+// because a category is not a check.
+check("44 The Breaking Room is wired the way the module is written", () => {
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/breaking/route.ts"), "utf8");
+  const vent = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
+  const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
+  const types = fs.readFileSync(path.join(ROOT, "src/lib/store/types.ts"), "utf8");
+  const contract = fs.readFileSync(path.join(ROOT, "src/lib/store/contract.ts"), "utf8");
+  const sql = fs.readFileSync(path.join(ROOT, "supabase/APPLY.sql"), "utf8");
+
+  /*
+    ── the route ────────────────────────────────────────────────────────────
+    "Which of your parents hurt you pass" can be answered with the worst
+    sentence of somebody's life. Same rule as /api/held, and the ordering is
+    the whole of it: routed BEFORE the write, never flagged after it.
+  */
+  ok(/classify\(/.test(route) && /intent === "crisis"/.test(route),
+    "an answer is routed for crisis");
+  const crisisIdx = route.indexOf('intent === "crisis"');
+  const writeIdx = route.indexOf("addBreaking");
+  ok(crisisIdx > 0 && writeIdx > 0 && crisisIdx < writeIdx,
+    "and routed before it is stored, not after");
+  ok(!/generateReply|providers/.test(route), "no model is in this path at all");
+
+  // A caller does not get to invent a question. An id the bank does not know
+  // would sit in the asked-list forever and mean nothing to `nextQuestion`.
+  ok(/QUESTIONS\.some\([^)]*\)/.test(route) && /status: 422/.test(route),
+    "an unknown question id is refused");
+  const idCheck = route.indexOf("QUESTIONS.some");
+  ok(idCheck > 0 && idCheck < writeIdx, "before the write, like everything else");
+
+  /*
+    ── the picker ───────────────────────────────────────────────────────────
+    Chosen on the server, from a count and an asked-list the server read. A
+    client that picks its own question is a client that can ask somebody in
+    crisis about their father — `canOpen` is only a gate if the thing it gates
+    runs behind it.
+  */
+  ok(/nextQuestion\(/.test(vent), "the vent route is what picks the question");
+  ok(!/nextQuestion|QUESTIONS|BREAKING_FLOOR/.test(chat),
+    "and the screen never picks one, or imports the bank to try");
+  ok(!/from "@\/lib\/vent\/breaking"/.test(chat),
+    "the client does not pull the module in — it costs intent.ts and 33 tactics");
+  ok(/lines: BREAKING_LINES/.test(vent),
+    "so the room's own words come down the wire instead");
+
+  /*
+    ── the screen ───────────────────────────────────────────────────────────
+    `void seal(w)` followed by "Sealed. Nothing here is kept." is the sharpest
+    failure in CLAUDE.md: a sentence written before its answer arrived. "Thank
+    you for trusting me with that one" over a dropped answer is the same
+    sentence in the one place it would hurt most.
+  */
+  const answerFn = chat.slice(chat.indexOf("async function answerBreaking"));
+  const body = answerFn.slice(0, answerFn.indexOf("\n  function submit"));
+  ok(/await fetch\("\/api\/breaking"/.test(body), "the answer is actually sent");
+  ok(/data\?\.saved \? [\w.]*received : [\w.]*unsaved/.test(body),
+    "and which line they get is decided by the server's boolean");
+  ok(/lines\.unsaved/.test(body) && /catch/.test(body),
+    "a throw gets the honest line too, never the thank-you");
+  ok(body.indexOf("data?.saved") < body.indexOf("received"),
+    "the claim comes after the answer, not before it");
+  ok(/setCrisis|setGated/.test(body),
+    "and a crisis answer hands them the line rather than filing it");
+
+  // One composer, two destinations — and the box says which one it is on.
+  // Without that, somebody who accepted, got distracted, and came back types
+  // an unrelated vent straight into their own record as an answer.
+  ok(/if \(answering\) return void answerBreaking/.test(chat),
+    "while a question is open the composer answers it");
+  ok(/placeholder=\{answering \?/.test(chat),
+    "and the box says so, rather than looking identical either way");
+  ok(/Leave it|leave it/.test(chat), "with a way out that is not answering");
+
+  /*
+    And the card can actually render.
+
+    It was guarded `offer && !gated && !askMood && !answering`, which reads
+    like restraint and is a contradiction: `askMood` is set on every vent
+    turn, and a vent turn is the only kind that produces an offer. The
+    condition was true of the code and false of anything a person would ever
+    see — the entire feature was unreachable, and every assertion above this
+    one still passed.
+
+    No check can prove a React tree paints. This one holds the guard to the
+    two states it is allowed to name, which is the part that was wrong.
+  */
+  const card = chat.slice(chat.indexOf("{offer &&"), chat.indexOf("{offer &&") + 60);
+  ok(!/askMood/.test(card),
+    "the offer does not wait on a flag that is always set when it exists", card.trim());
+  ok(/\{askMood && !offer && !answering &&/.test(chat),
+    "it is the mood check that waits, and only while a question is on the table");
+  const accept = chat.slice(chat.indexOf("function acceptBreaking"));
+  // Comments stripped, or this reads the paragraph explaining the bug and
+  // reports the bug. The check is about the code.
+  const acceptCode = accept
+    .slice(0, accept.indexOf("function declineBreaking"))
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  ok(!/setAskMood\(false\)/.test(acceptCode),
+    "and accepting a question never cancels the measurement — it defers it");
+
+  /*
+    ── the store ────────────────────────────────────────────────────────────
+    The asked-list is the only thing standing between somebody and being asked
+    the same question twice, so one id appears once however many times it is
+    answered — otherwise the cap evicts the record that it was ever asked.
+  */
+  ok(/export const BREAKING_CAP = \d+;/.test(types), "the cap is a named constant");
+  for (const backend of ["file-store.ts", "supabase-store.ts"]) {
+    const b = fs.readFileSync(path.join(ROOT, "src/lib/store", backend), "utf8");
+    ok(/addBreaking/.test(b) && /getBreaking/.test(b),
+      `${backend} implements both halves`);
+    ok(/filter\(\(e\) => e\.q !== q\)/.test(b),
+      `${backend} keeps one row per question, so an id is never evicted twice over`);
+    ok(/BREAKING_CAP/.test(b), `${backend} trims to the shared cap, not its own number`);
+    // Both backends distinguish the two answers, or they diverge — and a
+    // divergence here is a room that opens on a laptop and stays shut in
+    // production, which is the failure this whole repo is organised against.
+    ok(/getBreaking\(userId: string\): Promise<BreakingAnswer\[\] \| null>/.test(b),
+      `${backend} can say "could not read" as well as "nothing yet"`);
+  }
+
+  /*
+    ── unreadable is not empty ──────────────────────────────────────────────
+    The shape this feature would have shipped with, and the one it shares with
+    every entry in CLAUDE.md's list: a failure returning the same value as a
+    success.
+
+    `getBreaking` returning `[]` on a 42703 makes every question look unasked.
+    A deployment with 0015 pending would then offer the shallowest question,
+    fail to keep the answer, and offer the same question again on the next
+    cadence turn — forever. Somebody asked the same question twice has learned
+    the room was not listening the first time.
+
+    Production is what a fresh Vercel project is: the one configuration
+    nothing here runs. It is also the one this would have happened in.
+  */
+  ok(/BreakingAnswer\[\] \| null/.test(types),
+    "the interface itself distinguishes 'nothing yet' from 'could not read'");
+  ok(/answered === null/.test(vent),
+    "and the vent path keeps the room shut when the store cannot say");
+  const store = fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8");
+  const add = store.slice(store.indexOf("async addBreaking"));
+  ok(/existing === null/.test(add.slice(0, 900)),
+    "a write never overwrites a column it could not read");
+
+  /*
+    And the write reports the write.
+
+    An update whose `eq` matches no row is not an error in PostgREST — no rows
+    change, `error` is null, and a bare update returns true. "Thank you for
+    trusting me with that one" over a row that was never touched is `void
+    seal(w)` again, in the place it would cost the most.
+  */
+  for (const fn of ["addBreaking", "addHeld"]) {
+    const body = store.slice(store.indexOf(`async ${fn}`));
+    const upto = body.slice(0, body.indexOf("catch (e)"));
+    ok(/\.select\("id"\)/.test(upto),
+      `${fn} asks which rows it changed`);
+    ok(/\(data\?\.length \?\? 0\) > 0/.test(upto),
+      `${fn} returns that, not the absence of an error`);
+  }
+
+  // On vent_users, so `deleteAll` takes it with the person and no delete path
+  // has to remember a fourth place. Same argument as the carve and the held.
+  ok(/vent_users[\s\S]{0,400}?add column if not exists breaking jsonb/.test(sql),
+    "the column exists in the SQL a person actually runs");
+  ok(/vent_users: "[^"]*\bbreaking\b[^"]*"/.test(contract),
+    "and the contract names it, so /api/health notices a deployment without it");
+
+  /*
+    ── the hand-back ────────────────────────────────────────────────────────
+    The only reason these are stored. A question answered into a void is a
+    question that was never worth asking — worse than never asked, because now
+    they know the room was not listening. If nothing reads them back, the
+    migration's comment is a promise the code does not keep.
+  */
+  const history = fs.readFileSync(path.join(ROOT, "src/components/history-list.tsx"), "utf8");
+  ok(/fetch\(`\/api\/breaking\?anonId=/.test(history),
+    "the answers are read back somewhere a person can see them");
+  ok(/\{entry\.a\}/.test(history), "and it is their words that are shown");
+
+  /*
+    And gone when they say gone.
+
+    `deleteAll` drops the vent_users row, so every jsonb column on it goes
+    with the person — which is the whole argument for keeping them there. But
+    the screen kept rendering what it had already fetched, over a toast
+    reading "All cleared. Fresh start." A promise kept in the database and
+    broken on the screen is the one a person actually experiences.
+  */
+  const wipe = history.slice(history.indexOf("async function clearAll"));
+  const wipeBody = wipe.slice(0, wipe.indexOf("function exportJson"));
+  for (const cleared of ["setRows([])", "setHeld([])", "setAnswers([])", "setPattern(null)"]) {
+    ok(wipeBody.includes(cleared),
+      `"Delete everything" clears ${cleared.replace(/\(.*/, "")} on the screen too`);
+  }
 });
 
 // ── 37. a class that compiles to nothing ──────────────────────────────────
@@ -4416,6 +4703,594 @@ if (BASE) {
     }
   });
 }
+
+check("45 A reply is allowed to finish its sentence", () => {
+  /*
+    The bug this closes reached a real person mid-sentence: "...before
+    planning the next play. If you".
+
+    Nothing here could have caught it. Check 14 stubs `fetch`, which is the
+    right instrument for the OpenAI-compatible adapter and structurally blind
+    to the Anthropic one — that path goes through the SDK, so there is no
+    fetch to stub. And the live checks run with no ANTHROPIC_API_KEY, so the
+    adapter is never executed at all. The shape with no key is again the one
+    shape nothing runs.
+
+    So this check does not execute the adapter. It reads how the adapter is
+    *wired*, the way check 16 reads a select list rather than issuing the
+    query, and it asserts the shared rule against the real exported function
+    rather than a copy of it.
+  */
+  const src = fs.readFileSync(path.join(ROOT, "src/lib/vent/providers.ts"), "utf8");
+
+  /*
+    The Anthropic call, from `async send(` to the end of that object literal.
+    Scoped deliberately: `temperature` is legal in the OpenAI-compatible
+    adapter two hundred lines up, and a whole-file grep would fail on it.
+  */
+  const anthropic = src.slice(src.indexOf("function anthropicProvider"));
+  ok(anthropic.length > 0, "the Anthropic adapter is findable in providers.ts",
+    "renamed? this check is scoped to `function anthropicProvider`");
+  /*
+    Code only, comments stripped.
+
+    The first version of this failed on the comment *inside the call* that
+    explains why `temperature` was removed — a check tripping over its own
+    postmortem, which is precisely what check 37 says it learned and what
+    check 35 learned before that. Third time in one file. Scan what runs.
+  */
+  const call = anthropic
+    .slice(anthropic.indexOf("messages.create("), anthropic.indexOf("const text"))
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+
+  /*
+    Thinking must be stated, not left to the default.
+
+    This is the whole bug in one assertion. Omitting `thinking` does not mean
+    "no thinking" on claude-sonnet-5 and the Opus-5 family — it means
+    adaptive, which is on. max_tokens then caps the reasoning and the speech
+    together, and the person reads half a sentence. An adapter that does not
+    say which it wants has already chosen the expensive one.
+  */
+  ok(/thinking\s*:/.test(call),
+    "the Anthropic call states a `thinking` mode rather than inheriting the default",
+    "unset means adaptive on this model family — the reply is billed for reasoning and truncated by it");
+
+  /*
+    Sampling parameters are a 400 on this model family, not a nudge. A
+    refused request is invisible from the outside: the chain simply answers
+    from further down and every reply looks like somebody else's.
+  */
+  for (const param of ["temperature", "top_p", "top_k"]) {
+    ok(!new RegExp(`\\b${param}\\s*:`).test(call),
+      `the Anthropic call sends no ${param}`,
+      `non-default sampling parameters are rejected with a 400 on claude-sonnet-5 / the Opus 5 family`);
+  }
+
+  /*
+    Both adapters ask the same question, and neither keeps its own answer.
+    The OpenAI path had a local copy that only refused replies under twelve
+    words — a rule that reads as "a stub is bad" and means "a long reply cut
+    mid-sentence is fine". The reply that shipped was fifty-two words.
+  */
+  const guards = src.match(/wasCutOff\(/g) || [];
+  is(guards.length, 2, "both adapters call the shared wasCutOff()");
+  ok(!/finish_reason\s*===\s*"length"\s*&&/.test(src),
+    "no adapter re-implements the cut-off rule with its own extra condition",
+    "a second copy of this rule is how the guard passed while the product regressed");
+
+  // The ceiling has to leave room for the thing it is a ceiling on. Four warm
+  // sentences is ~150 tokens; 220 was the number that truncated in production.
+  ok(MAX_TOKENS >= 400, `MAX_TOKENS (${MAX_TOKENS}) leaves room for a whole reply`,
+    "a ceiling is not a purchase — unused headroom is never billed");
+
+  /*
+    And the rule itself, from the module the product imports.
+
+    A reply that hit the ceiling and still lands on a full stop is a complete
+    thought that ended at the edge; that one ships. Everything else is the
+    model being interrupted.
+  */
+  ok(wasCutOff("Spend five seconds noticing the room you are in. If you", true),
+    "a sentence cut mid-clause at the ceiling is refused");
+  /*
+    "Tired. Na" is the fragment from this file's own postmortem — 217 tokens
+    of silent reasoning, three tokens of reply, in front of somebody who had
+    just written that they were tired. It ends on "Na", not on a full stop,
+    so it is refused. Keeping it here by name means the rule is tested
+    against the sentence that caused it.
+  */
+  ok(wasCutOff("Tired. Na", true),
+    "the original truncated reply is refused, not published");
+  ok(wasCutOff("Na wa. That one heavy.", true) === false,
+    "a short reply that does land on a full stop still ships");
+  ok(wasCutOff("...before planning the next play. If you", false) === false,
+    "a reply that never hit the ceiling is never second-guessed");
+  ok(wasCutOff("Where did the weight land?", true) === false,
+    "a question mark ends a sentence too");
+  ok(wasCutOff('He said "the rent is due."', true) === false,
+    "so does a full stop inside a closing quote");
+});
+
+check("46 The always-visible line says it is an AI, and says it once", () => {
+  /*
+    Check 17 made the crisis *number* impossible to hand-write. The sentence
+    carrying that number was still typed out twice — chat footer and landing
+    footer — identical by luck, already drifted in whitespace. Same class of
+    bug, one layer up, and the check that caught the number could not see it.
+
+    It also omitted the disclosure that matters most. VENT says it out loud
+    when asked, and on the terms page. The line somebody actually reads at 2am
+    said only that Mind Weave is not a licensed therapist — true, and quiet
+    about the part a person is owed regardless of jurisdiction: the thing
+    answering is not a person.
+
+    As of 2026 four US states ban AI-delivered therapy outright and four more
+    require exactly this disclosure. That is not why the line is there — a
+    person deserves to know either way — but it does mean the omission was
+    the kind of thing that gets a product pulled rather than merely criticised.
+  */
+  const HOME = "src/components/disclaimer.tsx";
+  const raw = fs.readFileSync(path.join(ROOT, HOME), "utf8");
+
+  /*
+    Code only. The first draft of this check asserted against the raw file and
+    passed a mutation that stripped the disclosure out of the rendered
+    sentence — because the word "AI" still appeared in the comment above
+    explaining why the disclosure is there.
+
+    That is the third time in this file, and the second time in this session:
+    check 35 learned it, check 37 recorded learning it, check 45 has a comment
+    about learning it, and this one still did it. A prose explanation of a rule
+    is not the rule. Scan what runs.
+  */
+  const home = raw.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+  // The disclosure itself, in the one place it lives.
+  ok(/\bAI\b/.test(home), "the shared disclaimer says it is an AI");
+  ok(/not a person/i.test(home), "and that it is not a person");
+  ok(/not a licensed therapist/i.test(home), "and that it is not a licensed therapist");
+  ok(/not medical advice/i.test(home), "and that it is not medical advice");
+  ok(/CRISIS_TEL/.test(home) && /EMERGENCY_TEL/.test(home),
+    "and it reaches for the derived dial strings, never a typed number");
+
+  /*
+    Nobody else writes that sentence. A second copy is how the first one
+    drifted, and a surface that renders its own wording is a surface that can
+    quietly drop the disclosure — which is precisely what happened.
+  */
+  const walk = (dir) =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) return walk(full);
+      return /\.tsx$/.test(e.name) ? [full] : [];
+    });
+
+  const TERMS = path.join(ROOT, "src/app/terms/page.tsx");
+  const offenders = walk(path.join(ROOT, "src"))
+    .filter((f) => f !== path.join(ROOT, HOME) && f !== TERMS)
+    .filter((f) => /not a licensed therapist/i.test(fs.readFileSync(f, "utf8")))
+    .map((f) => path.relative(ROOT, f));
+
+  is(offenders.length, 0,
+    `only ${HOME} and the terms page write the disclaimer${offenders.length ? `: also ${offenders.join(", ")}` : ""}`);
+
+  /*
+    And both places a person can start from actually render it. A shared
+    component nobody mounts is a disclosure that does not exist — the same
+    failure as a health probe that does not take the road.
+  */
+  for (const surface of ["src/app/page.tsx", "src/components/chat/vent-chat.tsx"]) {
+    const text = fs.readFileSync(path.join(ROOT, surface), "utf8");
+    ok(/<Disclaimer\b/.test(text), `${surface} renders <Disclaimer />`,
+      "the footer is the line somebody reads at 2am — it cannot be optional");
+  }
+
+  // The terms page is allowed its own longer wording, but not a weaker one.
+  const terms = fs.readFileSync(TERMS, "utf8");
+  ok(/\bit is an ai\b/i.test(terms) || /\bAI\b/.test(terms),
+    "the terms page discloses the AI too");
+});
+
+check("47 The one who is already watching is not handed a mirror", () => {
+  /*
+    The person this protects can see the whole pattern, name its origin, cite
+    the mechanism — and has not moved in two years. Research calls the
+    combination hyperreflexivity, and what sustains it is a belief rather
+    than a deficit: that thinking about it is how it gets solved. So every
+    pass feels like work.
+
+    Which made the library's honest answer to "I know exactly why I do this
+    and I still do it" a bug: `socratic` fires on ANALYTICAL at weight 70, so
+    the most fluent self-analysts in the product were reliably handed one
+    more question to take away and turn over.
+  */
+  const WATCHING = [
+    "I know exactly why I do this, it's an attachment thing from childhood, but I still do it every time",
+    "I understand that my self-sabotage is a defence mechanism and I'm very self-aware about it, yet nothing changes",
+    "My therapist said it's a trauma response and logically I get it, but I'm still stuck",
+    "I dey aware say na my childhood cause am, e no dey change anything",
+  ];
+  // Ordinary heaviness. A person venting is not a person analysing, and
+  // treating them as one would be its own kind of insult.
+  const PLAIN = [
+    "work don tire me, rent due and i no fit talk to anybody",
+    "i just dey vex today, everything dey heavy",
+    "my oga shouted at me in front of everyone and i wanted to disappear",
+  ];
+
+  for (const m of WATCHING) ok(caughtWatchingSelf(m), `caught: "${m.slice(0, 44)}…"`);
+  for (const m of PLAIN) {
+    ok(!caughtWatchingSelf(m), `not caught: "${m.slice(0, 44)}…"`,
+      "an ordinary vent must not be read as self-analysis");
+  }
+
+  // The three moves exist, and are their own family — filing them under
+  // "cognitive" would put them next to the moves they replace.
+  const observing = ALL_TACTICS.filter((t) => t.family === "observing").map((t) => t.id);
+  for (const id of ["insight_is_not_change", "postpone_the_loop", "felt_sense"]) {
+    ok(observing.includes(id), `${id} is in the observing family`);
+  }
+
+  /*
+    The assertion that matters: across a whole stuck conversation, not one
+    turn of it, nothing that asks them to think about the thought is ever
+    selected. One turn would prove almost nothing — the three-turn block
+    moves the selection every time, and the bug would simply arrive on turn
+    two.
+  */
+  const FEEDS_THE_LOOP = ["socratic", "thought_record", "double_standard"];
+  for (const m of WATCHING) {
+    const recent = [];
+    for (let turn = 1; turn <= 4; turn++) {
+      const t = selectTactic({
+        ...classify(m), message: m, pressure: 70, duality: null, mood: null,
+        ventCount: turn, recentTactics: [...recent], body: turn > 2 ? "chest" : null,
+      });
+      ok(!FEEDS_THE_LOOP.includes(t.id),
+        `turn ${turn} does not answer analysis with analysis (${t.id})`,
+        "handing insight to somebody drowning in insight is more water");
+      recent.push(t.id);
+    }
+    // And the first thing said is the true thing nobody says to them.
+    ok(recent[0] === "insight_is_not_change",
+      `opens by naming that the understanding did not move it (${recent[0]})`);
+  }
+});
+
+check("48 No screen says it happened without reading the answer", () => {
+  /*
+    The second of this project's two recurring mechanisms, and the one with
+    no gate on it. CLAUDE.md lists three faces already — `void seal(w)`
+    followed by "Sealed", `submitMood` toasting "Saved. That's the anchor."
+    with no request at all, and `persisted: false` nested where nobody saw
+    it. Each was fixed where it was found. None of them stopped the next one.
+
+    Four more were sitting in the app while that list was being written:
+    a delete that said "Deleted." without checking anything, a clipboard
+    write that said "Copied." on a promise it discarded, a feedback post
+    thanking people for ratings the rate limiter had just dropped, and a
+    full wipe that removed the anon id — the only key that reaches those
+    rows — before knowing whether the wipe happened.
+
+    So: a success toast standing downstream of a request has to have read
+    something. Deliberately coarse. It cannot tell a real check from a
+    decorative one, and it will not catch a claim phrased as a card instead
+    of a toast. What it does catch is the exact shape that has now shipped
+    seven times — ask, assume, announce.
+  */
+  const walk = (dir) =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) return walk(full);
+      return /\.tsx$/.test(e.name) ? [full] : [];
+    });
+
+  const offenders = [];
+  for (const file of walk(path.join(ROOT, "src"))) {
+    const lines = fs.readFileSync(file, "utf8").split("\n");
+    lines.forEach((line, i) => {
+      /*
+        Anchored on the severity, not on `toast(`.
+
+        The first version required both on one line and therefore could not
+        see a multi-line call — which is the shape the circle close uses, the
+        single bug CLAUDE.md calls the sharpest this product ever shipped.
+        That one is correct today, and the check written to protect it was
+        walking straight past it.
+      */
+      if (!/"success"/.test(line)) return;
+      // Confirm it is a toast and not some other "success" string.
+      const near = lines.slice(Math.max(0, i - 6), i + 1).join("\n");
+      if (!/toast\(/.test(near)) return;
+
+      // The claim's neighbourhood: far enough back to hold the request it
+      // is reporting on, near enough not to borrow another function's check.
+      const from = Math.max(0, i - 30);
+      const before = lines.slice(from, i + 1).join("\n");
+      if (!/\bfetch\(/.test(before)) return; // nothing was asked; nothing to read
+      const read =
+        /\.ok\b/.test(before) ||
+        /\bstatus\b/.test(before) ||
+        /\b(body|data|d)\??\.(deleted|saved|anchored|ok)\b/.test(before) ||
+        /*
+          A toast whose message is chosen by a ternary has read something to
+          choose with. `seal(w).then((sealed) => toast(sealed ? … : …))` is
+          the canonical form: the request's own answer picks the sentence.
+        */
+        /\?[^\n]*\n?[^\n]*:/.test(near);
+      if (!read) {
+        offenders.push(`${path.relative(ROOT, file)}:${i + 1}`);
+      }
+    });
+  }
+
+  is(offenders.length, 0,
+    "every success message downstream of a request has read the response",
+    offenders.join(", "));
+
+  /*
+    And the sharpest instance, asserted by name, because a heuristic above
+    should never be the only thing holding the worst case.
+
+    A failed wipe that has already dropped the anon id leaves the data on the
+    server with nothing left that can reach it. Destroying the key to data
+    you did not delete is worse than not deleting it, so the removal must sit
+    after the answer.
+  */
+  /*
+    The offline queue, which is the only case where local storage is not a
+    convenience but the last copy.
+
+    `flushQueue` counted any 200 as sent and then cleared the queue — so a
+    reply the route marked `persisted: false` deleted words somebody wrote
+    with no connection. That shape is not hypothetical: production shows
+    PGRST303 clock skew on `circles` right now, and an insert that fails on
+    its way to Supabase returns exactly that.
+  */
+  const anon = fs
+    .readFileSync(path.join(ROOT, "src/lib/anon.ts"), "utf8")
+    // Code only. The first version of this assertion passed its own mutation
+    // because the comment explaining why `persisted` must be read contains
+    // the word "persisted". Fourth time in this file. Scan what runs.
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  const flush = anon.slice(anon.indexOf("export async function flushQueue"));
+  ok(/persisted/.test(flush.slice(0, flush.indexOf("return sent"))),
+    "the offline drain reads `persisted`, not just the status code",
+    "a 200 that saved nothing must not clear the last copy of somebody's words");
+
+  const history = fs.readFileSync(path.join(ROOT, "src/components/history-list.tsx"), "utf8");
+  const clear = history.slice(history.indexOf("async function clearAll"));
+  const dropId = clear.indexOf('removeItem("mw-anon-id")');
+  const readAnswer = clear.search(/if \(!res\.ok \|\| !body\)/);
+  ok(dropId > 0 && readAnswer > 0 && readAnswer < dropId,
+    "the anon id is dropped only after the server confirms the wipe",
+    "dropping it first strands undeleted rows behind a key nobody has");
+});
+
+check("49 The health probe asks as the identity that does the work", () => {
+  /*
+    The oldest bug in this repo, on its fourth arrival, in the endpoint built
+    to abolish it. CLAUDE.md lists three: `models.retrieve` reporting ok for a
+    week while every vent failed on billing; an anonymous probe reporting
+    `database: ok` under deny-by-default RLS; a HEAD request that could not
+    carry the error object it was asking for. All three are fixed in the file.
+
+    The fourth was hiding inside the fix for the second. The repair read
+    `createAdminClient() ?? (await createClient())` — and that `??` is the
+    anonymous client, restored, directly beneath a comment calling an
+    anonymous probe "the green light over the broken road, again".
+
+    It fired in a specific and very ordinary shape: a Supabase URL and an anon
+    key with no service-role key, which is what somebody has after pasting the
+    two values the dashboard shows first. `getStore()` builds only an admin
+    client, so that deployment persists nothing at all — and the probe fell
+    back to anon, received RLS's perfectly legitimate empty answer, and
+    reported the database healthy.
+
+    So the rule is not "use the admin client". It is that there is no second
+    client to fall back to. The only honest answers are "I asked as the
+    identity that does the work" and "I could not ask".
+  */
+  const src = fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+  ok(!/createAdminClient\(\)\s*\?\?/.test(code),
+    "the admin client has no fallback",
+    "`??` here substitutes a different role to get an answer — that is the bug, not the fix");
+  ok(!/\bcreateClient\b/.test(code),
+    "the anonymous server client is not reachable from this route at all",
+    "the strongest form of the rule: the wrong identity is not in scope");
+  ok(/no_service_key/.test(code),
+    "a probe that cannot run says so instead of reporting ok",
+    "configured, reachable, and unprobeable is its own state");
+
+  /*
+    And it still cannot go back to asking in a shape that drops the answer.
+    `head: true` returns no body, so PostgREST's error JSON — the object
+    carrying code and hint — never arrives.
+  */
+  ok(!/head:\s*true/.test(code), "and it asks in a shape that can carry a failure",
+    "head: true has no body, so the error object never arrives");
+});
+
+check("50 A referral nobody has dialled is never offered", () => {
+  /*
+    The state between an ordinary sitting and a crisis. Crisis routes to a
+    number locally, ahead of the model, and always will. This is the person
+    who is not in danger, comes back every week, and leaves exactly as heavy
+    as they arrived.
+
+    The trigger is their own anchored sittings, so it reads the same two
+    columns as the efficacy loop and the preference pipeline — the product
+    cannot hold two opinions about whether somebody is being helped.
+
+    And the payload is governed by the oldest rule here. A referral is a
+    phone number handed to somebody having a bad week; a number that has
+    changed is a dead line at the worst possible moment, and worse than
+    silence because they will not look twice. So nothing renders without a
+    date, and the entries in the file today are deliberately undated: they
+    were drafted from public listings, and a listing is not a dialled phone.
+  */
+  const now = new Date("2026-08-15T00:00:00Z");
+
+  ok(activeReferrals(now).length === 0,
+    "the drafted entries do not render, because nobody has verified them",
+    "an entry with no verifiedOn is a number nobody has dialled");
+  ok(REFERRALS.length > 0, "while the drafts themselves are there to be verified");
+
+  // The rule, exercised rather than asserted — the only way a staleness
+  // window ever gets tested is by moving the clock.
+  const one = { ...REFERRALS[0], tel: "0000000000", verifiedOn: "2026-08-01" };
+  const fresh = (r, at) => {
+    if (!r.verifiedOn) return false;
+    const age = (at.getTime() - Date.parse(r.verifiedOn)) / 86_400_000;
+    return age >= 0 && age <= STALE_AFTER_DAYS;
+  };
+  ok(fresh(one, now), "a freshly verified entry is offered");
+  ok(!fresh(one, new Date("2027-09-01T00:00:00Z")),
+    "and the same entry stops being offered once it goes stale",
+    `nothing is offered past ${STALE_AFTER_DAYS} days without being re-checked`);
+
+  /*
+    The trigger. Heavy is not the signal — stuck is. Somebody arriving at 90
+    and leaving at 40 every week is in pain and being helped, and telling them
+    this is not working would be false.
+  */
+  const row = (before, after) => ({
+    tension_before: before, tension_after: after,
+    user_message: "again", ai_reply: "…", real_world_tag: "economy",
+  });
+  const stuck = Array.from({ length: 6 }, () => row(70, 69));
+  const helped = Array.from({ length: 6 }, () => row(90, 40));
+
+  ok(pastWhatThisHolds(stuck), "six sittings that never move is the signal");
+  ok(!pastWhatThisHolds(helped),
+    "six heavy sittings that move fifty points is not",
+    "the signal is the absence of movement, not the presence of pain");
+  ok(!pastWhatThisHolds(stuck.slice(0, HANDOFF_FLOOR - 1)),
+    `under ${HANDOFF_FLOOR} anchored sittings it says nothing`,
+    "a pattern claimed from four data points is a horoscope");
+  ok(!pastWhatThisHolds([row(70, null), row(null, 20)]),
+    "and a sitting with only one reading is not counted at all");
+
+  /*
+    The sentence and the thing it points at ship together or not at all.
+    Naming somebody's stuckness and then handing them an empty list is the
+    cruellest version of this feature.
+  */
+  const h = pastWhatThisHolds(stuck);
+  is(handoffLine(h, []), null, "with nothing verified to offer, it stays quiet");
+  ok(typeof handoffLine(h, [one]) === "string" && !/you need|you should|therapy/i.test(handoffLine(h, [one])),
+    "and when it speaks it offers rather than prescribes",
+    "this product does not tell people what they need");
+});
+
+check("51 Closing a circle destroys the words before it claims to be closed", () => {
+  /*
+    Confidentiality here is a deletion policy, and this is the statement that
+    keeps it.
+
+    `closeCircle` on the Supabase store is two network calls with no
+    transaction between them, and the order decides what a half-failure
+    leaves behind. It set `status: "closed"` first — so a transcript delete
+    that failed left a circle marked closed with every word still in the
+    table. And `sweepIfOver` returns true immediately on
+    `status === "closed"`, so the guard it had just tripped was the same
+    guard that stopped anything ever retrying it. Permanently closed,
+    permanently readable, nothing looking at it again.
+
+    Reversed, a half-failure heals: the status stays open, `ends_at` has
+    passed, and the next request that touches the circle sweeps it again.
+
+    Asserted on source order because there is no way to fault-inject half of
+    a Supabase call from a suite with no dependencies — and the ordering is
+    the whole fix.
+  */
+  const store = fs
+    .readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8")
+    // Code only — the comment above the statements names both of them.
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+
+  const fn = store.slice(store.indexOf("async closeCircle"));
+  const body = fn.slice(0, fn.indexOf("\n  }"));
+  const deleteAt = body.indexOf("circle_messages");
+  const flagAt = body.indexOf('status: "closed"');
+
+  ok(deleteAt > 0 && flagAt > 0, "closeCircle still does both halves");
+  ok(deleteAt < flagAt,
+    "the transcript is deleted before the circle is marked closed",
+    "flag first means a failed delete is never retried — sweepIfOver skips a closed circle");
+
+  /*
+    And the early return that makes the order matter. If this ever stops
+    short-circuiting on a closed circle the reasoning above changes, and
+    whoever changes it should have to read this.
+  */
+  const sweep = fs
+    .readFileSync(path.join(ROOT, "src/lib/circles/sweep.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  ok(/status === "closed"\)\s*return true/.test(sweep),
+    "and a circle already closed is not swept twice",
+    "this early return is why the delete has to come first");
+});
+
+check("52 Faith is answered inside itself, not around it", () => {
+  /*
+    The frame most of this market thinks in, and the library had no move for
+    it. `meaning_stance` is Frankl and is right when nothing can move — a
+    father's results. The everyday register is not terminal and is
+    everywhere: "I don dey pray since", "pastor said make I fast", "Allah
+    knows best but I am tired". Without a move, those were answered with a
+    cognitive worksheet, which is the WEIRD failure this repo already names
+    for family obligation, unaddressed one domain over.
+  */
+  const base = { pressure: 70, duality: null, mood: null, ventCount: 2, recentTactics: [] };
+  const pick = (m) => selectTactic({ ...base, ...classify(m), message: m }).id;
+
+  for (const m of [
+    "I don dey pray since last year and nothing dey happen",
+    "my pastor said I should fast but maybe my faith no strong enough",
+    "I keep asking God why me and I feel guilty for asking",
+    "Allah knows best but honestly I am tired of waiting",
+  ]) {
+    is(pick(m), "faith_frame", `answered inside the frame: "${m.slice(0, 40)}…"`);
+  }
+
+  // An ordinary vent is not a sermon.
+  ok(pick("work don tire me, rent due and i no fit talk to anybody") !== "faith_frame",
+    "a vent with no faith in it is not handed a faith move");
+
+  /*
+    And the priority that matters most: when nothing can move, Frankl still
+    wins. Somebody whose father is dying and who says "God help us" must not
+    be asked whether their faith is restful — the situation outranks the
+    register, and `meaning_stance` is vetoed-in by nothingCanMove.
+  */
+  is(pick("my dad's test results came back, God help us, i don't know"),
+    "meaning_stance",
+    "the unfixable still outranks the register");
+
+  /*
+    The four rules, asserted against the shipping instruction rather than a
+    copy of it. Each exists because breaking.ts already set the standard: a
+    line here must land for a Muslim, a Christian, a traditionalist and
+    somebody who thinks all of it is nonsense.
+  */
+  const t = ALL_TACTICS.find((x) => x.id === "faith_frame");
+  const text = `${t.instruction} ${t.hold}`.toLowerCase();
+  ok(/name they used|only the name/.test(text),
+    "it uses their word for it and never introduces one");
+  ok(/do not affirm|never affirm/.test(text) && /question it|doubt/.test(text),
+    "it neither affirms nor questions the belief");
+  ok(/never prescribe/.test(text), "it never prescribes practice");
+  ok(/everything happens for a reason/.test(text),
+    "and it still bans the one sentence that empties a room");
+});
 
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");

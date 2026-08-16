@@ -6,8 +6,8 @@ import { isExpired, MAX_SEATS } from "@/lib/circles/rules";
 import { TYPING_WINDOW_MS } from "@/lib/circles/presence";
 import type {
   CircleMemberRow, CircleMessageRow, CircleRow,
-  NewVent, ProfilePatch, Store, VentRow, HeldNote } from "./types";
-import { HELD_CAP } from "./types";
+  NewVent, ProfilePatch, Store, VentRow, HeldNote, BreakingAnswer } from "./types";
+import { BREAKING_CAP, HELD_CAP } from "./types";
 
 /**
  * Local development backend. A single JSON file, no dependency, no daemon.
@@ -30,6 +30,8 @@ interface UserRow {
   last_seen_at: string;
   /** What held, newest first. See `HELD_CAP`. */
   held?: HeldNote[];
+  /** Breaking Room answers, newest first. See `BREAKING_CAP` and 0015. */
+  breaking?: BreakingAnswer[];
 }
 
 interface FeedbackRow {
@@ -252,6 +254,49 @@ export class FileStore implements Store {
       // cap is a product decision and lives with the other product decisions.
       user.held = [{ text: trimmed, at: new Date().toISOString() }, ...existing]
         .slice(0, HELD_CAP);
+      hit = true;
+    });
+    return hit;
+  }
+
+  /**
+   * Null when there is no row, `[]` when there is one and it is empty.
+   *
+   * The same shape as Postgres, and it matters more here than it looks. A
+   * backend that collapses the two locally while the other one distinguishes
+   * them is how the Breaking Room would open on a laptop and stay shut in
+   * production — or worse, the reverse. See the `Store` interface.
+   */
+  async getBreaking(userId: string): Promise<BreakingAnswer[] | null> {
+    const user = this.read().users.find((u) => u.id === userId);
+    if (!user) return null;
+    return Array.isArray(user.breaking) ? user.breaking : [];
+  }
+
+  async addBreaking(userId: string, q: string, a: string): Promise<boolean> {
+    const answer = a.trim();
+    if (!q.trim() || !answer) return false;
+    let hit = false;
+    await this.write((db) => {
+      const user = db.users.find((u) => u.id === userId);
+      if (!user) return;
+      const existing = Array.isArray(user.breaking) ? user.breaking : [];
+      /*
+        The old answer to the same question is dropped, not kept beside the
+        new one.
+
+        `nextQuestion` filters on `q`, so a duplicate id is only reachable if
+        something upstream re-offered a question — and if that ever happens
+        the person has answered it twice and the second answer is the current
+        one. Two rows with the same id would also let the cap evict the
+        *record that it was asked*, which is the one thing here that must not
+        be lost: an id falling off the end is a question that becomes askable
+        again, of somebody who already paid to answer it.
+      */
+      user.breaking = [
+        { q, a: answer, at: new Date().toISOString() },
+        ...existing.filter((e) => e.q !== q),
+      ].slice(0, BREAKING_CAP);
       hit = true;
     });
     return hit;

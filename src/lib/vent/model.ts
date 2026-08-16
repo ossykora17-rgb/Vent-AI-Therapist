@@ -19,7 +19,49 @@ import { env } from "@/lib/env";
 // and Anthropic answered 404 not_found_error, naming the model — the probe in
 // this file is what caught it. The unsuffixed id is the one that resolves.
 export const VENT_MODEL = "claude-sonnet-5";
-export const MAX_TOKENS = 220;
+
+/**
+ * The ceiling on a reply, and why it is not 220 any more.
+ *
+ * A ceiling is not a purchase. Billing counts tokens the model actually
+ * generates, so unused headroom costs nothing and too little costs somebody
+ * the end of their sentence. 220 was sized for the visible reply alone — three
+ * or four sentences, which is about right — and that was the whole mistake:
+ * on a model that thinks first, `max_tokens` caps the thinking *and* the
+ * speaking together. The reply gets whatever is left.
+ *
+ * This file already carried the postmortem — "217 tokens of silent reasoning,
+ * three tokens of 'Tired. Na'" — and the fix went into the OpenAI-compatible
+ * adapter only. The Anthropic adapter kept passing 220 straight through, and
+ * `claude-sonnet-5` runs adaptive thinking *by default* when no `thinking` is
+ * sent. So the same bug came back on the other path, wearing the same face:
+ * a person read "Spend five seconds noticing the room you are in. If you"
+ * and nothing after it.
+ *
+ * Two changes, not one. The adapter now asks for no thinking at all (a vent
+ * reply is warmth, not deliberation — see `providers.ts`), which is the actual
+ * saving; and the ceiling is set where a complete four-sentence reply fits
+ * with room to spare, so the ceiling stops being the thing that decides.
+ */
+export const MAX_TOKENS = 600;
+
+/**
+ * Did the model stop because it finished, or because it ran out of room?
+ *
+ * Both adapters ask this, so it is answered once. The OpenAI path had its own
+ * copy that only refused replies under twelve words — which reads as "a stub
+ * is bad" but means "a long reply cut mid-sentence is fine". The reply that
+ * sent a person here was fifty-two words and ended on "If you".
+ *
+ * A reply that hit the ceiling and still lands on a full stop is a complete
+ * thought that happened to end at the edge; that one ships. Anything else is
+ * the model being interrupted, and a fragment in front of somebody having a
+ * bad day is worse than saying plainly that we could not answer.
+ */
+export function wasCutOff(text: string, hitCeiling: boolean): boolean {
+  if (!hitCeiling) return false;
+  return !/[.!?…]["')\]]?$/.test(text.trim());
+}
 
 export type ModelStatus =
   | "ok"

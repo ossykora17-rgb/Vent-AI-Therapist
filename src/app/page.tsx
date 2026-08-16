@@ -1,4 +1,4 @@
-import { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL } from "@/lib/vent/intent";
+import { Disclaimer } from "@/components/disclaimer";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { isSupabaseConfigured } from "@/lib/env";
@@ -184,18 +184,7 @@ export default async function LandingPage() {
       </main>
 
       <footer className="mx-auto w-full max-w-[640px] px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
-        <p className="text-[12px] leading-relaxed text-ash">
-          Mind Weave is not a licensed therapist. VENT is for emotional support
-          only, not medical advice. In crisis, call Nigeria{" "}
-          <a href={`tel:${CRISIS_TEL}`} className="underline underline-offset-2">
-            {CRISIS_LINES.nigeria}
-          </a>{" "}
-          or emergency{" "}
-          <a href={`tel:${EMERGENCY_TEL}`} className="underline underline-offset-2">
-            {CRISIS_LINES.emergency}
-          </a>
-          .
-        </p>
+        <Disclaimer />
         {/*
           Terms and Privacy existed and linked only to each other — a closed
           loop with no door into it from anywhere in the product. Every surface

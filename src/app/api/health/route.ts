@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import { FULL_CONTRACT, explainDbCode } from "@/lib/store/contract";
 import { getStore } from "@/lib/store";
 import {
@@ -22,7 +21,25 @@ export const dynamic = "force-dynamic";
  * database actually answers — not just whether the keys are present.
  */
 export async function GET() {
-  let database: "ok" | "unreachable" | "misconfigured" | "not_configured" =
+  let database:
+    | "ok"
+    | "unreachable"
+    | "misconfigured"
+    | "not_configured"
+    /*
+      Configured, reachable, and impossible to probe honestly.
+
+      A URL and an anon key with no service-role key is the shape somebody
+      lands in by pasting the two values the Supabase dashboard shows first.
+      `getStore()` builds only an admin client, so in that shape there is no
+      store and nothing is ever written — while the probe below used to fall
+      back to the anonymous client, get RLS's perfectly legitimate empty
+      answer, and report `ok`.
+
+      Its own comment already said an anonymous probe is the green light over
+      the broken road. The `??` put it back.
+    */
+    | "no_service_key" =
     "not_configured";
   // Which tables answered and which did not — a migration that was never run
   // looks exactly like a wrong key unless the check says which.
@@ -64,8 +81,20 @@ export async function GET() {
   // typo you fix in the dashboard in ten seconds; an unreachable database is
   // an outage or a wrong key. Collapsing them sends you looking in the wrong
   // place, and this endpoint exists to stop exactly that.
+  /*
+    Built once, and the probe refuses to run without it.
+
+    There is no fallback client on purpose. The only honest answers here are
+    "I asked as the identity that does the work" and "I could not ask at all".
+    Substituting a different role to get an answer is how this endpoint
+    reported a healthy database to deployments that were saving nothing.
+  */
+  const admin = createAdminClient();
+
   if (isSupabaseConfigured && !isSupabaseUrlValid) {
     database = "misconfigured";
+  } else if (isSupabaseConfigured && !admin) {
+    database = "no_service_key";
   } else if (isSupabaseConfigured) {
     try {
       // The identity the product actually uses.
@@ -77,7 +106,7 @@ export async function GET() {
       // denied`, because service_role had no GRANT. A health probe on a path
       // the product never takes is the green light over the broken road,
       // again: this file already learned it once with models.retrieve.
-      const supabase = createAdminClient() ?? (await createClient());
+      const supabase = admin;
       // Every table the product touches, with the exact columns it selects.
       //
       // Two tables was a sample, and a sample is how `vents` looked healthy

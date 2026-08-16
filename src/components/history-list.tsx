@@ -31,6 +31,10 @@ export function HistoryList() {
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [testimony, setTestimony] = React.useState<string | null>(null);
   const [held, setHeld] = React.useState<Array<{ text: string; at: string }>>([]);
+  /* The Breaking Room's answers, with the question each one belongs to. */
+  const [answers, setAnswers] = React.useState<
+    Array<{ q: string; a: string; at: string; text: string | null }>
+  >([]);
   const [pattern, setPattern] = React.useState<{
     sentence: string;
     dropHere: number | null;
@@ -38,20 +42,52 @@ export function HistoryList() {
     firstWords: string | null;
     latestWords: string | null;
   } | null>(null);
+  /*
+    Set together or not at all. The route only sends a sentence when it also
+    has somewhere verified to point, so these two can never disagree — and
+    the card below reads the sentence, never the count, so it cannot render
+    a diagnosis with nothing under it.
+  */
+  const [handoff, setHandoff] = React.useState<{
+    sentence: string;
+    referrals: Array<{ org: string; what: string; tel?: string; label?: string; url?: string; hours?: string; free: boolean }>;
+  } | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        // Counted, not generated — see lib/vent/pattern. Runs beside the
-        // history fetch because it costs nothing and is the reason to be here.
-        fetch(`/api/held?anonId=${encodeURIComponent(anonId())}`)
+        /*
+          Three side reads, beside the history rather than before it.
+
+          Counted, not generated — see lib/vent/pattern. None of them blocks
+          the list, and each fails to silence on its own: a card with nothing
+          in it is the correct rendering of a question nobody has answered.
+
+          Separate statements, and they were not.
+
+          The first two ended in a comma, which made all three one expression
+          joined by the comma operator — legal, evaluated in order, and doing
+          the right thing by accident. Adding a fourth in the same style would
+          go on working right up until somebody put a `return` or an `await`
+          in the middle of it. Lint has been calling it "an expression" for as
+          long as it has been there.
+        */
+        void fetch(`/api/held?anonId=${encodeURIComponent(anonId())}`)
           .then((r) => (r.ok ? r.json() : null))
           .then((d) => {
             if (!cancelled && Array.isArray(d?.held)) setHeld(d.held);
           })
-          .catch(() => {}),
-        fetch(`/api/pattern?anonId=${encodeURIComponent(anonId())}`)
+          .catch(() => {});
+
+        void fetch(`/api/breaking?anonId=${encodeURIComponent(anonId())}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => {
+            if (!cancelled && Array.isArray(d?.answers)) setAnswers(d.answers);
+          })
+          .catch(() => {});
+
+        void fetch(`/api/pattern?anonId=${encodeURIComponent(anonId())}`)
           .then((r) => r.json())
           .then((d) => {
             if (!cancelled && d.testimonySentence) {
@@ -59,6 +95,9 @@ export function HistoryList() {
             }
             if (!cancelled && d.pattern && d.sentence) {
               setPattern({ sentence: d.sentence, ...d.pattern });
+            }
+            if (!cancelled && d.handoffSentence && d.referrals?.length) {
+              setHandoff({ sentence: d.handoffSentence, referrals: d.referrals });
             }
           })
           .catch(() => {});
@@ -92,31 +131,146 @@ export function HistoryList() {
     });
   }, [rows, query, minMood]);
 
+  /*
+    Deletion is the one promise this product cannot be loose about.
+
+    This said "Deleted." on the strength of having asked. It did not check
+    `res.ok`, so a 500 or a dropped connection reported success; and it never
+    read the body, which is the sharper half — the route answers 200 with
+    `deleted: 0` when there is no store and when the anon id is unknown. So in
+    the shape with no Supabase configured, which is what a fresh Vercel
+    project is and what real people were using, pressing delete removed the
+    row from the screen, said "Deleted.", deleted nothing, and handed it all
+    back on the next refresh.
+
+    The route was written carefully for this. Its own comment says every
+    caller should report from what it returns rather than from whether a store
+    was configured. This caller was the one that did not — and twelve lines
+    away in vent-chat.tsx the same fix already exists, with a comment saying
+    "Kept" is never said on the strength of having asked.
+
+    The row is now put back when the delete did not happen, because a screen
+    that hides what the database still holds is the lie that matters here.
+  */
   async function remove(id: string) {
+    const removed = rows.find((row) => row.id === id);
     setRows((r) => r.filter((row) => row.id !== id));
+    const restore = () => {
+      if (removed) setRows((r) => (r.some((x) => x.id === id) ? r : [removed, ...r]));
+    };
+
     try {
-      await fetch(`/api/vent?anonId=${encodeURIComponent(anonId())}&id=${id}`, {
+      const res = await fetch(`/api/vent?anonId=${encodeURIComponent(anonId())}&id=${id}`, {
         method: "DELETE",
       });
+      const body = res.ok ? await res.json().catch(() => null) : null;
+
+      if (!res.ok || !body) {
+        restore();
+        toast("Couldn't delete that. It is still here.", "error");
+        return;
+      }
+      // `deleted: 0` is the route being honest that it found nothing to
+      // delete — no store, or an anon id it has never seen.
+      if (!body.deleted) {
+        restore();
+        toast(
+          body.persisted === false
+            ? "Nothing was ever stored, so there was nothing to delete."
+            : "Couldn't delete that. It is still here.",
+          "info",
+        );
+        return;
+      }
       toast("Deleted.", "success");
     } catch {
-      toast("Couldn't delete that.", "error");
+      restore();
+      toast("Couldn't delete that. It is still here.", "error");
     }
   }
 
   async function clearAll() {
     if (!window.confirm("Delete every vent permanently? This cannot be undone.")) return;
+    /*
+      Everything read off that person, not just the list.
+
+      This cleared `rows` alone, and the four cards above it — what held, what
+      they answered, the pattern, the record — kept rendering their contents
+      over a toast that said "All cleared. Fresh start." The rows really were
+      gone: `deleteAll` drops the `vent_users` row and every jsonb column on
+      it goes with the person, which is the whole argument for keeping them
+      there. But the screen went on showing sentences it had already been told
+      to forget, until somebody reloaded.
+
+      "Delete everything" is a promise this product makes on its front page,
+      and a promise kept in the database and broken on the screen is the one a
+      person actually experiences. The state goes with the request.
+    */
+    /*
+      And the order matters more than the clearing did.
+
+      This fired the request, never looked at the answer, and then removed
+      the anon id — which is the only key that reaches that person's rows.
+      So a wipe that failed left the data on the server *and* threw away the
+      one handle that could ever delete it. Silently, under "All cleared.
+      Fresh start."
+
+      Destroying the key to data you did not delete is strictly worse than
+      not deleting it. The id is dropped only once the server has said, in
+      the body rather than in a status code, that there was something and it
+      is gone.
+    */
+    const previous = { rows, held, answers, pattern, testimony, handoff };
     setRows([]);
+    setHeld([]);
+    setAnswers([]);
+    setPattern(null);
+    setTestimony(null);
+    // The fifth card. The bug this whole block exists for was four cards
+    // still rendering over a toast that said "All cleared."
+    setHandoff(null);
+
+    const putBack = () => {
+      setRows(previous.rows);
+      setHeld(previous.held);
+      setAnswers(previous.answers);
+      setPattern(previous.pattern);
+      setTestimony(previous.testimony);
+      setHandoff(previous.handoff);
+    };
+
     try {
-      await fetch(`/api/vent?anonId=${encodeURIComponent(anonId())}`, { method: "DELETE" });
+      const res = await fetch(`/api/vent?anonId=${encodeURIComponent(anonId())}`, {
+        method: "DELETE",
+      });
+      const body = res.ok ? await res.json().catch(() => null) : null;
+
+      if (!res.ok || !body) {
+        putBack();
+        toast("Couldn't clear it. Everything is still here.", "error");
+        return;
+      }
+      if (!body.deleted) {
+        putBack();
+        toast(
+          body.persisted === false
+            ? "Nothing was ever stored, so there was nothing to clear."
+            : "Couldn't clear it. Everything is still here.",
+          "info",
+        );
+        return;
+      }
+
       // A full wipe makes them a new person here: drop the id AND the
       // onboarding flag, so the chair question seeds their tension again
       // rather than starting the next session at a meaningless default.
+      // Only now — before the answer, this line was destroying the key.
       localStorage.removeItem("mw-anon-id");
       localStorage.removeItem("mw-onboarded");
       toast("All cleared. Fresh start.", "success");
     } catch {
-      toast("Couldn't clear it all.", "error");
+      putBack();
+      toast("Couldn't clear it. Everything is still here.", "error");
     }
   }
 
@@ -215,11 +369,99 @@ export function HistoryList() {
         )}
 
         {/*
+          What they answered when the room asked something heavy.
+
+          The reason the answers are stored at all. A question answered into a
+          void is a question that was never worth asking — somebody wrote the
+          hardest sentence of their week and it went nowhere, which is worse
+          than never having been asked, because now they know the room was not
+          listening.
+
+          Safe to show back for exactly one reason, and it is the same reason
+          "what held" is: they wrote it, on purpose, to a question they were
+          asked and could decline. The carve is never shown to them because a
+          model wrote it. `testimony.ts` counts instead of quoting because
+          nobody chose to be quoted. This one they chose.
+
+          The question comes down with the answer rather than being stored
+          beside it — the wording is ours and may improve, and freezing an old
+          draft into somebody's record would make an edit of ours look like an
+          answer of theirs. A question we have since retired leaves `text`
+          null, and their words still show, because hiding what somebody said
+          behind a change we made to our own copy would be indefensible.
+        */}
+        {answers.length > 0 && (
+          <section className="glass mb-5 p-5 sm:p-6">
+            <p className="label-mono mb-3">What you answered</p>
+            <ul className="space-y-5">
+              {answers.map((entry) => (
+                <li key={entry.q} className="border-l-2 border-gold/40 pl-4">
+                  {entry.text && (
+                    <p className="mb-1 text-[15px] leading-[1.6] text-ash">
+                      {entry.text}
+                    </p>
+                  )}
+                  <p className="reply">{entry.a}</p>
+                  <p className="label-mono mt-1">
+                    {new Date(entry.at).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/*
           The Pattern. Counted from their own rows, never generated — and only
           shown once there is enough to count, because a pattern claimed from
           four data points is a horoscope. Everyone else in this category draws
           a mood line, which answers a question nobody was asking.
         */}
+        {/*
+          When this is bigger than a vent.
+
+          Rendered from `handoff.sentence` rather than from a count, because
+          the route only sends a sentence when it also has somewhere verified
+          to point. So this card cannot appear over an empty list — naming
+          somebody's stuckness and then offering nothing is the cruellest
+          version of this feature, and it is unreachable by construction.
+
+          Deliberately not styled as an alarm. It is not a warning and it is
+          not a diagnosis; it is a count they gave us, read back, next to
+          people who do this properly and do not charge.
+        */}
+        {handoff && (
+          <section className="glass settle mb-5 border-line/20 p-5 sm:p-6">
+            <p className="label-mono mb-3">Something to consider</p>
+            <p className="reply">{handoff.sentence}</p>
+            <ul className="mt-4 flex flex-col gap-3">
+              {handoff.referrals.map((r) => (
+                <li key={r.org} className="border-t border-line/10 pt-3">
+                  <p className="text-[15px] font-semibold">{r.org}</p>
+                  <p className="mt-1 text-[14px] leading-[1.55] text-ash">{r.what}</p>
+                  <p className="mt-1 text-[13px] text-ash">
+                    {r.tel && (
+                      <a href={`tel:${r.tel}`} className="underline underline-offset-2">
+                        {r.label ?? r.tel}
+                      </a>
+                    )}
+                    {r.url && !r.tel && (
+                      <a href={r.url} className="underline underline-offset-2" rel="noreferrer">
+                        {r.label ?? r.url}
+                      </a>
+                    )}
+                    {r.hours && <span> · {r.hours}</span>}
+                    {r.free && <span> · free</span>}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {pattern && (
           <section className="glass settle mb-5 border-gold/40 p-5 sm:p-6">
             <p className="label-mono mb-3">What keeps coming back</p>
@@ -400,9 +642,21 @@ export function HistoryList() {
                       <div className="mt-3 flex gap-2">
                         <button
                           type="button"
-                          onClick={() => {
-                            void navigator.clipboard.writeText(r.ai_reply ?? "");
-                            toast("Copied.", "success");
+                          /*
+                            `void` plus an unconditional toast is the same
+                            bug one size down. writeText rejects on a denied
+                            permission, an unfocused document, or an insecure
+                            context — and "Copied." was said either way, so
+                            somebody pastes nothing into a message they meant
+                            to send to a person.
+                          */
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(r.ai_reply ?? "");
+                              toast("Copied.", "success");
+                            } catch {
+                              toast("Couldn't copy — long-press to select it.", "info");
+                            }
                           }}
                           className="min-h-[44px] flex-1 rounded-card border border-line/15 text-sm"
                         >

@@ -1,7 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "@/lib/env";
-import { classifyModelError, type ModelVerdict } from "./model";
+import { classifyModelError, wasCutOff, type ModelVerdict } from "./model";
 
 /**
  * More than one way to answer, so one empty account cannot silence the room.
@@ -332,7 +332,12 @@ export function openAiCompatible(
       // Neither is half a sentence. A reply cut off at the budget is the
       // model being interrupted, and showing the stub is worse than saying
       // plainly that it could not answer.
-      if (choice?.finish_reason === "length" && text.split(/\s+/).length < 12) {
+      //
+      // This used to add `&& text.split(/\s+/).length < 12`, which reads as
+      // "a stub is bad" and means "a long reply cut mid-sentence is fine".
+      // The reply that sent somebody looking was fifty-two words. One rule
+      // now, in model.ts, asked by both adapters.
+      if (wasCutOff(text, choice?.finish_reason === "length")) {
         throw new ProviderError(
           502,
           `${id} was cut off before it finished a sentence (${text.length} chars)`,
@@ -381,7 +386,25 @@ function anthropicProvider(): Provider {
       const completion = await client.messages.create({
         model: MODEL.anthropic,
         max_tokens: maxTokens,
-        temperature: 0.7,
+        /*
+          Two parameters this call used to get wrong, both of them silent.
+
+          `thinking` was not sent at all. Omitting it does not mean "no
+          thinking" on claude-sonnet-5 — it means adaptive, which is on by
+          default. So every vent paid for a silent reasoning pass and then
+          published whatever was left of a 220-token ceiling, which is how
+          somebody got a reply ending "If you". A vent reply is three or four
+          warm sentences to a person having a bad day; there is nothing here
+          to deliberate about. Off is both the correct answer and the cheapest
+          one — it is the only change in this file that lowers a bill.
+
+          `temperature: 0.7` was rejected outright: non-default sampling
+          parameters are a 400 on this model. Not a degraded reply, a refused
+          request — this provider was failing every time and the chain was
+          quietly answering from further down. The warmth was never coming
+          from the temperature anyway. It comes from the prompt.
+        */
+        thinking: { type: "disabled" },
         system,
         messages,
       });
@@ -391,6 +414,15 @@ function anthropicProvider(): Provider {
         .join("")
         .trim();
       if (!text) throw new ProviderError(502, "anthropic returned an empty completion");
+
+      // The guard the OpenAI path already had, on the path that shipped the
+      // fragment. Asking is free; not asking cost a sentence.
+      if (wasCutOff(text, completion.stop_reason === "max_tokens")) {
+        throw new ProviderError(
+          502,
+          `anthropic was cut off before it finished a sentence (${text.length} chars)`,
+        );
+      }
       return text;
     },
   };
