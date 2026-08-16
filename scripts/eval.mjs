@@ -5239,6 +5239,59 @@ check("51 Closing a circle destroys the words before it claims to be closed", ()
     "this early return is why the delete has to come first");
 });
 
+check("52 Faith is answered inside itself, not around it", () => {
+  /*
+    The frame most of this market thinks in, and the library had no move for
+    it. `meaning_stance` is Frankl and is right when nothing can move — a
+    father's results. The everyday register is not terminal and is
+    everywhere: "I don dey pray since", "pastor said make I fast", "Allah
+    knows best but I am tired". Without a move, those were answered with a
+    cognitive worksheet, which is the WEIRD failure this repo already names
+    for family obligation, unaddressed one domain over.
+  */
+  const base = { pressure: 70, duality: null, mood: null, ventCount: 2, recentTactics: [] };
+  const pick = (m) => selectTactic({ ...base, ...classify(m), message: m }).id;
+
+  for (const m of [
+    "I don dey pray since last year and nothing dey happen",
+    "my pastor said I should fast but maybe my faith no strong enough",
+    "I keep asking God why me and I feel guilty for asking",
+    "Allah knows best but honestly I am tired of waiting",
+  ]) {
+    is(pick(m), "faith_frame", `answered inside the frame: "${m.slice(0, 40)}…"`);
+  }
+
+  // An ordinary vent is not a sermon.
+  ok(pick("work don tire me, rent due and i no fit talk to anybody") !== "faith_frame",
+    "a vent with no faith in it is not handed a faith move");
+
+  /*
+    And the priority that matters most: when nothing can move, Frankl still
+    wins. Somebody whose father is dying and who says "God help us" must not
+    be asked whether their faith is restful — the situation outranks the
+    register, and `meaning_stance` is vetoed-in by nothingCanMove.
+  */
+  is(pick("my dad's test results came back, God help us, i don't know"),
+    "meaning_stance",
+    "the unfixable still outranks the register");
+
+  /*
+    The four rules, asserted against the shipping instruction rather than a
+    copy of it. Each exists because breaking.ts already set the standard: a
+    line here must land for a Muslim, a Christian, a traditionalist and
+    somebody who thinks all of it is nonsense.
+  */
+  const t = ALL_TACTICS.find((x) => x.id === "faith_frame");
+  const text = `${t.instruction} ${t.hold}`.toLowerCase();
+  ok(/name they used|only the name/.test(text),
+    "it uses their word for it and never introduces one");
+  ok(/do not affirm|never affirm/.test(text) && /question it|doubt/.test(text),
+    "it neither affirms nor questions the belief");
+  ok(/never prescribe/.test(text), "it never prescribes practice");
+  ok(/everything happens for a reason/.test(text),
+    "and it still bans the one sentence that empties a room");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

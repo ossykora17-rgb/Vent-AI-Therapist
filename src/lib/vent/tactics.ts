@@ -80,6 +80,21 @@ const has = (re: RegExp) => (c: TacticContext) => re.test(c.message.toLowerCase(
 const ANALYTICAL = /\b(because|therefore|the fact|statistic|logically|technically|percent)\b/;
 
 /*
+  Faith, as this market actually speaks it.
+
+  Deliberately wide across traditions and deliberately including Pidgin,
+  because the register that gets missed is never the formal one. It is
+  "na God go do am" and "I don dey pray since", not "I am experiencing a
+  crisis of faith".
+
+  `\bpray` rather than `\bprayer\b` catches praying, prayed, prayers. `chi`
+  is bounded tightly — it is a real Igbo concept and also three letters
+  inside a hundred English words.
+*/
+const FAITH =
+  /\b(god|allah|jesus|christ|lord|holy spirit|bible|quran|qur'an|koran|church|mosque|pastor|imam|priest|deacon|fellowship|prayer|pray(ing|ed|s)?|fast(ing|ed)?|anoint|blessing|blessed|testimony|faith|sin|repent|juju|chi|ori|orisha|babalawo|native doctor|shrine|ancestor)\b/;
+
+/*
   Watching yourself, fluently, from a seat nothing reaches.
 
   This is not somebody who cannot see the pattern. It is somebody who can
@@ -625,6 +640,53 @@ const TACTICS: Tactic[] = [
     fits: (c) => AVOIDANT.test(c.message.toLowerCase()) && words(c.message) <= 6,
     weight: () => 85,
     // Letting somebody go without a task is *more* right here, not less.
+    holdsWhenNothingMoves: true,
+  },
+
+  {
+    id: "faith_frame",
+    family: "narrative",
+    /*
+      The frame most of this market actually thinks in, and the one the
+      library had no move for.
+
+      `meaning_stance` is Frankl and it is the right answer when nothing can
+      move — a father's results, a death. But the ordinary register is not
+      terminal and it is everywhere: "I don dey pray since", "God's time is
+      the best", "I don't know if God is punishing me", "pastor said make I
+      fast". Without a move for it, a spiritual sentence got answered with a
+      cognitive worksheet — the WEIRD failure this file already names for
+      family obligation, unaddressed one domain over.
+
+      The clinical content is Pargament's religious coping, and specifically
+      the part that matters here: faith can be a place to rest, or it can
+      become one more examination somebody is failing. "If I had enough
+      faith this would have lifted by now" turns a comfort into a second
+      source of shame, on top of the thing that brought them. Naming that
+      without touching the theology is the whole move.
+
+      Four rules, and the reason each exists:
+
+      - Use only the name they used. God, Allah, chi, the universe. Never
+        introduce one, never swap one for another, never generalise it to
+        "your faith" — that is a stranger renaming the most personal thing
+        in the message.
+      - Never affirm and never doubt the belief. This product is not a
+        chaplain and it is not an atheist. Both readings lose half the room,
+        and the standard the Breaking Room already sets is that a line must
+        land for a Muslim, a Christian, a traditionalist and somebody who
+        thinks all of it is nonsense.
+      - Never prescribe practice. "Pray about it", "have you tried fasting",
+        "give it to God" — advice, presumption, and not ours to give.
+      - Never diagnose the belief as a coping mechanism. They did not ask.
+    */
+    instruction:
+      "They have brought their faith into this, so answer inside it rather than around it — using only the name they used for it, never one you introduce. Do not affirm it and do not question it; that is not what is being asked and both cost you the room. The one thing worth asking is what it is doing for them right now: whether it is somewhere they get to rest, or whether it has quietly become one more thing they are failing at — the enough-faith exam. Never prescribe practice, never say everything happens for a reason, never tell them what it means. e.g. \"You talk say you don dey pray since. When you pray about this one, e dey feel like rest, or e don turn another exam wey you dey fail?\"",
+    hold: "When you take this to God, is it somewhere to rest — or has it become one more thing to pass?",
+    fits: (c) => FAITH.test(c.message.toLowerCase()),
+    weight: () => 84,
+    // It asks nothing of the situation and nothing of the belief. When the
+    // ground is gone this still stands, because it only asks about now.
     holdsWhenNothingMoves: true,
   },
 
