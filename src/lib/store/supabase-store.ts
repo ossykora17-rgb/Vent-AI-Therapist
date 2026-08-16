@@ -381,11 +381,34 @@ export class SupabaseStore implements Store {
   }
 
   async closeCircle(id: string): Promise<void> {
-    done("closeCircle", await this.db.from("circles").update({ status: "closed" }).eq("id", id));
-    // Closing ends confidentiality's only real guarantee: the words go. A
-    // failed delete must not be reported as a circle that closed cleanly.
+    /*
+      The words go first, and the flag goes last.
+
+      These are two network calls with no transaction between them, and the
+      order decides what a half-failure leaves behind. It used to set
+      `status: "closed"` first — so a transcript delete that failed left a
+      circle marked closed with every word still in the table, and
+      `sweepIfOver` returns `true` immediately on `status === "closed"`. The
+      guard it had just tripped was the same guard that stopped anything ever
+      retrying. Permanently closed, permanently readable, nothing looking at
+      it again.
+
+      Reversed, a half-failure heals itself. If the delete fails the status
+      stays open, `ends_at` has passed, and the next request that touches this
+      circle sweeps it again and retries. If the delete succeeds and the
+      update fails, the next sweep re-runs a delete over nothing and sets the
+      flag. Either way the words are gone before anything claims they are.
+
+      This is also what sweep.ts already says it does — "the words are the
+      promise, and they go first" — a principle it applied to the SFU call
+      and not to the two statements inside this one.
+
+      The file store does both inside a single write() and is atomic, so it
+      never had this shape.
+    */
     done("closeCircle:transcript",
       await this.db.from("circle_messages").delete().eq("circle_id", id));
+    done("closeCircle", await this.db.from("circles").update({ status: "closed" }).eq("id", id));
   }
 
   async listMembers(circleId: string): Promise<CircleMemberRow[]> {

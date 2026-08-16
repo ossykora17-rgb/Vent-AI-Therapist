@@ -5188,6 +5188,57 @@ check("50 A referral nobody has dialled is never offered", () => {
     "this product does not tell people what they need");
 });
 
+check("51 Closing a circle destroys the words before it claims to be closed", () => {
+  /*
+    Confidentiality here is a deletion policy, and this is the statement that
+    keeps it.
+
+    `closeCircle` on the Supabase store is two network calls with no
+    transaction between them, and the order decides what a half-failure
+    leaves behind. It set `status: "closed"` first — so a transcript delete
+    that failed left a circle marked closed with every word still in the
+    table. And `sweepIfOver` returns true immediately on
+    `status === "closed"`, so the guard it had just tripped was the same
+    guard that stopped anything ever retrying it. Permanently closed,
+    permanently readable, nothing looking at it again.
+
+    Reversed, a half-failure heals: the status stays open, `ends_at` has
+    passed, and the next request that touches the circle sweeps it again.
+
+    Asserted on source order because there is no way to fault-inject half of
+    a Supabase call from a suite with no dependencies — and the ordering is
+    the whole fix.
+  */
+  const store = fs
+    .readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8")
+    // Code only — the comment above the statements names both of them.
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+
+  const fn = store.slice(store.indexOf("async closeCircle"));
+  const body = fn.slice(0, fn.indexOf("\n  }"));
+  const deleteAt = body.indexOf("circle_messages");
+  const flagAt = body.indexOf('status: "closed"');
+
+  ok(deleteAt > 0 && flagAt > 0, "closeCircle still does both halves");
+  ok(deleteAt < flagAt,
+    "the transcript is deleted before the circle is marked closed",
+    "flag first means a failed delete is never retried — sweepIfOver skips a closed circle");
+
+  /*
+    And the early return that makes the order matter. If this ever stops
+    short-circuiting on a closed circle the reasoning above changes, and
+    whoever changes it should have to read this.
+  */
+  const sweep = fs
+    .readFileSync(path.join(ROOT, "src/lib/circles/sweep.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  ok(/status === "closed"\)\s*return true/.test(sweep),
+    "and a circle already closed is not swept twice",
+    "this early return is why the delete has to come first");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
