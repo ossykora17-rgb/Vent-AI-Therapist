@@ -4991,7 +4991,20 @@ check("48 No screen says it happened without reading the answer", () => {
   for (const file of walk(path.join(ROOT, "src"))) {
     const lines = fs.readFileSync(file, "utf8").split("\n");
     lines.forEach((line, i) => {
-      if (!/toast\(/.test(line) || !/"success"/.test(line)) return;
+      /*
+        Anchored on the severity, not on `toast(`.
+
+        The first version required both on one line and therefore could not
+        see a multi-line call — which is the shape the circle close uses, the
+        single bug CLAUDE.md calls the sharpest this product ever shipped.
+        That one is correct today, and the check written to protect it was
+        walking straight past it.
+      */
+      if (!/"success"/.test(line)) return;
+      // Confirm it is a toast and not some other "success" string.
+      const near = lines.slice(Math.max(0, i - 6), i + 1).join("\n");
+      if (!/toast\(/.test(near)) return;
+
       // The claim's neighbourhood: far enough back to hold the request it
       // is reporting on, near enough not to borrow another function's check.
       const from = Math.max(0, i - 30);
@@ -5000,7 +5013,13 @@ check("48 No screen says it happened without reading the answer", () => {
       const read =
         /\.ok\b/.test(before) ||
         /\bstatus\b/.test(before) ||
-        /\b(body|data|d)\??\.(deleted|saved|anchored|ok)\b/.test(before);
+        /\b(body|data|d)\??\.(deleted|saved|anchored|ok)\b/.test(before) ||
+        /*
+          A toast whose message is chosen by a ternary has read something to
+          choose with. `seal(w).then((sealed) => toast(sealed ? … : …))` is
+          the canonical form: the request's own answer picks the sentence.
+        */
+        /\?[^\n]*\n?[^\n]*:/.test(near);
       if (!read) {
         offenders.push(`${path.relative(ROOT, file)}:${i + 1}`);
       }
@@ -5020,6 +5039,28 @@ check("48 No screen says it happened without reading the answer", () => {
     you did not delete is worse than not deleting it, so the removal must sit
     after the answer.
   */
+  /*
+    The offline queue, which is the only case where local storage is not a
+    convenience but the last copy.
+
+    `flushQueue` counted any 200 as sent and then cleared the queue — so a
+    reply the route marked `persisted: false` deleted words somebody wrote
+    with no connection. That shape is not hypothetical: production shows
+    PGRST303 clock skew on `circles` right now, and an insert that fails on
+    its way to Supabase returns exactly that.
+  */
+  const anon = fs
+    .readFileSync(path.join(ROOT, "src/lib/anon.ts"), "utf8")
+    // Code only. The first version of this assertion passed its own mutation
+    // because the comment explaining why `persisted` must be read contains
+    // the word "persisted". Fourth time in this file. Scan what runs.
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  const flush = anon.slice(anon.indexOf("export async function flushQueue"));
+  ok(/persisted/.test(flush.slice(0, flush.indexOf("return sent"))),
+    "the offline drain reads `persisted`, not just the status code",
+    "a 200 that saved nothing must not clear the last copy of somebody's words");
+
   const history = fs.readFileSync(path.join(ROOT, "src/components/history-list.tsx"), "utf8");
   const clear = history.slice(history.indexOf("async function clearAll"));
   const dropId = clear.indexOf('removeItem("mw-anon-id")');

@@ -71,6 +71,26 @@ export async function flushQueue(): Promise<number> {
         }),
       });
       if (!res.ok) break;
+
+      /*
+        A 200 is not a save, and this queue is the last copy.
+
+        These are words somebody wrote with no connection — the one case
+        where local storage is not a convenience but the only place they
+        exist. Counting a 200 as sent and then calling clearQueue() deleted
+        them whenever the route answered `persisted: false`: no store
+        configured, or an insert that failed on its way to Supabase. The
+        PGRST303 clock skew visible on production right now produces exactly
+        that shape.
+
+        The route reports `persisted` precisely so a caller does not have to
+        infer it from a status code — its own comment says a write that
+        failed is a write that did not happen. Reading it here means a vent
+        stays queued until it is genuinely kept, and gets another attempt on
+        the next drain rather than a silent deletion.
+      */
+      const body = await res.json().catch(() => null);
+      if (!body || body.persisted === false) break;
       sent++;
     } catch {
       break;
