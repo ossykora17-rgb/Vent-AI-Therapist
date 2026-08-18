@@ -104,7 +104,30 @@ export function explainDbCode(code?: string | null): string | null {
     case "42501":
       return "table exists but this role cannot read it — see 0008_grants.sql";
     case "42703":
-      return "a column in the contract does not exist — the schema has drifted from the code";
+      /*
+        Two different problems wearing one code, and the cheaper one is not
+        the obvious one.
+
+        The obvious reading is schema drift: the migration was never applied.
+        The other is that it was applied a minute ago and PostgREST is still
+        serving a cached schema — the column is in the table and the API layer
+        has not noticed. Identical error, identical message, and somebody who
+        has just run the SQL correctly is told it did not work.
+
+        That cost real time here: a migration was run against production and
+        the health check went on naming the column missing, which reads as a
+        failed migration and sends you back to the SQL editor to run the thing
+        you already ran.
+
+        Both fixes are one line, so name both. `notify pgrst` is free and does
+        nothing when the column genuinely is absent.
+      */
+      return (
+        "a column in the contract does not exist — either the migration has " +
+        "not been applied, or it has and PostgREST is serving a cached schema. " +
+        "Check with: select column_name from information_schema.columns where " +
+        "table_name='<table>'; then reload with: notify pgrst, 'reload schema';"
+      );
     case "PGRST125":
       return "the request path was rejected — check NEXT_PUBLIC_SUPABASE_URL has no /rest/v1 suffix";
     case "PGRST100":
