@@ -24,7 +24,7 @@ const { groundNow } = await app("src/lib/vent/grounding.ts");
 const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS, ALL_TACTICS, nothingCanMove, caughtWatchingSelf } =
   await app("src/lib/vent/tactics.ts");
 const { buildFlavour } = await app("src/lib/flavour/profile.ts");
-const { flavourBlock, openingBlock, carveBlock } = await app("src/lib/vent/prompt.ts");
+const { flavourBlock, openingBlock, carveBlock, memoryBlock } = await app("src/lib/vent/prompt.ts");
 const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/vent/chairs.ts");
 const { selectMemory } = await app("src/lib/vent/memory.ts");
@@ -2256,6 +2256,9 @@ check("24 The system prompt has a budget, and every block earns its place", () =
       ai_reply: "Sixteen hours.",
       created_at: new Date(Date.now() - i * 86_400_000).toISOString(),
       body_tapped: "chest", chair_picked: "tight_edge", mood_score: 4,
+      // The LANDED line renders only when a sitting carries both readings and
+      // a real drop. Without these the heaviest prompt was not the heaviest.
+      tension_before: 88, tension_after: 30,
     })),
     flavour: buildFlavour([
       "abeg partner shouted for chambers again, the brief is due",
@@ -5387,6 +5390,62 @@ check("53 A person's own sittings outrank the room's average", () => {
   is((src.match(/POINTS_FOR_FULL_SWING/g) ?? []).length, 2,
     "the swing arithmetic exists in exactly one place",
     "one definition and one use — a second copy is a second answer");
+});
+
+check("54 The model is shown the one reply that worked on this person", () => {
+  /*
+    Until now the model saw only what the person wrote — never a single thing
+    it had said back. So it re-guessed its own register from the system prompt
+    on every turn, and the sitting that moved this person fifty points was
+    indistinguishable from the one that moved them two.
+
+    This is the cheapest few-shot that exists: one line, from this person's
+    own history, chosen by the only evidence there is about whether it worked.
+    It needs a measured outcome bound to a specific reply for a specific
+    person, which is what the anchor route made possible.
+  */
+  const row = (msg, reply, before, after, day) => ({
+    user_message: msg, ai_reply: reply, created_at: `2026-08-0${day}T09:00:00Z`,
+    body_tapped: null, chair_picked: null, mood_score: null,
+    tension_before: before, tension_after: after,
+  });
+
+  const worked = "Sixteen hours and nobody asked. Na you dey carry am alone.";
+  const block = memoryBlock([
+    row("rent again", "Small small.", 70, 68, 1),
+    row("i cannot tell them", worked, 80, 30, 2),
+    row("same thing", "E heavy.", 60, 55, 3),
+  ]);
+
+  ok(block.includes(worked), "the reply that produced the biggest drop is shown");
+  ok(/−50|-50/.test(block), "with the size of the drop it produced");
+  ok(!block.includes("Small small."), "and the ones that barely moved are not",
+    "two competing examples pull register in two directions");
+  ok(/never repeat|Aim like it|↳/.test(block), "marked as a shape to aim at");
+
+  /*
+    Silence below the floor, like every other floor here. Two points is a
+    thumb on a slider, not evidence.
+  */
+  const thin = memoryBlock([row("rent", "Small small.", 70, 68, 1), row("again", "Ok.", 60, 58, 2)]);
+  ok(!thin.includes("↳"), "nothing is marked when nothing actually moved");
+
+  // A sitting nobody anchored cannot qualify, however good the reply reads.
+  const unanchored = memoryBlock([row("rent", worked, null, null, 1)]);
+  ok(!unanchored.includes("↳"), "and an unanchored sitting is never held up as proof");
+
+  /*
+    And the fields have to survive the trip. VentRow carries ai_reply and both
+    readings, selectMemory passes rows through untouched — but a filter that
+    projected columns would silently empty this feature while every check that
+    calls memoryBlock directly still passed.
+  */
+  const passed = selectMemory([
+    { ...row("rent", worked, 80, 30, 2), intent_type: "vent" },
+  ], 6);
+  ok(passed[0].ai_reply === worked && passed[0].tension_before === 80,
+    "selectMemory carries the reply and the readings through",
+    "the block cannot mark what it was never handed");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
