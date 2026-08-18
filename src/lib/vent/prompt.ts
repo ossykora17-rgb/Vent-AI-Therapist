@@ -100,6 +100,9 @@ export interface MemoryRow {
   body_tapped: string | null;
   chair_picked: string | null;
   mood_score: number | null;
+  /* Optional, and only ever read together — see LANDED in memoryBlock. */
+  tension_before?: number | null;
+  tension_after?: number | null;
 }
 
 /** Their own words, dated, so recall is specific instead of vague. */
@@ -108,7 +111,36 @@ export function memoryBlock(rows: MemoryRow[]): string {
     return "MEMORY: nothing yet. Listen for names, exact phrases, and where it sits in the body.";
   }
 
-  const lines = rows.slice(-6).map((r) => {
+  /*
+    One reply of its own, chosen by what it did.
+
+    Until now the model saw only what the person wrote — never a single thing
+    it had said back. So every turn it re-guessed its own register from the
+    system prompt alone, and the sitting that actually moved this person
+    forty points was indistinguishable from the one that moved them two.
+
+    This is the cheapest possible few-shot: not a corpus, not a fine-tune —
+    one line, drawn from this person's own history, selected by the only
+    evidence that exists about whether it worked. The model is not being told
+    to repeat it; a repeated sentence is the thing this product refuses. It is
+    being shown the shape that landed, for this particular human, so it can
+    aim rather than re-guess.
+
+    RELIEF_FLOOR is ten points because two points is a thumb on a slider. Only
+    one line is included: two competing examples pull register in two
+    directions, and a person's best sitting is more useful than their best two.
+  */
+  const RELIEF_FLOOR = 10;
+  const top = rows
+    .filter((r) => r.ai_reply && r.tension_before != null && r.tension_after != null)
+    .map((r) => ({ r, relief: (r.tension_before as number) - (r.tension_after as number) }))
+    .filter(({ relief }) => relief >= RELIEF_FLOOR)
+    .sort((a, b) => b.relief - a.relief)[0];
+  const best = top?.r;
+  const bestRelief = top?.relief;
+
+    const shown = rows.slice(-6);
+  const lines = shown.map((r) => {
     const when = new Date(r.created_at).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -116,10 +148,14 @@ export function memoryBlock(rows: MemoryRow[]): string {
     });
     const body = r.body_tapped ? ` [${r.body_tapped}]` : "";
     const mood = r.mood_score ? ` [mood ${r.mood_score}/10]` : "";
-    return `- ${when}${body}${mood}: "${r.user_message.slice(0, 160)}"`;
+    // The one that worked carries what was said back, on the same row. A
+    // separate paragraph cost a whole sentence of framing to say what an
+    // arrow says here, and split the exchange across two places.
+    const landed = r === best ? `\n  ↳ landed, −${bestRelief}: "${(r.ai_reply as string).slice(0, 140)}"` : "";
+    return `- ${when}${body}${mood}: "${r.user_message.slice(0, 160)}"${landed}`;
   });
 
-  return `MEMORY — their own words, most recent last. Quote a phrase back exactly when it fits; never recite the list:\n${lines.join("\n")}`;
+return `MEMORY — their own words, oldest first. Quote a phrase exactly when it fits; never recite the list:\n${lines.join("\n")}`;
 }
 
 const VOICE = `WHO YOU ARE

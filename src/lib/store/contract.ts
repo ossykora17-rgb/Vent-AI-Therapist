@@ -29,6 +29,32 @@
  * with a path error naming no column at all. Check 16 fails any list with
  * whitespace in it — including these.
  */
+/**
+ * The stored procedures the server calls, and the arguments it calls them with.
+ *
+ * Tables were the whole contract, and a table check cannot see a function.
+ * `countVentsSince` — every rate-limit decision on every vent — goes through
+ * `vent_rate_count`, which arrives in migration 0014. If that migration is
+ * skipped, dropped or renamed, all eight tables still answer perfectly and
+ * `/api/health` still says `database: ok`, while every vent fails on the one
+ * call the check was never told about.
+ *
+ * That is this file's oldest bug on its fifth outing: models.retrieve, the
+ * anonymous probe, the HEAD request, the `??` fallback — and now a probe that
+ * checks the right identity, in the right shape, against the wrong surface.
+ *
+ * The arguments are harmless by construction: a uuid that belongs to nobody
+ * counts nothing and returns zero. The probe is asking whether the function
+ * exists and accepts this signature, which is precisely what a caller needs
+ * to know before it depends on it.
+ */
+export const RPC_CONTRACT: Readonly<Record<string, Record<string, unknown>>> = {
+  vent_rate_count: {
+    p_user_id: "00000000-0000-0000-0000-000000000000",
+    p_since: "1970-01-01T00:00:00.000Z",
+  },
+};
+
 export const TABLE_CONTRACT: Readonly<Record<string, string>> = {
   vent_users: "id,anon_id,carve,held,breaking,created_at",
   vents:

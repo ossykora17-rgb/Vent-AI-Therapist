@@ -6,7 +6,7 @@ import { answerFactual, groundNow } from "@/lib/vent/grounding";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { CARRY_WORDS, OBJECT_IDS } from "@/lib/vent/chairs";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
-import { getEfficacy } from "@/lib/vent/efficacy";
+import { blendEfficacy, getEfficacy, measurePersonalEfficacy } from "@/lib/vent/efficacy";
 import { findPattern, type Pattern } from "@/lib/vent/pattern";
 import { coverage, COVERAGE_FLOOR } from "@/lib/vent/scan";
 import { buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
@@ -156,6 +156,8 @@ async function handlePOST(request: Request) {
   // What recurs, from the same twenty-four rows the memory block already
   // fetched. Computed, never generated, and null below the floor.
   let pattern: Pattern | null = null;
+  /* Their own anchored sittings, hoisted for the selector below. */
+  let mine: VentRow[] = [];
 
   if (store) {
     // Configured is not the same as reachable, and the store now says which
@@ -235,6 +237,7 @@ async function handlePOST(request: Request) {
         // lives, so the eval suite measures the real filter and not a copy.
         const recent = await store.recentVents(userId, memoryFetchSize(MEMORY_TURNS));
         const rows = selectMemory(recent, MEMORY_TURNS);
+        mine = recent;
 
         pattern = findPattern(recent);
 
@@ -303,7 +306,18 @@ async function handlePOST(request: Request) {
   // returned, so nothing anybody gets for nothing waits on it. It is cached on
   // a half-hour clock and fails open to "no opinion", which is also what a
   // product with no usage yet looks like.
-  const tactic = selectTactic({ ...ctx, efficacy: await getEfficacy(store) });
+  /*
+    Their own opinion first, the room's underneath.
+
+    `recent` is already in hand for memory, so the personal table costs no
+    extra query — it is arithmetic over rows this request has already paid
+    for. Below four anchored sittings on a move it says nothing and the room
+    answers, which is the same shape as every other floor in this product.
+  */
+  const tactic = selectTactic({
+    ...ctx,
+    efficacy: blendEfficacy(measurePersonalEfficacy(mine), await getEfficacy(store)),
+  });
 
   // Flavour is read from everything they have said here — pure local
   // heuristics, so personalising the delivery costs nothing.

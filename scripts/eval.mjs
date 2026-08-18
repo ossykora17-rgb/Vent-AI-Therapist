@@ -24,7 +24,7 @@ const { groundNow } = await app("src/lib/vent/grounding.ts");
 const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS, ALL_TACTICS, nothingCanMove, caughtWatchingSelf } =
   await app("src/lib/vent/tactics.ts");
 const { buildFlavour } = await app("src/lib/flavour/profile.ts");
-const { flavourBlock, openingBlock, carveBlock } = await app("src/lib/vent/prompt.ts");
+const { flavourBlock, openingBlock, carveBlock, memoryBlock } = await app("src/lib/vent/prompt.ts");
 const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/vent/chairs.ts");
 const { selectMemory } = await app("src/lib/vent/memory.ts");
@@ -36,6 +36,9 @@ const { guardianVerdict, THRESHOLD } = await app("src/lib/external/guardian.ts")
 // The campfire's own lines, imported once so no check keeps a copy of them.
 const { MYCELIUM: MYCELIUM_RULE } = await app("src/lib/circles/rules.ts");
 const { noModelKeyReply } = await app("src/lib/vent/fallback.ts");
+const { RPC_CONTRACT } = await app("src/lib/store/contract.ts");
+const { measurePersonalEfficacy, blendEfficacy, PERSONAL_SPAN } =
+  await app("src/lib/vent/efficacy.ts");
 const { REFERRALS, STALE_AFTER_DAYS, HANDOFF_FLOOR, activeReferrals, pastWhatThisHolds, handoffLine } =
   await app("src/lib/vent/referrals.ts");
 const { allProviders, configuredProviders, openAiCompatible } =
@@ -2253,6 +2256,9 @@ check("24 The system prompt has a budget, and every block earns its place", () =
       ai_reply: "Sixteen hours.",
       created_at: new Date(Date.now() - i * 86_400_000).toISOString(),
       body_tapped: "chest", chair_picked: "tight_edge", mood_score: 4,
+      // The LANDED line renders only when a sitting carries both readings and
+      // a real drop. Without these the heaviest prompt was not the heaviest.
+      tension_before: 88, tension_after: 30,
     })),
     flavour: buildFlavour([
       "abeg partner shouted for chambers again, the brief is due",
@@ -5114,6 +5120,35 @@ check("49 The health probe asks as the identity that does the work", () => {
   */
   ok(!/head:\s*true/.test(code), "and it asks in a shape that can carry a failure",
     "head: true has no body, so the error object never arrives");
+
+  /*
+    The fifth face, and the first one that is not about how the probe asks
+    but about what it forgets to ask at all.
+
+    A table check cannot see a function. Every rate-limit decision on every
+    vent goes through `vent_rate_count`, which arrives in migration 0014 —
+    skip it and all eight tables answer perfectly while every vent fails, and
+    `/api/health` says `database: ok` throughout.
+
+    So: every RPC the store calls must be in the contract, and the health
+    route must probe them. Derived from the store's own source rather than
+    from a list somebody maintains by hand, because a hand-maintained list of
+    things-to-check is the thing that was already missing.
+  */
+  const storeSrc = fs
+    .readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  const called = [...storeSrc.matchAll(/\.rpc\(\s*"([a-z_]+)"/g)].map((m) => m[1]);
+  const covered = Object.keys(RPC_CONTRACT);
+
+  ok(called.length > 0, "the store calls at least one stored procedure", called.join(", "));
+  for (const fn of new Set(called)) {
+    ok(covered.includes(fn), `${fn} is in the contract`,
+      "a procedure the server depends on that nothing verifies");
+  }
+  ok(/RPC_CONTRACT/.test(code), "and the health route probes them",
+    "a contract nobody reads is a list, not a check");
 });
 
 check("50 A referral nobody has dialled is never offered", () => {
@@ -5290,6 +5325,127 @@ check("52 Faith is answered inside itself, not around it", () => {
   ok(/never prescribe/.test(text), "it never prescribes practice");
   ok(/everything happens for a reason/.test(text),
     "and it still bans the one sentence that empties a room");
+});
+
+check("53 A person's own sittings outrank the room's average", () => {
+  /*
+    The efficacy table was the room: five hundred vents across everybody,
+    twelve anchored observations per tactic. That is a real finding and it is
+    about the average person, and there is no average person. A somatic move
+    beating the room by four points says nothing about somebody who has never
+    once been helped by one — and their own eleven sittings say exactly that.
+
+    Nothing else in this product, and nothing in any competitor, is in a
+    position to hear it: it needs a measured outcome bound to a specific
+    technique for a specific person, which is what the anchor route made
+    possible.
+  */
+  const row = (tactic, before, after) => ({
+    tactic_used: tactic, tension_before: before, tension_after: after,
+  });
+
+  // Somebody for whom the body work does nothing and the room move lands.
+  const mine = [
+    ...Array.from({ length: 5 }, () => row("body_map_drop_set", 70, 68)),
+    ...Array.from({ length: 5 }, () => row("ubuntu_frame", 70, 30)),
+  ];
+  const personal = measurePersonalEfficacy(mine);
+  ok((personal.get("ubuntu_frame") ?? 0) > 0, "what worked for them is lifted");
+  ok((personal.get("body_map_drop_set") ?? 0) < 0, "what did not is lowered");
+
+  /*
+    Thin evidence buys a smaller nudge. Lowering the floor without lowering
+    the span would be louder guessing rather than better listening.
+  */
+  for (const [, delta] of personal) {
+    ok(Math.abs(delta) <= PERSONAL_SPAN,
+      `a personal delta stays inside ±${PERSONAL_SPAN} (${delta})`,
+      "the room may move a weight further because it knows more");
+  }
+  ok(PERSONAL_SPAN < EFFICACY_SPAN, "and the personal span is the smaller one");
+
+  // Under the floor it says nothing at all, like every other floor here.
+  is(measurePersonalEfficacy(mine.slice(0, 3)).size, 0,
+    "under the floor a personal table has no opinion");
+
+  /*
+    Per tactic, not all-or-nothing. Somebody can have learned something about
+    two moves and nothing about the other thirty four, and for those the room
+    is still the best answer available.
+  */
+  const room = new Map([["exact_mirror", 5], ["ubuntu_frame", -4]]);
+  const blended = blendEfficacy(personal, room);
+  is(blended.get("exact_mirror"), 5, "the room still answers where they are silent");
+  ok(blended.get("ubuntu_frame") > 0,
+    "and where they disagree with the room, they win",
+    "it is their session, and the number came from their own slider");
+  is(blendEfficacy(new Map(), room).get("ubuntu_frame"), -4,
+    "somebody with no history gets the room unchanged");
+
+  /*
+    One scoring function, two callers. Writing the arithmetic twice is how a
+    suite ends up asserting against a copy while the product drifts.
+  */
+  const src = fs.readFileSync(path.join(ROOT, "src/lib/vent/efficacy.ts"), "utf8");
+  is((src.match(/POINTS_FOR_FULL_SWING/g) ?? []).length, 2,
+    "the swing arithmetic exists in exactly one place",
+    "one definition and one use — a second copy is a second answer");
+});
+
+check("54 The model is shown the one reply that worked on this person", () => {
+  /*
+    Until now the model saw only what the person wrote — never a single thing
+    it had said back. So it re-guessed its own register from the system prompt
+    on every turn, and the sitting that moved this person fifty points was
+    indistinguishable from the one that moved them two.
+
+    This is the cheapest few-shot that exists: one line, from this person's
+    own history, chosen by the only evidence there is about whether it worked.
+    It needs a measured outcome bound to a specific reply for a specific
+    person, which is what the anchor route made possible.
+  */
+  const row = (msg, reply, before, after, day) => ({
+    user_message: msg, ai_reply: reply, created_at: `2026-08-0${day}T09:00:00Z`,
+    body_tapped: null, chair_picked: null, mood_score: null,
+    tension_before: before, tension_after: after,
+  });
+
+  const worked = "Sixteen hours and nobody asked. Na you dey carry am alone.";
+  const block = memoryBlock([
+    row("rent again", "Small small.", 70, 68, 1),
+    row("i cannot tell them", worked, 80, 30, 2),
+    row("same thing", "E heavy.", 60, 55, 3),
+  ]);
+
+  ok(block.includes(worked), "the reply that produced the biggest drop is shown");
+  ok(/−50|-50/.test(block), "with the size of the drop it produced");
+  ok(!block.includes("Small small."), "and the ones that barely moved are not",
+    "two competing examples pull register in two directions");
+  ok(/never repeat|Aim like it|↳/.test(block), "marked as a shape to aim at");
+
+  /*
+    Silence below the floor, like every other floor here. Two points is a
+    thumb on a slider, not evidence.
+  */
+  const thin = memoryBlock([row("rent", "Small small.", 70, 68, 1), row("again", "Ok.", 60, 58, 2)]);
+  ok(!thin.includes("↳"), "nothing is marked when nothing actually moved");
+
+  // A sitting nobody anchored cannot qualify, however good the reply reads.
+  const unanchored = memoryBlock([row("rent", worked, null, null, 1)]);
+  ok(!unanchored.includes("↳"), "and an unanchored sitting is never held up as proof");
+
+  /*
+    And the fields have to survive the trip. VentRow carries ai_reply and both
+    readings, selectMemory passes rows through untouched — but a filter that
+    projected columns would silently empty this feature while every check that
+    calls memoryBlock directly still passed.
+  */
+  const passed = selectMemory([
+    { ...row("rent", worked, 80, 30, 2), intent_type: "vent" },
+  ], 6);
+  ok(passed[0].ai_reply === worked && passed[0].tension_before === 80,
+    "selectMemory carries the reply and the readings through",
+    "the block cannot mark what it was never handed");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { FULL_CONTRACT, explainDbCode } from "@/lib/store/contract";
+import { FULL_CONTRACT, RPC_CONTRACT, explainDbCode } from "@/lib/store/contract";
 import { getStore } from "@/lib/store";
 import {
   isAnthropicConfigured,
@@ -74,8 +74,15 @@ export async function GET() {
     the light was not telling the truth about the road.
   */
   const transient: Record<string, { code?: string; hint?: string }> = {};
-  // Which contract was checked, so a green health cannot mean "checked two".
-  const tablesChecked = Object.keys(FULL_CONTRACT).length;
+  /*
+    Which contract was checked, so a green health cannot mean "checked two".
+
+    Counts the stored procedures as well now. The number is the answer to
+    "how much did you actually look at", and leaving the functions out of it
+    would understate the check in exactly the direction that matters.
+  */
+  const tablesChecked =
+    Object.keys(FULL_CONTRACT).length + Object.keys(RPC_CONTRACT).length;
 
   // Distinct from "unreachable" on purpose. A URL that does not parse is a
   // typo you fix in the dashboard in ten seconds; an unreachable database is
@@ -189,6 +196,43 @@ export async function GET() {
           tableErrors[name] = { ...tableErrors[name], missingColumns };
         }
       }
+      /*
+        The functions, which a table check cannot see.
+
+        Every rate-limit decision on every vent goes through
+        `vent_rate_count`. Skip its migration and all eight tables still
+        answer perfectly while every vent fails — a green light over a broken
+        road, from a probe asking the right identity in the right shape about
+        the wrong surface.
+
+        Counted into `missingTables` on purpose rather than into a field of
+        its own: everything downstream — the verdict, the status, the 503 —
+        already reads that list, and a second list is a second thing to
+        forget. The name is now the only inaccurate part, and an inaccurate
+        name is cheaper than an unread field.
+      */
+      const rpcNames = Object.keys(RPC_CONTRACT);
+      const rpcResults = await Promise.all(
+        rpcNames.map((fn) => supabase!.rpc(fn, RPC_CONTRACT[fn])),
+      );
+      for (const [i, res] of rpcResults.entries()) {
+        if (!res.error) continue;
+        const name = rpcNames[i];
+        if (res.error.code === "PGRST303") {
+          transient[name] = { code: res.error.code, hint: explainDbCode(res.error.code) ?? undefined };
+          continue;
+        }
+        missingTables.push(name);
+        tableErrors[name] = {
+          code: res.error.code ?? undefined,
+          hint:
+            res.error.hint ??
+            explainDbCode(res.error.code) ??
+            "a stored procedure the server calls is missing — check the migrations",
+          message: res.error.message ?? undefined,
+        };
+      }
+
       database = missingTables.length ? "unreachable" : "ok";
     } catch {
       database = "unreachable";
