@@ -68,6 +68,50 @@ export const NO_EFFICACY: EfficacyTable = new Map();
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 /**
+ * What one person's own sittings say, and why its numbers are different.
+ *
+ * The table above is the room: five hundred vents across everybody, twelve
+ * anchored observations per tactic before it may move a weight. Those floors
+ * are right for a claim about everyone and unreachable for a claim about one
+ * person — nobody has twelve anchored sittings on each of two tactics.
+ *
+ * So the personal floor is four, and because four is thinner evidence than
+ * twelve, the personal span is half. Less evidence must mean a smaller nudge;
+ * lowering the bar without lowering the influence would just be louder
+ * guessing. It is the same trade the preference pipeline makes when it scores
+ * somebody against their own baseline instead of the cohort's.
+ *
+ * Why bother: the room's opinion is about the average person, and there is no
+ * average person. `body_map_drop_set` beating the room by four points is a
+ * real finding and still says nothing about somebody who has never once been
+ * helped by a somatic move. Their own eleven sittings say that, and nothing
+ * else in this product — or in any competitor's — is in a position to hear it.
+ */
+export const PERSONAL_FLOOR = 4;
+export const PERSONAL_SPAN = 3;
+
+export function measurePersonalEfficacy(vents: readonly VentRow[]): EfficacyTable {
+  return score(vents, PERSONAL_FLOOR, PERSONAL_SPAN);
+}
+
+/**
+ * Their own opinion where they have one, the room's everywhere else.
+ *
+ * Per tactic rather than all-or-nothing: a person can have enough sittings to
+ * have learned something about two moves and nothing about the other thirty
+ * four, and the room is still the best available answer for those thirty four.
+ */
+export function blendEfficacy(
+  personal: EfficacyTable,
+  population: EfficacyTable,
+): EfficacyTable {
+  if (personal.size === 0) return population;
+  const merged = new Map(population);
+  for (const [id, delta] of personal) merged.set(id, delta);
+  return merged;
+}
+
+/**
  * Per-tactic drop, compared against the room.
  *
  * Returns an empty table — meaning "carry on as before" — whenever there is
@@ -77,10 +121,26 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n
  * itself in a mirror.
  */
 export function measureEfficacy(vents: readonly VentRow[]): EfficacyTable {
+  return score(vents, EFFICACY_FLOOR, EFFICACY_SPAN);
+}
+
+/*
+  One scoring function, two callers.
+
+  The room and the person differ only in how much evidence they demand and how
+  far they may move a weight. Writing the arithmetic twice is how the eval
+  suite ends up asserting against a copy while the product drifts — this file
+  already carries that lesson about chair tensions living in four places.
+*/
+function score(
+  vents: readonly VentRow[],
+  floor: number,
+  span: number,
+): EfficacyTable {
   const anchored = vents.filter(
     (v) => v.tactic_used && v.tension_before !== null && v.tension_after !== null,
   );
-  if (anchored.length < EFFICACY_FLOOR * 2) return NO_EFFICACY;
+  if (anchored.length < floor * 2) return NO_EFFICACY;
 
   const byTactic = new Map<string, number[]>();
   for (const v of anchored) {
@@ -92,7 +152,7 @@ export function measureEfficacy(vents: readonly VentRow[]): EfficacyTable {
   }
 
   const qualifying = [...byTactic.entries()].filter(
-    ([, drops]) => drops.length >= EFFICACY_FLOOR,
+    ([, drops]) => drops.length >= floor,
   );
   // One tactic over the floor has nothing to be compared with.
   if (qualifying.length < 2) return NO_EFFICACY;
@@ -107,9 +167,9 @@ export function measureEfficacy(vents: readonly VentRow[]): EfficacyTable {
   for (const [id, drops] of qualifying) {
     const mean = drops.reduce((a, b) => a + b, 0) / drops.length;
     const delta = clamp(
-      Math.round(((mean - baseline) * EFFICACY_SPAN) / POINTS_FOR_FULL_SWING),
-      -EFFICACY_SPAN,
-      EFFICACY_SPAN,
+      Math.round(((mean - baseline) * span) / POINTS_FOR_FULL_SWING),
+      -span,
+      span,
     );
     if (delta !== 0) table.set(id, delta);
   }

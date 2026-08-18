@@ -37,6 +37,8 @@ const { guardianVerdict, THRESHOLD } = await app("src/lib/external/guardian.ts")
 const { MYCELIUM: MYCELIUM_RULE } = await app("src/lib/circles/rules.ts");
 const { noModelKeyReply } = await app("src/lib/vent/fallback.ts");
 const { RPC_CONTRACT } = await app("src/lib/store/contract.ts");
+const { measurePersonalEfficacy, blendEfficacy, PERSONAL_SPAN } =
+  await app("src/lib/vent/efficacy.ts");
 const { REFERRALS, STALE_AFTER_DAYS, HANDOFF_FLOOR, activeReferrals, pastWhatThisHolds, handoffLine } =
   await app("src/lib/vent/referrals.ts");
 const { allProviders, configuredProviders, openAiCompatible } =
@@ -5320,6 +5322,71 @@ check("52 Faith is answered inside itself, not around it", () => {
   ok(/never prescribe/.test(text), "it never prescribes practice");
   ok(/everything happens for a reason/.test(text),
     "and it still bans the one sentence that empties a room");
+});
+
+check("53 A person's own sittings outrank the room's average", () => {
+  /*
+    The efficacy table was the room: five hundred vents across everybody,
+    twelve anchored observations per tactic. That is a real finding and it is
+    about the average person, and there is no average person. A somatic move
+    beating the room by four points says nothing about somebody who has never
+    once been helped by one — and their own eleven sittings say exactly that.
+
+    Nothing else in this product, and nothing in any competitor, is in a
+    position to hear it: it needs a measured outcome bound to a specific
+    technique for a specific person, which is what the anchor route made
+    possible.
+  */
+  const row = (tactic, before, after) => ({
+    tactic_used: tactic, tension_before: before, tension_after: after,
+  });
+
+  // Somebody for whom the body work does nothing and the room move lands.
+  const mine = [
+    ...Array.from({ length: 5 }, () => row("body_map_drop_set", 70, 68)),
+    ...Array.from({ length: 5 }, () => row("ubuntu_frame", 70, 30)),
+  ];
+  const personal = measurePersonalEfficacy(mine);
+  ok((personal.get("ubuntu_frame") ?? 0) > 0, "what worked for them is lifted");
+  ok((personal.get("body_map_drop_set") ?? 0) < 0, "what did not is lowered");
+
+  /*
+    Thin evidence buys a smaller nudge. Lowering the floor without lowering
+    the span would be louder guessing rather than better listening.
+  */
+  for (const [, delta] of personal) {
+    ok(Math.abs(delta) <= PERSONAL_SPAN,
+      `a personal delta stays inside ±${PERSONAL_SPAN} (${delta})`,
+      "the room may move a weight further because it knows more");
+  }
+  ok(PERSONAL_SPAN < EFFICACY_SPAN, "and the personal span is the smaller one");
+
+  // Under the floor it says nothing at all, like every other floor here.
+  is(measurePersonalEfficacy(mine.slice(0, 3)).size, 0,
+    "under the floor a personal table has no opinion");
+
+  /*
+    Per tactic, not all-or-nothing. Somebody can have learned something about
+    two moves and nothing about the other thirty four, and for those the room
+    is still the best answer available.
+  */
+  const room = new Map([["exact_mirror", 5], ["ubuntu_frame", -4]]);
+  const blended = blendEfficacy(personal, room);
+  is(blended.get("exact_mirror"), 5, "the room still answers where they are silent");
+  ok(blended.get("ubuntu_frame") > 0,
+    "and where they disagree with the room, they win",
+    "it is their session, and the number came from their own slider");
+  is(blendEfficacy(new Map(), room).get("ubuntu_frame"), -4,
+    "somebody with no history gets the room unchanged");
+
+  /*
+    One scoring function, two callers. Writing the arithmetic twice is how a
+    suite ends up asserting against a copy while the product drifts.
+  */
+  const src = fs.readFileSync(path.join(ROOT, "src/lib/vent/efficacy.ts"), "utf8");
+  is((src.match(/POINTS_FOR_FULL_SWING/g) ?? []).length, 2,
+    "the swing arithmetic exists in exactly one place",
+    "one definition and one use — a second copy is a second answer");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
