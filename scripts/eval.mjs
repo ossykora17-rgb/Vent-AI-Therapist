@@ -36,6 +36,7 @@ const { guardianVerdict, THRESHOLD } = await app("src/lib/external/guardian.ts")
 // The campfire's own lines, imported once so no check keeps a copy of them.
 const { MYCELIUM: MYCELIUM_RULE } = await app("src/lib/circles/rules.ts");
 const { noModelKeyReply } = await app("src/lib/vent/fallback.ts");
+const { RPC_CONTRACT } = await app("src/lib/store/contract.ts");
 const { REFERRALS, STALE_AFTER_DAYS, HANDOFF_FLOOR, activeReferrals, pastWhatThisHolds, handoffLine } =
   await app("src/lib/vent/referrals.ts");
 const { allProviders, configuredProviders, openAiCompatible } =
@@ -5114,6 +5115,35 @@ check("49 The health probe asks as the identity that does the work", () => {
   */
   ok(!/head:\s*true/.test(code), "and it asks in a shape that can carry a failure",
     "head: true has no body, so the error object never arrives");
+
+  /*
+    The fifth face, and the first one that is not about how the probe asks
+    but about what it forgets to ask at all.
+
+    A table check cannot see a function. Every rate-limit decision on every
+    vent goes through `vent_rate_count`, which arrives in migration 0014 —
+    skip it and all eight tables answer perfectly while every vent fails, and
+    `/api/health` says `database: ok` throughout.
+
+    So: every RPC the store calls must be in the contract, and the health
+    route must probe them. Derived from the store's own source rather than
+    from a list somebody maintains by hand, because a hand-maintained list of
+    things-to-check is the thing that was already missing.
+  */
+  const storeSrc = fs
+    .readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  const called = [...storeSrc.matchAll(/\.rpc\(\s*"([a-z_]+)"/g)].map((m) => m[1]);
+  const covered = Object.keys(RPC_CONTRACT);
+
+  ok(called.length > 0, "the store calls at least one stored procedure", called.join(", "));
+  for (const fn of new Set(called)) {
+    ok(covered.includes(fn), `${fn} is in the contract`,
+      "a procedure the server depends on that nothing verifies");
+  }
+  ok(/RPC_CONTRACT/.test(code), "and the health route probes them",
+    "a contract nobody reads is a list, not a check");
 });
 
 check("50 A referral nobody has dialled is never offered", () => {
