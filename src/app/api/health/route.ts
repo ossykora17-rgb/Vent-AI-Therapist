@@ -42,6 +42,17 @@ export async function GET() {
     */
     | "no_service_key" =
     "not_configured";
+  /*
+    Whether this role may write, as a third state and not a boolean.
+
+    "unverified" is the honest default and the common one — no key, no store,
+    a database that never answered. It is deliberately not `false`: a boolean
+    forces every unknown into either "writes work" or "writes are broken", and
+    both of those are claims nothing has checked. The whole point of this
+    field is to stop a claim being made from configuration.
+  */
+  let writable: "ok" | "denied" | "unverified" = "unverified";
+  let writeError: { code?: string; hint?: string; message?: string } | null = null;
   // Which tables answered and which did not — a migration that was never run
   // looks exactly like a wrong key unless the check says which.
   const missingTables: string[] = [];
@@ -234,6 +245,63 @@ export async function GET() {
         };
       }
 
+      /*
+        Whether this role may WRITE, which nine reading probes cannot know.
+
+        `persisting: Boolean(store)` was the answer to "are people's words
+        being saved", computed from whether a store object exists. That is a
+        green light over a broken road for the fourth time in this file's
+        history — models.retrieve, the anonymous probe, the HEAD request, and
+        now the oldest form of it: a light wired to configuration rather than
+        to the thing.
+
+        And it is not theoretical here. Every probe above is a `select`. A
+        `GRANT SELECT` without `GRANT INSERT` — which is one word missing from
+        0008, in exactly the file whose whole postmortem is about grants —
+        gives `database: ok`, `tablesChecked: 9`, `missingTables: []`, and
+        every vent silently failing to insert. The chat would say "Not saved"
+        to the person; `/api/health` would say `persisting: true` to whoever
+        is trying to work out why.
+
+        So: an UPDATE, as the service role, against a uuid that belongs to
+        nobody. It matches zero rows and changes nothing, and it still has to
+        pass the privilege check — which is the thing that broke. Nothing is
+        created, so nothing pollutes the tables the pipelines count.
+
+        What it does not prove, stated plainly rather than implied: this is
+        the service role, which bypasses RLS, so a policy that blocks writes
+        for some *other* identity is invisible here. That is correct scope —
+        the server writes as the service role and this asks as the identity
+        that does the work — but a probe that quietly widened its claim to
+        "writes are fine" would be the same bug wearing the newest coat.
+      */
+      const NOBODY = "00000000-0000-0000-0000-000000000000";
+      const wrote = await supabase!
+        .from("vent_users")
+        .update({ carve: null })
+        .eq("id", NOBODY);
+
+      if (wrote.error) {
+        if (wrote.error.code === "PGRST303") {
+          transient.write = {
+            code: wrote.error.code,
+            hint: explainDbCode(wrote.error.code) ?? undefined,
+          };
+        } else {
+          writable = "denied";
+          writeError = {
+            code: wrote.error.code ?? undefined,
+            hint:
+              wrote.error.hint ??
+              explainDbCode(wrote.error.code) ??
+              "this role can read but not write — check GRANT INSERT/UPDATE in 0008_grants.sql",
+            message: wrote.error.message ?? undefined,
+          };
+        }
+      } else {
+        writable = "ok";
+      }
+
       database = missingTables.length ? "unreachable" : "ok";
     } catch {
       database = "unreachable";
@@ -277,9 +345,23 @@ export async function GET() {
 
   return NextResponse.json(
     {
-      // Degraded means nobody can be answered — not that one link is down.
+      /*
+        Degraded means nobody can be answered — not that one link is down.
+
+        `writable === "denied"` joins that list, and adding it is the point of
+        having probed at all. A database that answers every read and refuses
+        every write is a deployment where people are heard and nothing they
+        say survives the tab, and the endpoint would otherwise have printed
+        `status: ok` over it — a green light over a broken road one field to
+        the left of the one that was just fixed. A verdict that knows and does
+        not say is the same failure as a verdict that never asked.
+
+        "unverified" deliberately does not degrade anything. Nothing has been
+        checked, and an unchecked thing is not a broken thing.
+      */
       status:
         database === "unreachable" ||
+        writable === "denied" ||
         (configuredProviders().length > 0 && model.status !== "ok")
           ? "degraded"
           : "ok",
@@ -295,7 +377,22 @@ export async function GET() {
       tried: probe.tried,
       skipped: skipped(),
       storage: store?.kind ?? "none",
-      persisting: Boolean(store),
+      /*
+        Kept, and no longer a claim about the deployment.
+
+        It read `Boolean(store)` — "a store object was constructed" — under a
+        name that answers "are people's words being saved". Callers depend on
+        this field, so it keeps its name and its type and stops overclaiming:
+        a database that has been asked whether it accepts writes reports what
+        it answered, and everything else reports what a file store genuinely
+        does, which is persist.
+      */
+      persisting: store ? (store.kind === "supabase" ? writable === "ok" : true) : false,
+      // The evidence, so `persisting: false` is never a bucket with nothing
+      // in it. "unverified" and "denied" are different problems and the
+      // second one names the GRANT to run.
+      writable,
+      ...(writeError ? { writeError } : {}),
       /*
         Which database this actually is.
 
