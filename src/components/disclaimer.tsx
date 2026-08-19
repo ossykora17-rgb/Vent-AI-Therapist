@@ -22,19 +22,61 @@ import { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL } from "@/lib/vent/intent";
  * with nothing configured as it does locally, which is the point — a
  * disclosure that depends on configuration is not a disclosure.
  */
+/*
+  Two lines, not four — and nothing removed to get there.
+
+  Screenshotted at 360px after the composer's controls were folded away, this
+  was the loudest thing left on the screen: four lines of legal prose directly
+  under a one-line input, taking more vertical space than the input, the
+  button and the pressure strip combined. Tidying the composer had made the
+  disclaimer the composer.
+
+  The temptation was to cut a clause. Every clause here is load-bearing —
+  "an AI", "not a person", "not a licensed therapist", "not medical advice",
+  and two numbers somebody might have to dial tonight — and check 46 holds all
+  of them, correctly.
+
+  So nothing is cut. It is set as what it actually is: one sentence somebody
+  should read, and a row of facts they should be able to find. The disclosure
+  keeps its size and its full stop; the numbers become a tight tabular row that
+  reads as a footer rather than as a paragraph, which is also how somebody
+  scanning for a phone number at 2am actually looks for one.
+
+  Same words, half the height, and the number is easier to hit than it was.
+*/
 export function Disclaimer({ className = "" }: { className?: string }) {
   return (
-    <p className={`text-[12px] leading-relaxed text-ash ${className}`.trim()}>
-      Mind Weave VENT is an AI — not a person, and not a licensed therapist.
-      Emotional support only, not medical advice. In crisis, call Nigeria{" "}
-      <a href={`tel:${CRISIS_TEL}`} className="underline underline-offset-2">
-        {CRISIS_LINES.nigeria}
-      </a>{" "}
-      or emergency{" "}
-      <a href={`tel:${EMERGENCY_TEL}`} className="underline underline-offset-2">
-        {CRISIS_LINES.emergency}
-      </a>
-      .
-    </p>
+    <div className={`text-ash ${className}`.trim()}>
+      <p className="text-[12px] leading-snug">
+        Mind Weave VENT is an AI — not a person, and not a licensed therapist.
+      </p>
+      <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] leading-snug">
+        <span>Support, not medical advice</span>
+        <span aria-hidden className="opacity-40">
+          ·
+        </span>
+        <span>
+          Crisis{" "}
+          <a
+            href={`tel:${CRISIS_TEL}`}
+            className="tabular underline underline-offset-2"
+          >
+            {CRISIS_LINES.nigeria}
+          </a>
+        </span>
+        <span aria-hidden className="opacity-40">
+          ·
+        </span>
+        <span>
+          Emergency{" "}
+          <a
+            href={`tel:${EMERGENCY_TEL}`}
+            className="tabular underline underline-offset-2"
+          >
+            {CRISIS_LINES.emergency}
+          </a>
+        </span>
+      </p>
+    </div>
   );
 }

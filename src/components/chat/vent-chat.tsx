@@ -13,6 +13,7 @@ import { anonId, queueVent } from "@/lib/anon";
 import { cn } from "@/lib/utils";
 import { carryingWord } from "@/lib/community/carrying";
 import { useComposerHeight } from "@/lib/ui/use-composer-height";
+import { readEventStream } from "@/lib/ui/event-stream";
 
 type Body = "head" | "throat" | "chest";
 
@@ -76,6 +77,37 @@ export function VentChat() {
   const [lines, setLines] = React.useState<Line[]>([]);
   const [draft, setDraft] = React.useState("");
   const [thinking, setThinking] = React.useState(false);
+  /**
+   * The reply as it is being written, or null.
+   *
+   * A preview and never a record. It is drawn on the same plate the finished
+   * reply lands on and then replaced by it, so what a person watches appear is
+   * in the place the answer will be — nothing slides, nothing is swapped out
+   * from under them.
+   *
+   * It never enters `lines`. That is the difference between this and a chat
+   * app: `lines` is the transcript, and a transcript may only contain what the
+   * server actually committed to. A stream can be abandoned mid-sentence when
+   * a provider dies, and a preview that had been written into the transcript
+   * would leave the abandoned half of somebody else's answer sitting in the
+   * record of a session.
+   */
+  const [streamed, setStreamed] = React.useState<string | null>(null);
+  /**
+   * Whether the body and pressure controls are showing.
+   *
+   * Closed by default, and that is the change. Three pills and a slider sat
+   * permanently above the composer — measured at 360px, the header, the
+   * controls, the box, the button and the disclaimer took 232px of a 640px
+   * screen, so more than a third of this product was chrome asking somebody to
+   * classify themselves before they had said a word.
+   *
+   * They are real inputs and they feed the tactic choice, so they stay. They
+   * are just not the first thing anybody meets. Onboarding already set the
+   * pressure, the current reading is legible in one line without opening
+   * anything, and the person who wants to move it taps one word.
+   */
+  const [trayOpen, setTrayOpen] = React.useState(false);
   const [pressure, setPressure] = React.useState(50);
   const [body, setBody] = React.useState<Body | null>(null);
   const [mood, setMood] = React.useState<number | null>(null);
@@ -158,6 +190,31 @@ export function VentChat() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [lines, thinking, askMood]);
 
+  /*
+    Following a reply as it is written, and knowing when not to.
+
+    Two rules, and both of them exist because the obvious version is wrong.
+
+    `behavior: "auto"`, not "smooth". A smooth scroll is a 300ms animation and
+    tokens land every 30ms or so, which queues thirty overlapping animations
+    that fight each other — the page shivers instead of scrolling. Instant is
+    the right call precisely because it is happening constantly: continuous
+    small jumps read as the page keeping up, which is what it is doing.
+
+    And it stops the moment somebody scrolls away. A person reading back
+    something said three turns ago, dragged to the bottom every 30ms by a
+    reply arriving, cannot read anything — the scroll position is theirs while
+    they are using it. 160px of slack, so it still follows for somebody sitting
+    at the bottom whose viewport is a few pixels off.
+  */
+  React.useEffect(() => {
+    if (streamed === null) return;
+    const room = document.documentElement;
+    const fromBottom = room.scrollHeight - room.scrollTop - room.clientHeight;
+    if (fromBottom > 160) return;
+    endRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+  }, [streamed]);
+
   async function send(text: string) {
     const message = text.trim();
     if (!message || thinking || gated) return;
@@ -165,12 +222,23 @@ export function VentChat() {
     setLines((l) => [...l, { id: nextId.current++, speaker: "you", text: message }]);
     setDraft("");
     setThinking(true);
+    setStreamed("");
     setAskMood(false);
+    // Collapse the tray on send. It is a thing you reach for, not a thing you
+    // sit in front of.
+    setTrayOpen(false);
 
     try {
       const res = await fetch("/api/vent", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          // Ask for it as it is written. A deployment, proxy or browser that
+          // will not stream answers with ordinary JSON and the branch below
+          // reads that instead — nobody is refused an answer over a transport
+          // preference.
+          accept: "text/event-stream",
+        },
         body: JSON.stringify({
           anonId: anonId(),
           message,
@@ -183,19 +251,66 @@ export function VentChat() {
         }),
       });
 
-      const data: VentResponse & { error?: string } = await res.json();
+      /*
+        Two shapes, one meaning.
 
-      if (res.status === 429) {
+        `status` and `data` below are the status and body of the turn, whether
+        they arrived at once or at the end of a stream. Everything after this
+        block is the code that was already here, unchanged, because the stream
+        does not change what a turn *is* — only when its first words appear.
+      */
+      let status = res.status;
+      let data: VentResponse & { error?: string };
+
+      if (res.headers.get("content-type")?.includes("text/event-stream")) {
+        let done: { status: number; body: VentResponse & { error?: string } } | null = null;
+        let live = "";
+        let atSeq = 0;
+
+        await readEventStream(res, (e) => {
+          if (e.event === "delta") {
+            const d = e.data as { chunk: string; seq: number };
+            /*
+              A new `seq` means the provider that was speaking failed and the
+              chain moved on. What is on screen is half a sentence from
+              somebody who is not going to finish it, so it goes — appending
+              would splice two voices into one reply and hand the result to
+              somebody at their worst.
+            */
+            if (d.seq !== atSeq) {
+              atSeq = d.seq;
+              live = "";
+            }
+            live += d.chunk;
+            setStreamed(live);
+          } else if (e.event === "done") {
+            done = e.data as typeof done;
+          }
+        });
+
+        // A stream that ended without `done` never delivered an answer. What
+        // is on screen is a fragment of one, and a fragment is not an answer —
+        // so it is discarded and the offline path takes it, which is the one
+        // branch here that does not lose what they said.
+        if (!done) throw new Error("stream ended without an answer");
+        ({ status, body: data } = done);
+      } else {
+        data = await res.json();
+      }
+
+      const ok = status >= 200 && status < 300;
+
+      if (status === 429) {
         toast(data.reply ?? "Slow down small.", "info");
         return;
       }
-      if (!res.ok && !data.reply) throw new Error(data.error ?? `HTTP ${res.status}`);
+      if (!ok && !data.reply) throw new Error(data.error ?? `HTTP ${status}`);
 
       // When the model does not answer, the reply alone names one cause out of
       // four and the real one is only in the JSON. Days were lost reading
       // "Network dipped" as a network problem. If the server said why, show it.
       const why =
-        !res.ok && data.reason
+        !ok && data.reason
           ? `\n\n[${data.reason}${data.detail ? ` — ${data.detail}` : ""}]`
           : "";
 
@@ -229,24 +344,65 @@ export function VentChat() {
       if (typeof data.memoryUsed === "number") setMemoryCount(data.memoryUsed);
       if (typeof data.persisted === "boolean") setPersisted(data.persisted);
     } catch {
-      // Offline: hold it locally rather than losing what they just said.
+      /*
+        Their words are kept. What broke is not guessed at.
+
+        This branch said "You're offline" for every failure that reached it,
+        and streaming gave it a second way in: a stream that ends without a
+        `done` throws here, and the room then told somebody with four bars that
+        their network had gone. A confident wrong diagnosis, in the product
+        whose own file records losing days to "Network dipped on my side"
+        meaning four different things.
+
+        One of the two sentences below is a fact this code can actually check
+        and the other is what is true when it cannot. `navigator.onLine` is
+        trusted in one direction only, and that asymmetry is the point: a
+        `false` is reliable — the machine knows it has no route — while a
+        `true` means nothing at all, since a wifi with no internet behind it
+        reports online all day. So a claim about being offline is made only on
+        the reading that supports it.
+
+        The queue does not depend on knowing which. That is the part that is
+        true either way, and it is the part that gets said first.
+      */
       queueVent({
         message,
         pressure,
         bodyTapped: body,
         queuedAt: new Date().toISOString(),
       });
+      const offline = typeof navigator !== "undefined" && navigator.onLine === false;
       setLines((l) => [
         ...l,
         {
           id: nextId.current++,
           speaker: "vent",
-          text: "You're offline — your truth still saved locally. It goes up the moment you're back.",
+          text: offline
+            ? "You're offline — your truth still saved locally. It goes up the moment you're back."
+            : "That one no reach me. What you wrote is held here, and it goes up with your next message.",
         },
       ]);
-      toast("Saved offline.", "info");
+      /*
+        No toast. The room already said it, in the room's voice.
+
+        There was one, and a screenshot showed it parked across "1 · still
+        heavy / 10 · lighter" — the two anchors that are the only thing making
+        a number on that row mean anything. Two confirmations of one event, the
+        smaller one covering part of the larger, on the card this product
+        exists to get an answer out of.
+
+        That is the reasoning already written into `submitMood` twenty lines
+        down, arriving late: the card gets the moment when there is a card, and
+        a toast is for when nothing else will speak. Here something else
+        speaks — a line in the transcript, scrolled to, in full measure.
+      */
     } finally {
       setThinking(false);
+      // Cleared here rather than beside each outcome, because every outcome
+      // clears it: the preview's whole job ends the moment there is a real
+      // line to replace it, and a `setStreamed(null)` missing from one branch
+      // would leave a ghost reply under the true one.
+      setStreamed(null);
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }
@@ -328,6 +484,10 @@ export function VentChat() {
 
   const drop =
     tensionBefore !== null && tensionAfter !== null ? tensionBefore - tensionAfter : null;
+
+  /* One word for the reading, used by the closed strip and by the open
+     slider, so the two can never disagree about what 67 means. */
+  const pressureWord = pressure > 66 ? "tight" : pressure > 33 ? "some" : "loose";
 
   /*
     What held — the counterweight to the carve, and the only thing in this
@@ -494,7 +654,25 @@ export function VentChat() {
    * routing it through the model would spend money to reply to a sentence that
    * already has its reply written.
    */
+  /** Put the grown box back to one line. Called wherever the draft is emptied. */
+  function shrink() {
+    const el = inputRef.current;
+    if (el) el.style.height = "";
+  }
+
   function submit(text: string) {
+    if (!text.trim() || thinking || gated) return;
+    shrink();
+    /*
+      A tap you can feel, on the one action in this product that costs
+      something to take.
+
+      Eight milliseconds — under the threshold where it reads as a buzz, over
+      the one where it reads as nothing. Guarded because iOS Safari has no
+      `vibrate` at all and desktops have no motor, and neither is a reason for
+      an exception.
+    */
+    navigator.vibrate?.(8);
     if (answering) return void answerBreaking(text);
     return void send(text);
   }
@@ -715,15 +893,36 @@ export function VentChat() {
             ),
           )}
 
+          {/*
+            The room, speaking.
+
+            This was the word "Thinking" and a pulsing ellipsis, held for the
+            two to eight seconds the chain takes — the longest single moment in
+            this product, spent by somebody who has just typed the hardest
+            sentence of their day, watching a machine word.
+
+            Now the plate is the same plate, in the same place, and the answer
+            writes itself into it. Nothing is swapped when it finishes: the
+            finished line renders where the preview was, at the same measure
+            and the same leading, so the transition is a caret going out.
+
+            Before the first token there is still a wait and it is still
+            honest about being one — but it says nothing rather than saying
+            "Thinking", because a caret in an empty plate already means
+            somebody is about to speak, and this product's first rule is that
+            silence beats a guess. The full-stop of that rule applied to a
+            loading state.
+          */}
           {thinking && (
             <li>
-              {/* The room, about to speak. Same plate, dimmed — so the
-                  answer lands in the space that was already holding it,
-                  rather than shoving a placeholder aside. */}
-              <div className="presence p-6 opacity-70 sm:p-8">
+              <div className="presence p-6 sm:p-8">
                 <p className="nameplate mb-4">Vent</p>
-                <p aria-live="polite" className="text-sm text-ash">
-                  Thinking<span className="animate-pulse">…</span>
+                <p aria-live="polite" className="reply whitespace-pre-wrap">
+                  {streamed}
+                  <span
+                    aria-hidden
+                    className="caret ml-0.5 inline-block h-[1em] w-[2px] translate-y-[0.12em] bg-gold"
+                  />
                 </p>
               </div>
             </li>
@@ -1061,46 +1260,91 @@ export function VentChat() {
 
       <footer ref={footerRef} className="sticky bottom-0 border-t border-line/10 bg-paper/95 backdrop-blur-glass">
         <div className="mx-auto max-w-[640px] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
-          {/* Where it sits + how tight. Both feed the tactic choice. */}
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            {(["head", "throat", "chest"] as const).map((b) => (
-              <button
-                key={b}
-                type="button"
-                onClick={() => setBody(body === b ? null : b)}
-                aria-pressed={body === b}
-                className={cn(
-                  "min-h-[44px] rounded-full border px-4 text-xs font-mono uppercase tracking-[0.1em] transition-colors duration-300",
-                  body === b
-                    ? "border-gold bg-gold text-on-gold"
-                    : "border-line/15 text-ash",
-                )}
-              >
-                {b}
-              </button>
-            ))}
-            {/* "Mid" sat immediately right of HEAD / THROAT / CHEST and read
-                as a fourth body part — and MID is a real somatic region in
-                `lib/vent/scan.ts`, so the collision was not only visual. It
-                is the pressure reading, so it says a pressure word. */}
-            <label className="ml-auto flex min-w-[140px] flex-1 items-center gap-2">
-              <span className="label-mono shrink-0">
-                {pressure > 66 ? "Tight" : pressure > 33 ? "Some" : "Loose"}
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={pressure}
-                onChange={(e) => setPressure(Number(e.target.value))}
-                aria-label="Pressure, 0 loose to 100 tight"
-                // The track reads as weight, not as a form control. See
-                // input[type="range"] in globals.css.
-                style={{ "--fill": `${pressure}%` } as React.CSSProperties}
-                className="h-2 w-full accent-gold"
-              />
-            </label>
-          </div>
+          {/*
+            Where it sits and how tight, folded away until asked for.
+
+            Both still feed the tactic choice and neither has changed. What
+            changed is that they no longer stand between a person and the box.
+            The current reading is stated in the strip — "chest · tight", or
+            just the pressure word when they have not named a place — so
+            nothing is hidden, only closed.
+
+            One line, and it reads as a sentence rather than a control: the
+            product's own voice describing what it currently believes, which is
+            also an invitation to correct it. That is the honest framing, since
+            correcting it is exactly what opening the tray does.
+          */}
+          {trayOpen && (
+            <div id="body-tray" className="mb-3 flex flex-wrap items-center gap-2">
+              {(["head", "throat", "chest"] as const).map((b) => (
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => setBody(body === b ? null : b)}
+                  aria-pressed={body === b}
+                  className={cn(
+                    "min-h-[44px] rounded-full border px-4 text-xs font-mono uppercase tracking-[0.1em] transition-colors duration-300",
+                    body === b
+                      ? "border-gold bg-gold text-on-gold"
+                      : "border-line/15 text-ash",
+                  )}
+                >
+                  {b}
+                </button>
+              ))}
+              {/* "Mid" sat immediately right of HEAD / THROAT / CHEST and read
+                  as a fourth body part — and MID is a real somatic region in
+                  `lib/vent/scan.ts`, so the collision was not only visual. It
+                  is the pressure reading, so it says a pressure word. */}
+              {/*
+                No word beside the slider, and that is not an omission.
+
+                Open, this printed "SOME" next to the track and the strip
+                twenty pixels below printed "SOME" again — the same reading,
+                twice, stacked, in the same typeface. Seen in a screenshot, not
+                in the source, where two components each rendering one label
+                looks perfectly reasonable.
+
+                The strip is the readout: it is visible whether this is open or
+                shut, it sits directly above the box, and it updates live while
+                the thumb is dragged. A second copy can only ever agree with it
+                or be a bug. `aria-label` carries the meaning for anybody not
+                reading the strip.
+              */}
+              <label className="ml-auto flex min-w-[160px] flex-1 items-center gap-2">
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={pressure}
+                  onChange={(e) => setPressure(Number(e.target.value))}
+                  aria-label="Pressure, 0 loose to 100 tight"
+                  // The track reads as weight, not as a form control. See
+                  // input[type="range"] in globals.css.
+                  style={{ "--fill": `${pressure}%` } as React.CSSProperties}
+                  className="h-2 w-full accent-gold"
+                />
+              </label>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setTrayOpen((o) => !o)}
+            aria-expanded={trayOpen}
+            aria-controls="body-tray"
+            className="focusable label-mono mb-2 flex min-h-[32px] items-center gap-1.5 text-ash transition-colors duration-300 hover:text-ink"
+          >
+            <span
+              aria-hidden
+              className="h-1.5 w-1.5 rounded-full bg-gold"
+              style={{ opacity: 0.35 + (pressure / 100) * 0.65 }}
+            />
+            {body ? `${body} · ${pressureWord}` : pressureWord}
+            <span aria-hidden className={cn("transition-transform duration-300", trayOpen && "rotate-180")}>
+              ⌄
+            </span>
+          </button>
 
           {/*
             While a heavy question is open, the box says whose it is.
@@ -1143,7 +1387,28 @@ export function VentChat() {
               ref={inputRef}
               rows={1}
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              /*
+                It grows with what you are writing, up to eight lines.
+
+                `rows={1}` with `resize-none` and a max height is a box that
+                looks like one line and stays one line — a long vent scrolled
+                inside a 48px window, so somebody pouring out a paragraph could
+                see the last eleven words of it and nothing else. A therapy
+                product whose input hides what you are saying while you say it.
+
+                Measured off `scrollHeight`, which needs the height reset first
+                or the box can only ever get taller: `scrollHeight` includes
+                the height already set, so without the reset a deleted line
+                leaves the space it had. Capped at 176px — eight lines at this
+                leading — after which it scrolls, because a composer that eats
+                the transcript is its own problem.
+              */
+              onChange={(e) => {
+                setDraft(e.target.value);
+                const el = e.currentTarget;
+                el.style.height = "auto";
+                el.style.height = `${Math.min(el.scrollHeight, 176)}px`;
+              }}
               onKeyDown={(e) => {
                 if (
                   (e.key === "Enter" && !e.shiftKey) ||
@@ -1152,20 +1417,47 @@ export function VentChat() {
                   e.preventDefault();
                   submit(draft);
                 }
-                if (e.key === "Escape") setDraft("");
+                if (e.key === "Escape") {
+                  setDraft("");
+                  shrink();
+                }
               }}
               placeholder={answering ? "Answer am how e dey…" : "Carve your truth…"}
               disabled={gated}
-              className="max-h-32 min-h-[48px] flex-1 resize-none rounded-card border border-line/15 bg-card/60 px-4 py-3 leading-[1.6] shadow-glass-sm backdrop-blur-glass placeholder:text-ash disabled:opacity-50"
+              className="min-h-[48px] flex-1 resize-none overflow-y-auto rounded-card border border-line/15 bg-card/60 px-4 py-3 leading-[1.6] shadow-glass-sm backdrop-blur-glass placeholder:text-ash disabled:opacity-50"
             />
+            {/*
+              A stroke, not a word.
+
+              "Send" in a 64px pill is the widest possible way to say the one
+              thing the Return key already says, and at 360px it took the space
+              the box needed. The arrow is round, gold, 48px — a full target —
+              and it is the only filled shape in the composer, so the eye finds
+              it without reading.
+
+              It goes quiet rather than spinning while the room is answering:
+              there is a caret writing a reply eight lines above it, and two
+              things claiming to be busy is one too many.
+            */}
             <button
               type="button"
               onClick={() => submit(draft)}
               disabled={!draft.trim() || thinking || gated}
               aria-label={answering ? "Send your answer" : "Send"}
-              className="flex h-12 min-w-[64px] items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-on-gold transition-opacity duration-300 disabled:opacity-40"
+              className="pressable focusable flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gold text-on-gold transition-opacity duration-300 disabled:opacity-30"
             >
-              {thinking ? "…" : "Send"}
+              <svg
+                aria-hidden
+                viewBox="0 0 24 24"
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.25}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 19V5M5 12l7-7 7 7" />
+              </svg>
             </button>
           </div>
 

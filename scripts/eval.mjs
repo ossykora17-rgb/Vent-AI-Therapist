@@ -4745,8 +4745,26 @@ check("45 A reply is allowed to finish its sentence", () => {
     postmortem, which is precisely what check 37 says it learned and what
     check 35 learned before that. Third time in one file. Scan what runs.
   */
+  /*
+    From `async send(` to the line that reads the completion — the whole
+    region that builds a request, however it chooses to build one.
+
+    It used to start at `messages.create(`, which is a claim about the *shape*
+    of the code and not about what is sent. The moment the parameters moved
+    into a named object so the streaming and non-streaming branches could share
+    them, `messages.create(params)` began appearing after `thinking:` instead
+    of before it, and the slice cut the assertion's own evidence out of the
+    file. The check failed on an adapter that had not changed what it sends by
+    a single field.
+
+    That is check 16's lesson arriving from the other direction: a check that
+    scans for a literal passes and fails on how something is written rather
+    than on what it does. Scoped to `send` it reads both shapes and would read
+    a third — and it is not weaker for it, because the sampling parameters it
+    forbids are absent from this whole region either way.
+  */
   const call = anthropic
-    .slice(anthropic.indexOf("messages.create("), anthropic.indexOf("const text"))
+    .slice(anthropic.indexOf("async send("), anthropic.indexOf("const text"))
     .replace(/\/\*[\s\S]*?\*\//g, " ")
     .replace(/\/\/[^\n]*/g, " ");
 
@@ -4762,6 +4780,32 @@ check("45 A reply is allowed to finish its sentence", () => {
   ok(/thinking\s*:/.test(call),
     "the Anthropic call states a `thinking` mode rather than inheriting the default",
     "unset means adaptive on this model family — the reply is billed for reasoning and truncated by it");
+
+  /*
+    One request object, both branches.
+
+    The adapter has two ways to call now — `.create()` when nothing is
+    listening and `.stream()` when somebody is watching the words appear — and
+    the second one is the path every real person takes. A streaming branch
+    that assembled its own parameter literal would be free to omit
+    `thinking: disabled`, and the bug would land where nothing looks: the eval
+    suite calls the chain without a sink, so the covered path stays correct
+    while every actual vent pays for a silent reasoning pass and gets truncated
+    by it. Precisely the "suite tests the shape its author is standing in"
+    failure, with a streaming API as the new shape.
+
+    So: at most one object literal in this region, and both calls handed the
+    same identifier.
+  */
+  const literals = call.match(/messages\s*\.?\s*(create|stream)\s*\(\s*\{/g) || [];
+  is(literals.length, 0,
+    "neither Anthropic call is handed its own inline parameter object");
+  const passed = [...call.matchAll(/messages\s*\.?\s*(?:create|stream)\s*\(\s*([A-Za-z_$][\w$]*)/g)]
+    .map((m) => m[1]);
+  ok(passed.length >= 1, "the Anthropic adapter calls the SDK with a named request object");
+  is(new Set(passed).size, 1,
+    "the streaming and non-streaming calls send the same request object",
+    "two literals is how `thinking: disabled` comes off the path real people use while the suite keeps passing");
 
   /*
     Sampling parameters are a 400 on this model family, not a nudge. A
@@ -5461,6 +5505,311 @@ check("54 The model is shown the one reply that worked on this person", () => {
   ok(passed[0].ai_reply === worked && passed[0].tension_before === 80,
     "selectMemory carries the reply and the readings through",
     "the block cannot mark what it was never handed");
+});
+
+await checkAsync("55 What was streamed is a preview; what was committed is the answer", async () => {
+  /*
+    The chat streams now, and streaming is this repo's oldest bug wearing its
+    most attractive face.
+
+    Every one of the eleven faces in CLAUDE.md is an interface that stated
+    something before, or without, its answer. A token stream is an interface
+    that states things *continuously* before the answer — by construction, on
+    purpose, and correctly. Which makes exactly one rule the difference
+    between a good streaming implementation and the twelfth face:
+
+      what is drawn while waiting may never become what is recorded.
+
+    It is not a hypothetical. Three things routinely make the streamed text
+    differ from the reply:
+
+      · a provider is cut off mid-sentence, `wasCutOff` refuses it, and the
+        chain answers from the next one — the first one's half-sentence is on
+        screen and is not the answer
+      · `keyless` rewrites the reply after the write, out of what the write
+        returned
+      · a crisis classification never reaches a model at all
+
+    So the transcript is fed from the response body and nothing else, and this
+    check holds all three layers to it: the chain discards on fallthrough, the
+    route sends the whole body at the end, and the client draws the preview
+    somewhere it can be thrown away.
+
+    Zero tokens. Read as text, like check 16 — the shape of the wiring is what
+    is being asserted, and executing a stream would need a provider.
+  */
+  const providers = fs.readFileSync(path.join(ROOT, "src/lib/vent/providers.ts"), "utf8");
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
+  const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+  // ── the chain ────────────────────────────────────────────────────────────
+  /*
+    A provider that dies mid-answer has already spoken. Without a discard, the
+    next provider's reply is appended to the abandoned half of the last one's
+    and somebody at their worst reads two voices spliced together.
+  */
+  const fallthrough = strip(providers).slice(
+    strip(providers).indexOf("export async function generateReply"),
+  );
+  ok(/onRestart\?\.\(\)/.test(fallthrough),
+    "the chain discards what a failed provider streamed before trying the next",
+    "without it the second answer is appended to the first one's half-sentence");
+
+  /*
+    And the guard still runs on the streamed text. A streaming path that read
+    its own completion would be free to skip `wasCutOff` — the exact fix for
+    the reply that ended "If you", quietly off on the only path real people
+    take. Check 45 counts two calls; this one asserts the streamed branch does
+    not get its own return.
+  */
+  const anthropic = strip(providers).slice(strip(providers).indexOf("function anthropicProvider"));
+  const returns = anthropic.slice(0, anthropic.indexOf("wasCutOff"));
+  ok(!/\breturn\s+[\w.]*text/.test(returns),
+    "the Anthropic adapter returns no text before the cut-off guard has run",
+    "an early return on the streamed branch takes the guard off the path everybody uses");
+
+  // ── the route ────────────────────────────────────────────────────────────
+  /*
+    One handler, threaded — not two. A second copy of a 500-line turn is how
+    persistence, the crisis gate, the breaking-room cadence and the rate limit
+    drift apart between the path a person takes and the path the suite tests.
+  */
+  is((route.match(/async function handlePOST/g) ?? []).length, 1,
+    "there is exactly one POST handler, streamed or not",
+    "a second copy is a second set of rules for the same turn");
+
+  /*
+    The stream must end by sending the whole response. A stream of deltas and
+    no terminal body is a UI that can only ever commit to what it drew — the
+    twelfth face, shipped.
+  */
+  const streamWrapper = strip(route).slice(strip(route).indexOf("export const POST"));
+  /*
+    Scoped to the success path, and that is the whole point of the scoping.
+
+    Written first as "somewhere in the wrapper there is a `done` with a status
+    and a body", it passed a mutation that deleted the real one outright —
+    because the failure branch below sends a `done` too, and satisfied the
+    pattern on a route that had stopped delivering answers entirely. A check
+    that a catch block can satisfy on behalf of the happy path is a check of
+    the catch block.
+
+    So it reads the turn's own result: whatever `handlePOST` was assigned to
+    has to appear inside the `done` that follows it, before the catch. Survives
+    a rename, fails a deletion.
+  */
+  const handled = /const\s+([A-Za-z_$][\w$]*)\s*=\s*await handlePOST\(/.exec(streamWrapper);
+  ok(handled, "the stream wrapper runs the one POST handler and keeps its response");
+  const success = streamWrapper.slice(handled?.index ?? 0).split(/\}\s*catch/)[0];
+  const doneCall = /send\(\s*"done"\s*,\s*\{[\s\S]{0,160}?\}\s*\)/.exec(success)?.[0] ?? "";
+  ok(/status/.test(doneCall) && /body/.test(doneCall),
+    "the successful turn ends with a `done` event carrying a status and a body",
+    "deltas alone give the client nothing to correct itself against");
+  /*
+    The *body* specifically, not merely the same object somewhere in the call.
+
+    First written as "the handler's identifier appears in the done payload",
+    which a mutation walked straight through: keeping `status: res.status` and
+    replacing the body with a literal satisfied it, on a route that had stopped
+    sending the answer and was sending an empty reply instead. The status is
+    not the part a person reads.
+  */
+  const bodyValue = doneCall.split(/body:/)[1] ?? "";
+  ok(handled && bodyValue.includes(handled[1]),
+    "the `done` body is the handler's own response, not something reconstructed",
+    "a body built from anything else is the preview being promoted to the answer");
+  ok(/catch[\s\S]{0,400}send\(\s*"done"/.test(streamWrapper),
+    "a failure mid-stream still sends a `done` rather than aborting the connection",
+    "an aborted stream is indistinguishable from a dropped network and blames the wrong thing");
+
+  // ── the client ───────────────────────────────────────────────────────────
+  const client = strip(chat);
+  /*
+    The preview never enters the transcript. `lines` is the record of the
+    session and may hold only what the server returned; the streamed text
+    lives in its own state and is cleared.
+  */
+  ok(!/setLines\([^)]{0,200}streamed/.test(client),
+    "the streamed preview is never written into the transcript",
+    "a preview in `lines` records half of an answer the server went on to refuse");
+  ok(/text:\s*data\.reply/.test(client),
+    "the committed line is built from the response body",
+    "the transcript comes from what came back, not from what was drawn");
+  ok(/setStreamed\(null\)/.test(client),
+    "the preview is cleared once there is a real line",
+    "a ghost reply under the true one");
+
+  /*
+    A changed `seq` means the chain moved on. A client that appends through it
+    shows the splice this check's first assertion exists to prevent — the
+    discard has to happen at both ends or it happens at neither.
+  */
+  ok(/seq\s*!==\s*atSeq[\s\S]{0,200}live\s*=\s*""/.test(client),
+    "the client throws away the preview when the provider changes",
+    "the chain discarding is worth nothing if the screen keeps drawing it");
+
+  /*
+    A failed turn does not diagnose itself.
+
+    Streaming added a second way into the offline branch — a stream that ends
+    without a `done` throws exactly where a dropped connection does — and that
+    branch said "You're offline" to everybody who reached it. Somebody with
+    four bars, whose stream died at the proxy, was told their network had gone.
+
+    This is the sentence class this whole file exists for, inverted: not a
+    claim made before the answer, but a claim about a *cause* nothing had
+    checked. The repo's own record of it is days lost reading "Network dipped
+    on my side" as a network problem when it was four different things.
+
+    `navigator.onLine === false` is the one reading that supports the claim,
+    and it is trusted in that direction only. A `true` means nothing — a wifi
+    with no internet behind it reports online all day — so the check is for
+    the false, explicitly, and never for the truthiness of the value.
+  */
+  ok(/navigator\.onLine\s*===\s*false/.test(client),
+    "the offline sentence is said only when the browser reports being offline",
+    "`if (navigator.onLine)` reads the useless direction — a captive portal is online all day");
+  ok(!/catch[\s\S]{0,600}text:\s*"You're offline/.test(client),
+    "no failure is unconditionally described as being offline",
+    "a stream that died at a proxy is not a network somebody lost");
+
+  /*
+    And the transport degrades rather than failing. A proxy that strips the
+    accept header, a browser without streams, an older deployment — none of
+    them is a reason to refuse somebody an answer.
+  */
+  ok(/text\/event-stream[\s\S]*?\}\s*else\s*\{[\s\S]{0,160}res\.json\(\)/.test(client),
+    "a response that is not an event stream is read as ordinary JSON",
+    "streaming is a preference about when words arrive, never a condition of getting them");
+
+  /*
+    And the parser is run, not read.
+
+    Everything above this point reads source, which is the right tool for
+    "is the wiring honest" and the wrong one for "does it work". A stream
+    parser is arithmetic over bytes and the only way to know it is right is to
+    give it bytes — including the ones that only ever arrive on a bad
+    connection.
+
+    The body below is split at a place that cannot happen on a laptop and
+    happens constantly on a phone: mid-payload, inside a JSON string, and again
+    inside a multi-byte character. Both are the same bug — a reader that
+    commits before a frame is complete — and both were reproduced here before
+    the buffer existed.
+  */
+  {
+    const saved = globalThis.fetch;
+    const frame = (o) => `data: ${JSON.stringify(o)}\n\n`;
+    const wire =
+      frame({ choices: [{ delta: { content: "I hear you." } }] }) +
+      frame({ choices: [{ delta: { content: " Na wahala — " } }] }) +
+      // U+2014 is three bytes, and it is deliberately at a split point below.
+      frame({ choices: [{ delta: { content: "e no easy." }, finish_reason: "stop" }] }) +
+      "data: [DONE]\n\n";
+    const bytes = new TextEncoder().encode(wire);
+    // Seventeen is prime and small: every frame gets cut, most of them more
+    // than once, and one cut lands inside the em dash.
+    const chunks = [];
+    for (let i = 0; i < bytes.length; i += 17) chunks.push(bytes.slice(i, i + 17));
+
+    globalThis.fetch = async () =>
+      new Response(
+        new ReadableStream({
+          start(c) {
+            for (const ch of chunks) c.enqueue(ch);
+            c.close();
+          },
+        }),
+        { status: 200, headers: { "content-type": "text/event-stream" } },
+      );
+
+    const seen = [];
+    const p = openAiCompatible("t-stream", "https://x", "k", "m", "T_KEY");
+    const text = await p.send({
+      system: "s",
+      messages: [],
+      maxTokens: 600,
+      onDelta: (c) => seen.push(c),
+    });
+    globalThis.fetch = saved;
+
+    is(text, "I hear you. Na wahala — e no easy.",
+      "the streamed reply is assembled whole across chunk boundaries",
+      "a payload split mid-JSON is the ordinary case on a mobile network");
+    is(seen.join(""), text,
+      "what was handed over piece by piece adds up to exactly what was returned",
+      "a preview that does not sum to the answer is a preview that lies");
+    is(seen.length, 3, "each fragment is handed on once, not per network chunk");
+
+    /*
+      And a streamed reply that was interrupted is still refused.
+
+      Written without this, the executable half of this check passed a mutation
+      that stopped reading `finish_reason` altogether — because the happy case
+      never needs it. Which means the guard for the reply that ended "If you"
+      would have come off on the streaming path, silently, on the only path
+      real people take, and nothing here would have said a word.
+
+      That is this file's oldest failure aimed at its own newest code: the
+      suite testing the shape its author was standing in, where the shape is
+      "the stream finished normally". It finished normally in every test
+      anybody would think to write.
+
+      The person's side of it is worse than a truncated string. They watch four
+      sentences arrive and stop mid-word — and then, correctly, the chain
+      refuses that provider and answers from the next one, so what they watched
+      appear is replaced. Refusing at the adapter is what makes the replacement
+      an answer instead of a second half.
+    */
+    const cutWire =
+      frame({ choices: [{ delta: { content: "That sounds like the kind of week that" } }] }) +
+      frame({ choices: [{ delta: {}, finish_reason: "length" }] }) +
+      "data: [DONE]\n\n";
+    globalThis.fetch = async () =>
+      new Response(cutWire, { status: 200, headers: { "content-type": "text/event-stream" } });
+
+    let refused = false;
+    const streamedSeen = [];
+    try {
+      await openAiCompatible("t-stream-cut", "https://x", "k", "m", "T_KEY").send({
+        system: "s",
+        messages: [],
+        maxTokens: 600,
+        onDelta: (c) => streamedSeen.push(c),
+      });
+    } catch {
+      refused = true;
+    }
+    globalThis.fetch = saved;
+
+    ok(refused,
+      "a streamed reply cut off mid-sentence is refused, exactly as a whole one is",
+      "`finish_reason` arrives on its own frame — a reader that drops it takes the guard off the streaming path");
+    ok(streamedSeen.length > 0,
+      "and it was refused after having been shown, which is why the client discards on a provider change");
+  }
+
+  // ── the reader ───────────────────────────────────────────────────────────
+  /*
+    A network chunk is not a message.
+
+    Both readers — ours in the browser, the provider's on the server — split a
+    JSON payload across two reads on a slow connection and reliably never on a
+    laptop. A parser without a carry buffer works in every test anybody writes
+    and fails on the network this product is for.
+  */
+  for (const [name, src] of [
+    ["the browser reader", fs.readFileSync(path.join(ROOT, "src/lib/ui/event-stream.ts"), "utf8")],
+    ["the provider reader", providers.slice(providers.indexOf("async function readSse"))],
+  ]) {
+    ok(/carry\s*=\s*[\w.]+\.pop\(\)\s*\?\?\s*""/.test(strip(src)),
+      `${name} keeps the trailing partial frame for the next read`,
+      "without it a payload split across two TCP reads throws on valid JSON");
+    ok(/decode\([^)]*\{\s*stream:\s*true\s*\}/.test(strip(src)),
+      `${name} decodes in streaming mode`,
+      "a multi-byte character split across reads becomes a replacement char otherwise");
+  }
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

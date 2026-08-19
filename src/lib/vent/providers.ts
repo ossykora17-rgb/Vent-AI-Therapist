@@ -33,6 +33,37 @@ export interface ProviderCall {
    * default has to be the expensive, safe one.
    */
   depth?: "fast" | "deep";
+  /**
+   * Where to put words as they arrive, when somebody is waiting on them.
+   *
+   * Absent means what this file has always done: one request, one string, at
+   * the end. Present means the adapter asks the provider to stream and hands
+   * each fragment over the moment it lands.
+   *
+   * The reason is not novelty. A vent reply is four sentences and the chain
+   * spends two to eight seconds producing them, during which the person who
+   * has just typed the hardest thing they will type today watches the word
+   * "Thinking". That silence is the longest part of this product's experience
+   * and it was the part nothing had ever been done about.
+   *
+   * What it must never become is a promise. The fragments are a preview: the
+   * return value of `send` is still the answer, still passes `wasCutOff`,
+   * still falls through to the next provider on failure. Everything a caller
+   * *commits to* comes from the resolved string, never from what was streamed
+   * — because a stream that dies at the third sentence has shown somebody
+   * three sentences that this file is about to refuse.
+   */
+  onDelta?: (chunk: string) => void;
+  /**
+   * Throw away everything streamed so far.
+   *
+   * Called when a provider fails after it had begun speaking and the chain
+   * moves to the next one. Without it the second provider's answer would be
+   * appended to the first one's abandoned half-sentence, which is the failure
+   * mode of every naive streaming fallback: two voices, spliced, neither of
+   * them the answer.
+   */
+  onRestart?: () => void;
 }
 
 export interface Provider {
@@ -232,6 +263,82 @@ async function discoverModel(
  * truncated mid-sentence, an empty completion, a rate limit — happened in a
  * shape no check ever ran. They run here now.
  */
+/**
+ * Read an OpenAI-shaped event stream, handing each fragment on as it lands.
+ *
+ * One reader for six providers, because the wire format is the one thing they
+ * genuinely all agree on: `data: {json}` per event, a blank line between,
+ * `data: [DONE]` at the end.
+ *
+ * Three details that are not obvious and each of which produces a bug:
+ *
+ * A chunk boundary is a network artefact, not a message boundary. TCP will
+ * split `data: {"choi` from `ces":[...]}` and a reader that parses per chunk
+ * throws on perfectly good JSON. Hence the carry buffer: only complete lines
+ * are parsed, and whatever is left over waits for the next read.
+ *
+ * A malformed event is skipped, not fatal. Providers interleave keep-alive
+ * comments and usage records into the same stream, and taking the whole reply
+ * down because one line was not the shape expected would be the strictest
+ * possible reading of the least important part.
+ *
+ * And `finish_reason` arrives on its own event, after the last content — so it
+ * is captured across the loop rather than read off the final frame. That is
+ * the field `wasCutOff` needs, and a stream that loses it silently disables
+ * the guard that exists because somebody was handed half a sentence.
+ */
+async function readSse(
+  id: string,
+  r: Response,
+  onDelta: (chunk: string) => void,
+): Promise<{ text: string; finishReason?: string }> {
+  const body = r.body;
+  if (!body) throw new ProviderError(502, `${id} streamed no body`);
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let carry = "";
+  let text = "";
+  let finishReason: string | undefined;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    carry += decoder.decode(value, { stream: true });
+
+    const lines = carry.split("\n");
+    // The last element is either an incomplete line or an empty string; both
+    // belong to the next read.
+    carry = lines.pop() ?? "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const payload = trimmed.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+
+      let event: {
+        choices?: Array<{ delta?: { content?: string }; finish_reason?: string }>;
+      };
+      try {
+        event = JSON.parse(payload);
+      } catch {
+        continue;
+      }
+
+      const choice = event.choices?.[0];
+      if (choice?.finish_reason) finishReason = choice.finish_reason;
+      const piece = choice?.delta?.content;
+      if (piece) {
+        text += piece;
+        onDelta(piece);
+      }
+    }
+  }
+
+  return { text, finishReason };
+}
+
 export function openAiCompatible(
   id: string,
   baseUrl: string,
@@ -255,7 +362,7 @@ export function openAiCompatible(
 
   const attempt = async (
     useModel: string,
-    { system, messages, maxTokens }: ProviderCall,
+    call: ProviderCall,
     /*
       An optional tuning parameter must never be why a provider is unusable.
 
@@ -276,6 +383,8 @@ export function openAiCompatible(
     */
     withHint = noThinking,
   ): Promise<string> => {
+      const { system, messages, maxTokens } = call;
+      const streaming = Boolean(call.onDelta);
       const r = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
@@ -290,6 +399,7 @@ export function openAiCompatible(
           // Ask it not to think, and leave room in case it does anyway.
           max_tokens: Math.max(maxTokens, THINKING_BUDGET),
           temperature: 0.7,
+          ...(streaming ? { stream: true } : {}),
           ...(withHint && !hintRejected ? { reasoning_effort: "none" } : {}),
           messages: [{ role: "system", content: system }, ...messages],
         }),
@@ -300,8 +410,12 @@ export function openAiCompatible(
         signal: AbortSignal.timeout(50_000),
       });
 
-      const body = await r.text();
+      // An error is JSON on both paths — a provider that refuses a streamed
+      // request refuses it with an ordinary body, not with an event stream —
+      // so the failure branch reads the same way it always has. Only success
+      // is shaped differently.
       if (!r.ok) {
+        const body = await r.text();
         // The one retry that is not a retry: the same call, minus the hint
         // that was never required. Once only, and remembered.
         if (r.status === 400 && withHint && !hintRejected) {
@@ -309,22 +423,33 @@ export function openAiCompatible(
           console.warn(
             `[providers] ${id}: rejected reasoning_effort, retrying without it`,
           );
-          return attempt(useModel, { system, messages, maxTokens }, false);
+          return attempt(useModel, call, false);
         }
         throw new ProviderError(r.status, `${r.status} ${body.slice(0, 300)}`);
       }
 
-      let parsed: {
-        choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
-      };
-      try {
-        parsed = JSON.parse(body);
-      } catch {
-        throw new ProviderError(502, `${id} returned a body that is not JSON`);
+      let text: string | undefined;
+      let finishReason: string | undefined;
+
+      if (streaming) {
+        const read = await readSse(id, r, call.onDelta!);
+        text = read.text.trim();
+        finishReason = read.finishReason;
+      } else {
+        const body = await r.text();
+        let parsed: {
+          choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+        };
+        try {
+          parsed = JSON.parse(body);
+        } catch {
+          throw new ProviderError(502, `${id} returned a body that is not JSON`);
+        }
+        const choice = parsed.choices?.[0];
+        text = choice?.message?.content?.trim();
+        finishReason = choice?.finish_reason;
       }
 
-      const choice = parsed.choices?.[0];
-      const text = choice?.message?.content?.trim();
       // An empty completion is a failure, not an answer. Returning "" here
       // would put a blank bubble in front of somebody mid-sentence.
       if (!text) throw new ProviderError(502, `${id} returned an empty completion`);
@@ -337,7 +462,7 @@ export function openAiCompatible(
       // "a stub is bad" and means "a long reply cut mid-sentence is fine".
       // The reply that sent somebody looking was fifty-two words. One rule
       // now, in model.ts, asked by both adapters.
-      if (wasCutOff(text, choice?.finish_reason === "length")) {
+      if (wasCutOff(text, finishReason === "length")) {
         throw new ProviderError(
           502,
           `${id} was cut off before it finished a sentence (${text.length} chars)`,
@@ -381,9 +506,9 @@ function anthropicProvider(): Provider {
     model: MODEL.anthropic,
     configured: Boolean(apiKey),
     keyState: keyStateOf("ANTHROPIC_API_KEY", apiKey),
-    async send({ system, messages, maxTokens }) {
+    async send({ system, messages, maxTokens, onDelta }) {
       const client = new Anthropic({ apiKey });
-      const completion = await client.messages.create({
+      const params = {
         model: MODEL.anthropic,
         max_tokens: maxTokens,
         /*
@@ -404,10 +529,28 @@ function anthropicProvider(): Provider {
           quietly answering from further down. The warmth was never coming
           from the temperature anyway. It comes from the prompt.
         */
-        thinking: { type: "disabled" },
+        thinking: { type: "disabled" as const },
         system,
         messages,
-      });
+      };
+
+      /*
+        `.stream()` and `.create()`, and the same object comes back from both.
+
+        The SDK's stream helper resolves to the assembled message — including
+        `stop_reason` — so everything below this line is untouched by which
+        branch ran. That matters more than it looks: the cut-off guard is the
+        fix for the reply that ended "If you", and a streaming path that got
+        its own bespoke completion handling is exactly how that guard comes
+        back off on one path only.
+      */
+      const completion = onDelta
+        ? await client.messages
+            .stream(params)
+            .on("text", (t) => onDelta(t))
+            .finalMessage()
+        : await client.messages.create(params);
+
       const text = completion.content
         .filter((b): b is Anthropic.TextBlock => b.type === "text")
         .map((b) => b.text)
@@ -596,6 +739,10 @@ export async function generateReply(call: ProviderCall): Promise<Answered> {
       return { text, provider: p.id, model: p.model, fellThrough };
     } catch (error) {
       last = error;
+      // This provider may have spoken before it failed. Anything it streamed
+      // is now somebody else's half-sentence sitting above the real answer —
+      // so it goes, and the next provider starts on a clean line.
+      call.onRestart?.();
       const { status } = classifyModelError(error);
       if (NON_TRANSIENT.has(status)) {
         dead.set(p.id, { until: Date.now() + DEAD_FOR_MS, why: status });
