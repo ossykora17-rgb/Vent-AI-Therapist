@@ -242,6 +242,29 @@ export interface Store {
 
   // ── Circles ─────────────────────────────────────────────────────────────
   listOpenCircles(): Promise<Array<CircleRow & { seats: number }>>;
+
+  /**
+   * Circles whose clock is up and which nobody has closed.
+   *
+   * The one query in this interface that exists to find rows *nobody is
+   * asking for*, and the reason it has to exist is written at the top of
+   * `sweep.ts`: a circle nobody polls never closes, so its transcript stays
+   * readable and its voice room stays live on the SFU.
+   *
+   * That comment says the fix was calling `sweepIfOver` from every route. It
+   * is not sufficient and never was. Every one of those routes is scoped to a
+   * circle id, so the check only runs when somebody asks about that circle —
+   * and when a circle ends, everybody closes their tab. `listOpenCircles`
+   * filters the expired ones out with `ends_at > now()`, so the lobby cannot
+   * see them either. The rows go invisible instead of going away.
+   *
+   * The common case, not an edge case: the normal end of a normal circle.
+   *
+   * Bounded by `limit` because the caller is a route somebody is waiting on,
+   * and a backlog is swept a few at a time rather than all at once. There is
+   * no deadline on a backlog; there is one on the person who opened the page.
+   */
+  expiredUnclosedCircles(limit: number): Promise<CircleRow[]>;
   getCircle(id: string): Promise<CircleRow | null>;
   createCircle(c: Omit<CircleRow, "id" | "created_at">): Promise<CircleRow>;
   closeCircle(id: string): Promise<void>;
