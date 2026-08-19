@@ -6319,6 +6319,186 @@ check("60 A write that changed nothing does not report that it worked", () => {
   }
 });
 
+await checkAsync("61 A circle nobody is asking about still gets closed", async () => {
+  /*
+    `sweep.ts` opens by describing this failure and calling it fixed:
+
+      "There was one copy of this check in the room GET and the clock-driven
+       close hung off it. That meant a circle nobody was polling never closed
+       at all — its row stayed waiting, its transcript stayed readable, and
+       its voice room stayed live on the SFU indefinitely."
+
+    The stated fix — "one predicate now, called by every route that touches a
+    circle" — was done, and it does not close the hole. Every one of those
+    routes is scoped to a circle id, so the check only runs when somebody asks
+    about that circle. When a circle ends, everybody closes their tab.
+
+    And `listOpenCircles` filters expired circles out with `ends_at > now()`,
+    in both backends, so the lobby could not see them either. The row went
+    invisible instead of going away: transcript intact in `circle_messages`,
+    room alive on the SFU, and nothing left in the product with a reason to
+    look at it.
+
+    That is the normal end of a normal circle. Not an edge case — the default
+    one. And it is a confidentiality promise, not a tidiness one:
+    "Circle transcripts are never training data. Confidentiality is a
+    deletion policy and a training set is its opposite."
+
+    Which makes this the sharpest version of a lesson already in this repo: a
+    fix that closes an instance while its own comment claims the class. The
+    comment was the most convincing thing in the file and it was describing
+    work that had not been finished.
+  */
+  const sweep = fs.readFileSync(path.join(ROOT, "src/lib/circles/sweep.ts"), "utf8");
+  const lobby = fs.readFileSync(path.join(ROOT, "src/app/api/circles/route.ts"), "utf8");
+  const types = fs.readFileSync(path.join(ROOT, "src/lib/store/types.ts"), "utf8");
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+  /*
+    Somebody has to be able to ask for the rows nobody is asking for. Without
+    a query whose predicate is "expired AND not closed", the only circles the
+    product can name are the ones it does not need to sweep.
+  */
+  ok(/expiredUnclosedCircles/.test(types),
+    "the store contract can name circles that are over and still open",
+    "every other circle query filters these out — they are unreachable by design");
+
+  for (const backend of ["supabase-store", "file-store"]) {
+    /*
+      Comments stripped before the body is sliced.
+
+      Written without it, the window caught the comment *inside* the method —
+      which explains the predicate in prose and therefore contains the words
+      "closed", "ends_at" and "limit". Two mutations that deleted the actual
+      predicates sailed through, satisfied by the paragraph describing them.
+
+      This trap is recorded four times in this file already, most recently at
+      check 45. Fifth. It is the most reliable way to write a check that only
+      ever tests its own documentation, and the fix is always the same one
+      line: scan what runs.
+    */
+    const src = strip(fs.readFileSync(path.join(ROOT, `src/lib/store/${backend}.ts`), "utf8"));
+    const at = src.indexOf("async expiredUnclosedCircles(");
+    ok(at > 0, `${backend} implements it`);
+    /*
+      From the opening brace, not from the name.
+
+      Three assertions passed their mutations on the signature alone:
+      `/closed/` matched "expiredUn**closed**Circles" and `/limit/` matched
+      the parameter. The method announced its own contract and the check read
+      the announcement — the same defect as scanning a comment, one token
+      further in, and the reason both fixes are the same instruction: read the
+      part that executes.
+    */
+    const body = src.slice(src.indexOf("{", at) + 1, at + 500);
+    const notClosed = { "supabase-store": /neq\(\s*"status"/, "file-store": /!==\s*"closed"/ }[backend];
+    const isOver = { "supabase-store": /lte\(\s*"ends_at"/, "file-store": /ends_at\)[^)]*\)\s*<=/ }[backend];
+    ok(notClosed.test(body),
+      `${backend} excludes circles that are already closed`,
+      "without it the sweep re-runs on rows it has already destroyed");
+    ok(isOver.test(body),
+      `${backend} asks only for circles whose clock is up`,
+      "without it a live circle is swept out from under the people sitting in it");
+    ok(/\.limit\(|\.slice\(/.test(body),
+      `${backend} bounds what one caller has to sweep`,
+      "a backlog has no deadline; the person waiting on the response does");
+  }
+
+  /*
+    And the lobby actually sweeps them. It is the one route in the product not
+    scoped to a circle id, which makes it the only place this can happen at
+    all.
+  */
+  const get = strip(lobby).slice(strip(lobby).indexOf("async function handleGET"),
+                                 strip(lobby).indexOf("async function handlePOST"));
+  ok(/expiredUnclosedCircles/.test(get) && /sweepIfOver/.test(get),
+    "the lobby sweeps what it finds",
+    "finding them and not sweeping them is the same row, still there, now with a query pointed at it");
+
+  /*
+    Through `sweepIfOver`, not by hand. That function is the only
+    implementation of "is this circle over" and it does two things in an order
+    that matters — transcript first, SFU second, because the words are the
+    promise and they go even if the SFU is unreachable.
+  */
+  ok(!/closeCircle\(/.test(get),
+    "the lobby closes circles through the one predicate, never directly",
+    "a second implementation of 'is this over' is how the two drift");
+
+  /*
+    A sweep that fails must not fail the lobby. The SFU being slow is not a
+    reason nobody can join a room.
+  */
+  ok(/try\s*\{[\s\S]{0,400}expiredUnclosedCircles[\s\S]{0,300}catch/.test(get),
+    "a sweep that cannot finish does not take the lobby down with it",
+    "it happens on the next load; a 500 here is a room nobody can enter");
+
+  /*
+    The order inside the predicate itself, unchanged and worth holding.
+
+    Scoped to the function body rather than the file: `closeVoiceRoom` is
+    imported on line 3, so a whole-file `indexOf` finds the import statement
+    and reports the calls in the wrong order on correct code. An assertion
+    about sequence has to read the sequence, not the first mention.
+  */
+  const body = strip(sweep).slice(strip(sweep).indexOf("export async function sweepIfOver"));
+  ok(body.indexOf("closeCircle") < body.indexOf("closeVoiceRoom"),
+    "the transcript is destroyed before the voice room is ended",
+    "the words are the promise — they go first, even if the SFU never answers");
+
+  /*
+    And the words actually go. Run, not read.
+
+    Everything above asserts the wiring, and wiring was exactly what was
+    already correct here — `sweepIfOver` was reachable from five routes and
+    the transcript still survived, because no route was ever called. So the
+    last assertion builds the situation itself: a circle whose clock ran out
+    while nobody was watching, with something said in it, and then asks
+    whether the words are gone.
+
+    A FileStore in a temp directory, no server, no model, no network. Note
+    that this is the backend that has been quietly right about everything else
+    today — here it is being asked the one question where both backends share
+    the same defect, because the defect was never in a backend. It was in
+    nothing ever calling them.
+  */
+  const store = new FileStore(fs.mkdtempSync(path.join(os.tmpdir(), "mw-sweep-")));
+  const over = await store.createCircle({
+    creator_anon_id: "sweep-test-anon",
+    tag: null, chair_picked: null, pressure_seeded: null, flavour: null,
+    status: "waiting",
+    starts_at: new Date(Date.now() - 60 * 60_000).toISOString(),
+    // Fifteen minutes ago: over, and nobody has looked since.
+    ends_at: new Date(Date.now() - 15 * 60_000).toISOString(),
+  });
+  await store.addCircleMessage({
+    circle_id: over.id,
+    anon_id: "sweep-test-anon",
+    content: "the thing I would only say in a room that forgets",
+    kind: "member",
+    flagged: false,
+  });
+  is((await store.listCircleMessages(over.id)).length, 1, "the circle had something said in it");
+
+  const found = await store.expiredUnclosedCircles(5);
+  is(found.length, 1,
+    "a circle nobody is asking about is findable",
+    "every other query in the product filters this row out — it is invisible, not gone");
+
+  const { sweepIfOver: run } = await app("src/lib/circles/sweep.ts");
+  is(await run(store, found[0]), true, "sweeping it reports the circle as over");
+  is((await store.listCircleMessages(over.id)).length, 0,
+    "and the transcript is gone",
+    "this is the whole promise: confidentiality is a deletion policy");
+  is((await store.getCircle(over.id))?.status, "closed",
+    "the row records that it closed");
+
+  // Idempotent: the next lobby load must not find it again and re-run the work.
+  is((await store.expiredUnclosedCircles(5)).length, 0,
+    "and it is not swept twice",
+    "a sweep that keeps finding its own output is a lobby doing unbounded work forever");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

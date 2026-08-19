@@ -410,6 +410,21 @@ export class SupabaseStore implements Store {
     }));
   }
 
+  async expiredUnclosedCircles(limit: number): Promise<CircleRow[]> {
+    // The complement of `listOpenCircles`, exactly: same two predicates, the
+    // clock one inverted. Written next to it on purpose — the pair is the
+    // whole set, and a circle that falls out of both is a circle that has
+    // stopped existing for every surface and stopped being deleted by any.
+    const data = ok("expiredUnclosedCircles", await this.db
+      .from("circles")
+      .select("*")
+      .neq("status", "closed")
+      .lte("ends_at", new Date().toISOString())
+      .order("ends_at", { ascending: true })
+      .limit(limit));
+    return (data ?? []) as unknown as CircleRow[];
+  }
+
   async getCircle(id: string): Promise<CircleRow | null> {
     // null here now means "no such circle", and only that.
     const data = ok("getCircle",

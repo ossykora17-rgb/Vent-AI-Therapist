@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getStore } from "@/lib/store";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { CIRCLE_MINUTES, MAX_SEATS, roleForSeat } from "@/lib/circles/rules";
+import { sweepIfOver } from "@/lib/circles/sweep";
 import { withStore } from "@/lib/http/with-store";
 
 export const dynamic = "force-dynamic";
@@ -19,11 +20,56 @@ const createSchema = z.object({
   intent: z.string().max(2000).optional(),
 });
 
+/**
+ * How many stale circles one lobby load will clear.
+ *
+ * Small on purpose. Somebody is waiting on this response, and each sweep is a
+ * transcript delete plus a call to the SFU. A backlog has no deadline; the
+ * person who just opened the page does.
+ */
+const SWEEP_BATCH = 5;
+
 /** Open circles, with seat counts. No content, ever — just the shape. */
 async function handleGET() {
   const store = getStore();
   if (!store) {
     return NextResponse.json({ circles: [], persisting: false, storage: "none" });
+  }
+
+  /*
+    The circles nobody is asking about, which is all of the ones that matter.
+
+    `sweep.ts` opens by describing this exact failure — "a circle nobody was
+    polling never closed at all — its transcript stayed readable, and its
+    voice room stayed live on the SFU indefinitely" — and states the fix as
+    calling `sweepIfOver` from every route that touches a circle. That was
+    done, and it is not sufficient, because every one of those routes is
+    scoped to a circle id. The check runs when somebody asks about that
+    circle, and when a circle ends everybody closes their tab.
+
+    `listOpenCircles` then filters the expired ones out with `ends_at > now()`
+    so the lobby never showed them either. The row went invisible instead of
+    going away: transcript intact in `circle_messages`, room alive on the SFU,
+    nothing left in the product with a reason to look at it.
+
+    That is the normal end of a normal circle, not an edge case — and it is a
+    confidentiality promise, not a tidiness one. "Circle transcripts are never
+    training data. Confidentiality is a deletion policy."
+
+    This is the one route that can see them, because it is the only one not
+    scoped to an id. Same "whoever notices first does the work" rule the file
+    already runs on, extended to the case where nobody notices.
+
+    It never fails the lobby. A sweep that cannot finish is a sweep that
+    happens on the next load; a lobby that 500s because the SFU was slow is a
+    room nobody can join.
+  */
+  try {
+    for (const stale of await store.expiredUnclosedCircles(SWEEP_BATCH)) {
+      await sweepIfOver(store, stale);
+    }
+  } catch (error) {
+    console.error("[circles] lobby sweep failed", error);
   }
 
   return NextResponse.json(

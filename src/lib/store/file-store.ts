@@ -343,6 +343,15 @@ export class FileStore implements Store {
       }));
   }
 
+  async expiredUnclosedCircles(limit: number): Promise<CircleRow[]> {
+    const db = this.read();
+    const now = Date.now();
+    return db.circles
+      .filter((c) => c.status !== "closed" && new Date(c.ends_at).getTime() <= now)
+      .sort((a, b) => a.ends_at.localeCompare(b.ends_at))
+      .slice(0, limit);
+  }
+
   async getCircle(id: string): Promise<CircleRow | null> {
     return this.read().circles.find((c) => c.id === id) ?? null;
   }
