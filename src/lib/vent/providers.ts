@@ -239,10 +239,32 @@ async function discoverModel(
     .filter(Boolean)
     .filter((id) => !/embed|aqa|imagen|veo|tts|whisper|guard|rerank|vision/i.test(id));
 
+  /*
+    Rank by version, and a parameter count is not a version.
+
+    `parseFloat(id.match(/(\d+(?:\.\d+)?)/))` takes the first number in the
+    id, and in half of all model names the first number is the size. So
+    `openai/gpt-oss-120b` scored 12000 and `llama-3.3-70b-versatile` scored
+    330, and the biggest model on the account won every fallback by a factor
+    of forty — not because it was newer, because "120b" was read as version
+    one hundred and twenty.
+
+    That is exactly how production came to be answering vents on a reasoning
+    model nobody chose. Groq retired llama-3.3, the prefer list stopped
+    matching, the fallback ran, and the arithmetic handed it the largest
+    number in the room.
+
+    Sizes are stripped first — `120b`, `70b`, `8x7b`, `4b` — and what is left
+    is the version if there is one. A model with no version scores zero and
+    ranks below any model with one, which is the correct order: `gpt-oss` and
+    `llama-3.3` are not comparable on a number, and when there is nothing to
+    compare, the named preference above has already had its say.
+  */
   const score = (id: string) => {
-    const version = parseFloat(id.match(/(\d+(?:\.\d+)?)/)?.[1] ?? "0");
+    const withoutSize = id.replace(/\b\d+x?\d*\.?\d*\s*b\b/gi, " ");
+    const version = parseFloat(withoutSize.match(/(\d+(?:\.\d+)?)/)?.[1] ?? "0");
     let s = version * 100;
-    if (/lite|mini|8b/i.test(id)) s -= 30;
+    if (/lite|mini|8b|tiny|small/i.test(id)) s -= 30;
     if (/preview|exp|beta/i.test(id)) s -= 20;
     return s;
   };
@@ -339,6 +361,44 @@ async function readSse(
   return { text, finishReason };
 }
 
+/**
+ * Does this model think before it speaks?
+ *
+ * `noThinking` is a constructor argument — decided once, by whoever wrote the
+ * provider table, about the model that was current then. The model is not
+ * decided then. `discoverModel` replaces it at runtime whenever a default is
+ * retired, and it has no notion of what kind of model it is picking.
+ *
+ * Which is how production ended up here: groq was registered with the hint
+ * off, because `llama-3.3-70b-versatile` answers immediately and has nothing
+ * to deliberate about. Groq retired it, discovery substituted
+ * `openai/gpt-oss-120b` — a reasoning model — and the request kept being
+ * built for the model that was written down rather than the one being called.
+ *
+ * That is this repo's oldest habit turned inward: a decision correct from
+ * where the author sat, wrong from where the request sat. The scar it points
+ * at is the sharpest one in the file — `max_tokens: 220`, 217 spent thinking,
+ * three tokens of "Tired. Na" handed to somebody who had just written that
+ * they were tired. The ceiling is 600 now, so the same substitution costs
+ * money and latency rather than a mutilated sentence, and it is the same
+ * mistake either way.
+ *
+ * So the hint follows the model. Matched on family rather than on exact ids,
+ * because an exact list is a list that goes stale — which is the thing that
+ * caused this.
+ *
+ * Asking a model that does not reason not to reason is free: the parameter is
+ * ignored, and when it is rejected outright the adapter already retries once
+ * without it and remembers. There is no cost to being wrong in this
+ * direction, and a truncated reply is the cost of being wrong in the other.
+ */
+const REASONS_FIRST =
+  /gpt-oss|(?:^|[^a-z])o[1-4](?:[^a-z]|$)|reasoner|qwq|qwen3|magistral|thinking|deepseek-r|glm-4\.[56]|grok-.*mini/i;
+
+export function thinksFirst(model: string): boolean {
+  return REASONS_FIRST.test(model);
+}
+
 export function openAiCompatible(
   id: string,
   baseUrl: string,
@@ -381,7 +441,15 @@ export function openAiCompatible(
       So: send it, and if the request comes back 400 while it was attached,
       send the same request again without it. Optional means optional.
     */
-    withHint = noThinking,
+    /*
+      Defaulted from the model in hand, not from the table.
+
+      `= noThinking` meant "whatever was true of the model this provider was
+      registered with", and the model being called is `useModel` — which
+      discovery may have replaced with something of an entirely different
+      class. See `thinksFirst`.
+    */
+    withHint = noThinking || thinksFirst(useModel),
   ): Promise<string> => {
       const { system, messages, maxTokens } = call;
       const streaming = Boolean(call.onDelta);

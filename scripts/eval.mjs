@@ -41,7 +41,7 @@ const { measurePersonalEfficacy, blendEfficacy, PERSONAL_SPAN } =
   await app("src/lib/vent/efficacy.ts");
 const { REFERRALS, STALE_AFTER_DAYS, HANDOFF_FLOOR, activeReferrals, pastWhatThisHolds, handoffLine } =
   await app("src/lib/vent/referrals.ts");
-const { allProviders, configuredProviders, openAiCompatible } =
+const { allProviders, configuredProviders, openAiCompatible, thinksFirst } =
   await app("src/lib/vent/providers.ts");
 const { wasCutOff, MAX_TOKENS } = await app("src/lib/vent/model.ts");
 
@@ -6128,6 +6128,111 @@ check("58 The light that says words are being saved is wired to a write", () => 
   ok(!/writable\s*!==\s*"ok"/.test(verdict) && !/"unverified"/.test(verdict),
     "and an unprobed deployment is not called broken",
     "nothing checked is not the same as something failed");
+});
+
+await checkAsync("59 A model the code did not choose is still called correctly", async () => {
+  /*
+    Found in a production health response, not here — and it had been serving
+    real vents for who knows how long.
+
+    `/api/health` reported groq answering on `openai/gpt-oss-120b`. The code's
+    groq default is `llama-3.3-70b-versatile` and its preference list is
+    ["llama-3.3", "llama"], so nothing in this repo chose that model. Groq
+    retired the default, `discoverModel` ran, and the fallback picked it.
+
+    Two defects, and neither had a check.
+
+    THE ARITHMETIC. `score()` read the first number in an id as a version, and
+    in half of all model names the first number is the *size*. `gpt-oss-120b`
+    scored 12000 against `llama-3.3-70b`'s 330 — the biggest model on the
+    account winning every fallback by a factor of forty because "120b" parsed
+    as version one hundred and twenty.
+
+    THE CLASS. `noThinking` is a constructor argument, decided once, about the
+    model that was current when the table was written. The model is not
+    decided then. Groq was registered with the hint off — correct for a llama,
+    which answers immediately — and discovery substituted a reasoning model
+    while the request kept being built for the one written down.
+
+    That second one points straight at the sharpest scar in the file:
+    `max_tokens: 220`, 217 spent thinking, three tokens of "Tired. Na" handed
+    to somebody who had just written that they were tired. The ceiling is 600
+    now, so the same substitution costs money and latency instead of a
+    mutilated sentence. Same mistake.
+
+    It is also this repo's oldest habit turned inward. Every face in CLAUDE.md
+    is a decision correct from where the author sat and wrong from where the
+    person sat. This is one correct from where the *table* sat and wrong from
+    where the request sat.
+  */
+
+  // ── a size is not a version ──────────────────────────────────────────────
+  const saved = globalThis.fetch;
+  const listing = (ids) => async (url) =>
+    String(url).endsWith("/models")
+      ? new Response(JSON.stringify({ data: ids.map((id) => ({ id })) }),
+          { status: 200, headers: { "content-type": "application/json" } })
+      : new Response(JSON.stringify({ error: { code: 404, message: "decommissioned" } }),
+          { status: 404, headers: { "content-type": "application/json" } });
+
+  const resolvedFor = async (ids, prefer) => {
+    let asked = null;
+    globalThis.fetch = async (url, init) => {
+      if (String(url).endsWith("/models")) return listing(ids)(url);
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      if (asked === null) { asked = body; return listing(ids)("x/completions"); }
+      asked = body;
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: "ok." }, finish_reason: "stop" }] }),
+        { status: 200, headers: { "content-type": "application/json" } });
+    };
+    const p = openAiCompatible(`t-disc-${Math.random()}`, "https://x", "k", "gone", "T_KEY", prefer);
+    await p.send({ system: "s", messages: [], maxTokens: 600 }).catch(() => {});
+    return { model: p.model, asked };
+  };
+
+  const sizes = await resolvedFor(
+    ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
+    ["nothing-matches"],
+  );
+  is(sizes.model, "llama-3.3-70b-versatile",
+    "a 120-billion-parameter model does not outrank a version 3.3 model",
+    "`120b` read as version 120 is how production ended up on a model nobody picked");
+
+  const versions = await resolvedFor(
+    ["gemini-1.5-flash", "gemini-2.5-flash", "gemini-2.0-flash"],
+    ["nothing-matches"],
+  );
+  is(versions.model, "gemini-2.5-flash",
+    "and a real version still wins when there is one to read");
+
+  // ── the hint follows the model, not the table ────────────────────────────
+  /*
+    Registered with the hint off, resolving to a reasoning model: the request
+    must carry `reasoning_effort` anyway. This is the assertion that would
+    have caught production.
+  */
+  const swapped = await resolvedFor(["openai/gpt-oss-120b"], ["gpt-oss"]);
+  is(swapped.model, "openai/gpt-oss-120b", "the reasoning model is what got resolved");
+  ok(swapped.asked?.reasoning_effort === "none",
+    "a provider registered without the hint still sends it to a model that reasons",
+    "the model is chosen at runtime; a constructor argument cannot know what it is");
+
+  const plain = await resolvedFor(["llama-3.3-70b-versatile"], ["llama"]);
+  ok(plain.asked?.reasoning_effort === undefined,
+    "and a model that answers immediately is not asked to stop thinking",
+    "an unnecessary parameter is a 400 waiting to happen — see the gemini outage");
+
+  globalThis.fetch = saved;
+
+  // ── the family test, read directly ───────────────────────────────────────
+  for (const id of ["openai/gpt-oss-120b", "deepseek-reasoner", "qwq-32b", "o3-mini", "glm-4.6"]) {
+    ok(thinksFirst(id), `${id} is recognised as a model that thinks first`);
+  }
+  for (const id of ["llama-3.3-70b-versatile", "gemini-flash-latest", "deepseek-chat", "glm-4-flash"]) {
+    ok(!thinksFirst(id), `${id} is not mistaken for one`,
+      "a false positive costs a wasted round trip on every provider that rejects the hint");
+  }
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
