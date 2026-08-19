@@ -123,12 +123,34 @@ export class SupabaseStore implements Store {
     const id = rows?.[0]?.id;
     if (!id) return false;
 
-    done("anchorLatestVent", await this.db
+    /*
+      The row was found a millisecond ago, and that is not the same as it
+      still being there.
+
+      `return true` after an update that throws only on error is the same
+      shape as `setCarve` — and here the race it misses is one the comment
+      four lines above already names. Two tabs, two ratings: the first anchors
+      the vent, the second's SELECT ran before it and its UPDATE now matches
+      nothing, because `tension_after` is no longer null. Nothing errors. The
+      second tab shows "Anchored." and the drop card for a rating that was
+      correctly discarded, and the number it draws is not the number in the
+      database.
+
+      That matters more here than anywhere else in this file. This one boolean
+      is the whole efficacy loop: `anchored` on the response, the drop card,
+      `measurePersonalEfficacy`, the outcome-weighted pairs. A false `true`
+      does not just mislead one screen — it is the one measurement this
+      product claims, reporting itself taken when it was not.
+
+      One word, same as the other three.
+    */
+    const updated = ok("anchorLatestVent", await this.db
       .from("vents")
       .update({ mood_score: mood, tension_after: tensionAfter })
       .eq("id", id)
-      .eq("user_id", userId));
-    return true;
+      .eq("user_id", userId)
+      .select("id")) as unknown as Array<{ id: string }> | null;
+    return (updated?.length ?? 0) > 0;
   }
 
   async insertVent(vent: NewVent): Promise<void> {
@@ -319,15 +341,36 @@ export class SupabaseStore implements Store {
 
   async setCarve(userId: string, carve: string | null): Promise<boolean> {
     try {
-      const { error } = await this.db
+      /*
+        `.select("id")`, for the third time in this file and the reason the
+        other two say it.
+
+        `addHeld` and `addBreaking` both ask for the affected rows back and
+        return whether there were any. This one — sitting between them, doing
+        the identical UPDATE against the identical table — returned `true`
+        whenever Postgres did not complain, and an UPDATE that matches nothing
+        does not complain. So a carve written against a user row that is not
+        there reported success, and `/api/carve` answered `carved: true` about
+        a sentence that went nowhere.
+
+        Its own contract in `store/types.ts` already said the rule: "Returns
+        what happened. A carve that did not land must not be reported as
+        kept." The comment was right and the implementation was not, which is
+        the second time today a correct diagnosis sat directly above the code
+        that ignored it.
+
+        One word, the same word, in all three now.
+      */
+      const { data, error } = await this.db
         .from("vent_users")
         .update({ carve })
-        .eq("id", userId);
+        .eq("id", userId)
+        .select("id");
       if (error) {
         console.warn("[store] setCarve", error.code, error.message);
         return false;
       }
-      return true;
+      return (data?.length ?? 0) > 0;
     } catch (e) {
       console.warn("[store] setCarve threw", e);
       return false;

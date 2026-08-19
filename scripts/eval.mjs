@@ -6235,6 +6235,90 @@ await checkAsync("59 A model the code did not choose is still called correctly",
   }
 });
 
+check("60 A write that changed nothing does not report that it worked", () => {
+  /*
+    The purest instance of this repo's first mechanism, found by reading the
+    two backends side by side rather than by running either.
+
+    Four Store methods return a boolean, and the boolean means "did this
+    land". `addHeld` and `addBreaking` ask Postgres for the affected rows
+    back and return whether there were any — both carry a comment saying that
+    asking is "the only way this function knows the difference, and it is one
+    word". `setCarve`, sitting between them, doing the identical UPDATE
+    against the identical table, returned `true` whenever Postgres did not
+    complain.
+
+    An UPDATE that matches nothing does not complain. So a carve written
+    against a user row that was not there reported success, and /api/carve
+    answered `carved: true` about a sentence that went nowhere.
+
+    Two things make this worth a check of its own rather than a one-line fix.
+
+    Its own contract already said the rule. `store/types.ts` on `setCarve`:
+    "Returns what happened. A carve that did not land must not be reported as
+    kept." Right diagnosis, directly above code that ignored it — the second
+    time in one audit, after `remove()` in history-list.
+
+    And nothing here could ever have caught it. FileStore's `setCarve` is
+    correct: it finds the user, returns false if there is none. Every check in
+    this suite runs against FileStore, so both stores were asked and only the
+    honest one answered. That is "the suite tests the shape its author is
+    standing in" with no disguise on at all — the shape is the backend, and
+    the one nobody runs is the one real people use.
+
+    So this reads the Supabase implementation as text, the way check 16 reads
+    a select list. A boolean that means "did it land" has to be derived from
+    rows, and there is exactly one way to get rows back from PostgREST.
+  */
+  const types = fs.readFileSync(path.join(ROOT, "src/lib/store/types.ts"), "utf8");
+  const supa = fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8");
+  const file = fs.readFileSync(path.join(ROOT, "src/lib/store/file-store.ts"), "utf8");
+
+  const declared = [...types.matchAll(/^\s{2}(\w+)\([^)]*\):\s*Promise<boolean>/gm)].map((m) => m[1]);
+  ok(declared.length >= 4, `the contract declares boolean-returning writes (${declared.length})`);
+
+  for (const name of declared) {
+    for (const [backend, src] of [["supabase", supa], ["file", file]]) {
+      const at = src.indexOf(`async ${name}(`);
+      ok(at > 0, `${backend} implements ${name}`);
+      if (at < 0) continue;
+
+      // The method body, to the next method declaration.
+      const rest = src.slice(at + 6);
+      const end = rest.search(/\n {2}(?:async |\/\*\*)/);
+      const body = rest.slice(0, end === -1 ? undefined : end);
+
+      ok(!/return true;/.test(body),
+        `${backend}.${name} never returns a bare true`,
+        "`true` for 'Postgres did not complain' is not 'the row changed'");
+
+      if (backend !== "supabase") continue;
+      /*
+        Scoped to the mutation, not the whole body: several of these read
+        first and then write, and a `.select()` belonging to the read would
+        satisfy a whole-body scan while the write stayed unchecked.
+      */
+      const mutation = body.search(/\.(update|insert|upsert)\(/);
+      if (mutation === -1) continue;
+      const writeCall = body.slice(mutation, mutation + 400);
+      ok(/\.select\(/.test(writeCall.slice(0, writeCall.indexOf("await") === -1 ? 400 : undefined)) ||
+         /\.select\(/.test(writeCall.split(/if\s*\(\s*error/)[0]),
+        `${backend}.${name} asks for the affected rows back`,
+        "an UPDATE matching nothing returns no error — rows are the only evidence");
+      /*
+        The shape, not a variable name. Written as `data?.length` it failed a
+        correct implementation that happened to call its result `updated` —
+        a check asserting a local identifier, which is the same over-fitting
+        that made check 45 fail on a refactor that changed nothing it cared
+        about.
+      */
+      ok(/\?\.length\s*\?\?\s*0\)?\s*>\s*0|\.length\s*>\s*0|\bcount\b/.test(body),
+        `${backend}.${name} decides from how many rows changed`,
+        "the row count is the answer; the absence of an error is not");
+    }
+  }
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
