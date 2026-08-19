@@ -129,6 +129,36 @@ export function VentChat() {
   const [kept, setKept] = React.useState<string | null>(null);
   const [keptOpen, setKeptOpen] = React.useState(false);
   const [pressure, setPressure] = React.useState(50);
+  /**
+   * Whether that 50 is a reading or a default.
+   *
+   * Production, today: `meanDrop: -28.3` across every anchored sitting. Read
+   * as written, that says this product leaves people twenty-eight points
+   * heavier than it found them. It does not. It says the arrival reading is
+   * fiction.
+   *
+   * `pressure` starts at 50 and is only ever set by two things: onboarding,
+   * which a returning visitor skips by construction, and this person dragging
+   * the slider. Everybody else's first vent was written to `tension_before`
+   * as 50 — a number nobody chose — and then they rated the sitting honestly
+   * at three out of ten, which is `after: 70`, which is a drop of minus
+   * twenty. The arithmetic was never wrong. The "before" was invented.
+   *
+   * Systematically negative, too, not noisy: 50 is the midpoint of a slider
+   * and it is low for somebody who has opened a venting app at 2am, so the
+   * fabricated before is nearly always under the honest after.
+   *
+   * This is the first rule in CLAUDE.md, broken at the one number this
+   * product claims about itself — "if you are about to make something up to
+   * fill a space, leave the space." A default is a guess wearing an integer.
+   *
+   * What it poisons is not one card. `measureEfficacy` ranks all 35 tactics
+   * on these drops, `measurePersonalEfficacy` does it per person, and
+   * `dpo-outcome.jsonl` orders the training pairs by them. Every one of those
+   * has been learning from a number that mostly measured how many people
+   * never touched a slider.
+   */
+  const [pressureSet, setPressureSet] = React.useState(false);
   const [body, setBody] = React.useState<Body | null>(null);
   const [mood, setMood] = React.useState<number | null>(null);
   const [askMood, setAskMood] = React.useState(false);
@@ -209,6 +239,7 @@ export function VentChat() {
     setShowOnboarding(false);
     // The chair is their opening tension reading — the drop is measured from it.
     setPressure(r.tension);
+    setPressureSet(true);
     setTensionBefore(r.tension);
 
     /*
@@ -295,7 +326,11 @@ export function VentChat() {
         body: JSON.stringify({
           anonId: anonId(),
           message,
-          pressure,
+          // Null, not 50, when nobody has said. `tension_before` is written
+          // straight from this, and a row with a null before is simply not
+          // measurable — which is the correct outcome, and infinitely better
+          // than a measurable row that measures nothing.
+          pressure: pressureSet ? pressure : null,
           bodyTapped: body,
           mood,
           openingObject: opening?.object ?? null,
@@ -382,7 +417,9 @@ export function VentChat() {
         setGated(true);
       } else if (data.intent === "vent") {
         // Only a real vent earns the mood check — greetings don't.
-        if (tensionBefore === null) setTensionBefore(pressure);
+        // Only from a reading. This fell back to `pressure` — the same
+        // default — so the drop card drew a number out of the same fiction.
+        if (tensionBefore === null && pressureSet) setTensionBefore(pressure);
         setAskMood(true);
       }
 
@@ -1457,7 +1494,12 @@ export function VentChat() {
                   min={0}
                   max={100}
                   value={pressure}
-                  onChange={(e) => setPressure(Number(e.target.value))}
+                  onChange={(e) => {
+                    setPressure(Number(e.target.value));
+                    // Touching it is the act that turns 50 from a default
+                    // into an answer. Nothing else can.
+                    setPressureSet(true);
+                  }}
                   aria-label="Pressure, 0 loose to 100 tight"
                   // The track reads as weight, not as a form control. See
                   // input[type="range"] in globals.css.
@@ -1475,12 +1517,27 @@ export function VentChat() {
             aria-controls="body-tray"
             className="focusable label-mono mb-2 flex min-h-[32px] items-center gap-1.5 text-ash transition-colors duration-300 hover:text-ink"
           >
+            {/*
+              Hollow until it means something.
+
+              The dot's opacity was driven by `pressure`, so an untouched
+              slider drew a half-lit dot that reads as a reading. A ring is
+              the honest shape for a number nobody has given — the same
+              distinction the strip's own words now make.
+            */}
             <span
               aria-hidden
-              className="h-1.5 w-1.5 rounded-full bg-gold"
-              style={{ opacity: 0.35 + (pressure / 100) * 0.65 }}
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                pressureSet ? "bg-gold" : "border border-gold/50",
+              )}
+              style={pressureSet ? { opacity: 0.35 + (pressure / 100) * 0.65 } : undefined}
             />
-            {body ? `${body} · ${pressureWord}` : pressureWord}
+            {!pressureSet
+              ? "How tight is it?"
+              : body
+                ? `${body} · ${pressureWord}`
+                : pressureWord}
             <span aria-hidden className={cn("transition-transform duration-300", trayOpen && "rotate-180")}>
               ⌄
             </span>
