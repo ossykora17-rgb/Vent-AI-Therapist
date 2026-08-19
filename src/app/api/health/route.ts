@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { FULL_CONTRACT, RPC_CONTRACT, explainDbCode } from "@/lib/store/contract";
 import { getStore } from "@/lib/store";
 import {
+  env,
   isAnthropicConfigured,
   isLivekitConfigured,
   isPaystackConfigured,
@@ -295,6 +296,33 @@ export async function GET() {
       skipped: skipped(),
       storage: store?.kind ?? "none",
       persisting: Boolean(store),
+      /*
+        Which database this actually is.
+
+        A missing column reads as a failed migration, and the migration is
+        usually fine — it was run against a different project. Nothing in this
+        response said which one the server was talking to, so the two facts a
+        person needs to compare lived in two different browser tabs: the
+        project ref in the Supabase URL they were editing, and the ref in
+        NEXT_PUBLIC_SUPABASE_URL on the host. Same-looking dashboards, two
+        databases, and a schema check that is right about the wrong one.
+
+        The ref is the subdomain of a public URL — the same value already
+        shipped to every browser in NEXT_PUBLIC_SUPABASE_URL — so naming it
+        here reveals nothing. The host is included whole for the same reason:
+        a self-hosted or proxied Supabase has no ref, and a null where a
+        person expected a string is its own answer.
+      */
+      database_ref: (() => {
+        const url = env.supabaseUrl;
+        if (!url) return null;
+        try {
+          const host = new URL(url).host;
+          return host.endsWith(".supabase.co") ? host.split(".")[0] : host;
+        } catch {
+          return null;
+        }
+      })(),
       services,
       // What the outside world last told us, and how long ago. Nothing is
       // served past its TTL, so an old entry here means "we asked and the
