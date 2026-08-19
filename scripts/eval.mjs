@@ -5149,6 +5149,21 @@ check("49 The health probe asks as the identity that does the work", () => {
   }
   ok(/RPC_CONTRACT/.test(code), "and the health route probes them",
     "a contract nobody reads is a list, not a check");
+
+  /*
+    And it names which database it is talking to.
+
+    A missing column reads as a failed migration, and the migration is
+    usually fine — it was run against a different project. The ref comes from
+    NEXT_PUBLIC_SUPABASE_URL, which every browser already has, so this
+    publishes nothing; asserting it here is about the other half, that no key
+    ever wanders into the same field.
+  */
+  ok(/database_ref/.test(code), "health names the database it probed",
+    "same-looking dashboards, two projects, and a schema check right about the wrong one");
+  ok(!/supabaseServiceRoleKey|supabaseAnonKey/.test(code),
+    "and no key is anywhere in this route",
+    "the ref is a public subdomain — a key is not");
 });
 
 check("50 A referral nobody has dialled is never offered", () => {
