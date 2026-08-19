@@ -330,6 +330,110 @@ async function main() {
         : `no store: vent=${posted.status} anchored=${body.anchored} reason=${body.reason} (correct)`);
   }
 
+  /*
+    13 — the streamed turn and the plain turn are the same turn.
+
+    Check 55 reads the wiring; this one takes the road. It is here because the
+    obvious way to add streaming is a second handler, and a second handler
+    drifts: the rate limit, the crisis gate, the breaking-room cadence and the
+    write all live in the turn, and a copy of them for the streaming path would
+    be wrong within a month — while every source-reading check kept passing,
+    because both copies would still look correct on their own.
+
+    So the same message goes twice, once each way, and the two answers are held
+    to the same shape. Not the same *words*: a model is not deterministic and
+    two vents from one person are two turns. The claim is narrower and is the
+    one that matters — the streamed response carries the same fields, the same
+    intent, the same persistence answer, and it arrives through a transport
+    that really is an event stream rather than a JSON body with a hopeful
+    content type.
+
+    Zero tokens in this shape and one in a shape with keys: the message is a
+    greeting, which `classify` answers locally and for free on both paths.
+
+    It also asserts the shape most likely to be got wrong and least likely to
+    be noticed — `done` is present and complete. A stream that emits deltas and
+    then dies leaves a client holding a preview it was told never to trust,
+    with nothing to replace it with, and the person sees their answer vanish.
+  */
+  {
+    const STREAM = `${ANON}-sse`;
+    const say = { anonId: STREAM, message: "abeg how far", pressure: 40 };
+
+    const plain = await post("/api/vent", say);
+    const plainBody = await plain.json().catch(() => ({}));
+
+    const res = await fetch(`${BASE}/api/vent`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "text/event-stream" },
+      body: JSON.stringify(say),
+    });
+    const ctype = res.headers.get("content-type") ?? "";
+    const raw = await res.text();
+
+    // Parsed the way the browser parses it, blank-line framed, so a change to
+    // the wire format fails here rather than in front of somebody.
+    let done = null;
+    let deltas = 0;
+    for (const frame of raw.split("\n\n")) {
+      const name = /^event:\s*(.+)$/m.exec(frame)?.[1]?.trim();
+      const data = frame.split("\n").filter((l) => l.startsWith("data:"))
+        .map((l) => l.slice(5).trim()).join("");
+      if (!data) continue;
+      if (name === "delta") deltas += 1;
+      if (name === "done") { try { done = JSON.parse(data); } catch { /* reported below */ } }
+    }
+
+    const streamed = ctype.includes("text/event-stream");
+    const complete = Boolean(done) && typeof done.status === "number" && Boolean(done.body);
+    const agrees = complete &&
+      done.status === plain.status &&
+      done.body.intent === plainBody.intent &&
+      done.body.persisted === plainBody.persisted &&
+      typeof done.body.reply === "string" && done.body.reply.length > 0;
+
+    record(13, "A streamed turn is the same turn, and it ends with the whole answer",
+      streamed && complete && agrees,
+      streamed
+        ? `sse ok · ${deltas} deltas · done=${done?.status} intent=${done?.body?.intent} ` +
+          `persisted=${done?.body?.persisted} (plain ${plain.status}/${plainBody.intent})`
+        : `NOT STREAMED — content-type=${ctype.slice(0, 40) || "none"}`);
+  }
+
+  /*
+    14 — a stranger is not greeted as somebody who was here before.
+
+    The screen now says "You're back. I kept what you left here" and shows the
+    carve on request. Check 56 reads the wiring; this asks the deployment.
+
+    Two questions, and the first is the one that matters. A person who has
+    never been here must get `carve: null` — because the failure mode of this
+    feature is not a missing memory, it is a claimed one: an endpoint that
+    500s, or answers `{}`, or throws on an unknown anon id in a way the client
+    reads as truthy, and every first-time visitor is told the room kept
+    something for them. That is the whole reason the client requires a string
+    with something in it, and this proves the server holds up its half.
+
+    The second: a bad request is bad in every shape. This route validates
+    before it touches the store, so a short anon id is 422 whether or not the
+    deployment has a database — the shape-dependent status code this repo has
+    now shipped twice.
+
+    Zero tokens. Two GETs.
+  */
+  {
+    const stranger = await fetch(
+      `${BASE}/api/carve?anonId=${ANON}-never-been-here`,
+    );
+    const strangerBody = await stranger.json().catch(() => ({}));
+    const short = await fetch(`${BASE}/api/carve?anonId=xx`);
+
+    record(14, "A stranger is not told the room kept something for them",
+      stranger.status === 200 && strangerBody.carve === null && short.status === 422,
+      `unknown=${stranger.status} carve=${JSON.stringify(strangerBody.carve)} ` +
+      `short-id=${short.status} (expect 200/null/422)`);
+  }
+
   // 10 — degradation, read straight off health.
   record(10, "Keys / degradation", true,
     `storage=${health.storage} persisting=${hasDb} anthropic=${hasAi} — no 500s on any path above`);

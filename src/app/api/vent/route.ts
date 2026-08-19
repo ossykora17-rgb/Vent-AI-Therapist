@@ -82,7 +82,22 @@ const bodySchema = z.object({
 
 type Input = z.infer<typeof bodySchema>;
 
-async function handlePOST(request: Request) {
+/**
+ * Where a reply goes while it is still being written.
+ *
+ * Null on every path but one — the browser chat asking for an event stream.
+ * Everything else here (the live checks, the eval suite, curl, the offline
+ * queue flush) gets exactly the JSON it always got, produced by exactly the
+ * same code, because the sink is threaded through rather than the handler
+ * being forked. A second copy of this route for streaming is how the two
+ * drift, and this file's own history says which copy would stop being fixed.
+ */
+interface Sink {
+  delta: (chunk: string) => void;
+  restart: () => void;
+}
+
+async function handlePOST(request: Request, sink: Sink | null = null) {
   let json: unknown;
   try {
     json = await request.json();
@@ -381,6 +396,8 @@ async function handlePOST(request: Request) {
         // regex pass over a message that is already classified — this product
         // does not spend a model call to size a model call.
         depth: verdict.depth,
+        onDelta: sink?.delta,
+        onRestart: sink?.restart,
         messages: [
           ...history.flatMap((h) =>
             h.ai_reply
@@ -791,7 +808,107 @@ async function handlePATCH(request: Request) {
   );
 }
 
-export const POST = withStore(handlePOST);
+/**
+ * The same turn, delivered as it is written.
+ *
+ * Two events and no more:
+ *
+ *   delta    a fragment of the reply, as the provider produced it
+ *   done     `{status, body}` — the entire response this route would have
+ *            returned, byte for byte
+ *
+ * `done` is the answer. The deltas are a preview, and the client is required
+ * to replace what it has drawn with `body.reply` when `done` lands, for a
+ * reason this codebase has paid for in a dozen other shapes: what was streamed
+ * is what a provider *started* saying, and this route can still refuse it. A
+ * completion cut off mid-sentence throws and the chain moves on. A crisis
+ * classification never reaches the model at all. `keyless` rewrites the reply
+ * after the write, out of what the write returned. In each of those the words
+ * on the screen and the words in the response differ, and the response is the
+ * one that is true.
+ *
+ * So: stream for the wait, commit on the answer. It is the same rule the rest
+ * of this product runs on — *did this wait for the thing, and did it read what
+ * came back* — applied to the one surface where waiting is the problem.
+ *
+ * A `restart` is not an event. The client is told to discard by the next thing
+ * it is sent, and nothing is sent between a restart and the next provider's
+ * first token, so it rides on the delta: `{ chunk, seq }`, and a client that
+ * sees `seq` change throws away what it has. One field instead of a third
+ * event type, and impossible to receive out of order.
+ */
+export const POST = withStore(async (request: Request) => {
+  if (!request.headers.get("accept")?.includes("text/event-stream")) {
+    return handlePOST(request);
+  }
+
+  const encoder = new TextEncoder();
+  let seq = 0;
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let closed = false;
+      const send = (event: string, data: unknown) => {
+        if (closed) return;
+        try {
+          controller.enqueue(
+            encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+          );
+        } catch {
+          // The tab was closed mid-answer. Nothing to report and nothing to
+          // recover — the write to storage already happened or is about to,
+          // and it does not depend on anybody still listening.
+          closed = true;
+        }
+      };
+
+      try {
+        const res = await handlePOST(request, {
+          delta: (chunk) => send("delta", { chunk, seq }),
+          restart: () => {
+            seq += 1;
+          },
+        });
+        send("done", { status: res.status, body: await res.json() });
+      } catch (error) {
+        /*
+          A throw here would otherwise be an aborted stream, and an aborted
+          stream is indistinguishable from a dropped connection — the client
+          would tell somebody their network dipped when what actually happened
+          was a store outage or a bug. `withStore` is wrapped *around* this
+          function, so by the time the error is thrown the response has already
+          begun and there is no status code left to set. The status goes in the
+          event instead, where the client reads it exactly as it reads every
+          other `done`.
+        */
+        console.error("[vent] stream failed", error);
+        send("done", {
+          status: 500,
+          body: {
+            error: "stream_failed",
+            reply:
+              "Something broke on my side before I could finish. Say it again — it was not you.",
+            persisted: false,
+          },
+        });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-store, no-transform",
+      // Nginx and friends buffer proxied responses by default, which turns a
+      // stream back into one lump delivered at the end — the exact thing this
+      // exists to stop, invisible in dev and only in front of real users.
+      "x-accel-buffering": "no",
+      connection: "keep-alive",
+    },
+  });
+});
 export const PATCH = withStore(handlePATCH);
 export const GET = withStore(handleGET);
 export const DELETE = withStore(handleDELETE);
