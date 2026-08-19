@@ -434,6 +434,43 @@ async function main() {
       `short-id=${short.status} (expect 200/null/422)`);
   }
 
+  /*
+    15 — deleting nothing is not a failure, and the route has to say so.
+
+    Check 57 reads the wiring. This asks the deployment, because the sentence
+    on the other end of this response is "Everything is still here" on the page
+    whose whole purpose is taking your words back.
+
+    An anon id nobody has ever used stands in for the sequence that produces
+    this in real life: wipe from one tab, return to the other, tap delete. The
+    row is gone, the id is gone, and the route must answer in a way that lets a
+    screen tell "there was none" from "it failed" — those are the same
+    `deleted: 0` and opposite things to be told.
+
+    `?carve=1` is asserted separately because it answers the end state rather
+    than a count: the question is "is it gone", and for a row that never
+    existed the answer was already yes.
+
+    Zero tokens. Two DELETEs against an id with nothing behind it.
+  */
+  {
+    const GHOST = `${ANON}-ghost`;
+    const wipe = await fetch(`${BASE}/api/vent?anonId=${GHOST}`, { method: "DELETE" });
+    const wipeBody = await wipe.json().catch(() => ({}));
+    const carve = await fetch(`${BASE}/api/vent?anonId=${GHOST}&carve=1`, { method: "DELETE" });
+    const carveBody = await carve.json().catch(() => ({}));
+
+    // With no store at all `persisted:false` already answers it, and `had` is
+    // not sent — that shape is honest by a different route and must not fail.
+    const separable = hasDb ? wipeBody.had === false : wipeBody.persisted === false;
+
+    record(15, "Deleting nothing reports nothing to delete, not a failure",
+      wipe.status === 200 && carve.status === 200 && separable &&
+        carveBody.deleted === "carve",
+      `wipe=${wipe.status} had=${wipeBody.had} persisted=${wipeBody.persisted} · ` +
+      `carve=${carve.status} deleted=${JSON.stringify(carveBody.deleted)}`);
+  }
+
   // 10 — degradation, read straight off health.
   record(10, "Keys / degradation", true,
     `storage=${health.storage} persisting=${hasDb} anthropic=${hasAi} — no 500s on any path above`);

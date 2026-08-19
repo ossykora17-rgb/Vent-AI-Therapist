@@ -5930,6 +5930,92 @@ check("56 The room only says it remembers when it can produce the thing", () => 
     "a first visit is the ordinary case, not a failure");
 });
 
+check("57 An absent record is not a failed deletion", () => {
+  /*
+    The mirror of every face in CLAUDE.md, and it took an audit to see it.
+
+    Ten of the eleven are a promise made before or without its answer — "I've
+    saved it, word for word", "Saved. That's the anchor.", "Sealed. Nothing
+    here is kept." Check 48 was built to fail any screen that says something
+    happened without reading what came back, and it works.
+
+    It is blind in the other direction. A screen can also *deny* something
+    without reading what came back, and this product had two of them:
+
+      · `?carve=1` for a row that does not exist answered `deleted: 0`, so
+        "Forget this" said *"Could not clear that. It is still here."*
+      · Clear-all did the same, on the page whose whole job is taking your
+        words back.
+
+    Both are reachable in one ordinary sequence: wipe from the History tab,
+    return to the chat tab that is still open, tap Forget. The id is gone, the
+    row is gone, and the room tells somebody their worst week survived.
+
+    "We still have it" is the most alarming sentence this product can produce,
+    and false alarm is not the gentler failure. It is worse than false comfort,
+    because somebody acts on it — they go looking for a way to delete a thing
+    that is already deleted, find none, and conclude deletion here never works.
+
+    A count of zero has two causes. The end state has one. So the route reports
+    whether there was anything, and no screen is allowed to turn a count into a
+    verdict.
+  */
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
+  const history = fs.readFileSync(path.join(ROOT, "src/components/history-list.tsx"), "utf8");
+  const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+  // ── the route says which of the two it is ────────────────────────────────
+  const del = strip(route).slice(strip(route).indexOf("async function handleDELETE"));
+  const noUser = del.slice(del.indexOf("if (!userId)"), del.indexOf("if (forgetCarve)"));
+  ok(/had:\s*false/.test(noUser),
+    "a delete for a row that does not exist says there was nothing to delete",
+    "`deleted: 0` alone cannot tell 'it failed' from 'there was none'");
+  ok(/deleted:\s*"carve"/.test(noUser),
+    "and forgetting a carve nobody has is reported as the end state it is",
+    "the question is 'is it gone', and for a row that never existed the answer is yes");
+
+  // ── no screen turns a count into a verdict ───────────────────────────────
+  /*
+    Narrow on purpose, and the first version was not.
+
+    Written first as "any survival claim must sit downstream of a guard", it
+    failed the chat — whose claim is correct, because `deleted === "carve"` is
+    guaranteed by the route above in both the had-it and never-had-it cases —
+    and it would have *passed* the original history bug, whose window happened
+    to contain a `persisted === false` belonging to a different branch. Wrong
+    on both files: a false alarm and a miss, from one loose regex.
+
+    A scan cannot see a cross-file contract. What it can see precisely is the
+    exact defective shape: a survival claim reached through a bare zero-count
+    test, with nothing between them that separates the two causes. That is
+    what both bugs were, and it is what a third one would be.
+  */
+  for (const [name, src] of [["history", history], ["chat", chat]]) {
+    const client = strip(src);
+    for (const m of client.matchAll(/!\s*\w+\.deleted\b/g)) {
+      const after = client.slice(m.index, m.index + 700);
+      const alarm = /(still here|still have|was not removed)/i.exec(after);
+      if (!alarm) continue;
+      ok(/\bhad\b/.test(after.slice(0, alarm.index)),
+        `${name}: a zero count is not reported as the record having survived`,
+        "`!deleted` is 'none was there' and 'it failed' at once — say which");
+    }
+  }
+  ok(/had\s*===\s*false/.test(strip(history)),
+    "the history wipe reads whether there was anything to wipe",
+    "the page whose whole job is taking your words back must not claim they survived");
+
+  /*
+    And the deletion claim keeps its own half of the rule, so this check
+    cannot be satisfied by a screen that simply stopped saying anything. Both
+    directions come from the answer or neither is trustworthy.
+  */
+  const forget = strip(chat).slice(strip(chat).indexOf("async function forgetCarve"));
+  ok(forget.indexOf("json()") < forget.indexOf("Forgotten"),
+    "and the success side is still read from the response, not the click");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
