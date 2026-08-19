@@ -6016,6 +6016,120 @@ check("57 An absent record is not a failed deletion", () => {
     "and the success side is still read from the response, not the click");
 });
 
+check("58 The light that says words are being saved is wired to a write", () => {
+  /*
+    The fourth green light over a broken road, and the oldest form of it.
+
+    `persisting: Boolean(store)` answered "are people's words being saved" by
+    checking whether a store object had been constructed. Three predecessors
+    are already written down in CLAUDE.md — `models.retrieve` probing metadata
+    that needs no credit, the anonymous client probing under deny-by-default
+    RLS, the HEAD request that could not carry the error body back — and every
+    time the light was the part that was wrong.
+
+    This one is not theoretical. Every other probe in that endpoint is a
+    `select`. `GRANT SELECT` without `GRANT INSERT` is one word missing from
+    0008 — in the migration whose entire postmortem is about grants — and it
+    produces `database: ok`, `missingTables: []`, `tablesChecked: 9`,
+    `persisting: true`, and every vent silently failing to insert. The chat
+    tells the person "Not saved". The endpoint tells whoever is debugging it
+    that persistence is fine.
+
+    Ask of /api/health, before trusting a word of it: is this asking as the
+    identity that does the work, in a shape that can carry the failure back,
+    *about the operation it claims to describe*. The third clause is this one.
+  */
+  const src = fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+  ok(!/persisting:\s*Boolean\(store\)\s*,/.test(code),
+    "`persisting` is not the existence of a store object",
+    "that is configuration answering a question about an outcome");
+
+  /*
+    A write is attempted, and it is a write. `select`, `head` and `rpc` are
+    all reads as far as a privilege check is concerned.
+  */
+  ok(/\.update\(|\.insert\(|\.upsert\(/.test(code),
+    "the endpoint attempts an actual write against the database",
+    "nine reading probes cannot tell you whether this role may write");
+
+  /*
+    Against nothing, so a health check never creates a row. A probe that
+    writes real data pollutes the tables the pipelines count, and a health
+    endpoint is called by uptime monitors.
+  */
+  ok(/00000000-0000-0000-0000-000000000000/.test(code),
+    "the write matches a uuid that belongs to nobody",
+    "a probe that creates rows is a probe the pipelines have to learn to ignore");
+
+  /*
+    And the result is read. A write whose error is discarded is the HEAD
+    request again: the request was made in the right shape and the answer had
+    nowhere to go.
+  */
+  /*
+    Scoped to the write's own identifier, and the first version was not.
+
+    Written as "`.error` appears somewhere after the update", it survived a
+    mutation that replaced the guard with `if (false)` — the error was still
+    mentioned in a branch that could never run, and the endpoint reported
+    `writable: "ok"` unconditionally. A dead branch satisfying a check about
+    a live one. Same defect as check 55's `done` assertion being satisfied by
+    the catch block, two audits apart, which is worth stating plainly: a
+    regex that only asks whether a token is *present* cannot tell running
+    code from decoration.
+  */
+  const assigned = /const\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+supabase!?[\s\S]{0,200}?\.update\(/.exec(code);
+  ok(assigned, "the write's result is kept");
+  const after = code.slice((assigned?.index ?? 0) + (assigned?.[0].length ?? 0));
+  const guard = /if\s*\(([^)]*)\)/.exec(after)?.[1] ?? "";
+  ok(assigned && guard.includes(assigned[1]) && guard.includes("error"),
+    "the outcome is decided by the write's own error, not by a constant",
+    "a dead branch reports `ok` for a database that refused the write");
+  ok(/writable\s*=\s*"denied"/.test(after) && /writable\s*=\s*"ok"/.test(after),
+    "both outcomes are recorded from the answer");
+
+  /*
+    Three states, not two. "Nothing checked" is a real and common answer — no
+    key, no store, a database that never replied — and folding it into `false`
+    would claim writes are broken on a deployment nobody has asked. That is
+    the same overclaim in the other direction.
+  */
+  ok(/"unverified"/.test(code),
+    "an unprobed deployment reports unverified rather than a verdict",
+    "a boolean forces every unknown into a claim");
+  ok(/writable,/.test(code) || /writable:/.test(code),
+    "the evidence is on the response, so `persisting: false` is never a bucket with nothing in it");
+
+  // And the file store, which has no grants and no roles, is not dragged
+  // through a Postgres verdict it can never earn.
+  ok(/kind === "supabase"/.test(code),
+    "only the database-backed store is judged on the write probe",
+    "a FileStore persists and has no privilege model to fail");
+
+  /*
+    The verdict says what the probe found.
+
+    A database that answers every read and refuses every write is a
+    deployment where people are heard and nothing survives the tab. Probing
+    it and then printing `status: ok` over it would be the same green light
+    one field to the left — a verdict that knows and does not say is no
+    better than one that never asked.
+
+    And "unverified" must not degrade anything. Nothing was checked, and an
+    unchecked thing is not a broken thing; folding it in would make every
+    keyless deployment report itself broken.
+  */
+  const verdict = code.slice(code.indexOf("status:"), code.indexOf("database,"));
+  ok(/writable === "denied"/.test(verdict),
+    "a database that refuses writes degrades the overall status",
+    "a green light over a broken road, one field to the left of the one just fixed");
+  ok(!/writable\s*!==\s*"ok"/.test(verdict) && !/"unverified"/.test(verdict),
+    "and an unprobed deployment is not called broken",
+    "nothing checked is not the same as something failed");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
