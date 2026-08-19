@@ -133,4 +133,41 @@ async function handlePOST(req: Request) {
   });
 }
 
+/**
+ * What the room kept, for the room to be able to say it kept something.
+ *
+ * The carve has existed for a while and only the model ever saw it. So
+ * somebody who sat here on Tuesday about their father opened the app on
+ * Thursday to "Come in. Say small. Hear plenty." — the identical blank room a
+ * stranger gets. The product remembered them and the screen did not, and the
+ * screen is the part a person experiences.
+ *
+ * Returned rather than rendered server-side because the chat is a client
+ * component with the anon id in localStorage; there is no session on the
+ * server to render it from.
+ *
+ * `carve: null` is the ordinary answer and the safe one. No store, no user,
+ * no carve, a store that is down — all of them are null, and null means the
+ * screen says nothing about remembering. A room that claims to remember and
+ * cannot produce the thing is worse than one that never claimed it.
+ */
+async function handleGET(req: Request) {
+  const anonId = new URL(req.url).searchParams.get("anonId");
+  if (!anonId || anonId.length < 8) {
+    return NextResponse.json({ error: "Invalid anonId" }, { status: 422 });
+  }
+
+  const store = getStore();
+  if (!store) return NextResponse.json({ carve: null, storage: "none" });
+
+  const userId = await store.findUserId(anonId);
+  if (!userId) return NextResponse.json({ carve: null, storage: store.kind });
+
+  return NextResponse.json(
+    { carve: await store.getCarve(userId), storage: store.kind },
+    { headers: { "cache-control": "no-store" } },
+  );
+}
+
+export const GET = withStore(handleGET);
 export const POST = withStore(handlePOST);

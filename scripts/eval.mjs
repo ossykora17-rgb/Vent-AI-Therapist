@@ -5812,6 +5812,124 @@ await checkAsync("55 What was streamed is a preview; what was committed is the a
   }
 });
 
+check("56 The room only says it remembers when it can produce the thing", () => {
+  /*
+    The carve has been written at the end of every real session since 0011 and
+    nothing but the model has ever read it. So somebody who sat here on Tuesday
+    about their father opened the app on Thursday to "Come in. Say small. Hear
+    plenty." — the identical blank room a stranger gets. The product remembered
+    them and the screen did not.
+
+    Which makes this the highest-risk sentence anybody has added to this
+    codebase, because "I kept what you left here" is a promise about the past,
+    and the eleven faces in CLAUDE.md are all promises made before or without
+    their answer. `persisted: false` nested where a first-time user could never
+    see it. `Saved. That's the anchor.` with no request behind it. `Sealed.
+    Nothing here is kept.` over a `seal` that never read `res.ok`.
+
+    Three things have to hold, and this checks all three:
+
+      · the claim is made only when a carve actually came back
+      · the wound is not printed at anybody on arrival
+      · they can delete it, and are told so only after it is gone
+  */
+  const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
+  const carveRoute = fs.readFileSync(path.join(ROOT, "src/app/api/carve/route.ts"), "utf8");
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const client = strip(chat);
+
+  /*
+    The greeting is a ternary on state that was fetched, not on anything about
+    the deployment. `isModelConfigured`, `storage !== "none"`, "they have an
+    anon id" — every one of those is a claim about the shape somebody is
+    standing in, and the carve is a claim about a row.
+  */
+  /*
+    Every branch in the greeting turns on the fetched carve, and nothing else.
+
+    Written first as "the file contains `kept ?` somewhere", which a mutation
+    walked through without breaking stride: swapping the headline's test for
+    `true` left the *second* ternary's `kept ?` in the file and the assertion
+    was satisfied by a line it was not about. The greeting then told every
+    first-time visitor "You're back. I kept what you left here" — the exact
+    sentence this check exists to prevent, passing the check that exists to
+    prevent it.
+
+    So the block is scoped and every ternary test inside it is read. `kept` is
+    a row that came back; `keptOpen` is a tap. Anything else — `true`,
+    `storage !== "none"`, `isModelConfigured` — is the deployment talking about
+    itself in the one place that must only talk about this person.
+  */
+  const blockStart = client.indexOf("lines.length === 0 && !thinking && (");
+  const block = client.slice(blockStart, client.indexOf("<ol", blockStart));
+  ok(blockStart > 0 && block.length > 0, "the greeting block is findable");
+  const tests = [...block.matchAll(/\{\s*([A-Za-z_$][\w$.]*)\s*\?/g)].map((m) => m[1]);
+  ok(tests.length >= 2, "the greeting has branches to check");
+  is(tests.filter((t) => t !== "kept" && t !== "keptOpen").length, 0,
+    "every branch in the greeting turns on the carve that came back, or on a tap",
+    "a greeting keyed to anything else is the deployment talking about itself");
+  ok(/setKept\(/.test(client) && !/setKept\((["'`])(?!\s*\))/.test(client.replace(/setKept\(null\)/g, "")),
+    "`kept` is only ever set from a value, never from a literal");
+
+  /*
+    And it is set from the response body, after the response. The pattern this
+    has to not be is `void fetch(...)` followed by a sentence.
+  */
+  const fetchBlock = client.slice(client.indexOf("/api/carve"), client.indexOf("/api/carve") + 420);
+  ok(/\.then\([\s\S]{0,200}json\(\)/.test(fetchBlock) || /await[\s\S]{0,80}json\(\)/.test(fetchBlock),
+    "the carve is read out of the response, not assumed from the request");
+  ok(/typeof\s+d\?\.carve\s*===\s*"string"/.test(fetchBlock) || /typeof[\s\S]{0,40}carve[\s\S]{0,20}string/.test(fetchBlock),
+    "and a body without a carve in it does not become one");
+
+  /*
+    The wound stays shut until asked for.
+
+    Not squeamishness — the Carver is instructed to keep their own words and
+    never soften, so the string is somebody's worst week in their own Pidgin.
+    Printing it above the composer means a person who opened this at 2am to get
+    away from a thing reads an inscription of it before typing a character.
+    The claim proves memory; the contents belong to them.
+  */
+  const greeting = client.slice(client.indexOf("lines.length === 0"), client.indexOf("Two voices, built differently") + 1 || undefined);
+  ok(/keptOpen\s*&&/.test(client) || /\{keptOpen/.test(client),
+    "the carve itself renders behind a second, explicit tap");
+  ok(!/\{kept\}/.test(greeting.slice(0, greeting.indexOf("keptOpen") === -1 ? 0 : greeting.indexOf("keptOpen"))),
+    "the carve is not printed in the greeting itself",
+    "eight words of somebody's worst week, unasked for, above the box");
+
+  /*
+    Deletable, and told so from the answer.
+
+    `?carve=1` existed from the day the carve did and no screen offered it. A
+    memory somebody cannot delete is a record kept about them, which is the
+    thing this product argues against. And "Forgotten." over a request that
+    failed is the seal bug inverted — the same lie, running the other way, and
+    worse, because they would leave believing something about their own life
+    was gone.
+  */
+  ok(/carve=1/.test(client), "a returning person is offered a way to make it forget");
+  const forget = client.slice(client.indexOf("async function forgetCarve"));
+  const said = forget.indexOf("Forgotten");
+  ok(said > 0 && forget.slice(0, said).includes("json()"),
+    "nothing is called forgotten until the answer has been read",
+    "the seal bug, inverted: a deletion claimed on the strength of having asked");
+  ok(/deleted\s*===\s*"carve"/.test(forget),
+    "and the claim reads the field the route actually returns");
+
+  /*
+    The route answers null in every shape that cannot produce a carve, and it
+    validates before it looks at the deployment — the 422-or-200-depending-on-
+    your-env bug this same file already carries a postmortem for.
+  */
+  const get = carveRoute.slice(carveRoute.indexOf("async function handleGET"));
+  ok(get.indexOf("Invalid anonId") < get.indexOf("getStore()"),
+    "a bad request is bad in every deployment shape",
+    "validating after getStore() makes the status code depend on the environment");
+  is((get.match(/carve:\s*null/g) ?? []).length, 2,
+    "no store and no user both answer with a null carve rather than an error",
+    "a first visit is the ordinary case, not a failure");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

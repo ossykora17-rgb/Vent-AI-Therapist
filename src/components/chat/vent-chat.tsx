@@ -108,6 +108,26 @@ export function VentChat() {
    * anything, and the person who wants to move it taps one word.
    */
   const [trayOpen, setTrayOpen] = React.useState(false);
+  /**
+   * The carve from the last session that had one, and whether it is showing.
+   *
+   * Held behind a tap, deliberately, and this is the only decision in the
+   * feature that took any thinking.
+   *
+   * The carve is the wound in eight words — "pops sick / fear of being
+   * useless son" — and it is written in the person's own language because the
+   * Carver is told to keep their words. Printing that on the opening screen
+   * would mean somebody who came here at 2am to get away from a thing reads an
+   * inscription of the thing before they have typed a character. The most
+   * memorable moment in the product and the cruellest, from one decision.
+   *
+   * So the room says it kept something, and they decide whether to look. The
+   * claim is what proves memory; the contents belong to them and stay shut
+   * until asked for. It is the same shape as the Breaking Room's visible no —
+   * consent before the heavy part, not after.
+   */
+  const [kept, setKept] = React.useState<string | null>(null);
+  const [keptOpen, setKeptOpen] = React.useState(false);
   const [pressure, setPressure] = React.useState(50);
   const [body, setBody] = React.useState<Body | null>(null);
   const [mood, setMood] = React.useState<number | null>(null);
@@ -150,6 +170,39 @@ export function VentChat() {
 
   React.useEffect(() => {
     if (!hasOnboarded()) setShowOnboarding(true);
+  }, []);
+
+  /*
+    What the room kept, asked for before they type.
+
+    The carve has been written at the end of every real session for a while
+    and only the model has ever seen it. So somebody who sat here on Tuesday
+    about their father opened the app on Thursday to the same blank room a
+    stranger gets. The product remembered and the screen did not, and the
+    screen is the part a person lives in.
+
+    Fetched, never assumed. `kept` stays null unless a row came back with
+    something in it — a store that is down, a first visit, a session too short
+    to carve and a wipe all leave it null, and the room then says nothing about
+    remembering. That is the rule this whole codebase is built on: a claim
+    about the past has to be able to produce the past.
+
+    One request, on mount, on a page somebody is about to sit and type on for
+    several minutes. It never blocks anything: the composer is live before it
+    lands and the greeting simply changes underneath if it arrives.
+  */
+  React.useEffect(() => {
+    let live = true;
+    fetch(`/api/carve?anonId=${encodeURIComponent(anonId())}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const carve = typeof d?.carve === "string" ? d.carve.trim() : "";
+        if (live && carve) setKept(carve);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
   }, []);
 
   function completeOnboarding(r: OnboardingResult) {
@@ -654,6 +707,38 @@ export function VentChat() {
    * routing it through the model would spend money to reply to a sentence that
    * already has its reply written.
    */
+  /**
+   * Make it forget, and only say so once it has.
+   *
+   * `?carve=1` has existed since the carve did and no screen ever offered it.
+   * A memory a person cannot delete is a record kept about them, and this
+   * product's whole argument is the opposite of that.
+   *
+   * The state is cleared from the response, not from the click. "Forgotten"
+   * over a request that failed is `I've saved it, word for word` inverted —
+   * the same sentence, the same lie, in the other direction, and worse here
+   * because somebody would leave believing a thing about their own life had
+   * been erased when it had not.
+   */
+  async function forgetCarve() {
+    try {
+      const res = await fetch(
+        `/api/vent?anonId=${encodeURIComponent(anonId())}&carve=1`,
+        { method: "DELETE" },
+      );
+      const data = res.ok ? await res.json().catch(() => null) : null;
+      if (data?.deleted === "carve") {
+        setKept(null);
+        setKeptOpen(false);
+        toast("Forgotten.", "success");
+      } else {
+        toast("Could not clear that. It is still here.", "info");
+      }
+    } catch {
+      toast("Could not clear that. It is still here.", "info");
+    }
+  }
+
   /** Put the grown box back to one line. Called wherever the draft is emptied. */
   function shrink() {
     const el = inputRef.current;
@@ -809,13 +894,68 @@ export function VentChat() {
         {lines.length === 0 && !thinking && (
           <div className="py-6">
             <p className="font-display text-[22px] leading-[1.3] tracking-[-0.01em]">
-              Come in. Say small. Hear plenty.
+              {kept ? "You're back." : "Come in. Say small. Hear plenty."}
             </p>
             <p className="mt-3 max-w-[48ch] text-[15px] leading-[1.7] text-ash">
-              Nobody reads this but you and the machine. It does not have to be
-              tidy, or finished, or even true yet — start in the middle if that
-              is where you are.
+              {kept
+                ? "I kept what you left here. Pick it up or start somewhere else — both are fine."
+                : "Nobody reads this but you and the machine. It does not have to be tidy, or finished, or even true yet — start in the middle if that is where you are."}
             </p>
+
+            {/*
+              Their own eight words, and only if they ask.
+
+              Two things are true at once and the design has to hold both. A
+              person is not remembered by a product that says "I remember" —
+              they are remembered when it can produce the thing. And a person
+              who opens this at 2am to get away from something must not be
+              handed an inscription of it on arrival.
+
+              So the sentence above makes the claim and this makes it good, on
+              a tap. What comes out is a quote, in their language, because the
+              Carver keeps their words — which is a different act from a system
+              showing somebody its assessment of them.
+
+              And the way out sits next to it, at the same weight. A room that
+              can recite your worst week and has no visible way to make it stop
+              is not a memory, it is a file. `?carve=1` already existed for
+              exactly this and had no door on any screen.
+            */}
+            {kept && (
+              <div className="mt-5">
+                <button
+                  type="button"
+                  onClick={() => setKeptOpen((o) => !o)}
+                  aria-expanded={keptOpen}
+                  className="focusable label-mono flex min-h-[44px] items-center gap-1.5 text-ash transition-colors duration-300 hover:text-ink"
+                >
+                  {keptOpen ? "Close it" : "What you left"}
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "transition-transform duration-300",
+                      keptOpen && "rotate-180",
+                    )}
+                  >
+                    ⌄
+                  </span>
+                </button>
+
+                {keptOpen && (
+                  <div className="presence arrive mt-2 p-6 sm:p-8">
+                    <p className="nameplate mb-4">Last time</p>
+                    <p className="reply max-w-[42ch]">{kept}</p>
+                    <button
+                      type="button"
+                      onClick={() => void forgetCarve()}
+                      className="focusable mt-4 min-h-[44px] text-[14px] text-ash underline underline-offset-4"
+                    >
+                      Forget this
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

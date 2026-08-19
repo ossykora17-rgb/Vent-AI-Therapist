@@ -400,6 +400,40 @@ async function main() {
         : `NOT STREAMED — content-type=${ctype.slice(0, 40) || "none"}`);
   }
 
+  /*
+    14 — a stranger is not greeted as somebody who was here before.
+
+    The screen now says "You're back. I kept what you left here" and shows the
+    carve on request. Check 56 reads the wiring; this asks the deployment.
+
+    Two questions, and the first is the one that matters. A person who has
+    never been here must get `carve: null` — because the failure mode of this
+    feature is not a missing memory, it is a claimed one: an endpoint that
+    500s, or answers `{}`, or throws on an unknown anon id in a way the client
+    reads as truthy, and every first-time visitor is told the room kept
+    something for them. That is the whole reason the client requires a string
+    with something in it, and this proves the server holds up its half.
+
+    The second: a bad request is bad in every shape. This route validates
+    before it touches the store, so a short anon id is 422 whether or not the
+    deployment has a database — the shape-dependent status code this repo has
+    now shipped twice.
+
+    Zero tokens. Two GETs.
+  */
+  {
+    const stranger = await fetch(
+      `${BASE}/api/carve?anonId=${ANON}-never-been-here`,
+    );
+    const strangerBody = await stranger.json().catch(() => ({}));
+    const short = await fetch(`${BASE}/api/carve?anonId=xx`);
+
+    record(14, "A stranger is not told the room kept something for them",
+      stranger.status === 200 && strangerBody.carve === null && short.status === 422,
+      `unknown=${stranger.status} carve=${JSON.stringify(strangerBody.carve)} ` +
+      `short-id=${short.status} (expect 200/null/422)`);
+  }
+
   // 10 — degradation, read straight off health.
   record(10, "Keys / degradation", true,
     `storage=${health.storage} persisting=${hasDb} anthropic=${hasAi} — no 500s on any path above`);
