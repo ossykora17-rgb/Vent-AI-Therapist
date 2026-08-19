@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { isExpired, MAX_SEATS } from "@/lib/circles/rules";
+import { isExpired, MAX_SEATS, MESSAGE_KINDS, SHARE_MAX_CHARS } from "@/lib/circles/rules";
 import { TYPING_WINDOW_MS } from "@/lib/circles/presence";
 import type {
   CircleMemberRow, CircleMessageRow, CircleRow,
@@ -423,7 +423,38 @@ export class FileStore implements Store {
     return live.sort((a, b) => a.created_at.localeCompare(b.created_at));
   }
 
+  /**
+   * The two constraints 0003 puts on this table, enforced here as well.
+   *
+   * `FileStore` has no constraints, and that is not a neutral difference — it
+   * is a backend that accepts rows the real one refuses, in a project where
+   * every automated check runs against this backend and real people run
+   * against the other. CLAUDE.md already records the ancestor: "the foreign
+   * key. FileStore has no foreign keys and accepted all of them."
+   *
+   * It happened again the same day this was written. A check built to prove
+   * that expired circles get swept inserted `kind: "member"` — a value the
+   * CHECK constraint in 0003 forbids — and passed, because this store took
+   * it. A test proving a property about a row Postgres would have rejected.
+   *
+   * So the permissive backend stops being permissive about the two things the
+   * database is strict about. It cannot mirror foreign keys or RLS, and it is
+   * not trying to be Postgres; it is refusing to be *looser* in the two places
+   * where being looser silently validates fiction.
+   */
   async addCircleMessage(m: Omit<CircleMessageRow, "id" | "created_at">): Promise<void> {
+    if (!(MESSAGE_KINDS as readonly string[]).includes(m.kind)) {
+      throw new Error(
+        `addCircleMessage: kind "${m.kind}" is not one of ${MESSAGE_KINDS.join(", ")} — ` +
+          "0003_circles.sql constrains this column and Postgres would refuse the row",
+      );
+    }
+    const length = m.content?.length ?? 0;
+    if (length < 1 || length > SHARE_MAX_CHARS) {
+      throw new Error(
+        `addCircleMessage: content is ${length} characters — 0003_circles.sql allows 1 to ${SHARE_MAX_CHARS}`,
+      );
+    }
     await this.write((db) => {
       db.circleMessages.push({ ...m, id: randomUUID(), created_at: new Date().toISOString() });
     });

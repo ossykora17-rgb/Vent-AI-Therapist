@@ -6475,7 +6475,24 @@ await checkAsync("61 A circle nobody is asking about still gets closed", async (
     circle_id: over.id,
     anon_id: "sweep-test-anon",
     content: "the thing I would only say in a room that forgets",
-    kind: "member",
+    /*
+      `share`, because that is a value the database will accept.
+
+      Written as "member" first — a kind that does not exist. 0003 constrains
+      this column to share / witness / keeper_prompt / guardian, so Postgres
+      would have rejected the row outright, and `FileStore` has no constraints
+      and took it happily.
+
+      Which is this file's own lesson landing on the check written to enforce
+      it, in the same commit: a fixture that only the permissive backend can
+      hold, proving a property about rows production cannot produce. CLAUDE.md
+      has the ancestor of this — "the foreign key. FileStore has no foreign
+      keys and accepted all of them."
+
+      Caught by reading the migration rather than by anything running, which
+      is the only way it could have been caught.
+    */
+    kind: "share",
     flagged: false,
   });
   is((await store.listCircleMessages(over.id)).length, 1, "the circle had something said in it");
@@ -6497,6 +6514,34 @@ await checkAsync("61 A circle nobody is asking about still gets closed", async (
   is((await store.expiredUnclosedCircles(5)).length, 0,
     "and it is not swept twice",
     "a sweep that keeps finding its own output is a lobby doing unbounded work forever");
+
+  /*
+    And the fixture above is a row the real database would accept.
+
+    The first version of this check inserted `kind: "member"` — a value 0003
+    forbids with a CHECK constraint — and passed, because `FileStore` had no
+    constraints. A test proving a property about a row Postgres would have
+    refused, inside the check written to catch exactly that class of mistake,
+    in the same commit.
+
+    So the permissive backend stopped being permissive about the two things
+    the database is strict about here, and this asserts it stays that way. It
+    cannot mirror foreign keys or RLS and is not trying to be Postgres — it is
+    refusing to be *looser* where being looser silently validates fiction.
+  */
+  let refused = false;
+  await store.addCircleMessage({
+    circle_id: over.id, anon_id: "x", content: "hi", kind: "member", flagged: false,
+  }).catch(() => { refused = true; });
+  ok(refused,
+    "the local backend refuses a message kind the database would refuse",
+    "a fixture only one backend can hold proves nothing about the other");
+
+  let tooLong = false;
+  await store.addCircleMessage({
+    circle_id: over.id, anon_id: "x", content: "x".repeat(901), kind: "share", flagged: false,
+  }).catch(() => { tooLong = true; });
+  ok(tooLong, "and content past the column's own limit");
 });
 
 check("62 A third party being down cannot hold a page open", () => {
@@ -6558,6 +6603,82 @@ check("62 A third party being down cannot hold a page open", () => {
     "N sequential calls to a third party is N times whatever bound each one has");
   ok(!/for\s*\(\s*const[^)]*await store\.expiredUnclosedCircles/.test(get),
     "and not in a loop that awaits inside itself");
+});
+
+check("63 The arrival reading is a reading, or it is nothing", () => {
+  /*
+    Production, read out of a workflow log rather than a screen:
+
+      {"vents":105,"anchored":6,"meanDrop":-28.3,"storage":"supabase"}
+
+    Taken at face value that says this product leaves people twenty-eight
+    points heavier than it found them. It does not. It says the number it is
+    computed from was invented.
+
+    `tension_before` is written straight from the `pressure` the client sends.
+    `pressure` is `useState(50)` and is set to anything real by exactly two
+    events: onboarding, which a returning visitor skips by construction, and
+    the person dragging the slider. So every returning visitor's first vent
+    recorded an arrival tension of 50 that nobody chose — and then they rated
+    the sitting honestly at three out of ten, which is `after: 70`, which is a
+    drop of minus twenty.
+
+    Systematically negative rather than noisy: 50 is the midpoint of a slider
+    and it is low for somebody who has opened a venting app at 2am, so the
+    fabricated before sits under the honest after nearly every time.
+
+    This is the first rule in CLAUDE.md — "if you are about to make something
+    up to fill a space, leave the space" — broken at the one number this
+    product claims about itself. A default is a guess wearing an integer, and
+    it is worse than a blank because it is measurable.
+
+    And it does not poison one card. `measureEfficacy` ranks all 35 tactics on
+    these drops, `measurePersonalEfficacy` does it per person against their
+    own baseline, and `dpo-outcome.jsonl` orders the preference pairs by them.
+    Three learning systems, all trained on how many people never touched a
+    slider.
+  */
+  const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const client = strip(chat);
+
+  /*
+    Null on the wire when nobody has said. The route already writes null
+    through — `input.pressure != null ? ... : null` — so the whole fix is
+    refusing to send a number that means nothing.
+  */
+  ok(/pressure:\s*\w+\s*\?\s*pressure\s*:\s*null/.test(client),
+    "an untouched slider is sent as null, not as its default",
+    "`tension_before: 50` from a person who never answered is a measurement of nothing");
+  ok(/tension_before:[\s\S]{0,60}!=\s*null[\s\S]{0,40}:\s*null/.test(strip(route)),
+    "and the route stores null rather than substituting one of its own");
+
+  /*
+    Two events may turn the default into a reading, and only two.
+  */
+  const setters = [...client.matchAll(/setPressureSet\(true\)/g)];
+  is(setters.length, 2,
+    "exactly two things can mark the reading as given — onboarding, and the slider",
+    "a third would be somewhere quietly deciding on the person's behalf");
+
+  /*
+    And nothing downstream reconstructs it. `tensionBefore` fell back to
+    `pressure` on the first vent of a session, so the drop card drew its
+    number out of the same default the wire had just refused to send.
+  */
+  ok(!/setTensionBefore\(pressure\)\s*;/.test(client.replace(/&&\s*pressureSet\)\s*setTensionBefore\(pressure\);/g, "")),
+    "the drop is never measured from the default either",
+    "refusing to send it and then using it locally is the same fiction, one layer in");
+
+  /*
+    The screen says which of the two it is. A strip reading "some" over an
+    untouched slider is the default presented as an answer — the interface
+    telling the person a thing about themselves that they never said.
+  */
+  ok(/!pressureSet/.test(client),
+    "the composer distinguishes a reading from a default on screen",
+    "showing 'some' for a number nobody gave is the same invention, rendered");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

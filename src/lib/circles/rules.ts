@@ -9,7 +9,23 @@ import { REAL_WORLD_TACTIC } from "@/lib/vent/tactics";
  */
 
 export type CircleRole = "keeper" | "sharer" | "witness";
-export type MessageKind = "share" | "witness" | "keeper_prompt" | "guardian";
+
+/**
+ * The four kinds, once, at runtime — and the type derived from them.
+ *
+ * This was a type alone. A type is erased before anything runs, so nothing
+ * could check a kind against it: the same four strings existed in the union
+ * here, in a CHECK constraint in 0003, and nowhere a running program could
+ * consult. `FileStore` therefore accepted `kind: "member"` from a check
+ * written the same day, and asserted a property about a row Postgres would
+ * have refused.
+ *
+ * `as const` then `typeof[number]` gives one list and a type that cannot
+ * disagree with it — the same "one table, one truth" rule chair tensions
+ * needed after living in four files.
+ */
+export const MESSAGE_KINDS = ["share", "witness", "keeper_prompt", "guardian"] as const;
+export type MessageKind = (typeof MESSAGE_KINDS)[number];
 
 export const MAX_SEATS = 6;
 export const CIRCLE_MINUTES = 45;
