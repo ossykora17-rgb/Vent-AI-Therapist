@@ -170,13 +170,27 @@ export function HistoryList() {
         toast("Couldn't delete that. It is still here.", "error");
         return;
       }
-      // `deleted: 0` is the route being honest that it found nothing to
-      // delete — no store, or an anon id it has never seen.
+      /*
+        `deleted: 0` is the route being honest that it found nothing to
+        delete — no store, or an anon id it has never seen. The comment above
+        said exactly that and the code below it then reported the second case
+        as a failure anyway, which is the sharpest version of this bug in the
+        repo: the diagnosis was written down and the branch was still wrong.
+
+        And here it is worse than a wrong sentence. `restore()` puts the row
+        back on the screen, so somebody watches their vent reappear while
+        being told it is still here — a product demonstrating, apparently
+        physically, that it kept what they asked it to destroy. It had not.
+
+        Nothing there means nothing to put back. The row stays gone, and the
+        sentence says which of the two happened.
+      */
       if (!body.deleted) {
-        restore();
+        const nothingToDelete = body.persisted === false || body.had === false;
+        if (!nothingToDelete) restore();
         toast(
-          body.persisted === false
-            ? "Nothing was ever stored, so there was nothing to delete."
+          nothingToDelete
+            ? "Nothing was stored, so there was nothing to delete."
             : "Couldn't delete that. It is still here.",
           "info",
         );
@@ -250,11 +264,34 @@ export function HistoryList() {
         toast("Couldn't clear it. Everything is still here.", "error");
         return;
       }
+      /*
+        An absent record is not a failed deletion.
+
+        `deleted` is a count, and a count of zero has two completely different
+        causes: the delete did not work, or there was nothing there. This read
+        both as the first and said *"Couldn't clear it. Everything is still
+        here."* — to somebody for whom nothing is here at all.
+
+        It is reachable: wipe from one tab, come back to this one, tap Clear
+        all. The id is gone, the row is gone, the route answers `deleted: 0`,
+        and the screen tells them their history survived. In a product whose
+        entire argument is that you can take your words back, "we still have
+        it" is the most alarming sentence available — and this one is false.
+
+        Every other face of this bug in CLAUDE.md is a promise made without its
+        answer. This is the mirror: a denial made without its answer. Same
+        defect, and this direction is worse, because somebody acts on it. They
+        go looking for a way to delete a thing that is already deleted.
+
+        So the route says whether there was anything, and this reads it. Two
+        causes, two sentences, and neither of them guesses.
+      */
       if (!body.deleted) {
         putBack();
+        const nothingToClear = body.persisted === false || body.had === false;
         toast(
-          body.persisted === false
-            ? "Nothing was ever stored, so there was nothing to clear."
+          nothingToClear
+            ? "Nothing was stored, so there is nothing to clear."
             : "Couldn't clear it. Everything is still here.",
           "info",
         );

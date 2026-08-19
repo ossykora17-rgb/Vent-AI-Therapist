@@ -673,20 +673,54 @@ async function handleDELETE(request: Request) {
     return NextResponse.json({ error: "Invalid anonId" }, { status: 422 });
   }
 
+  const forgetCarve = url.searchParams.get("carve") === "1";
+
   const store = getStore();
   if (!store) return NextResponse.json({ deleted: 0, persisted: false, storage: "none" });
 
   const userId = await store.findUserId(anonId);
-  if (!userId) return NextResponse.json({ deleted: 0, persisted: true, storage: store.kind });
+  /*
+    Nothing to delete is a deletion that holds, and it has to answer as one.
+
+    This returned `deleted: 0` for a row that does not exist, which is
+    literally true and reads as a failure to every caller — and the caller for
+    `?carve=1` is a button whose whole job is to tell somebody their memory is
+    gone. So: wipe your history in the History tab, come back to the tab you
+    left open, tap Forget, and the room says *"Could not clear that. It is
+    still here."* about a line that had already been destroyed.
+
+    That is this file's own bug read backwards. Every face of it so far has
+    been a promise made without its answer — "I've saved it, word for word",
+    "Sealed. Nothing here is kept." This is the mirror: a *denial* made
+    without its answer, in the one product where "we still have it" is the
+    most alarming sentence available. False comfort and false alarm are the
+    same defect, and the second one is worse here, because somebody acts on it
+    — they go looking for a way to delete a thing that is already deleted, and
+    find none, and conclude the deletion never works.
+
+    The question a person is asking is not "did a row change" — it is "is it
+    gone". For a user with no row the answer is yes, and it was yes before
+    they asked. The end state is the truth, so the end state is what is
+    reported. The general delete keeps `deleted: 0` on purpose: it is a count,
+    nobody's screen turns it into a promise, and history-list reads `res.ok`.
+  */
+  if (!userId) {
+    return NextResponse.json(
+      forgetCarve
+        ? { deleted: "carve", persisted: true, storage: store.kind, had: false }
+        : { deleted: 0, persisted: true, storage: store.kind, had: false },
+      { headers: { "cache-control": "no-store" } },
+    );
+  }
 
   // The carve on its own. "Clear everything" already takes it, but a person
   // who wants that one line gone should not have to burn their whole history
   // to do it — the sentence they did not write is exactly the one they are
   // most likely to want removed on its own.
-  if (url.searchParams.get("carve") === "1") {
+  if (forgetCarve) {
     await store.setCarve(userId, null);
     return NextResponse.json(
-      { deleted: "carve", persisted: true, storage: store.kind },
+      { deleted: "carve", persisted: true, storage: store.kind, had: true },
       { headers: { "cache-control": "no-store" } },
     );
   }
