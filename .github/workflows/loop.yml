@@ -41,6 +41,30 @@ jobs:
             const h = require("./health.json");
             console.log(`commit ${h.commit} · database ${h.database} · ${h.tablesChecked ?? "?"} tables checked`);
             console.log(`storage ${h.storage} · model ${h.model?.status} via ${h.model?.answeredBy || "nobody"}`);
+            /*
+              Whether writes land, and who is actually in the chain.
+
+              This printed the schema and the model and stopped there, which
+              covered the two things that had broken before and none of the
+              three that broke since. `writable` is the difference between a
+              database that answers reads and one that keeps anything;
+              `keyState` tells a key that is present apart from one saved
+              empty, which is a whole provider sitting out of the chain and
+              looks identical from every other angle. Both were found by
+              reading a health response by hand — which is the argument for
+              the daily report reading them instead.
+            */
+            console.log(`writable ${h.writable ?? "?"} · persisting ${h.persisting}` +
+              (h.writeError ? ` · ${h.writeError.code ?? "?"} ${h.writeError.hint ?? ""}` : ""));
+            const chain = (h.chain || [])
+              .map((p) => `${p.provider}:${p.configured ? "on" : p.keyState}`)
+              .join(" ");
+            console.log(`chain ${chain}`);
+            const svc = h.services || {};
+            console.log(`services ${Object.entries(svc).map(([k, v]) => `${k}=${v}`).join(" ")}`);
+            for (const t of h.tried || []) {
+              if (t.status !== "ok") console.log(`  tried ${t.provider}: ${t.status}`);
+            }
             for (const [t, e] of Object.entries(h.tableErrors || {})) {
               console.log(`  ${t}: [${e.code ?? "?"}] ${e.hint ?? e.message ?? "no hint"}`);
               if (e.hint && e.message) console.log(`      ${e.message}`);
