@@ -6499,6 +6499,67 @@ await checkAsync("61 A circle nobody is asking about still gets closed", async (
     "a sweep that keeps finding its own output is a lobby doing unbounded work forever");
 });
 
+check("62 A third party being down cannot hold a page open", () => {
+  /*
+    Written the day before it could happen, broken by a configuration change
+    rather than by a commit.
+
+    `closeVoiceRoom` says, in its own opening paragraph, that the transcript
+    deletion "cannot be held hostage to a third party being up" — and then
+    awaited an SDK call with no bound on it. True of the deletion, false of
+    the request doing the deleting.
+
+    That was harmless while nobody had LiveKit keys, because
+    `isLivekitConfigured` was false and the function returned on line one. The
+    lobby sweep added the same week called it once per stale circle, in a
+    loop. The hour a key was pasted into Vercel, that loop became five
+    unbounded round trips to a third party, in series, inside a page load —
+    on a line of code that had never executed in that deployment shape.
+
+    Measured against an SFU that accepts the connection and never answers:
+    50.2 seconds before, 6.2 after. On Vercel the first number is past
+    `maxDuration`, so the circles page does not load slowly, it 504s.
+
+    Which is this repo's own question arriving from a direction it had not
+    come from before. Every previous face was *which deployment shape makes
+    this false* — a shape somebody else was standing in. This one was a shape
+    that did not exist yet and was one paste away.
+  */
+  const close = fs.readFileSync(path.join(ROOT, "src/lib/voice/close.ts"), "utf8");
+  const lobby = fs.readFileSync(path.join(ROOT, "src/app/api/circles/route.ts"), "utf8");
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+  const body = strip(close).slice(strip(close).indexOf("export async function closeVoiceRoom"));
+  ok(/Promise\.race\(|AbortSignal|signal:/.test(body),
+    "the call to the SFU is bounded",
+    "an SDK call with no timeout can hold a request open for as long as the third party likes");
+  ok(/deleteRoom/.test(body) && /setTimeout|timeout/i.test(body),
+    "and the bound is on the room deletion itself");
+  /*
+    Losing the race has to land somewhere that already knows what to do. The
+    catch below it logs and returns — the same outcome as an unreachable SFU,
+    which is what a hang is, discovered sooner.
+  */
+  ok(body.indexOf("Promise.race") < body.lastIndexOf("catch"),
+    "a timeout is handled by the same catch that already handles an unreachable SFU");
+
+  /*
+    And the sweep does not multiply the wait.
+
+    Five bounded calls in series is still five times the bound. `allSettled`
+    rather than `all`, so one circle that will not close does not abandon the
+    others — each has already deleted its transcript before touching the SFU,
+    so the promise that matters is kept before any of this can fail.
+  */
+  const get = strip(lobby).slice(strip(lobby).indexOf("async function handleGET"),
+                                 strip(lobby).indexOf("async function handlePOST"));
+  ok(/Promise\.allSettled\(/.test(get),
+    "the lobby sweeps its batch at once, not one after another",
+    "N sequential calls to a third party is N times whatever bound each one has");
+  ok(!/for\s*\(\s*const[^)]*await store\.expiredUnclosedCircles/.test(get),
+    "and not in a loop that awaits inside itself");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

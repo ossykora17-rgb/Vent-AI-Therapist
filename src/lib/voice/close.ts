@@ -17,6 +17,28 @@ import { roomNameFor } from "./livekit";
  * deletion is the promise that actually matters and it cannot be held hostage
  * to a third party being up.
  */
+/**
+ * The longest this is allowed to hold anybody up.
+ *
+ * The paragraph above says the transcript deletion "cannot be held hostage to
+ * a third party being up", and then this function awaited an SDK call with no
+ * bound on it — so the *close* could not be held hostage but the request doing
+ * the closing could be, indefinitely.
+ *
+ * That was survivable while it was theoretical. It stopped being theoretical
+ * the hour LiveKit keys were added: before that `isLivekitConfigured` was
+ * false and this returned instantly, and the lobby sweep added the same day
+ * calls it once per stale circle. Five unbounded round trips to a third party,
+ * in series, inside a page load — on a deployment shape that had never once
+ * executed this line.
+ *
+ * Six seconds is generous for an API call that deletes a room and irrelevant
+ * to correctness: the words are already gone by the time this runs, and a
+ * room that outlives its circle by a few minutes is tidied by the next sweep.
+ * Nothing downstream reads the result.
+ */
+const SFU_DEADLINE_MS = 6_000;
+
 export async function closeVoiceRoom(circleId: string): Promise<void> {
   if (!isLivekitConfigured) return;
 
@@ -32,9 +54,24 @@ export async function closeVoiceRoom(circleId: string): Promise<void> {
       env.livekitApiSecret,
     );
 
-    // Disconnects every participant and drops the room. There is no gentler
-    // call here, and there should not be — the circle is over.
-    await svc.deleteRoom(roomNameFor(circleId));
+    /*
+      Disconnects every participant and drops the room. There is no gentler
+      call here, and there should not be — the circle is over.
+
+      Raced rather than given a signal, because the SDK's client does not take
+      one. Losing the race throws, which lands in the catch below and is
+      logged exactly like an unreachable SFU — the same outcome it already
+      handles, reached a few seconds sooner.
+    */
+    await Promise.race([
+      svc.deleteRoom(roomNameFor(circleId)),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`SFU did not answer in ${SFU_DEADLINE_MS}ms`)),
+          SFU_DEADLINE_MS,
+        ),
+      ),
+    ]);
   } catch (error) {
     // A room that never opened returns an error, and so does an unreachable
     // SFU. Neither may fail the close.

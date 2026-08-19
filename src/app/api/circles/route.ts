@@ -64,10 +64,28 @@ async function handleGET() {
     happens on the next load; a lobby that 500s because the SFU was slow is a
     room nobody can join.
   */
+  /*
+    Together, not one after another — and that changed meaning today.
+
+    Written as a `for` loop the day before LiveKit keys existed, when
+    `closeVoiceRoom` returned instantly because nothing was configured. Five
+    sequential no-ops. The hour a key was added, the same loop became five
+    sequential round trips to a third party inside a page load, and each one
+    of those had no timeout on it.
+
+    Which is this codebase's own question, asked of code written an hour
+    earlier and answered by a configuration change rather than by a commit:
+    *which deployment shape makes this false?* The one nobody had — until
+    somebody pasted a key.
+
+    `allSettled`, so one circle that will not close does not abandon the other
+    four. Each `sweepIfOver` already deletes the transcript before it touches
+    the SFU, so the promise that matters is kept before any of this can go
+    wrong.
+  */
   try {
-    for (const stale of await store.expiredUnclosedCircles(SWEEP_BATCH)) {
-      await sweepIfOver(store, stale);
-    }
+    const stale = await store.expiredUnclosedCircles(SWEEP_BATCH);
+    await Promise.allSettled(stale.map((c) => sweepIfOver(store, c)));
   } catch (error) {
     console.error("[circles] lobby sweep failed", error);
   }
