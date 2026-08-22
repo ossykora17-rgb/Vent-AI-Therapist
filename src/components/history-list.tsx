@@ -304,6 +304,10 @@ export function HistoryList() {
       // Only now — before the answer, this line was destroying the key.
       localStorage.removeItem("mw-anon-id");
       localStorage.removeItem("mw-onboarded");
+      // And the flag that says the room has introduced itself. Whoever comes
+      // back is a new person by construction — the id is gone — so they are
+      // owed the sentence again rather than a room acting familiar.
+      localStorage.removeItem("mw-alliance");
       toast("All cleared. Fresh start.", "success");
     } catch {
       putBack();
