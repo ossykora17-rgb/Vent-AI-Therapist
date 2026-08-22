@@ -712,6 +712,40 @@
     }
   }
 
+  /*
+   * A seat that is speaking, and nothing else in the room.
+   *
+   * Slow and shallow — 2.4s, and the ring never fully disappears. A circle is
+   * six people sitting still while one of them talks; anything quicker reads
+   * as a notification badge, which is the register this product spends all
+   * its restraint staying out of.
+   *
+   * Off entirely under reduced motion, where the ring simply stays. Somebody
+   * who has turned animation off still needs to see who has the room, and a
+   * held ring says that without moving.
+   */
+  .seat-speaking {
+    animation: seat-speaking 2.4s ease-in-out infinite;
+    transform-origin: center;
+  }
+
+  @keyframes seat-speaking {
+    0%,
+    100% {
+      opacity: 0.28;
+    }
+    50% {
+      opacity: 0.85;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .seat-speaking {
+      animation: none;
+      opacity: 0.6;
+    }
+  }
+
   /* What is behind the Closing recedes rather than disappears. */
   .receding {
     opacity: 0.35;

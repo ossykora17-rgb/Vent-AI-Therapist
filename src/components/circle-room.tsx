@@ -6,6 +6,7 @@ import Link from "next/link";
 import { anonId } from "@/lib/anon";
 import { CHAIRS, tensionDrop, tensionForChair, tensionNow } from "@/lib/vent/chairs";
 import { CircleVoice } from "@/components/circle-voice";
+import { CircleSeats } from "@/components/circle-seats";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,7 @@ interface RoomState {
   present: number;
   typingOthers: number;
   seatsPresent: boolean[];
+  mySeat: number | null;
   voice: boolean;
 }
 
@@ -271,7 +273,22 @@ export function CircleRoom({ id }: { id: string }) {
         </div>
       </header>
 
-      <main id="main" className="mx-auto w-full max-w-[640px] flex-1 px-4 py-5">
+      {/*
+        Bottom room for the composer, which is `sticky bottom-0`.
+
+        The chat learned this and the room did not: without it the tail of the
+        page sits underneath the footer, and the circle drawing pushed the
+        "nobody has spoken yet" line straight behind it — the sentence naming
+        who is in the room, hidden by the box you talk into.
+
+        Measured, not guessed: `--composer-h` is published by the same hook
+        this file already calls, so it stays correct when the mode switch, a
+        rule refusal or the crisis gate changes the footer's height.
+      */}
+      <main
+        id="main"
+        className="mx-auto w-full max-w-[640px] flex-1 px-4 pt-5 pb-[calc(var(--composer-h,180px)+24px)]"
+      >
         {crisis && (
           <div className="glass mb-4 border-gold/60 p-4">
             <p className="label-mono mb-2">This isn&apos;t the room for that</p>
@@ -371,7 +388,7 @@ export function CircleRoom({ id }: { id: string }) {
               speaking, and both keep it.
             */}
             {state.seats < 2 ? (
-              <p className="max-w-[42ch] py-2 text-[15px] leading-[1.7] text-ash">
+              <p className="max-w-[36ch] text-center text-[15px] leading-[1.7] text-ash">
                 You are the first one here. The circle opens when somebody else
                 sits down.
               </p>
@@ -659,11 +676,55 @@ export function CircleRoom({ id }: { id: string }) {
               are here and quiet, which is the one worth naming, because
               silence with somebody in it is the whole feeling of a circle.
             */}
-            {messages.length === 0 && (state.present ?? 1) > 1 && (
-              <div className="flex min-h-[30dvh] flex-col justify-center">
-                <p className="text-center text-sm text-ash">
-                  Nobody has spoken yet. {state.present} people are here, waiting with you.
-                </p>
+            {/*
+              The room, before it is a conversation.
+
+              Gated first on being alone, which was exactly backwards: three
+              people sitting in silence is when a drawing of the room says the
+              most, and that was the case where it disappeared and left the
+              void back where it started.
+
+              It belongs to the silence, not to the solitude. Whoever is in
+              the room, until somebody speaks, this is what the screen is
+              about — five hundred pixels that were doing no work in a product
+              named after the shape it was not drawing.
+
+              Everything in it came from the server: `seatsPresent` is the
+              presence window, `mySeat` is the member list. A room that draws
+              a person who is not there is "your turn comes" in a nicer shape.
+
+              It goes the moment the room starts talking. A diagram competing
+              with what somebody just said is decoration, and this is only
+              worth its space while the space was empty anyway.
+            */}
+            {messages.length === 0 && (
+              /*
+                The sentence above the drawing, not below it.
+
+                Below, it was the part that fell under the sticky composer —
+                two cards, a circle and a line of text is more than a 740px
+                phone holds, and whatever is last is what the footer covers.
+                The line naming who is in the room, hidden by the box you talk
+                into.
+
+                Padding did not fix it and should not have: the content is
+                genuinely taller than the viewport and the page scrolls. What
+                was wrong was the order. Words cannot be missed; a drawing can
+                be scrolled to. So the sentence is the thing that is always
+                visible and the room is the thing you find under it.
+              */
+              <div className="flex flex-col items-center gap-6 py-6">
+                {(state.present ?? 1) > 1 && (
+                  <p className="max-w-[34ch] text-center text-[15px] leading-[1.7] text-ash">
+                    Nobody has spoken yet. {state.present} people are here,
+                    waiting with you.
+                  </p>
+                )}
+                <CircleSeats
+                  seatsPresent={state.seatsPresent}
+                  maxSeats={state.maxSeats}
+                  mySeat={state.mySeat}
+                />
               </div>
             )}
 

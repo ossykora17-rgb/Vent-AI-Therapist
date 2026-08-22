@@ -357,7 +357,22 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
   if (!enabled) return null;
 
   return (
-    <div className="glass mt-4 p-4">
+    /*
+      A plate once you are in it, a line while you are not.
+
+      Every plate in this product is somewhere a voice speaks from — the
+      Keeper's intention, a share, a reply. This one held an offer, and an
+      offer is not a voice. Stacked under the Breathing card it made two
+      full-width framed panels eating five hundred and fifty pixels before
+      the room itself got any, which is the density complaint moved rather
+      than fixed.
+
+      Unjoined it is a sentence and a button on the page's own spine. The
+      moment somebody is actually in the voice room it becomes a plate again,
+      because then it *is* a voice — it carries who is speaking, the mic, and
+      the leave.
+    */
+    <div className={cn(status === "live" ? "glass mt-4 p-4" : "mt-4")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         {/*
           Say that the voice is disguised, before they speak and while they

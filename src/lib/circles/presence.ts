@@ -41,6 +41,14 @@ export interface PresenceMember {
 }
 
 export interface Presence {
+  /**
+   * Which seat is the caller's, or null.
+   *
+   * Null when they have not taken one — drawn as no seat highlighted rather
+   * than as seat zero, because a room that marks the wrong chair as yours is
+   * worse than one that marks none.
+   */
+  mySeat: number | null;
   /** How many of the seats have a person behind them right now. */
   present: number;
   /** Someone else is writing. Never "who" — a circle has no names. */
@@ -54,6 +62,9 @@ export interface Presence {
  * present in your own room, and the dot for your seat should be lit — seeing
  * yourself in the row is what makes the row legible.
  */
+/** −1 from `findIndex` is "not there", and not a seat. */
+const indexOrNull = (i: number) => (i < 0 ? null : i);
+
 export function presenceOf(
   members: PresenceMember[],
   me: string | null,
@@ -62,6 +73,20 @@ export function presenceOf(
   const seatsPresent = members.map((m) => isPresent(m.last_seen_at, now));
   return {
     present: seatsPresent.filter(Boolean).length,
+    /*
+      Which seat is theirs, or null.
+
+      `seatsPresent` has always been an array of six booleans with no way to
+      tell which one is you — enough to draw a count, not enough to draw a
+      room. Computed here rather than in the route because this is the one
+      place presence is worked out, and a second implementation of "which
+      member is the caller" is a second answer.
+
+      Null for somebody who has not taken a seat, and null is drawn as no
+      seat highlighted rather than as seat zero. A room that marks the wrong
+      chair as yours is worse than one that marks none.
+    */
+    mySeat: me === null ? null : indexOrNull(members.findIndex((m) => m.anon_id === me)),
     typingOthers: members.filter(
       (m) => m.anon_id !== me && isTyping(m.typing_until, now) && isPresent(m.last_seen_at, now),
     ).length,
