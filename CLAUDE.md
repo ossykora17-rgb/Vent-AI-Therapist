@@ -21,7 +21,7 @@ constraint. It outranks elegance, cleverness, and feature count.
 npm run local      # the whole product, no accounts, no cloud  → :3001
 npm run gate       # selector + eval + pipelines + live-verify → merge or don't
 npm run live-checks # boots its own build twice — with a store and without
-npm run eval       # 91 checks, no server; add a URL for the live room
+npm run eval       # 92 checks, no server; add a URL for the live room
 npm run audit      # grade last 50 turns; --dry is free, --apply writes a diff
 npm run heartbeat  # what changed, what is dirty, who should fix it
 npm run data       # store → data/sft.jsonl + data/eval.jsonl
@@ -75,6 +75,7 @@ own copy passes while the product regresses.
 | Concern | File |
 | --- | --- |
 | The office: banned phrases, reply contract | `src/lib/vent/voice.ts` |
+| Reject and regenerate, before anybody reads it | `src/lib/vent/failsafe.ts` |
 | One move from outside, per pressure, cached | `src/lib/vent/research.ts` |
 | What the audit proposed and the gate kept | `src/lib/vent/learned.ts` |
 | Intent routing, crisis, meta-vs-vent | `src/lib/vent/intent.ts` |

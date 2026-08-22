@@ -989,3 +989,31 @@ export const ALL_TACTICS: readonly Tactic[] = [
   ...TACTICS,
   ...Object.values(REAL_WORLD_TACTIC),
 ];
+
+/**
+ * A fallback is not a reply, and grading it as one is a lie.
+ *
+ * `quality.ts` learned this the expensive way: with no model key a vent gets
+ * the tactic's authored `hold` — English prose, written for a room rather than
+ * for this message — and graded as model output it produced ten "majors" on
+ * the first run, every Pidgin case flagged for answering in English.
+ *
+ * The first version of this audit walked straight into it. Run against the
+ * local store it reported five majors for "answered a Pidgin message in
+ * English", and every one was an authored line from `tactics.ts` that no model
+ * had ever seen.
+ *
+ * The store cannot say whether a model answered — there is no provider column,
+ * and adding one would only help rows written after the migration. It does not
+ * need one: the authored replies are a closed set, so an exact match against
+ * the tactic library identifies them, retroactively, for every row already
+ * stored.
+ */
+const AUTHORED: ReadonlySet<string> = new Set(
+  ALL_TACTICS.map((t) => t.hold?.trim()).filter((h): h is string => Boolean(h)),
+);
+
+export function wasAuthored(reply: string | null): boolean {
+  return Boolean(reply && AUTHORED.has(reply.trim()));
+}
+

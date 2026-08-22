@@ -11,6 +11,7 @@ import { findPattern, type Pattern } from "@/lib/vent/pattern";
 import { coverage, COVERAGE_FLOOR } from "@/lib/vent/scan";
 import { buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
 import { research } from "@/lib/vent/research";
+import { inspectReply } from "@/lib/vent/failsafe";
 import { MEMORY_TURNS, memoryFetchSize, selectMemory } from "@/lib/vent/memory";
 import { noModelKeyReply } from "@/lib/vent/fallback";
 import { MAX_TOKENS, classifyModelError, modelFailureReply } from "@/lib/vent/model";
@@ -26,6 +27,24 @@ export const dynamic = "force-dynamic";
 // enough to kill it mid-answer, which surfaces as a network fault and sends
 // everyone looking at their wifi.
 export const maxDuration = 60;
+
+/*
+  What the one retry may spend, and it comes out of this route's budget rather
+  than being added to it.
+
+  The first call may take the full provider deadline. A retry given its own
+  clock on top pushes the worst case past `maxDuration`, and a function the
+  platform kills gets no classifier, no fallthrough and no log line — which is
+  the harm check 64 exists to prevent. So the retry is skipped entirely when
+  there is not this much left, and a reply with one bad sentence in it goes
+  out instead. That is the right trade: the alternative is somebody waiting on
+  a reply that never arrives.
+
+  Declared here, as a literal, because it is this route's second and not the
+  failsafe's — the module that decides *whether* to retry has no idea how much
+  clock is left.
+*/
+const RETRY_DEADLINE_MS = 12_000;
 
 // Depth costs money, so only a real vent reaches it. VENT_MODEL and the
 // failure vocabulary live in @/lib/vent/model so /api/health probes the model
@@ -99,6 +118,14 @@ interface Sink {
 }
 
 async function handlePOST(request: Request, sink: Sink | null = null) {
+  /*
+    When the platform's clock started, so the one retry can be skipped rather
+    than started and killed. Read once at the top rather than at the point of
+    use: by then the body has been parsed, the store read and the model called,
+    and "how long have I got" measured from after all of that is not the
+    question `maxDuration` is asking.
+  */
+  const startedAt = Date.now();
   let json: unknown;
   try {
     json = await request.json();
@@ -424,6 +451,50 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
 
       reply = answered.text;
       answeredBy = answered.provider;
+
+      /*
+        Inspected before anybody reads it, and regenerated once if it fails.
+
+        `gradeReply` already knew about advice, promises, banned phrases and
+        the file read aloud — and it only ever ran in a paid command nobody
+        runs nightly, and in the audit, which reads replies people already
+        received. The live path shipped whatever came back.
+
+        Narrow on purpose: only the offences that are unambiguous from the
+        text. One retry, on a shorter clock than the first attempt, and then
+        the tactic's authored line — which passes by construction, because
+        check 76 fails the build if anything we wrote contains a banned
+        phrase. A person waiting on a reply that never arrives is worse than
+        a reply with one bad sentence in it.
+      */
+      const asCase = {
+        id: "live",
+        message: input.message,
+        intent: "vent" as const,
+        language: classification.language === "pidgin" ? ("pidgin" as const) : ("en" as const),
+        probes: "live failsafe",
+      };
+      const verdictOnReply = inspectReply(asCase, reply);
+      const leftOnTheClock = maxDuration * 1000 - (Date.now() - startedAt);
+      if (verdictOnReply.reject && leftOnTheClock > RETRY_DEADLINE_MS) {
+        console.warn("[vent] rejected own reply:", verdictOnReply.reject);
+        try {
+          const again = await generateReply({
+            system: `${systemPrompt}\n\n${verdictOnReply.correction}`,
+            maxTokens: MAX_TOKENS,
+            depth: verdict.depth,
+            deadlineMs: RETRY_DEADLINE_MS,
+            messages: [{ role: "user" as const, content: input.message }],
+          });
+          reply = inspectReply(asCase, again.text).reject
+            ? tactic.hold ?? reply
+            : again.text;
+          answeredBy = again.provider;
+        } catch {
+          // The retry is a second opinion on our own output. Unreachable means
+          // keep what we have rather than leave somebody with nothing.
+        }
+      }
       if (answered.fellThrough.length) {
         console.warn("[vent] fell through", JSON.stringify(answered.fellThrough));
       }

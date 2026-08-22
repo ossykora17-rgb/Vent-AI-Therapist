@@ -181,7 +181,14 @@ export function sentenceCount(text: string): number {
  * will happily improvise a warmer version of. A first-time visitor being told
  * "I remember you mentioned…" is the worst failure available here.
  */
-export const NO_MEMORY_LINE = "I don't have that from before yet.";
+/*
+  His words, not a paraphrase of them.
+
+  This read "I don't have that from before yet." — close, and not the same
+  sentence. The spec has now named the exact line twice, and a constant that
+  approximates a specified string is the drift this file exists to stop.
+*/
+export const NO_MEMORY_LINE = "We haven't talked about this yet.";
 
 /**
  * What this product says it is, in one place.

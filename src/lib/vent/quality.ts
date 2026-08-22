@@ -215,6 +215,38 @@ export function gradeReply(
   }
   if (reply.length > 700) add("length", "minor", `${reply.length} chars is a paragraph, not a reply`);
 
+  /*
+    THE TWO GRADERS THAT DID NOT SURVIVE THEIR OWN CORPUS.
+
+    "Ask one question" and "use their own words back" are both real rules in
+    `OFFICE_RULES`, and both were added here as majors. The dry run flagged
+    twenty-two of the seventy-two authored replies immediately — and the rule
+    written at the top of `scripts/quality.mjs` is explicit about what that
+    means: those replies were written by hand to the constitution, so if the
+    graders flag them, *the graders are wrong*.
+
+    They were. Reading the flags:
+
+      "Then tell me what happened last night." — an invitation that costs
+      something, with no question mark. Punctuation is not the rule; the rule
+      is whether the reply asks for something back, and a regex cannot tell an
+      imperative that digs from one that instructs.
+
+      "You dodge the call and then pay for it all day", answering "my mumcy
+      keeps calling and i don't pick" — no shared uncommon word, and a better
+      reply than one that had repeated "mumcy". Exact-word echo measures
+      parroting, and the corpus paraphrases on purpose.
+
+    Tuning them until seventy-two hand-written examples pass would have
+    produced a rule that measures its own reference set and nothing else. Both
+    signals survive where they were always correct: `flatReplies` in
+    `audit.ts` uses them as *weighted evidence* for choosing ten replies worth
+    asking a model about, never as a verdict on one reply.
+
+    Left as a comment rather than deleted because the next person will have the
+    same good idea.
+  */
+
   // Never mix the two in one reply. Only checked on Pidgin cases: an English
   // reply legitimately contains no Pidgin, but a Pidgin reply leaning on
   // English function words is the mixing the voice forbids.
