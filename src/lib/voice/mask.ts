@@ -179,30 +179,90 @@ export interface Mask {
  * believed they were masked. That is the whole rule here, and it is the
  * difference between a bug and a betrayal.
  */
+/**
+ * Which of the four ways this can fail, when it does.
+ *
+ * A person reported "my browser doesn't support voice activation" and there
+ * was no way to know which of these they hit — one message over four causes,
+ * three of which are fixable and one of which is not. That is this repo's
+ * oldest bug by name: "Network dipped on my side", which meant four different
+ * things and cost days.
+ *
+ * Reported alongside the null rather than instead of it. The null is the
+ * safety contract — the caller publishes nothing rather than an unmasked
+ * voice — and it must not change shape to carry a diagnostic.
+ */
+export type MaskFailure =
+  | "no_audio_context"
+  | "context_rejected"
+  | "context_suspended"
+  | "no_shift"
+  | "no_track";
+
 export function maskMicrophone(
   input: MediaStream,
   depth: MaskDepth = "deeper",
+  onFail?: (why: MaskFailure) => void,
 ): Mask | null {
+  const fail = (why: MaskFailure) => {
+    onFail?.(why);
+    return null;
+  };
   const Ctx: typeof AudioContext | undefined =
     typeof window === "undefined"
       ? undefined
       : window.AudioContext ??
         (window as unknown as { webkitAudioContext?: typeof AudioContext })
           .webkitAudioContext;
-  if (!Ctx) return null;
+  if (!Ctx) return fail("no_audio_context");
 
   let ctx: AudioContext;
   try {
     ctx = new Ctx();
   } catch {
-    return null;
+    return fail("context_rejected");
+  }
+
+  /*
+    A suspended context is silence wearing a track, and that is worse than a
+    refusal.
+
+    Chrome and Safari start an AudioContext `suspended` unless it is created
+    inside a user gesture — and by the time this runs, the click that started
+    the join has been through a fetch, a dynamic import of a 13 MB SDK and a
+    `getUserMedia` prompt. On Safari the gesture does not survive an await at
+    all, so this is the ordinary path on a phone, not the exceptional one.
+
+    What happened without this is the failure this file exists to prevent,
+    inverted. `createMediaStreamDestination()` hands back a perfectly real
+    track whether or not the graph is running, so the caller published it,
+    muted it, unmuted it on request, and the room heard nothing at all. The
+    person believed they were speaking. The rule here is "fail to silence,
+    never to an unmasked voice", and it had found a way to fail to silence
+    while reporting success — which is the one outcome the rule did not
+    anticipate, because silence was supposed to be the safe direction.
+
+    `resume()` is a promise and this function is synchronous by design (its
+    caller publishes the track immediately). So it is asked to resume and then
+    checked: still suspended means no mask, which means no microphone, which
+    the person is told. A context that resumes a moment later is fine — the
+    track is already wired and starts carrying audio when the graph runs.
+  */
+  if (ctx.state === "suspended") {
+    void ctx.resume().catch(() => {});
+    // Re-read: `resume()` resolves asynchronously but flips the state
+    // synchronously wherever the policy allows it at all.
+    if (ctx.state === "suspended") {
+      void ctx.close();
+      return fail("context_suspended");
+    }
   }
 
   const ratio = shiftRatio(depth);
   const hz = sweepHz(ratio);
   if (hz === 0) {
     void ctx.close();
-    return null;
+    return fail("no_shift");
   }
 
   const source = ctx.createMediaStreamSource(input);
@@ -300,7 +360,7 @@ export function maskMicrophone(
   const track = destination.stream.getAudioTracks()[0];
   if (!track) {
     void ctx.close();
-    return null;
+    return fail("no_track");
   }
 
   let stopped = false;

@@ -45,6 +45,16 @@ import type { VentRow } from "@/lib/store";
  * one person about their own life, this one guards a change to what everybody
  * gets offered.
  */
+/**
+ * The value the pressure slider held when nobody had touched it.
+ *
+ * Not a threshold and not a preference — the literal midpoint the client
+ * defaulted to, and therefore the exact value that means "this person never
+ * answered" in every row written before that was fixed. Named here so the
+ * reason lives with the arithmetic that uses it.
+ */
+export const PRE_FIX_DEFAULT = 50;
+
 export const EFFICACY_FLOOR = 12;
 
 /** The most this can move a tactic's weight, in either direction. */
@@ -137,8 +147,42 @@ function score(
   floor: number,
   span: number,
 ): EfficacyTable {
+  /*
+    Rows written before the arrival reading was real are not evidence.
+
+    Until the fix that stopped it, `tension_before` was whatever the pressure
+    slider happened to hold, and for every returning visitor that was the
+    untouched default of fifty. Production's mean drop was −28.3: not a
+    product making people worse, a corpus of fabricated arrivals sitting under
+    honest departures.
+
+    Stopping the write does nothing to the rows already written. This function
+    reads the last five hundred vents across everybody, so the poisoned ones
+    stay in the window for as long as it takes five hundred new ones to push
+    them out — and until then the selector, the per-person table and the
+    outcome-weighted preference pairs all keep ranking thirty-five tactics on
+    them. A fix that only stops new damage while the old damage keeps
+    steering the product is half a fix.
+
+    So the exact default is dropped. This is deliberately crude and
+    deliberately over-inclusive: it also discards the genuine sittings of
+    anybody who really did arrive at fifty and said so. That is the correct
+    trade. A real reading lost is one observation; a fabricated one kept is a
+    vote in every ranking this file produces, and there is no column recording
+    which of the two a fifty was.
+
+    It expires on its own. Once the corpus is rows written by a client that
+    sends null instead of a default, `PRE_FIX_DEFAULT` matches only people who
+    genuinely chose fifty — and by then they are a minority small enough that
+    discarding them costs nothing measurable. No migration, no backfill, no
+    flag to remember to remove.
+  */
   const anchored = vents.filter(
-    (v) => v.tactic_used && v.tension_before !== null && v.tension_after !== null,
+    (v) =>
+      v.tactic_used &&
+      v.tension_before !== null &&
+      v.tension_after !== null &&
+      v.tension_before !== PRE_FIX_DEFAULT,
   );
   if (anchored.length < floor * 2) return NO_EFFICACY;
 

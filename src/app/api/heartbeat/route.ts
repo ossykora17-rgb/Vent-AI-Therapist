@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
-import { checkMessage } from "@/lib/circles/rules";
+import { containsAdvice } from "@/lib/circles/rules";
 import { supabaseUrlPath } from "@/lib/env";
-import { efficacyNote, measureEfficacy } from "@/lib/vent/efficacy";
+import { efficacyNote, measureEfficacy, PRE_FIX_DEFAULT } from "@/lib/vent/efficacy";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -63,13 +63,41 @@ export async function GET() {
 
   const findings: Finding[] = [];
 
-  // 1. Advice that reached somebody. checkMessage is the rule the circles use,
+  // 1. Advice that reached somebody.
   //    imported rather than reimplemented, so this cannot drift from what the
   //    product enforces.
-  const advice = vents.filter(
-    // "share" is the kind a person's own words are checked as.
-    (v) => v.ai_reply && checkMessage(v.ai_reply, "share").ok === false,
-  ).length;
+  /*
+    `containsAdvice`, not `checkMessage`.
+
+    This measured VENT's replies with circle governance, which bundles three
+    rules and only one of them is about advice. The other two are wrong about
+    a reply by construction:
+
+      CROSSTALK forbids addressing a person instead of the room — and a vent
+      reply addresses one person, because there is nobody else in it.
+      "That one no be your fault" trips `\b(you|your) (problem|fault|issue)\b`
+      and is one of the most useful sentences available to somebody carrying
+      something they did not begin.
+
+      SHARE_MAX_CHARS caps a member's share at 900 and has nothing to say
+      about a reply.
+
+    `containsAdvice` exists in that file precisely because this distinction
+    had already been learned once — its own comment records the quality
+    graders flagging that exact line in an authored reply — and this endpoint
+    went on measuring with the bundled version anyway.
+
+    Production reported `advice_in_reply: 2`. On this rule some or all of that
+    is a reply correctly telling somebody a thing was not their fault, counted
+    as the product breaking its own core rule. A false finding is worse than a
+    missed one here: it is a metric that would have had somebody rewriting a
+    prompt to stop producing good sentences.
+
+    "Anything the eval suite asserts must be imported from the module the
+    product actually uses" — the same rule, applied to the thing that watches
+    the product rather than to the suite.
+  */
+  const advice = vents.filter((v) => v.ai_reply && containsAdvice(v.ai_reply)).length;
   if (advice > 0) {
     findings.push({
       kind: "advice_in_reply",
@@ -106,8 +134,27 @@ export async function GET() {
 
   // 4. The tension drop is the only outcome this product claims. A drop that
   //    is not happening is the finding that matters more than any of the above.
+  /*
+    The same exclusion the selector makes, or this cannot see its own fix.
+
+    `tension_before` was the pressure slider's untouched default of fifty for
+    every returning visitor, which is what produced a reported mean drop of
+    −28.3 — fabricated arrivals sitting under honest departures. The client
+    sends null now and the selector drops the old rows, but this endpoint is
+    the surface used to *check* whether that worked. Left as it was, it would
+    have gone on reporting −28.3 out of the same poisoned rows and the fix
+    would have looked like it did nothing.
+
+    `PRE_FIX_DEFAULT` is imported rather than written as 50 here, for the
+    reason this file already learned about `checkMessage` ten lines up: a
+    second copy of a rule is a rule that drifts. Three consumers now — the
+    selector, the preference pipeline and this — one definition.
+  */
   const withDrop = vents.filter(
-    (v) => v.tension_before !== null && v.tension_after !== null,
+    (v) =>
+      v.tension_before !== null &&
+      v.tension_after !== null &&
+      v.tension_before !== PRE_FIX_DEFAULT,
   );
   const meanDrop = withDrop.length
     ? withDrop.reduce((a, v) => a + (v.tension_before! - v.tension_after!), 0) / withDrop.length
