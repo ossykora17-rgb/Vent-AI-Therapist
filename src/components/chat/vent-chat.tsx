@@ -4,7 +4,7 @@ import { CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { Disclaimer } from "@/components/disclaimer";
 import * as React from "react";
 import Link from "next/link";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { RoomHeader } from "@/components/room-header";
 import { useToast } from "@/components/ui/toast";
 import { FeedbackFab } from "@/components/feedback-fab";
 import { Onboarding, hasOnboarded, type OnboardingResult } from "@/components/onboarding";
@@ -808,48 +808,9 @@ export function VentChat() {
       {showOnboarding && <Onboarding onDone={completeOnboarding} />}
       <FeedbackFab />
 
-      <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/95 backdrop-blur-glass">
-        <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
-          <div className="min-w-0">
-            {/* nowrap: at 360px this wrapped to two lines and shoved the
-                title down, because the nav takes the rest of the row. */}
-            <p className="label-mono whitespace-nowrap leading-none">Mind Weave</p>
-            <h1 className="truncate font-display text-2xl font-bold leading-tight tracking-[-0.02em]">
-              VENT
-            </h1>
-          </div>
-          {/*
-            Three doors, visible on a phone.
+      <RoomHeader />
 
-            These were pill buttons, and two of the three were `sm:` hidden —
-            so on the device almost everybody here is holding, History and
-            Memory did not exist. The most distinctive thing in the product and
-            the page where you take your words back, both unreachable from the
-            screen you actually sit on.
-
-            The pill chrome was what ate the width: borders and 16px of padding
-            each, three times over, at 360px. Dropping to plain text fits all
-            three with room to spare — and reads better anyway. A door in a
-            quiet room is a word on a wall, not a button.
-          */}
-          <nav aria-label="Sections" className="flex items-center gap-3 sm:gap-4">
-            {[
-              ["/circles", "Circles"],
-              ["/history", "History"],
-              ["/memory", "Memory"],
-            ].map(([href, label]) => (
-              <Link
-                key={href}
-                href={href}
-                className="label-mono flex h-11 items-center text-ink/70 underline-offset-[6px] transition-colors duration-300 hover:text-ink hover:underline hover:decoration-gold"
-              >
-                {label}
-              </Link>
-            ))}
-            <ThemeToggle />
-          </nav>
-        </div>
-
+      <div className="sticky top-[68px] z-20 bg-paper/95 backdrop-blur-glass">
         {/*
           Two separate facts, and they were one line.
 
@@ -883,7 +844,7 @@ export function VentChat() {
             )}
           </div>
         )}
-      </header>
+      </div>
 
       {/* pb, not py: the feedback pill floats 12px above the composer and is
           44px tall, so the last 56px of any transcript sits under it at full

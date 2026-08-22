@@ -7,7 +7,7 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: "*",
       allow: "/",
       // Nothing private is behind these, but there is no reason to crawl them.
-      disallow: ["/api/", "/dashboard", "/history"],
+      disallow: ["/api/", "/history"],
     },
     sitemap: `${env.siteUrl.replace(/\/$/, "")}/sitemap.xml`,
   };

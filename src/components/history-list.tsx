@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { anonId } from "@/lib/anon";
 import { useToast } from "@/components/ui/toast";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { RoomHeader } from "@/components/room-header";
 import { cn } from "@/lib/utils";
 
 interface VentRow {
@@ -323,25 +323,7 @@ export function HistoryList() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/95 backdrop-blur-glass">
-        <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
-          <div>
-            <p className="label-mono leading-none">Mind Weave</p>
-            <h1 className="font-display text-2xl font-bold leading-tight tracking-[-0.02em]">
-              History
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/chat"
-              className="flex h-11 items-center rounded-full border border-line/10 px-4 text-sm"
-            >
-              Vent
-            </Link>
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
+      <RoomHeader />
 
       <main id="main" className="mx-auto w-full max-w-[640px] flex-1 px-4 py-5">
         {/*
