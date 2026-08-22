@@ -45,6 +45,15 @@ shipped was a refusal that read *"Your turn comes"* to people whose turn
 could never come, because roles were fixed at join. Read a refusal message
 and ask whether it is true.
 
+**Understanding is the job; fixing is not.** A coping task nobody asked for is
+rejected and regenerated before anybody reads it, and the ban lifts only on
+their own words asking for one — `askedForSkill` in `voice.ts`. The test is not
+whether the task is good advice. It is whether the reply survives having its
+message deleted: if it could be sent to any human on earth, it failed. Note
+where the line falls, because it is not "no actions" — the library's own drop
+set is a breathing instruction and passes, because it is aimed at the exact
+place in the body they named. Generic is the offence. Task is not.
+
 **Close means close.** `sweepIfOver()` in `src/lib/circles/sweep.ts` is the
 only implementation of "is this circle over". Call it from every route that
 touches a circle. It deletes the transcript and ends the voice room once, on
@@ -74,7 +83,7 @@ own copy passes while the product regresses.
 
 | Concern | File |
 | --- | --- |
-| The office: banned phrases, reply contract | `src/lib/vent/voice.ts` |
+| The office: banned phrases, unasked-for tasks, reply contract | `src/lib/vent/voice.ts` |
 | Reject and regenerate, before anybody reads it | `src/lib/vent/failsafe.ts` |
 | One move from outside, per pressure, cached | `src/lib/vent/research.ts` |
 | What the audit proposed and the gate kept | `src/lib/vent/learned.ts` |
@@ -312,3 +321,18 @@ Check 81 asks it for you now: no sentence a person reads may live in two files.
 It found three the day it was written — the chair question in the circle lobby
 and the circle room, the failed-deletion sentence in the chat and on the Memory
 page, and the product's own title in two metadata files.
+
+**And a number is a sentence.** `docs/POSITIONING.md` claimed "23 banned
+phrases fail the build". The true count was 15. The other eight it was counting
+are `FILE_LANGUAGE`, which is graded on *model output* and has never failed a
+build in its life — so the claim was a hand-typed integer sitting one table
+away from the thing it counted, in the one document written for somebody who
+cannot check it, in a file whose own opening paragraph says "a comparison that
+only works if nobody checks it is not an advantage". Nobody typed it wrong;
+a row was added and the number stayed where it was. That is what makes it the
+same bug as the two copies of a sentence rather than a typo.
+
+Check 86 asserts it against the tables now. Any claim of the form "N things are
+enforced" is a copy of something the code already knows, and it belongs in the
+same category as a duplicated sentence: derive it, or assert it, or do not
+write the number.

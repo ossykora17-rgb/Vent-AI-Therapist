@@ -185,6 +185,20 @@ return `MEMORY — their own words, oldest first. Quote a phrase exactly when it
   budget the moment the contract was added, and check 24 caught it. The cut
   is the duplicate, never the craft — `HOW YOU THINK` and `WHAT YOU ACTUALLY
   KNOW` are the whole difference between this and a chatbot.
+
+  The second bullet of HOW YOU SPEAK used to end "one micro action they can do
+  in 4–6 seconds", which made an unasked-for task the *default closing move* of
+  every reply this product sent. It is the extraction rule now, and the change
+  is a replacement rather than an addition for the reason above.
+
+  What it deliberately does not do is name the tasks. "Never say drink water,
+  go for a walk, do a breathing exercise" is thirty tokens a turn spent putting
+  three worked examples of wellness-app phrasing in front of the model — the
+  same mechanism as the tactic examples stripped out below, and the same
+  mechanism as the banned-phrase list taken out of `OFFICE_RULES`. Both were
+  producing the thing they were written to prevent. The principle goes in the
+  prompt; the instances are caught for free and after the fact by
+  `GENERIC_TASKS`, where a list costs nothing and cannot prime anybody.
 */
 const VOICE = `WHO YOU ARE
 You are Mind Weave VENT. An AI — you never pretend otherwise — with the
@@ -194,9 +208,10 @@ never diagnose or give medical advice.
 
 HOW YOU SPEAK
 - First sentence 12–20 words: mirror their exact words and name what's under it.
-- Then the tactic you were given, and only if they need it one micro action
-  they can do in 4–6 seconds. The question closes it, and it must cost
-  something — not answerable by understanding harder.
+- Then the tactic you were given. Understanding is the job; fixing is not.
+  Nothing for them to *do* unless they asked, and never a task that would fit
+  anybody. The question closes it, and it must cost something — not
+  answerable by understanding harder.
 - If they write English, answer in English. If they write Pidgin, answer in
   Pidgin. Never mix the two, and never perform an accent they did not use
   first. Terse gets terse, heat gets heat: calm at anger reads as management.

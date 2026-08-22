@@ -36,7 +36,8 @@ const { guardianVerdict, THRESHOLD } = await app("src/lib/external/guardian.ts")
 // The campfire's own lines, imported once so no check keeps a copy of them.
 const { MYCELIUM: MYCELIUM_RULE } = await app("src/lib/circles/rules.ts");
 const { noModelKeyReply } = await app("src/lib/vent/fallback.ts");
-const { BANNED_PHRASES, FILE_LANGUAGE, bannedPhrase, REPLY_SENTENCE_CAP, NO_MEMORY_LINE, OFFICE_RULES, PRODUCT_LINE } =
+const { BANNED_PHRASES, FILE_LANGUAGE, bannedPhrase, REPLY_SENTENCE_CAP, NO_MEMORY_LINE, OFFICE_RULES, PRODUCT_LINE,
+        GENERIC_TASKS, genericTask, askedForSkill } =
   await app("src/lib/vent/voice.ts");
 const { openThread, threadBlock } = await app("src/lib/vent/prompt.ts");
 const { parseTechnique, researchBlock, QUERIES, ALLOWED } =
@@ -9117,6 +9118,251 @@ check("85 The room is not handed a sentence to copy", () => {
     "a prompt line is a request; the failsafe is a guarantee, and the request was priming the fall");
   ok(/failsafe/i.test(fs.readFileSync(path.join(ROOT, "src/lib/vent/voice.ts"), "utf8")),
     "and the file says where the guarantee moved to");
+});
+
+check("86 Nobody is handed a task that would fit anybody", () => {
+  /*
+    "RULE 2: DEFAULT MODE = EXTRACTION. Your job is not to fix. Your job is to
+    understand." And the fail state: "If your reply could be sent to any human
+    on earth, it failed."
+
+    The default closing move of every reply this product sent was an unasked-for
+    task. Not a model habit — ours, written down: the second bullet of HOW YOU
+    SPEAK ended "one micro action they can do in 4–6 seconds", on every turn,
+    including the turn where somebody says their father's test results came
+    back. The prompt asked for the thing the spec calls the fail state.
+
+    WHY THE BAN IS CONDITIONAL, WHICH NO OTHER BAN IN THIS SUITE IS
+
+    "You've got this" is wrong in every message this product will ever send.
+    "Try a breathing exercise" is wrong right up until somebody types "what
+    should I do", and then it is the answer to the question. A ban with no
+    exemption would make the room refuse the one request it is qualified to
+    grant — so the exemption is read from their own words, and both halves are
+    asserted below, because a ban that never lifts and a ban that always lifts
+    fail this check in the same place.
+  */
+  const SPEC = ["drink water", "go for a walk", "breathing exercise",
+                "gratitude list", "put your phone down"];
+  for (const task of SPEC) {
+    ok(genericTask(`Maybe ${task} and see how you feel.`) !== null,
+      `"${task}" is caught`, "named in the anti-generic-task protocol");
+  }
+  ok(GENERIC_TASKS.length >= SPEC.length,
+    `and the same species came with it (${GENERIC_TASKS.length} rows)`);
+
+  /*
+    Every regex still matches its own phrase — the same structural guard check
+    76 runs over the other two tables, for the same reason: `say` is what a
+    person reads in a failure message and `re` is what enforces it, and the two
+    halves of one row disagreeing is silent.
+  */
+  for (const t of GENERIC_TASKS) {
+    ok(t.re.test(t.say), `"${t.say}" is matched by its own rule`,
+      `${t.re} does not match the phrase written next to it`);
+    ok(typeof t.why === "string" && t.why.length > 8,
+      `and says what it does to the person reading it`,
+      "a ban with no reason gets deleted by the next person in a hurry");
+  }
+
+  // ── the exemption ────────────────────────────────────────────────────────
+  const ASKS = [
+    "what should i do", "What do I do now?", "honestly what can i do about it",
+    "give me something to try", "any tips for calming down", "tell me what to do",
+    "how do i cope with this", "i need advice", "what would you do",
+    // The way most of the people this is written for actually ask.
+    "wetin i go do", "wetin make i do now", "abeg advise me", "how i go take handle am",
+  ];
+  for (const m of ASKS) {
+    ok(askedForSkill(m), `asking is heard: "${m}"`,
+      "a ban that never lifts makes the room refuse the one request it can grant");
+  }
+
+  /*
+    And the near-misses, which are the expensive half.
+
+    A false positive here silently re-opens the ban for somebody who never
+    asked, so these are not symmetric with the list above. "Wetin I do wrong"
+    is the one that was actually broken: the Pidgin pattern had an optional
+    future marker, so a person blaming themselves for what already happened was
+    read as requesting a technique. The tense *is* the classifier — English gets
+    it free from "should", Pidgin carries it in `go` and `fit`.
+  */
+  const NOT_ASKS = [
+    "help me", "i need help", "i don't know what to do with myself",
+    "my dad's test results came back", "what should i have done",
+    "wetin i do wrong", "wetin i do to deserve this", "everything i do is wrong",
+    "she said i should do better", "what do i tell my mum",
+  ];
+  for (const m of NOT_ASKS) {
+    ok(!askedForSkill(m), `and not heard where it was not said: "${m}"`,
+      "'help me' at 2am is the only thing left to say, not a request for a drill");
+  }
+
+  // ── the two together, which is the actual rule ───────────────────────────
+  const vent = { id: "t", message: "my chest dey tight since morning and i no fit sleep",
+                 intent: "vent", language: "en", probes: "" };
+  const TASK_REPLY = "Try a breathing exercise before bed.";
+  ok(inspectReply(vent, TASK_REPLY).reject,
+    "a task nobody asked for is rejected before anybody reads it");
+  is(inspectReply({ ...vent, message: `${vent.message} — what should i do` }, TASK_REPLY).reject, null,
+    "and the same sentence is allowed to somebody who asked",
+    "the exemption is the difference between a therapy office and a room that will not answer");
+
+  const note = inspectReply(vent, TASK_REPLY).correction;
+  ok(note && /did not ask/i.test(note), "the retry is told why");
+  is(genericTask(note), null,
+    "and the note names no task it is about",
+    "a correction that repeats the failure is one bad parse from being an instruction");
+
+  /*
+    THE ASSERTION THIS WHOLE CHECK EXISTS FOR
+
+    The generic version and the surgical version of one clinical move fall on
+    opposite sides of the list, and nothing was special-cased for it.
+    `body_map_drop_set` says "four seconds in, six out, drop the shoulder" —
+    breathing, aimed at the exact place in the body they named, selected
+    because they named it. "Try a breathing exercise" is the same technique
+    with the person removed from it.
+
+    If this assertion ever fails, the list has stopped describing *generic* and
+    started describing *breathing*, and it is the list that is wrong.
+  */
+  const drop = ALL_TACTICS.find((t) => t.id === "body_map_drop_set");
+  ok(drop && /breath|inhale|exhale|seconds? in/i.test(`${drop.instruction} ${drop.hold}`),
+    "the library's own breathing move is still a breathing move");
+  is(genericTask(drop.hold), null,
+    "and it survives the ban, because it is aimed at what they said",
+    "the same move, tied to their body, is the reason the ban is drawn on 'generic' and not on 'task'");
+
+  /*
+    Nothing we wrote hands over one either — and this is load-bearing rather
+    than tidy. `inspectReply` exempts authored lines by design (see check 82),
+    so an authored `hold` carrying a generic task is a rejection that ships
+    anyway, through the one door the failsafe leaves open. Check 76 makes the
+    identical argument for the banned phrases; this is that argument applied to
+    the table that came after it.
+  */
+  const unsafe = ALL_TACTICS.filter((t) => t.hold && genericTask(t.hold)).map((t) => t.id);
+  is(unsafe.join(","), "", "no authored fallback hands over one",
+    "the failsafe exempts our own strings — an authored generic task is the one that reaches somebody");
+
+  const files = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(e.name)) files.push(full);
+    }
+  };
+  walk(path.join(ROOT, "src"));
+  // Three files name these by construction: the table, the grader that imports
+  // it, and the tactic library, whose surgical moves are the near-misses above.
+  const DEFINES = ["voice.ts", "quality.ts", "tactics.ts"];
+  let scanned = 0;
+  const broken = [];
+  for (const f of files) {
+    if (DEFINES.includes(path.basename(f))) continue;
+    const src = fs
+      .readFileSync(f, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/\/\/[^\n]*/g, " ")
+      .replace(/className=(?:"[^"]*"|\{`[^`]*`\})/g, " ");
+    const prose = [
+      ...[...src.matchAll(/"([^"\n]*\s[^"\n]*)"|'([^'\n]*\s[^'\n]*)'/g)].map((m) => m[1] ?? m[2] ?? ""),
+      ...[...src.matchAll(/`([^`]{12,})`/g)].map((m) => m[1]),
+      ...[...src.matchAll(/>([^<>{}]{12,})</g)].map((m) => m[1].replace(/\s+/g, " ").trim()),
+    ];
+    for (const text of prose) {
+      scanned++;
+      const hit = genericTask(text);
+      if (hit) broken.push(`${path.basename(f)}: "${hit.match}" — ${hit.why}`);
+    }
+  }
+  ok(scanned > 300, `there is authored copy to check (${scanned} strings)`,
+    "if this finds almost nothing the assertion below is vacuous");
+  is(broken.length, 0,
+    `and none of it does either${broken.length ? ` — ${broken.join(" | ")}` : ""}`,
+    "a wellness tip in our own copy is the one the failsafe cannot catch");
+
+  // ── the prompt stopped asking for it ─────────────────────────────────────
+  /*
+    Comments stripped before the slice, and the first version of this check did
+    not do it — so it read the comment *above* the block, which names the line
+    it removed and quotes the phrase it was asserting absent. It failed for the
+    right reason by accident. A probe that cannot tell the shipped string from
+    the note explaining why the string changed is asserting about the editor.
+  */
+  const promptSrc = fs
+    .readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  const speaks = slice(promptSrc, "HOW YOU SPEAK", 700);
+  ok(speaks.length > 400, "the block is found and read whole",
+    "a marker that lands in a comment slices 700 characters of prose about the code");
+  ok(!/micro action they can do/i.test(speaks),
+    "the standing instruction to close on a micro action is gone",
+    "it made an unasked-for task the default closing move of every reply");
+  ok(/Understanding is the job/.test(speaks) && /unless they asked/.test(speaks),
+    "and extraction is what stands in its place",
+    "RULE 2: your job is not to fix, your job is to understand");
+
+  /*
+    And it does not name the tasks, for the reason `OFFICE_RULES` no longer
+    names the phrases: telling a model not to say "drink water" is showing it
+    "drink water" and asking it to think about the register. Asserted against
+    the assembled prompt rather than the source, because the source is where
+    the list would be *absent* and the prompt is where it would arrive.
+  */
+  const built = buildSystemPrompt({
+    grounding: groundNow(),
+    classification: classify("i no fit start anything today"),
+    tactic: ALL_TACTICS.find((t) => t.id === "micro_action"),
+    ctx: { message: "i no fit start anything today", pressure: 60, ventCount: 2, recentTactics: [] },
+    memory: [],
+    message: "i no fit start anything today",
+  });
+  const named = GENERIC_TASKS.filter((t) => t.re.test(built));
+  is(named.length, 0,
+    `the assembled prompt names none of them${named.length ? ` (${named.map((t) => t.say).join(", ")})` : ""}`,
+    "a list of things not to say is a list of things said, in front of a model, every turn");
+
+  /*
+    One table, one truth. The grader imports the ban and the exemption rather
+    than keeping its own copy of either — a suite that checks its own copy
+    passes while the product regresses, which is the oldest rule in CLAUDE.md
+    and the one this repository has broken most often.
+  */
+  const quality = fs.readFileSync(path.join(ROOT, "src/lib/vent/quality.ts"), "utf8");
+  ok(/genericTask/.test(quality) && /askedForSkill/.test(quality),
+    "the grader imports both halves");
+  ok(/from "\.\/voice"/.test(quality.slice(0, quality.indexOf("export"))),
+    "from the table the product is built from");
+  const failsafe = fs.readFileSync(path.join(ROOT, "src/lib/vent/failsafe.ts"), "utf8");
+  ok(/"generic_task"/.test(slice(failsafe, "const REJECT", 200)),
+    "and the failsafe spends a retry on it",
+    "a grader nobody acts on is a grader that runs in a paid command nobody runs");
+
+  /*
+    The number in the competitive table is the number in the tables.
+
+    `POSITIONING.md` said "23 banned phrases fail the build" and the true count
+    was 15 — the ones check 76 fails a build over. The other eight it was
+    counting are `FILE_LANGUAGE`, which is graded on *model output* and has
+    never failed a build in its life. A hand-typed number, one table away from
+    the thing it counts, drifting quietly in the one document written to be
+    read by somebody who cannot check it.
+
+    That file's own opening paragraph is the rule it broke: "a comparison that
+    only works if nobody checks it is not an advantage". So it is checked, here,
+    against the two tables that actually fail a build — and a row added to
+    either one now fails this until the claim catches up.
+  */
+  const positioning = fs.readFileSync(path.join(ROOT, "docs/POSITIONING.md"), "utf8");
+  const claimed = Number(positioning.match(/(\d+) phrases and unasked-for tasks fail the \*\*build\*\*/)?.[1]);
+  is(claimed, BANNED_PHRASES.length + GENERIC_TASKS.length,
+    `the competitive table's count is the count (${claimed})`,
+    "the claims end up in a deck and nobody can say where the number came from");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
