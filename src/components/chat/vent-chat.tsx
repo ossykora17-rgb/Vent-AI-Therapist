@@ -1510,7 +1510,11 @@ export function VentChat() {
               style={pressureSet ? { opacity: 0.35 + (pressure / 100) * 0.65 } : undefined}
             />
             {!pressureSet
-              ? "How tight is it?"
+              // "How tight is it?" is a poem where a number out of ten was
+              // meant, and it was the label on the one control somebody uses
+              // to say how bad it is. The strip already prints the reading
+              // once it exists; before that it should say what it collects.
+              ? "Set the pressure"
               : body
                 ? `${body} · ${pressureWord}`
                 : pressureWord}
@@ -1553,7 +1557,7 @@ export function VentChat() {
 
           <div className="flex items-end gap-2">
             <label htmlFor="vent-input" className="sr-only">
-              {answering ? "Your answer" : "Carve your truth"}
+              {answering ? "Your answer" : "What you came to say"}
             </label>
             <textarea
               id="vent-input"
@@ -1595,7 +1599,10 @@ export function VentChat() {
                   shrink();
                 }
               }}
-              placeholder={answering ? "Answer am how e dey…" : "Carve your truth…"}
+              // A slogan in the box at the moment somebody starts typing is
+              // the room advertising itself to a person who came in to speak.
+              // What an office actually asks, asked plainly.
+              placeholder={answering ? "Answer am how e dey…" : "What’s going on?"}
               disabled={gated}
               className="min-h-[48px] flex-1 resize-none overflow-y-auto rounded-card border border-line/15 bg-card/60 px-4 py-3 leading-[1.6] shadow-glass-sm backdrop-blur-glass placeholder:text-ash disabled:opacity-50"
             />
