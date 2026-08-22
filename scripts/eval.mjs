@@ -46,6 +46,8 @@ const { knownProblems, flatReplies, parseProposals, auditPrompt } =
 const { echoesThem } = await app("src/lib/vent/echo.ts");
 const { wasAuthored } = await app("src/lib/vent/tactics.ts");
 const { inspectReply } = await app("src/lib/vent/failsafe.ts");
+const { openingLine, allianceLine, shouldSayAlliance, ALLIANCE_AT } =
+  await app("src/lib/vent/intake.ts");
 const { parseNotes, keepable, notesBlock, NOTE_KINDS, MAX_IN_PROMPT, MAX_SUBJECT, MAX_DETAIL } =
   await app("src/lib/vent/notes.ts");
 const { acceptable, prune, learnedBlock, MAX_LEARNED, MAX_RULE_CHARS, LEARNED_RULES } =
@@ -8904,6 +8906,96 @@ check("83 The office keeps what they said, and never a diagnosis", () => {
   ok(/upsert\(/.test(save) && /onConflict/.test(save), "the Supabase write is one upsert");
   ok(!/listNotes\(/.test(save), "with no read in front of it",
     "read-then-write is how the same subject gets stored twice by two tabs closing at once");
+});
+
+check("84 The room introduces itself once, and only as true as the write", () => {
+  /*
+    THE INTAKE PROTOCOL. Build alliance first, then treat — which is what a
+    therapist does and what nothing else in this category does. Woebot opens
+    with mood tracking, Wysa opens with an exercise; both are doing the second
+    thing first, which works on somebody who has already decided to be helped
+    and loses everybody else in ninety seconds.
+
+    No forms. Free: this is the greeting path and it has never cost a token.
+  */
+  const g = groundNow();
+  const back = openingLine(g, "en", "pops sick / fear of being useless son", []);
+  ok(/welcome back/i.test(back), "somebody it knows is welcomed back");
+  ok(/pops sick/.test(back), "and the thing is named",
+    "'welcome back' alone is a doorman; naming it is somebody who was in the room");
+
+  const first = openingLine(g, "en", null, []);
+  ok(!/welcome back/i.test(first), "a stranger is not welcomed back",
+    "that is the one line that makes every other product in this category feel fake");
+  ok(/what made you open/i.test(first), "they are asked what brought them");
+
+  // A note is enough on its own — the carve is not the only thing worth naming.
+  ok(/welcome back/i.test(openingLine(g, "en", null, [{ kind: "person", subject: "mumcy", detail: "calls Sundays" }])),
+    "a note counts as knowing them");
+  ok(!/welcome back/i.test(openingLine(g, "en", null, [{ kind: "loss", subject: "x", detail: "said he would and did not" }])),
+    "a loss does not — it never gets read back at anybody");
+
+  ok(/wetin|dey|na /i.test(openingLine(g, "pidgin", null, [])), "and it opens in their language");
+
+  const long = openingLine(g, "en", "a".repeat(200), []);
+  ok(long.length < 140, `a long carve is trimmed (${long.length} chars)`,
+    "a long quotation read back is the file being recited, not somebody remembering");
+
+  /*
+    THE CONTRACT, AND THE HALF OF IT THAT IS A PROMISE.
+
+    "I remember our conversations so we don't start over." A model may never
+    say that — `PROMISES` in quality.ts bans it outright — because a model
+    cannot know whether the write landed, and the worst bug this product ever
+    shipped was a sentence claiming a save that never happened.
+
+    The server can know. `persisted` comes back from the write rather than
+    from the configuration, and with nothing kept the claim is dropped while
+    the disclosure survives. A person is owed the second half either way.
+  */
+  const kept = allianceLine(true, "en");
+  ok(/keep what we talk about/i.test(kept), "with a store, it says it keeps things");
+  ok(/not a person|machine/i.test(kept), "and says what it is",
+    "four US states now require this product to say so out loud");
+
+  const lost = allianceLine(false, "en");
+  ok(!/\b(keep|remember|saved|stored)\b/i.test(lost.replace(/nothing[^.]*kept/i, "")),
+    "with no store, it claims to keep nothing",
+    "'I remember' said to somebody whose words are being dropped is the first face in CLAUDE.md's list");
+  ok(/not a person|machine/i.test(lost), "and still says what it is");
+  ok(/nothing here is being kept/i.test(lost), "and says so plainly");
+
+  for (const line of [kept, lost, allianceLine(true, "pidgin"), allianceLine(false, "pidgin")]) {
+    is(bannedPhrase(line), null, `no banned phrase: "${line.slice(0, 34)}…"`);
+  }
+
+  // Once, at the third exchange. Earlier is a disclaimer about nothing; later
+  // is after they have told a machine something they would not have.
+  is(ALLIANCE_AT, 3, "the third exchange");
+  ok(!shouldSayAlliance(2, false), "not the second");
+  ok(shouldSayAlliance(3, false), "the third");
+  ok(!shouldSayAlliance(4, false), "not the fourth");
+  ok(!shouldSayAlliance(3, true), "and never twice");
+
+  /*
+    Wired to the write, not to the deployment. This is the distinction the
+    whole file turns on and it is one identifier: `saved` is what `tryPersist`
+    returned; `Boolean(store)` is a claim about configuration, and the two
+    disagree exactly when a person is being told something untrue.
+  */
+  const route = fs
+    .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ");
+  ok(/allianceLine\(saved,/.test(route),
+    "the sentence is built from what the write returned",
+    "Boolean(store) is a claim about the deployment, not about the row");
+  ok(/allianceSaid/.test(route), "and the client says whether it has been heard");
+
+  // A wipe makes them a new person, so they hear it again.
+  const history = fs.readFileSync(path.join(ROOT, "src/components/history-list.tsx"), "utf8");
+  ok(/removeItem\("mw-alliance"\)/.test(history),
+    "clearing everything clears the flag too",
+    "the id is gone, so for all the room knows they are somebody else");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

@@ -21,7 +21,7 @@ constraint. It outranks elegance, cleverness, and feature count.
 npm run local      # the whole product, no accounts, no cloud  → :3001
 npm run gate       # selector + eval + pipelines + live-verify → merge or don't
 npm run live-checks # boots its own build twice — with a store and without
-npm run eval       # 93 checks, no server; add a URL for the live room
+npm run eval       # 94 checks, no server; add a URL for the live room
 npm run audit      # grade last 50 turns; --dry is free, --apply writes a diff
 npm run heartbeat  # what changed, what is dirty, who should fix it
 npm run data       # store → data/sft.jsonl + data/eval.jsonl
@@ -82,6 +82,7 @@ own copy passes while the product regresses.
 | 32 tactics, 3-turn block, somatic gate | `src/lib/vent/tactics.ts` |
 | Memory: vents only, six-turn cap | `src/lib/vent/memory.ts` |
 | The office across sessions, and no diagnosis | `src/lib/vent/notes.ts` |
+| The first three messages, and the alliance line | `src/lib/vent/intake.ts` |
 | Chair → tension → drop | `src/lib/vent/chairs.ts` |
 | Circle phases, governance, Keeper lines | `src/lib/circles/rules.ts` |
 | "Is this circle over" | `src/lib/circles/sweep.ts` |

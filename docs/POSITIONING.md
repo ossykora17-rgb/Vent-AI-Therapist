@@ -23,6 +23,24 @@ A comparison that only works if nobody checks it is not an advantage.
 | **Cost** | Free. Most messages never reach a model — crisis, date, greeting and meta are answered locally | Free / employer-funded | Freemium | Freemium + subscription |
 | **Accessibility** | Web, no install, no account, works on a 360px phone, Pidgin and English, Nigerian context by construction | App store, US-centric | App store | App store |
 
+### Alliance before treatment
+
+Woebot opens with mood tracking. Wysa opens with an exercise. Both are doing
+the second thing first, which works on somebody who has already decided to be
+helped and loses everybody else in ninety seconds.
+
+VENT's first three messages are `src/lib/vent/intake.ts`, and there is no form
+in them. A returning person is welcomed back **and the thing is named** — the
+carve, in their own words — or, if there is nothing specific to name, they get
+the new-visitor line instead, because "welcome back" said to a stranger is the
+single tell that makes a product in this category feel fake.
+
+At the third exchange, once ever, the room says what it is. The claim half of
+that sentence — *"I keep what we talk about"* — is only said when the write
+actually landed; with no store it says the disclosure and drops the claim,
+because "I remember" told to somebody whose words are being dropped is the
+first entry on CLAUDE.md's list of thirteen. Check 84 asserts both halves.
+
 ### Where the advantage is actually real
 
 Three of those rows are structural rather than a matter of effort, and they are

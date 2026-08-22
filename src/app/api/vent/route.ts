@@ -12,6 +12,7 @@ import { coverage, COVERAGE_FLOOR } from "@/lib/vent/scan";
 import { buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
 import { research } from "@/lib/vent/research";
 import { inspectReply } from "@/lib/vent/failsafe";
+import { allianceLine, openingLine, shouldSayAlliance } from "@/lib/vent/intake";
 import { MEMORY_TURNS, memoryFetchSize, selectMemory } from "@/lib/vent/memory";
 import { noModelKeyReply } from "@/lib/vent/fallback";
 import { MAX_TOKENS, classifyModelError, modelFailureReply } from "@/lib/vent/model";
@@ -77,6 +78,15 @@ const HISTORY_LIMIT = 100;
 
 const bodySchema = z.object({
   anonId: z.string().min(8).max(64),
+  /*
+    Whether the room has already introduced itself to this person.
+
+    A flag from the client rather than a count on the server, because the count
+    moves and the flag does not: somebody who clears their id is a new person
+    by construction and should hear it again, and somebody who read it on
+    Tuesday should not.
+  */
+  allianceSaid: z.boolean().optional(),
   message: z.string().trim().min(1).max(4000),
   chairPicked: z.enum(["tight_edge", "sunk", "half_off"]).nullish(),
   bodyTapped: z.enum(["head", "throat", "chest"]).nullish(),
@@ -315,13 +325,37 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
     recentTactics,
   };
 
+  /*
+    Read once, used twice: the greeting names one of these, and the prompt
+    below carries them. Both degrade to nothing rather than failing the turn —
+    a session opens knowing less, never not at all.
+  */
+  const greetCarve = store && userId ? await store.getCarve(userId).catch(() => null) : null;
+  const greetNotes = store && userId ? await store.listNotes(userId).catch(() => []) : [];
+
   // ── 3. Free paths. No model call — this is the credit policy in code. ───
   const factual =
     classification.intent === "factual"
       ? answerFactual(input.message, grounding)
       : null;
+  /*
+    The first thing the room says, and it branches on whether it knows them.
+
+    `localReply` still answers `meta`; the greeting goes through `openingLine`,
+    which needs the carve and the notes and therefore needs the store to have
+    answered — which it has, by here. Free either way: this is the greeting
+    path and it has never cost a token.
+
+    The branch is on something read, not on something guessed. "Welcome back"
+    said to a stranger is the failure that makes every other product in this
+    category feel fake, so with nothing specific to name it falls through to
+    the new-visitor line.
+  */
   const local =
-    factual ?? localReply(classification.intent, grounding, classification.language);
+    factual ??
+    (classification.intent === "greeting"
+      ? openingLine(grounding, classification.language === "pidgin" ? "pidgin" : "en", greetCarve, greetNotes)
+      : localReply(classification.intent, grounding, classification.language));
 
   if (local) {
     const saved =
@@ -392,13 +426,13 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
     // Free when there is no store and null on every failure inside the store,
     // so a session simply opens knowing nothing — which is what it did before
     // the Carver existed.
-    carve: store && userId ? await store.getCarve(userId) : null,
+    carve: greetCarve,
     /*
       The office, across sessions. Free when there is no store, and every
       failure inside the store degrades to nothing — a session opens knowing
       less rather than not opening at all.
     */
-    notes: store && userId ? await store.listNotes(userId).catch(() => []) : [],
+    notes: greetNotes,
     opening: {
       object: input.openingObject,
       carrying: input.openingCarrying,
@@ -703,6 +737,19 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
       },
       provider: answeredBy,
       persisted: saved,
+      /*
+        Said once, at the third exchange, and only as true as the write.
+
+        The first half of this sentence — "I keep what we talk about" — is a
+        promise the code cannot keep, and the grader bans a model from making
+        it for exactly that reason: a model cannot know whether the write
+        landed. The server can, and `saved` is what came back from it rather
+        than what the configuration implied. With nothing kept, the claim is
+        dropped and only the disclosure half is said.
+      */
+      alliance: shouldSayAlliance(history.length + 1, input.allianceSaid === true)
+        ? allianceLine(saved, classification.language === "pidgin" ? "pidgin" : "en")
+        : null,
       storage: store?.kind ?? "none",
     },
     { headers: { "cache-control": "no-store" } },

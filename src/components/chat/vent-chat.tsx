@@ -10,11 +10,37 @@ import { FeedbackFab } from "@/components/feedback-fab";
 import { Onboarding, hasOnboarded, type OnboardingResult } from "@/components/onboarding";
 import { Breathing, Journaling, ToolRow, shouldOfferBreathing } from "@/components/tools";
 import { anonId, queueVent } from "@/lib/anon";
+
 import { FORGET_FAILED } from "@/lib/vent/voice";
 import { cn } from "@/lib/utils";
 import { carryingWord } from "@/lib/community/carrying";
 import { useComposerHeight } from "@/lib/ui/use-composer-height";
 import { readEventStream } from "@/lib/ui/event-stream";
+
+/**
+ * Has the room introduced itself to whoever is holding this device?
+ *
+ * Beside the anon id rather than on the server, and that is the point: a wipe
+ * clears the id and this flag together, so somebody who starts over hears the
+ * sentence again — which is correct, because for all the room knows they are
+ * somebody else.
+ */
+const ALLIANCE_KEY = "mw-alliance";
+const allianceSaid = () => {
+  try {
+    return localStorage.getItem(ALLIANCE_KEY) === "1";
+  } catch {
+    // Storage blocked. Saying it twice is a smaller failure than never.
+    return false;
+  }
+};
+const markAllianceSaid = () => {
+  try {
+    localStorage.setItem(ALLIANCE_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+};
 
 type Body = "head" | "throat" | "chest";
 
@@ -35,6 +61,15 @@ interface VentResponse {
   memoryUsed?: number;
   tokensSpent?: boolean;
   persisted?: boolean;
+  /**
+   * The room introducing itself, once, at the third exchange — or null.
+   *
+   * Decided on the server, because half of it is a claim about whether the
+   * write landed and only the server knows that. Rendered as its own line
+   * rather than appended to the reply: it is the room speaking about itself,
+   * not part of the answer to what somebody just said.
+   */
+  alliance?: string | null;
   /** Why the model did not answer, when it did not. Shown, not swallowed. */
   reason?: string;
   detail?: string | null;
@@ -327,6 +362,10 @@ export function VentChat() {
         body: JSON.stringify({
           anonId: anonId(),
           message,
+          // Whether the room has already introduced itself to this person. A
+          // flag rather than a count: clearing the id makes somebody new by
+          // construction, and they should hear it again.
+          allianceSaid: allianceSaid(),
           // Null, not 50, when nobody has said. `tension_before` is written
           // straight from this, and a row with a null before is simply not
           // measurable — which is the correct outcome, and infinitely better
@@ -411,7 +450,13 @@ export function VentChat() {
           text: data.reply + why,
           crisis: data.intent === "crisis",
         },
+        // Its own line, after the answer. A disclosure folded into a reply is
+        // a disclosure somebody reads past.
+        ...(data.alliance
+          ? [{ id: nextId.current++, speaker: "vent" as const, text: data.alliance }]
+          : []),
       ]);
+      if (data.alliance) markAllianceSaid();
 
       if (data.intent === "crisis") {
         setCrisis(data.crisis ?? CRISIS_LINES);
