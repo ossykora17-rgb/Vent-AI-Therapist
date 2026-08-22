@@ -21,7 +21,7 @@ constraint. It outranks elegance, cleverness, and feature count.
 npm run local      # the whole product, no accounts, no cloud  → :3001
 npm run gate       # selector + eval + pipelines + live-verify → merge or don't
 npm run live-checks # boots its own build twice — with a store and without
-npm run eval       # 94 checks, no server; add a URL for the live room
+npm run eval       # 95 checks, no server; add a URL for the live room
 npm run audit      # grade last 50 turns; --dry is free, --apply writes a diff
 npm run heartbeat  # what changed, what is dirty, who should fix it
 npm run data       # store → data/sft.jsonl + data/eval.jsonl
