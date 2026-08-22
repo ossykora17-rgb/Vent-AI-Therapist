@@ -67,6 +67,7 @@ export const TABLE_CONTRACT: Readonly<Record<string, string>> = {
   // migration, and production named it within two runs — which is the check
   // working on its author first, and the correct order for that to happen in.
   vent_feedback: "id,user_id,anon_id,rating,message,created_at",
+  vent_notes: "id,user_id,kind,subject,detail,created_at,updated_at",
   circles:
     "id,creator_anon_id,tag,chair_picked,pressure_seeded,flavour,status," +
     "starts_at,ends_at,created_at",

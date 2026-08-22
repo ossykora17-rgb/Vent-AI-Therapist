@@ -12,6 +12,7 @@ import {
   parseCarve,
   worthCarving,
 } from "@/lib/vent/carve";
+import type { Note } from "@/lib/vent/notes";
 
 export const dynamic = "force-dynamic";
 /*
@@ -129,6 +130,7 @@ async function handlePOST(req: Request) {
   const earlier = await store.getCarve(userId);
 
   let carve: string | null = null;
+  let notes: Note[] = [];
   try {
     const answered = await generateReply({
       system: CARVER_SYSTEM,
@@ -138,7 +140,9 @@ async function handlePOST(req: Request) {
       deadlineMs: CARVE_DEADLINE_MS,
       messages: [{ role: "user", content: carvePrompt(messages, earlier) }],
     });
-    carve = parseCarve(answered.text)?.carve ?? null;
+      const read = parseCarve(answered.text);
+    carve = read?.carve ?? null;
+    notes = read?.notes ?? [];
   } catch (error) {
     // A provider outage at the end of a session is not something the person
     // needs to hear about. They already got their reply and their drop.
@@ -150,8 +154,25 @@ async function handlePOST(req: Request) {
 
   // The claim comes from the write, not from the model having answered.
   const kept = await store.setCarve(userId, carve);
+  /*
+    The notes, from the same call and never at the cost of the carve.
+
+    Written after it and reported separately: a session can produce a good
+    line and no notes, or notes and no line, and a caller that collapses those
+    into one boolean cannot tell which. Failures here are swallowed on purpose
+    — nobody is waiting on this request, and a note that did not land is worth
+    strictly less than the line that did.
+  */
+  let noted = 0;
+  try {
+    noted = notes.length > 0 ? await store.saveNotes(userId, notes) : 0;
+  } catch (error) {
+    console.warn("[carve] notes did not land", error);
+  }
   return NextResponse.json({
     carved: kept,
+    // Counted from the write, like everything else here.
+    noted,
     // Their own line back to them, only when it was actually kept. The
     // Memory page reads what is stored; this is for the session that made it.
     carve: kept ? carve : null,

@@ -393,6 +393,12 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
     // so a session simply opens knowing nothing — which is what it did before
     // the Carver existed.
     carve: store && userId ? await store.getCarve(userId) : null,
+    /*
+      The office, across sessions. Free when there is no store, and every
+      failure inside the store degrades to nothing — a session opens knowing
+      less rather than not opening at all.
+    */
+    notes: store && userId ? await store.listNotes(userId).catch(() => []) : [],
     opening: {
       object: input.openingObject,
       carrying: input.openingCarrying,

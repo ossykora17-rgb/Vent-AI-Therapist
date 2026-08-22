@@ -1,3 +1,4 @@
+import type { Note } from "@/lib/vent/notes";
 /**
  * One storage interface, two backends: Supabase in the cloud, a JSON file on
  * disk for local development. The routes never know which one they got, so
@@ -239,6 +240,17 @@ export interface Store {
   addBreaking(userId: string, q: string, a: string): Promise<boolean>;
 
   deleteAll(userId: string): Promise<void>;
+
+  // ── What the room knows across sessions ──────────────────────────────────
+  /** Everything about this person, newest first. Empty is the ordinary case. */
+  listNotes(userId: string): Promise<Note[]>;
+  /**
+   * Write what the Carver learned. **Returns how many rows landed**, not
+   * whether Postgres complained — one note out of four surviving is still a
+   * session that learned something, and a caller cannot tell the difference
+   * from a boolean.
+   */
+  saveNotes(userId: string, notes: readonly Note[]): Promise<number>;
 
   // ── Circles ─────────────────────────────────────────────────────────────
   listOpenCircles(): Promise<Array<CircleRow & { seats: number }>>;

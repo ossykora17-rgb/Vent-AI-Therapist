@@ -1,4 +1,5 @@
 import "server-only";
+import type { Note } from "@/lib/vent/notes";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -43,18 +44,31 @@ interface FeedbackRow {
   created_at: string;
 }
 
+/**
+ * A note as it is stored. `Note` is what the Carver produces; this is that
+ * plus the columns Postgres adds, so both backends return the same shape.
+ */
+export interface StoredNote extends Note {
+  id: string;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
 interface Db {
   users: UserRow[];
   vents: VentRow[];
   feedback: FeedbackRow[];
   circles: CircleRow[];
   circleMembers: CircleMemberRow[];
+  notes: StoredNote[];
   circleMessages: CircleMessageRow[];
 }
 
 const EMPTY: Db = {
   users: [], vents: [], feedback: [],
   circles: [], circleMembers: [], circleMessages: [],
+  notes: [],
 };
 
 export class FileStore implements Store {
@@ -319,9 +333,47 @@ export class FileStore implements Store {
     });
   }
 
+  async listNotes(userId: string): Promise<StoredNote[]> {
+    return this.read()
+      .notes.filter((n) => n.user_id === userId)
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at) || a.id.localeCompare(b.id));
+  }
+
+  async saveNotes(userId: string, notes: readonly Note[]): Promise<number> {
+    let wrote = 0;
+    await this.write((db) => {
+      const now = new Date().toISOString();
+      for (const n of notes) {
+        // Lower-cased subject is the dedupe key in both stores, because the
+        // Postgres unique index names columns and cannot name an expression.
+        const subject = n.subject.trim().toLowerCase();
+        const at = db.notes.findIndex(
+          (x) => x.user_id === userId && x.kind === n.kind && x.subject === subject,
+        );
+        if (at >= 0) {
+          db.notes[at] = { ...db.notes[at], detail: n.detail.trim(), updated_at: now };
+        } else {
+          db.notes.push({
+            id: randomUUID(), user_id: userId, kind: n.kind,
+            subject, detail: n.detail.trim(), created_at: now, updated_at: now,
+          });
+        }
+        wrote++;
+      }
+    });
+    return wrote;
+  }
+
   async deleteAll(userId: string): Promise<void> {
     await this.write((db) => {
       db.vents = db.vents.filter((v) => v.user_id !== userId);
+      /*
+        And the notes. Postgres does this with `on delete cascade` on the
+        foreign key; here it has to be a statement, and a statement is a thing
+        a future delete path can forget. That is why check 83 asserts it in
+        both backends rather than trusting the two to agree.
+      */
+      db.notes = db.notes.filter((n) => n.user_id !== userId);
       // The carve goes with them — it is a column on this row, so deleting
       // the person deletes the sentence written about them. Nothing separate
       // to remember, which is the point of putting it here.

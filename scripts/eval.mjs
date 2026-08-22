@@ -46,6 +46,8 @@ const { knownProblems, flatReplies, parseProposals, auditPrompt } =
 const { echoesThem } = await app("src/lib/vent/echo.ts");
 const { wasAuthored } = await app("src/lib/vent/tactics.ts");
 const { inspectReply } = await app("src/lib/vent/failsafe.ts");
+const { parseNotes, keepable, notesBlock, NOTE_KINDS, MAX_IN_PROMPT, MAX_SUBJECT, MAX_DETAIL } =
+  await app("src/lib/vent/notes.ts");
 const { acceptable, prune, learnedBlock, MAX_LEARNED, MAX_RULE_CHARS, LEARNED_RULES } =
   await app("src/lib/vent/learned.ts");
 const { RPC_CONTRACT } = await app("src/lib/store/contract.ts");
@@ -2359,6 +2361,18 @@ check("24 The system prompt has a budget, and every block earns its place", () =
       real constant would measure a ceiling that rises the first night the
       audit accepts anything. The cap is what the budget has to hold.
     */
+    /*
+      A full set of notes, at the cap and at the character limit — the same
+      argument as the learned rules below. `listNotes` returns nothing on a
+      first session, so a ceiling measured without them would rise on its own
+      the first time somebody came back.
+    */
+    notes: Array.from({ length: MAX_IN_PROMPT }, (_, i) => ({
+      kind: "fact",
+      subject: "s".repeat(MAX_SUBJECT),
+      detail: "d".repeat(MAX_DETAIL),
+      id: `n${i}`,
+    })),
     learned: Array.from({ length: MAX_LEARNED }, (_, i) => ({
       id: `r${i}`,
       rule: "x".repeat(MAX_RULE_CHARS),
@@ -2412,7 +2426,24 @@ check("24 The system prompt has a budget, and every block earns its place", () =
     first night anything was accepted, which is the silent growth this whole
     check exists to catch.
   */
-  const BUDGET = 3480;
+  /*
+    3,480 → 3,600 for the office across sessions, and this is the last raise.
+
+    Four blocks have been added to a prompt that was 3,200 five commits ago —
+    the office contract, the open thread, the move from outside, the rules the
+    audit earned — and each was individually justified, which is exactly how a
+    prompt doubles while every step looks reasonable. Notes are capped at three
+    lines of ninety-four characters, measured at ~100 tokens against a full
+    list rather than the empty one a first session produces.
+
+    THE RULE FROM HERE: the next block pays by removal. Not by compressing an
+    essay somewhere else — that money has been spent, twice — but by taking
+    something out of the prompt that this one replaces. The carve and these
+    notes are the same thing at two granularities and the obvious candidate;
+    `HOW THEY WALKED IN` carries three tapped words for 222 tokens and is the
+    other. Whoever raises this number next should have deleted something.
+  */
+  const BUDGET = 3600;
   ok(tokens <= BUDGET,
     "the heaviest possible prompt stays inside its budget",
     `${tokens} tokens vs ${BUDGET}`);
@@ -2423,6 +2454,8 @@ check("24 The system prompt has a budget, and every block earns its place", () =
   ok(heaviest.includes("ONE MOVE FROM OUTSIDE"), "and the move looked up for it");
   ok(heaviest.includes("WHAT THIS ROOM GOT WRONG BEFORE"),
     "and the rules the audit earned a place for");
+  ok(heaviest.includes("WHAT YOU ALREADY KNOW ABOUT THEM"),
+    "and the office it keeps across sessions");
 
   // A floor as well as a ceiling. If this collapses, a block stopped
   // rendering and every reply quietly got worse with nothing failing.
@@ -8748,6 +8781,129 @@ check("82 The room reads its own reply before anybody else does", () => {
     "exactly one retry, never a loop",
     "a reply that keeps failing must end at an authored line, not at the rate limit");
   ok(/tactic\.hold/.test(block), "and a retry that also fails falls back to the authored line");
+});
+
+check("83 The office keeps what they said, and never a diagnosis", () => {
+  /*
+    Facts, relationships, goals, triggers, wins, losses, language — the office
+    across sessions, which is the one thing six turns of transcript cannot
+    hold. The carve is a line about the wound; this is the name of the sister.
+
+    ONE TABLE, EIGHT KINDS. The obvious build is eight tables, and they all
+    have the same shape: a subject, a detail, when it was last true. Eight
+    tables is eight sets of store methods, eight RLS policies, and eight places
+    to forget a GRANT — which this project has already paid for once.
+
+    AND THERE IS NO `trauma` KIND. The spec asked for one. A trauma row is a
+    clinical label written by a model about somebody who never consented to
+    being assessed, in a product whose every screen says it is not therapy and
+    whose prompt says never diagnose. The row outlives the sentence that
+    produced it and gets read back weeks later as established fact. `hard`
+    holds the same information in the only form this product may: their words
+    for the thing, not our name for it.
+  */
+  ok(!NOTE_KINDS.includes("trauma"), "there is no trauma kind",
+    "a diagnosis in a database is still a diagnosis");
+  ok(NOTE_KINDS.includes("hard"), "there is a kind for a hard thing they named");
+  is(NOTE_KINDS.length, 8, `eight kinds (${NOTE_KINDS.join(", ")})`);
+
+  const note = (over) => ({ kind: "fact", subject: "rent", detail: "landlord raised it in March", ...over });
+  is(keepable(note()), null, "a plain fact in their words is kept");
+
+  for (const bad of [
+    ["depression", { detail: "said the depression is back" }],
+    ["anxiety", { subject: "anxiety", detail: "gets it before calls" }],
+    ["trauma", { detail: "childhood trauma around money" }],
+    ["a disorder", { detail: "shows signs of an eating disorder" }],
+  ]) {
+    ok(keepable(note(bad[1])), `refused: ${bad[0]}`,
+      "the ban has to hold at the write, because a row outlives the sentence");
+  }
+
+  ok(keepable(note({ detail: "deep down he fears failing his father" })),
+    "an interpretation stated as fact is refused",
+    "'said he is afraid' is a record; 'deep down he fears' is a reading, and only one survives being wrong");
+  is(keepable(note({ detail: "said he is afraid of failing his father" })), null,
+    "and the same thing as a record is kept");
+
+  ok(keepable(note({ kind: "vibes" })), "an invented kind is refused");
+  ok(keepable(note({ detail: "x".repeat(MAX_DETAIL + 1) })), `over ${MAX_DETAIL} characters is refused`);
+  ok(keepable(note({ subject: "s".repeat(MAX_SUBJECT + 1) })), `and so is a long subject`);
+
+  /*
+    One bad note never costs the good ones. A session that produced something
+    worth keeping should not lose it to a fourth array element that named a
+    condition — the batch does not fail over its worst member.
+  */
+  const { keep, dropped } = parseNotes([
+    note(),
+    note({ subject: "mumcy", kind: "person", detail: "calls Sundays, they don't pick" }),
+    note({ subject: "sleep", detail: "the insomnia is worse" }),
+  ]);
+  is(keep.length, 2, "the good notes survive a bad one");
+  is(dropped.length, 1, "and the bad one is reported rather than swallowed");
+  is(parseNotes("not an array").keep.length, 0, "prose is not notes");
+  is(parseNotes(null).keep.length, 0, "and neither is nothing");
+
+  // Same subject twice in one batch is one note.
+  is(parseNotes([note({ detail: "first version here" }), note({ detail: "second version here" })]).keep.length, 1,
+    "a subject repeated in one batch is one note, later wins");
+
+  /*
+    `loss` never reaches the model. It shapes nothing a reply should say —
+    reading somebody their failures back is the cruellest thing this table
+    makes possible — and it is kept only so the audit can see whether the room
+    is working.
+  */
+  const block = notesBlock([
+    { kind: "loss", subject: "quitting", detail: "said he would and did not" },
+    { kind: "fact", subject: "rent", detail: "landlord raised it in March" },
+  ]);
+  ok(!block?.includes("quitting"), "a loss never reaches the prompt",
+    "kept for the audit, never read back at somebody");
+  ok(block?.includes("rent"), "everything else does");
+  is(notesBlock([]), null, "and a first session carries not a token for this");
+  ok(!/TRIGGERS|GOALS:/.test(block ?? ""),
+    "the block is lines about a person, not a form",
+    "a block with headings is a file being read aloud");
+
+  /*
+    Written by the call that already runs. The Carver reads the session at the
+    end of it; asking a second model what it learned would be a second bill for
+    a second reading of the same words.
+  */
+  const carve = fs.readFileSync(path.join(ROOT, "src/lib/vent/carve.ts"), "utf8");
+  ok(/NOTES_INSTRUCTION/.test(carve), "the Carver's own job asks for them");
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/carve/route.ts"), "utf8");
+  is((route.match(/generateReply\(/g) ?? []).length, 1,
+    "and the route still makes exactly one call",
+    "a second call to learn what the first one just read is a second bill for the same words");
+  ok(/saveNotes\(/.test(route) && route.indexOf("setCarve") < route.indexOf("saveNotes"),
+    "the line is written before the notes, and both are reported separately");
+
+  /*
+    And they go when the person goes. The landing page promises one tap deletes
+    everything; Postgres does it with `on delete cascade` and the file store has
+    to say so, which is a statement a future delete path can forget.
+  */
+  const file = fs.readFileSync(path.join(ROOT, "src/lib/store/file-store.ts"), "utf8");
+  const wipe = slice(file.replace(/\/\*[\s\S]*?\*\//g, " "), "async deleteAll(", 500);
+  ok(/db\.notes = db\.notes\.filter/.test(wipe), "the file store deletes the notes with the person");
+  const sql = fs.readFileSync(path.join(ROOT, "supabase/migrations/0017_notes.sql"), "utf8");
+  ok(/on delete cascade/.test(sql), "and Postgres cascades from the user row");
+  ok(/grant all privileges on public\.vent_notes to service_role/.test(sql),
+    "with the GRANT under the policy",
+    "a perfect policy behind a closed door reads as 42501, and health said ok over it for weeks");
+  ok(/revoke all on public\.vent_notes from anon/.test(sql), "and nothing for the browser key");
+  ok(/enable row level security/.test(sql), "deny-by-default, like every other table here");
+
+  // One upsert, not a read then a write — the shape that put seven people in
+  // a six-seat circle.
+  const supa = fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8");
+  const save = slice(supa.replace(/\/\*[\s\S]*?\*\//g, " "), "async saveNotes(", 800);
+  ok(/upsert\(/.test(save) && /onConflict/.test(save), "the Supabase write is one upsert");
+  ok(!/listNotes\(/.test(save), "with no read in front of it",
+    "read-then-write is how the same subject gets stored twice by two tabs closing at once");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
