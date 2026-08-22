@@ -25,7 +25,7 @@ import { execFileSync } from "node:child_process";
 import { app, ROOT } from "./app-imports.mjs";
 
 const { classify } = await app("src/lib/vent/intent.ts");
-const { checkMessage } = await app("src/lib/circles/rules.ts");
+const { containsAdvice } = await app("src/lib/circles/rules.ts");
 const { coverageDrift, COVERAGE_FLOOR } = await app("src/lib/vent/scan.ts");
 
 const DATA_DIR = path.resolve(ROOT, process.env.VENT_DATA_DIR || ".data");
@@ -44,7 +44,7 @@ const LOOPABLE = {
   advice_in_reply: {
     repeats: true, verifiable: true, bounded: true, reproducible: true,
     skill: "data-quality",
-    why: "the prompt let a reply give advice — checkMessage catches it every time",
+    why: "the prompt let a reply give advice — containsAdvice catches it every time",
   },
   no_tactic: {
     repeats: true, verifiable: true, bounded: true, reproducible: true,
@@ -184,11 +184,21 @@ for (const v of newVents) {
 
   scoreable.push({ message: v.user_message, reply: v.ai_reply, tactic: v.tactic_used });
 
-  const verdict = checkMessage(v.ai_reply, "share");
-  if (!verdict.ok) {
+  /*
+    `containsAdvice`, the same change as the live endpoint and for the same
+    reason — and the fact that it had to be made twice is the argument.
+
+    `checkMessage(reply, "share")` bundles advice with cross-talk and a share
+    length cap, neither of which is a rule about a reply. "That one no be your
+    fault" trips the cross-talk pattern and is one of the best sentences this
+    product can produce. Two surfaces measured the same wrong thing because
+    each reached for the bundled function rather than the one that exists to
+    answer this exact question.
+  */
+  if (containsAdvice(v.ai_reply)) {
     findings.push({
       kind: "advice_in_reply", vent: v.id, tag: v.real_world_tag ?? "none",
-      tactic: v.tactic_used, detail: verdict.reason, at: v.created_at,
+      tactic: v.tactic_used, at: v.created_at,
     });
   }
   if (!v.tactic_used) {

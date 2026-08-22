@@ -6924,6 +6924,169 @@ check("65 The backup copies what can be lost and nothing that was promised destr
     "a red cross every morning is how a real failure stops being read");
 });
 
+check("66 A fix that stops the damage still has to answer for the damage done", () => {
+  /*
+    Refusing to write a fabricated arrival reading does nothing to the ones
+    already written.
+
+    `tension_before` was whatever the pressure slider held, and for every
+    returning visitor that was an untouched fifty. Production's mean drop was
+    −28.3 — fabricated arrivals sitting under honest departures. The client
+    sends null now. The rows do not change.
+
+    `getEfficacy` reads the last five hundred vents across everybody, so the
+    poisoned ones stay in the window until five hundred new ones push them
+    out, and until then they keep ranking thirty-five tactics, keep steering
+    `measurePersonalEfficacy`, and keep ordering the preference pairs the
+    model is trained on. Stopping new damage while the old damage still
+    steers the product is half a fix, and the half nobody notices is missing.
+
+    The exclusion is exact-match and deliberately over-inclusive: it discards
+    genuine sittings from anybody who really did arrive at fifty. That is the
+    correct trade, because nothing records which fifties were chosen. A real
+    reading lost is one observation. A fabricated one kept is a vote in every
+    ranking, and in the training corpus it teaches that a reply which relieved
+    nothing was the better answer.
+
+    It expires on its own — once every row comes from a client that sends
+    null, fifty means only the people who chose it. No migration, no backfill,
+    no flag to remember to remove.
+  */
+  const eff = fs.readFileSync(path.join(ROOT, "src/lib/vent/efficacy.ts"), "utf8");
+  const pipe = fs.readFileSync(path.join(ROOT, "scripts/rlhf-pipeline.mjs"), "utf8");
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+  ok(/PRE_FIX_DEFAULT\s*=\s*50/.test(strip(eff)),
+    "the value that means 'never answered' is named where the arithmetic is",
+    "a bare 50 in a filter is a magic number nobody can date");
+  ok(/tension_before !== PRE_FIX_DEFAULT/.test(strip(eff)),
+    "the selector excludes rows whose arrival reading was the default",
+    "they outvote the honest rows for as long as they stay in the window");
+  ok(/tension_before === 50/.test(strip(pipe)),
+    "and the preference pipeline excludes them too",
+    "the corpus the model trains on is the one place this is permanent");
+
+  /*
+    And the heartbeat, which is the surface used to check whether any of this
+    worked. Left as it was it would have gone on reporting −28.3 out of the
+    same rows, and the fix would have looked like it did nothing.
+
+    Imported rather than written as a literal, because three copies of a rule
+    is three rules. This same file learned that about `checkMessage` in the
+    same commit.
+  */
+  const beat = strip(fs.readFileSync(path.join(ROOT, "src/app/api/heartbeat/route.ts"), "utf8"));
+  ok(/PRE_FIX_DEFAULT/.test(beat),
+    "the heartbeat measures the drop by the same rule the selector does",
+    "a metric that cannot see its own fix reports the bug forever");
+  ok(!/tension_before !== 50/.test(beat),
+    "and it imports the value rather than repeating it",
+    "a second copy of a rule is a rule that drifts");
+
+  /*
+    One question, one implementation. `containsAdvice` exists because circle
+    governance bundles three rules and only one of them is about advice — the
+    other two are wrong about a reply by construction, and "that one no be
+    your fault" trips the cross-talk pattern. Both watchers reached for the
+    bundled function anyway and both counted good sentences as violations.
+  */
+  for (const [name, src] of [
+    ["the live heartbeat", beat],
+    ["the offline heartbeat", strip(fs.readFileSync(path.join(ROOT, "scripts/heartbeat-data.mjs"), "utf8"))],
+  ]) {
+    ok(/containsAdvice/.test(src),
+      `${name} measures advice with the rule that is about advice`);
+    ok(!/checkMessage\([^)]*ai_reply/.test(src),
+      `${name} does not judge a reply by circle governance`,
+      "cross-talk and a share cap are rules about a room, not about an answer");
+  }
+
+  /*
+    Executable, because the filter is arithmetic and arithmetic is worth
+    running. Twelve honest sittings on each of two tactics, plus a pile of
+    fabricated fifties that would drag one of them down if they counted.
+  */
+  const row = (tactic, before, after) => ({
+    tactic_used: tactic, tension_before: before, tension_after: after,
+    intent_type: "vent", user_message: "x", ai_reply: "y", created_at: new Date().toISOString(),
+  });
+  const honest = [
+    ...Array.from({ length: 12 }, () => row("a", 80, 30)),
+    ...Array.from({ length: 12 }, () => row("b", 80, 70)),
+  ];
+  const clean = measureEfficacy(honest);
+  ok((clean.get("a") ?? 0) > (clean.get("b") ?? 0),
+    "the tactic followed by larger drops ranks above the one that is not");
+
+  const poisoned = measureEfficacy([
+    ...honest,
+    ...Array.from({ length: 40 }, () => row("a", 50, 90)),
+  ]);
+  is(poisoned.get("a"), clean.get("a"),
+    "and forty fabricated arrivals do not move it",
+    "an untouched slider is not forty people reporting that a tactic made them worse");
+});
+
+check("67 A silent microphone is never published as a masked one", () => {
+  /*
+    Reported by a person: "my browser doesn't support voice activation". There
+    was no way to tell them which of four causes they had hit, because all
+    four printed the same sentence — three of them fixable, one not. That is
+    "Network dipped on my side" in a new room, and this file has already paid
+    for that once.
+
+    Naming them found the one that mattered, and it was not the one reported.
+
+    Chrome and Safari start an AudioContext `suspended` unless it is created
+    inside a user gesture, and by the time the mask is built the click has
+    been through a fetch, a 13 MB dynamic import and a microphone prompt. On
+    Safari a gesture does not survive an await at all, so suspended is the
+    ordinary path on a phone.
+
+    `createMediaStreamDestination()` returns a perfectly real track whether or
+    not the graph is running. So the caller published it, muted it, unmuted it
+    on request — and the room heard nothing, while the person believed they
+    were speaking.
+
+    The rule in this file is "fail to silence, never to an unmasked voice",
+    and it had found a way to fail to silence *while reporting success*. That
+    is the one outcome the rule did not anticipate, because silence was
+    supposed to be the safe direction.
+  */
+  const mask = fs.readFileSync(path.join(ROOT, "src/lib/voice/mask.ts"), "utf8");
+  const voice = fs.readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8");
+  const code = mask.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+  ok(/state === "suspended"/.test(code) && /\.resume\(/.test(code),
+    "a suspended context is resumed rather than wired up silently",
+    "a track from a stopped graph is real, carries nothing, and publishes as success");
+  ok(/return fail\("context_suspended"\)/.test(code),
+    "and one that will not resume is refused, not published",
+    "silence reported as speech is worse than a refusal, because nobody can tell");
+
+  /*
+    The null contract is unchanged, and that is deliberate. The safety
+    property is that the caller gets nothing rather than the raw stream; a
+    diagnostic must not change the shape of the thing it describes.
+  */
+  let named = null;
+  is(maskMicrophone({ getAudioTracks: () => [] }, "deeper", (r) => { named = r; }), null,
+    "the return value is still null — the diagnostic rides beside it, not instead of it");
+  is(named, "no_audio_context",
+    "and the reason arrives with a name",
+    "one sentence over four causes is how a fixable failure looks unfixable");
+
+  // Each cause is distinguishable at the source, or naming them bought nothing.
+  const reasons = [...code.matchAll(/return fail\("(\w+)"\)/g)].map((m) => m[1]);
+  is(new Set(reasons).size, reasons.length, "no two failures share a name");
+  ok(reasons.length >= 4, `every way out is named (${reasons.length})`);
+
+  // And the person is told something true of their case rather than of all four.
+  ok(/context_suspended/.test(voice.replace(/\/\*[\s\S]*?\*\//g, " ")),
+    "the room's wording distinguishes the recoverable case",
+    "'this browser can't' is false for somebody whose browser only wanted a second tap");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

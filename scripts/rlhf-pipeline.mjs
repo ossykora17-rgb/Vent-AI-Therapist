@@ -252,6 +252,23 @@ function anchoredSittings(db) {
     // Nothing to put down means nothing to measure. Not a failure — an
     // absence, and an absence is not a zero.
     if (v.tension_before <= 0) continue;
+    /*
+      And fifty is an absence too, in every row written before the client
+      stopped sending its own default.
+
+      `tension_before` was whatever the pressure slider held, and for every
+      returning visitor that was an untouched fifty. Production's mean drop
+      was −28.3: fabricated arrivals sitting under honest departures. Those
+      rows are still in the database and this pipeline reads the database.
+
+      Dropped rather than corrected, and the same exact-match rule the
+      selector uses — see `PRE_FIX_DEFAULT` in `lib/vent/efficacy.ts`. Nothing
+      records which fifties were chosen and which were defaulted, so the only
+      safe reading is neither. Over-inclusive on purpose: a genuine fifty lost
+      is one training pair, a fabricated one kept teaches the model that a
+      reply which relieved nothing was the better answer.
+    */
+    if (v.tension_before === 50) continue;
     rows.push({
       user: v.user_id,
       prompt: v.user_message,

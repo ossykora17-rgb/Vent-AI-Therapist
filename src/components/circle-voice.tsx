@@ -178,14 +178,31 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
       micRef.current = mic;
 
       const { maskMicrophone } = await import("@/lib/voice/mask");
-      const masked = maskMicrophone(mic, "deeper");
+      /*
+        Four causes, one message, and the person who hit it could not tell us
+        which — "my browser doesn't support voice activation" was the report,
+        and the only honest response was that we did not know either. Three of
+        the four are fixable and one is not, so a single sentence covering all
+        four is the "Network dipped on my side" bug in a new room.
+
+        Reported to the console with a name, and to the person in words that
+        are true of their case. Never the raw reason on screen: somebody who
+        came here to say a hard thing does not need `context_suspended`.
+      */
+      let why: string | null = null;
+      const masked = maskMicrophone(mic, "deeper", (reason) => {
+        why = reason;
+        console.warn("[voice] mask unavailable:", reason);
+      });
       if (!masked) {
         // Fail to silence, never to an unmasked person who believed they were
         // masked. They stay in the room and can still read and write.
         mic.getTracks().forEach((t) => t.stop());
         micRef.current = null;
         setNotice(
-          "This browser can't disguise your voice, so the microphone stayed shut. The room is still here in text.",
+          why === "context_suspended"
+            ? "Your browser held the audio back until you tap. Tap Join once more and the microphone opens — the room is here in text either way."
+            : "This browser can't disguise your voice, so the microphone stayed shut. The room is still here in text.",
         );
       } else {
         maskRef.current = masked;
