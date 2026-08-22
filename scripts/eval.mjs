@@ -5599,9 +5599,27 @@ await checkAsync("55 What was streamed is a preview; what was committed is the a
     has to appear inside the `done` that follows it, before the catch. Survives
     a rename, fails a deletion.
   */
-  const handled = /const\s+([A-Za-z_$][\w$]*)\s*=\s*await handlePOST\(/.exec(streamWrapper);
+  /*
+    The streaming call specifically, and the slice runs to the `done`.
+
+    Two things broke this that are worth naming, because both are the check
+    reading a shape rather than a meaning.
+
+    There are two `await handlePOST(` sites now — the plain one added when the
+    non-streaming path started timing itself, and the streamed one. This
+    matched the first, so every assertion below was scoped to the wrong
+    branch. The streamed call is the one that takes a sink, so it is matched
+    by its second argument rather than by being first.
+
+    And the slice ended at the first `} catch`, which is inside the `send`
+    helper's own try — three hundred characters before the thing being
+    asserted. `success` now runs to the `done` it is about.
+  */
+  const handled = /const\s+([A-Za-z_$][\w$]*)\s*=\s*await handlePOST\(\s*request\s*,/.exec(streamWrapper);
   ok(handled, "the stream wrapper runs the one POST handler and keeps its response");
-  const success = streamWrapper.slice(handled?.index ?? 0).split(/\}\s*catch/)[0];
+  const after = streamWrapper.slice(handled?.index ?? 0);
+  const doneAt = after.indexOf('send("done"');
+  const success = doneAt === -1 ? after.split(/\}\s*catch/)[0] : after.slice(0, doneAt + 200);
   const doneCall = /send\(\s*"done"\s*,\s*\{[\s\S]{0,160}?\}\s*\)/.exec(success)?.[0] ?? "";
   ok(/status/.test(doneCall) && /body/.test(doneCall),
     "the successful turn ends with a `done` event carrying a status and a body",
@@ -5615,8 +5633,39 @@ await checkAsync("55 What was streamed is a preview; what was committed is the a
     sending the answer and was sending an empty reply instead. The status is
     not the part a person reads.
   */
-  const bodyValue = doneCall.split(/body:/)[1] ?? "";
-  ok(handled && bodyValue.includes(handled[1]),
+  /*
+    Following one assignment, because reading the response into a name is not
+    reconstructing it.
+
+    This required the handler's identifier to appear inside `body:` — which
+    was true while the call read `body: await res.json()` and false the moment
+    a latency log needed the parsed body before it was sent. `const body =
+    await res.json()` then `body:` is the same value by a shorter name, and
+    the check called it a fabrication.
+
+    So one hop is resolved: an identifier is accepted when it was assigned
+    from the handler's own response. A literal still fails, which is the thing
+    this assertion is actually for.
+  */
+  /*
+    `body: x` and `{ status, body }` are the same field.
+
+    Split on `body:` this found nothing at all in the shorthand form and
+    reported the value as absent — a check failing a correct object because
+    of how the language lets you write it. Third variation of the same
+    mistake in this one assertion, which is itself the argument: match the
+    field, then read whatever form its value takes.
+  */
+  const explicit = /\bbody\s*:\s*([^,}]+)/.exec(doneCall)?.[1]?.trim();
+  const shorthand = /\bbody\s*[,}]/.test(doneCall) ? "body" : undefined;
+  const bodyValue = explicit ?? shorthand ?? "";
+  const alias = /^([A-Za-z_$][\w$]*)$/.exec(bodyValue)?.[1];
+  const fromHandler =
+    handled &&
+    (bodyValue.includes(handled[1]) ||
+      (alias &&
+        new RegExp(`const\\s+${alias}\\s*=\\s*await\\s+${handled[1]}\\.json\\(`).test(success)));
+  ok(fromHandler,
     "the `done` body is the handler's own response, not something reconstructed",
     "a body built from anything else is the preview being promoted to the answer");
   ok(/catch[\s\S]{0,400}send\(\s*"done"/.test(streamWrapper),
@@ -6791,6 +6840,88 @@ check("64 No route gives up before the work it does is allowed to finish", () =>
       "a function killed by the platform gets no classifier, no fallthrough and no log line");
   }
   ok(checked >= 2, `routes that can reach a model were found (${checked})`);
+});
+
+check("65 The backup copies what can be lost and nothing that was promised destroyed", () => {
+  /*
+    Supabase Hobby keeps no automated backups, so every carve, every held
+    note and every vent has lived in one database with no second copy. That
+    is the only promise in this product that cannot be repaired by shipping a
+    fix — "I kept what you left here" is unrecoverable the moment it stops
+    being true.
+
+    And a backup route is the most dangerous thing in this repo, because the
+    two ways it fails are opposite and both are silent:
+
+      it serves everybody's history to whoever guesses the path
+      it copies the one thing the product promised to destroy
+
+    The second is the subtle one. A circle's transcript is deleted when the
+    circle closes, and that deletion is the whole promise the room is built
+    on. A nightly job copying transcripts somewhere durable turns a room that
+    forgets into a room that remembers forever, off-site, past the moment
+    everybody in it was told their words were gone. A backup of something
+    whose value is its deletion is not a backup, it is a leak on a schedule.
+
+    Neither failure shows up in an artifact that looks fine.
+  */
+  const src = fs.readFileSync(path.join(ROOT, "src/app/api/export/route.ts"), "utf8");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+  // ── shut without a secret ────────────────────────────────────────────────
+  /*
+    Ordering matters and is asserted: the token check has to come before the
+    database client is built, or a misconfiguration decides whether an
+    unauthenticated caller gets 401 or something worse. Same rule as the
+    422-before-getStore lesson two routes over.
+  */
+  ok(/backupToken/.test(code), "the route is gated on a token at all");
+  ok(code.indexOf("backupToken") < code.indexOf("createAdminClient("),
+    "and the gate is checked before a database client exists",
+    "a route that connects first has already decided the answer depends on configuration");
+  ok(/501/.test(code),
+    "no token means the route does not exist rather than being open",
+    "absent must never mean unauthenticated-and-allowed");
+  ok(/timingSafeEqual/.test(code),
+    "the comparison does not leak the token through timing",
+    "this is the only string standing between a stranger and everybody's history");
+  ok(!/console\.(log|info|warn|error)\([^)]*token/i.test(code),
+    "the token is never written to a log");
+
+  // ── never copies what was promised destroyed ─────────────────────────────
+  ok(/NEVER_EXPORT/.test(code) && /circle_messages/.test(code),
+    "circle transcripts are excluded by name",
+    "confidentiality is a deletion policy, and a durable copy is its opposite");
+  const exclusion = code.slice(code.indexOf("NEVER_EXPORT"));
+  ok(/filter\(\([^)]*\)\s*=>\s*!\s*NEVER_EXPORT\.has/.test(exclusion),
+    "and the exclusion is applied to the table list, not merely declared",
+    "a constant nothing reads is a comment with a type");
+
+  /*
+    Derived from the contract, so a table added there is copied without
+    anybody remembering to come here. The failure this prevents is a backup
+    that is quietly one table short for months.
+  */
+  ok(/FULL_CONTRACT/.test(code),
+    "the table list comes from the contract rather than a second copy",
+    "a hand-kept list is how a backup ends up missing the newest table");
+
+  // ── says when it is not a whole copy ─────────────────────────────────────
+  ok(/complete/.test(code) && /truncated/.test(code),
+    "an incomplete copy says so rather than looking like a good one",
+    "an artifact that looks fine until the day it is needed is the worst outcome here");
+
+  // ── and the workflow acts on that ────────────────────────────────────────
+  const wf = fs.readFileSync(path.join(ROOT, ".github/workflows/backup.yml"), "utf8");
+  ok(/exitCode = 1|exit 1/.test(wf),
+    "the job fails when the copy is not whole",
+    "a green tick over a partial backup is worth less than no backup");
+  ok(!/cat backup\.json|echo .*backup\.json/.test(wf),
+    "the job never prints the copy",
+    "a run log is readable by anybody with repo access");
+  ok(/if \[ -z "\$TOKEN" \]/.test(wf),
+    "a repository without a token is skipped, not failed",
+    "a red cross every morning is how a real failure stops being read");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

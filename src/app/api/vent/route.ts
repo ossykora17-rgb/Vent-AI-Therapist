@@ -871,9 +871,43 @@ async function handlePATCH(request: Request) {
  * sees `seq` change throws away what it has. One field instead of a third
  * event type, and impossible to receive out of order.
  */
+/**
+ * How long a turn took, and which provider it took that long on.
+ *
+ * Nothing in this product measured latency. Both of the slow paths found so
+ * far — a fifty-second lobby against a hung SFU, a carve killed by the
+ * platform at thirty — were found by reading a runtime error table and by
+ * building a black hole on purpose. Neither would have shown up in a metric
+ * because there was no metric.
+ *
+ * One line per turn, to the platform's own log, which already exists and
+ * already retains. Not a dashboard, not a service, not a dependency: the
+ * cheapest thing that turns "the app feels slow" into a number somebody can
+ * sort by. `answeredBy` is on it because "slow" and "slow *on gemini*" are
+ * different problems with the same symptom, and the chain moves.
+ *
+ * No message, no reply, no anon id. A latency line is the one log in here
+ * that would be tempting to enrich with content, and content in a log is a
+ * transcript in a place nobody promised one.
+ */
+function logTurn(started: number, res: Response, provider: string | null) {
+  const ms = Math.round(Date.now() - started);
+  console.info(
+    `[vent] turn ${res.status} ${ms}ms via ${provider ?? "local"}`,
+  );
+}
+
 export const POST = withStore(async (request: Request) => {
+  const started = Date.now();
+
   if (!request.headers.get("accept")?.includes("text/event-stream")) {
-    return handlePOST(request);
+    const res = await handlePOST(request);
+    // Cloned, because reading a body consumes it and this response is on its
+    // way to somebody. `provider` is the only field wanted and a clone is the
+    // only way to look without taking it.
+    const body = await res.clone().json().catch(() => null);
+    logTurn(started, res, body?.provider ?? null);
+    return res;
   }
 
   const encoder = new TextEncoder();
@@ -903,7 +937,11 @@ export const POST = withStore(async (request: Request) => {
             seq += 1;
           },
         });
-        send("done", { status: res.status, body: await res.json() });
+        const body = await res.json();
+        // Measured where the turn actually ends, which on this path is when
+        // the answer is handed over rather than when the function returns.
+        logTurn(started, res, (body as { provider?: string })?.provider ?? null);
+        send("done", { status: res.status, body });
       } catch (error) {
         /*
           A throw here would otherwise be an aborted stream, and an aborted

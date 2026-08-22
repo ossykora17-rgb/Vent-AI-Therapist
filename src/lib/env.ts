@@ -72,6 +72,21 @@ export const env = {
   livekitApiKey: s(process.env.LIVEKIT_API_KEY),
   livekitApiSecret: s(process.env.LIVEKIT_API_SECRET),
   paystackPublicKey: s(process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY),
+  /**
+   * The one credential that guards a copy of everything.
+   *
+   * Supabase Hobby keeps no automated backups. Every carve, every held note,
+   * every vent is one incident away from gone — in a product whose opening
+   * sentence to a returning person is "I kept what you left here". That is
+   * the only promise here that cannot be made good after the fact.
+   *
+   * A backup route needs a secret by construction: unauthenticated, it is a
+   * full database dump served to anybody who guesses the path, which is a
+   * worse failure than having no backup at all. So the route answers 501
+   * until this is set, and never anything else — absent means the door does
+   * not exist, not that it is open.
+   */
+  backupToken: s(process.env.VENT_BACKUP_TOKEN),
   siteUrl:
     process.env.NEXT_PUBLIC_SITE_URL ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
