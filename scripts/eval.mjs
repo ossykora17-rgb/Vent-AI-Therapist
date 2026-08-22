@@ -41,8 +41,11 @@ const { BANNED_PHRASES, FILE_LANGUAGE, bannedPhrase, REPLY_SENTENCE_CAP, NO_MEMO
 const { openThread, threadBlock } = await app("src/lib/vent/prompt.ts");
 const { parseTechnique, researchBlock, QUERIES, ALLOWED } =
   await app("src/lib/vent/research.ts");
-const { knownProblems, flatReplies, parseProposals, echoesThem, wasAuthored, auditPrompt } =
+const { knownProblems, flatReplies, parseProposals, auditPrompt } =
   await app("src/lib/vent/audit.ts");
+const { echoesThem } = await app("src/lib/vent/echo.ts");
+const { wasAuthored } = await app("src/lib/vent/tactics.ts");
+const { inspectReply } = await app("src/lib/vent/failsafe.ts");
 const { acceptable, prune, learnedBlock, MAX_LEARNED, MAX_RULE_CHARS, LEARNED_RULES } =
   await app("src/lib/vent/learned.ts");
 const { RPC_CONTRACT } = await app("src/lib/store/contract.ts");
@@ -8639,6 +8642,112 @@ check("81 A sentence a person reads lives in one file", () => {
   const voice = fs.readFileSync(path.join(ROOT, "src/lib/vent/voice.ts"), "utf8");
   ok(/export const FORGET_FAILED/.test(voice), "so is the sentence for a deletion that did not happen");
   ok(/export const PRODUCT_TITLE/.test(voice), "and the product's own title");
+});
+
+check("82 The room reads its own reply before anybody else does", () => {
+  /*
+    "FAILSAFE: If output sounds like a self-help book, reject and regenerate."
+
+    Everything needed for that already existed and none of it ran at the right
+    time. `gradeReply` has known about advice, promises, banned phrases and the
+    file read aloud for months — in `npm run quality`, a paid command nobody
+    runs nightly, and in the audit, which reads replies people already
+    received. The live path shipped whatever came back.
+
+    Narrow on purpose. Only offences that are unambiguous from the text: the
+    two fatals, the banned table, and the bookkeeping. Coverage, length and
+    language mixing are real findings that belong in the audit — a reply one
+    sentence over the cap is worth a note, not a second billed call.
+  */
+  const said = { id: "t", message: "my rent don pass me and i no fit breathe", intent: "vent", language: "en", probes: "" };
+  const rejects = (reply) => inspectReply(said, reply).reject;
+
+  is(rejects("Rent past you, and the breath went with it. Which one came first?"), null,
+    "a reply that keeps the rules is sent");
+
+  ok(rejects("You should talk to your landlord about a payment plan."),
+    "advice is rejected", "this room does not fix people");
+  ok(rejects("I've saved that, word for word, and I'll be here tomorrow."),
+    "so is a promise the code cannot keep");
+  ok(rejects("I understand. That must be hard."),
+    "so is the self-help book", "two phrases that fit any conversation on earth");
+  ok(rejects("Based on what you've told me across your previous sessions, rent is the theme."),
+    "and so is the file read aloud", "a counter is a database talking");
+  ok(rejects(""), "an empty reply is not a reply");
+
+  /*
+    And the ones that are NOT grounds for a second call, asserted because a
+    retry list that grows quietly is a bill that grows quietly.
+  */
+  is(rejects("Rent past you. The breath went with it. Which came first. Say it plain. Then stop."), null,
+    "a reply over the sentence cap is a note, not a retry",
+    "length is a finding for the audit — it does not justify a second billed call");
+
+  /*
+    The correction never quotes the offence.
+
+    `acceptable()` in learned.ts refuses a rule containing a banned phrase for
+    the same reason: a model reading "you said 'you've got this'" has still
+    read it, and a correction that repeats the failure is one bad parse from
+    being an instruction.
+  */
+  const note = inspectReply(said, "I understand. You've got this.").correction;
+  ok(note && note.length > 20, "a rejection comes with a note for the retry");
+  is(bannedPhrase(note), null, "and the note quotes none of the phrases it is about",
+    "a correction that repeats the failure teaches it");
+
+  /*
+    The fallback has to be safe by construction, or the failsafe has a third
+    outcome nobody checked. Every authored `hold` is what a rejected retry
+    falls back to, so every one of them must pass this inspection.
+  */
+  const unsafe = ALL_TACTICS
+    .filter((t) => t.hold)
+    .filter((t) => inspectReply({ ...said, message: t.hold }, t.hold).reject)
+    .map((t) => t.id);
+  is(unsafe.join(","), "", "every authored fallback passes its own inspection",
+    "the fallback is what a rejected retry becomes — an unsafe one is a rejection that ships anyway");
+  /*
+    It passes because authored lines are exempt, and that exemption is the
+    finding. `change_talk`'s hold — "You already said what you should do" — is
+    the person's own "should" handed back, and `containsAdvice` sees the word.
+    A rule from the circles room, applied to a private one, exactly as
+    `quality.ts` records happening once before.
+  */
+  ok(ALL_TACTICS.some((t) => t.hold && /should/i.test(t.hold)),
+    "and one of them contains the word that made the exemption necessary");
+
+  // ── the route spends this out of its own budget, never on top of it ───────
+  const route = fs
+    .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ");
+  ok(/const RETRY_DEADLINE_MS = \d/.test(route),
+    "the retry's clock is a literal in the route that owns the budget",
+    "the module deciding whether to retry has no idea how much clock is left");
+  ok(/leftOnTheClock\s*>\s*RETRY_DEADLINE_MS/.test(route),
+    "and the retry is skipped when there is not that much left",
+    "a function the platform kills gets no classifier, no fallthrough and no log line");
+  ok(/startedAt = Date\.now\(\)/.test(route.slice(0, route.indexOf("await generateReply"))),
+    "measured from when the platform's clock started",
+    "how long have I got, asked after the body was parsed and the model called, is not the question maxDuration asks");
+
+  /*
+    And it is actually called on what the model said. Asserted because the
+    cheapest way to disable a failsafe is to keep every branch around it and
+    hand it a verdict that is always null — which passed every other assertion
+    in this check.
+  */
+  ok(/inspectReply\(asCase, reply\)/.test(route),
+    "the model's reply is the thing inspected",
+    "a verdict that is always null keeps the shape and removes the guard");
+  ok(route.indexOf("inspectReply(asCase, reply)") < route.indexOf("provider: answeredBy"),
+    "and it is inspected before the turn is answered");
+
+  const block = slice(route, "verdictOnReply", 1400);
+  is((block.match(/generateReply\(/g) ?? []).length, 1,
+    "exactly one retry, never a loop",
+    "a reply that keeps failing must end at an authored line, not at the rate limit");
+  ok(/tactic\.hold/.test(block), "and a retry that also fails falls back to the authored line");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

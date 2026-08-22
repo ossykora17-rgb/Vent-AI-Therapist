@@ -1,6 +1,7 @@
 import { gradeReply, worstOf, type Finding as Note, type GoldenCase } from "./quality";
 import { acceptable, MAX_RULE_CHARS, type LearnedRule } from "./learned";
-import { ALL_TACTICS } from "./tactics";
+import { wasAuthored } from "./tactics";
+import { echoesThem } from "./echo";
 
 /**
  * The nightly self-audit, minus the part that costs money.
@@ -85,32 +86,6 @@ export function knownProblems(rows: AuditRow[], grade = gradeReply): Finding[] {
 /** Markers, not a language detector — the same set the grader uses. */
 const PIDGIN = /\b(dey|na|abeg|wetin|don|sabi|wahala|oga|make i|e go)\b/i;
 
-/**
- * A fallback is not a reply, and grading it as one is a lie.
- *
- * `quality.ts` learned this the expensive way: with no model key a vent gets
- * the tactic's authored `hold` — English prose, written for a room rather than
- * for this message — and graded as model output it produced ten "majors" on
- * the first run, every Pidgin case flagged for answering in English.
- *
- * The first version of this audit walked straight into it. Run against the
- * local store it reported five majors for "answered a Pidgin message in
- * English", and every one was an authored line from `tactics.ts` that no model
- * had ever seen.
- *
- * The store cannot say whether a model answered — there is no provider column,
- * and adding one would only help rows written after the migration. It does not
- * need one: the authored replies are a closed set, so an exact match against
- * the tactic library identifies them, retroactively, for every row already
- * stored.
- */
-const AUTHORED: ReadonlySet<string> = new Set(
-  ALL_TACTICS.map((t) => t.hold?.trim()).filter((h): h is string => Boolean(h)),
-);
-
-export function wasAuthored(reply: string | null): boolean {
-  return Boolean(reply && AUTHORED.has(reply.trim()));
-}
 
 /**
  * Replies that broke nothing and still went nowhere.
@@ -151,30 +126,6 @@ export function flatReplies(rows: AuditRow[], limit = 10): AuditRow[] {
     .sort((a, b) => b.weight - a.weight);
 
   return scored.slice(0, limit).map((s) => s.row);
-}
-
-/**
- * Does the reply use any word they used that is theirs rather than everyone's?
- *
- * Not a similarity score and deliberately not one. The rule the room actually
- * has is "use their own words back to them", and the cheapest honest test of
- * it is whether a single uncommon word survived the round trip.
- */
-const COMMON =
-  /^(the|and|that|with|from|about|because|would|there|this|have|been|they|them|your|what|when|will|just|like|really|very|dey|na|wey|abi|make|una|don|still|even|much|more|some|than|then|only|into|over|after|before|being|which|while|these|those|their|other|could|should|might|every|thing|things|feel|feels|felt)$/i;
-
-export function echoesThem(message: string, reply: string): boolean {
-  const words = (s: string) =>
-    new Set(
-      s
-        .toLowerCase()
-        .split(/[^a-z']+/i)
-        .filter((w) => w.length >= 5 && !COMMON.test(w)),
-    );
-  const theirs = words(message);
-  if (theirs.size === 0) return true; // Nothing distinctive to echo.
-  for (const w of words(reply)) if (theirs.has(w)) return true;
-  return false;
 }
 
 /**
