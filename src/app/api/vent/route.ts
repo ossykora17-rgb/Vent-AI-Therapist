@@ -467,6 +467,22 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
       // The chain, not one provider. A rate limit or an empty balance on the
       // first is a reason to try the next, not a reason to tell somebody
       // mid-sentence that they cannot be heard.
+      /*
+        Built once and used twice — the first attempt and the retry. Two
+        expressions of "the conversation so far" is two things that can
+        disagree, and they did: the retry had none.
+      */
+      const modelMessages = [
+        ...history.flatMap((h) =>
+          h.ai_reply
+            ? [
+                { role: "user" as const, content: h.user_message },
+                { role: "assistant" as const, content: h.ai_reply },
+              ]
+            : [],
+        ),
+        { role: "user" as const, content: input.message },
+      ];
       const answered = await generateReply({
         system: systemPrompt,
         maxTokens: MAX_TOKENS,
@@ -476,17 +492,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
         depth: verdict.depth,
         onDelta: sink?.delta,
         onRestart: sink?.restart,
-        messages: [
-          ...history.flatMap((h) =>
-            h.ai_reply
-              ? [
-                  { role: "user" as const, content: h.user_message },
-                  { role: "assistant" as const, content: h.ai_reply },
-                ]
-              : [],
-          ),
-          { role: "user" as const, content: input.message },
-        ],
+        messages: modelMessages,
       });
 
       reply = answered.text;
@@ -524,7 +530,16 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
             maxTokens: MAX_TOKENS,
             depth: verdict.depth,
             deadlineMs: RETRY_DEADLINE_MS,
-            messages: [{ role: "user" as const, content: input.message }],
+            /*
+              The same conversation, not just the last line.
+
+              The first version sent `[{ user: message }]` alone — so the one
+              call made specifically to produce a *less* generic reply was the
+              only call in the product with no history behind it. A retry
+              stripped of context is a retry that can only be more generic
+              than the attempt it is replacing.
+            */
+            messages: modelMessages,
           });
           reply = inspectReply(asCase, again.text).reject
             ? tactic.hold ?? reply

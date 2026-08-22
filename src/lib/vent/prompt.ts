@@ -523,6 +523,47 @@ export function threadBlock(thread: OpenThread | null): string | null {
   ].join("\n");
 }
 
+/**
+ * The tactic, without the worked example.
+ *
+ * Eleven of the thirty-five instructions end in `e.g. "Choke. And it sits in
+ * your chest."` — a finished sentence, handed to a model, as *the move to
+ * make this turn*. What comes back is that sentence with two words changed.
+ *
+ * `exact_mirror` carries one and weighs 90 at `ventCount <= 1`, so the very
+ * first reply anybody has ever received here was shaped by a template. That
+ * is the whole of "generic and scripted", and it was documentation leaking
+ * into a prompt: the examples are genuinely useful to somebody reading
+ * `tactics.ts` and actively harmful in front of the model.
+ *
+ * So they stay in the file and stop reaching the prompt. "Mirror their exact
+ * two strongest words back, then name where they are holding it" is a clear
+ * instruction without a sentence attached to copy.
+ */
+export function withoutExample(instruction: string): string {
+  // No `s` flag: the target predates it. `[\s\S]` says the same thing and
+  // compiles everywhere this ships.
+  return instruction.replace(/\s*e\.g\.[\s\S]*$/i, "").trim();
+}
+
+/**
+ * How the last two replies opened, so this one does not open that way.
+ *
+ * Nothing in this prompt has ever asked for variety. `recentTactics` blocks
+ * the same *move* three turns running and says nothing about phrasing, so the
+ * same opening clause could — and did — front three replies in a row while
+ * every rule in the file was being kept.
+ *
+ * Four words is enough to name a pattern and short enough to be worth ~15
+ * tokens. Their own words are not the risk; the risk is ours.
+ */
+export function recentOpenings(rows: MemoryRow[], take = 2): string[] {
+  return rows
+    .slice(-take)
+    .map((r) => (r.ai_reply ?? "").trim().split(/\s+/).slice(0, 4).join(" "))
+    .filter((o) => o.length > 6);
+}
+
 export interface BuildPromptArgs {
   grounding: Grounding;
   classification: Classification;
@@ -588,6 +629,10 @@ export function buildSystemPrompt({
       `Real-world pressure detected: ${classification.realWorldTag}. Make the tool specific to it, not generic.`,
     ctx.recentTactics.length > 0 &&
       `Already used recently — do NOT repeat these moves: ${ctx.recentTactics.slice(-3).join(", ")}.`,
+    recentOpenings(memory).length > 0 &&
+      `You opened your last replies with: ${recentOpenings(memory)
+        .map((o) => `"${o}…"`)
+        .join(" and ")}. Do not open this one anywhere near that.`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -653,7 +698,7 @@ export function buildSystemPrompt({
     // outranks all of it.
     notesBlock(notes),
     "",
-    `THIS TURN — the move to make (express it in your own voice, do not quote it):\n${tactic.instruction}`,
+    `THIS TURN — the move to make (express it in your own voice, do not quote it):\n${withoutExample(tactic.instruction)}`,
     "",
     state && `WHAT YOU KNOW RIGHT NOW\n${state}`,
     "",

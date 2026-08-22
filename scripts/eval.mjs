@@ -48,6 +48,7 @@ const { wasAuthored } = await app("src/lib/vent/tactics.ts");
 const { inspectReply } = await app("src/lib/vent/failsafe.ts");
 const { openingLine, allianceLine, shouldSayAlliance, ALLIANCE_AT } =
   await app("src/lib/vent/intake.ts");
+const { withoutExample, recentOpenings } = await app("src/lib/vent/prompt.ts");
 const { parseNotes, keepable, notesBlock, NOTE_KINDS, MAX_IN_PROMPT, MAX_SUBJECT, MAX_DETAIL } =
   await app("src/lib/vent/notes.ts");
 const { acceptable, prune, learnedBlock, MAX_LEARNED, MAX_RULE_CHARS, LEARNED_RULES } =
@@ -8143,7 +8144,23 @@ check("76 The office has one voice, and nothing we wrote breaks it", () => {
   ok(!/[Tt]hree to four sentences/.test(prompt),
     "and no longer carries its own sentence count",
     `REPLY_SENTENCE_CAP is ${REPLY_SENTENCE_CAP}`);
-  for (const rule of ["Ask one question that digs", "Four parts reflecting"]) {
+  /*
+    "Ask one question that digs" was a numbered step in a three-step template,
+    and the template was half the reason replies read as scripted. What has to
+    survive is the *requirement*, not the numbering — so this asserts the
+    contract still demands one question and still forbids advice, and no longer
+    asserts the shape it demands them in.
+  */
+  // Whitespace-normalised: the contract is wrapped prose, and a phrase that
+  // straddles a line break is still the phrase. A check that fails on where
+  // the text happens to wrap is asserting about the editor.
+  const contract = OFFICE_RULES.replace(/\s+/g, " ");
+  ok(/ask one thing you do not know the answer to/i.test(contract),
+    "the contract still demands exactly one real question");
+  ok(/deliberately not a template/i.test(contract),
+    "and says the shape is not one",
+    "sometimes the right reply is one sentence, sometimes only the question");
+  for (const rule of ["Four parts reflecting"]) {
     ok(OFFICE_RULES.includes(rule), `the contract carries: ${rule.slice(0, 40)}`);
   }
   /*
@@ -8996,6 +9013,110 @@ check("84 The room introduces itself once, and only as true as the write", () =>
   ok(/removeItem\("mw-alliance"\)/.test(history),
     "clearing everything clears the flag too",
     "the id is gone, so for all the room knows they are somebody else");
+});
+
+check("85 The room is not handed a sentence to copy", () => {
+  /*
+    "The replies look generic and scripted."
+
+    They were, and two of the reasons were ours rather than the model's.
+
+    ELEVEN OF THIRTY-FIVE TACTIC INSTRUCTIONS END IN A WORKED EXAMPLE.
+    `e.g. "Choke. And it sits in your chest."` — a finished sentence, handed
+    over as *the move to make this turn*. What comes back is that sentence
+    with two words changed. `exact_mirror` carries one and weighs 90 at
+    `ventCount <= 1`, so the first reply anybody has ever received here was
+    shaped by a template.
+
+    It was documentation leaking into a prompt: genuinely useful to somebody
+    reading `tactics.ts`, actively harmful in front of the model. So it stays
+    in the file and stops reaching the prompt.
+
+    AND NOTHING EVER ASKED FOR VARIETY. `recentTactics` blocks the same *move*
+    three turns running and says nothing about phrasing, so one opening clause
+    could front three replies in a row with every rule in the file kept.
+  */
+  const withEg = ALL_TACTICS.filter((t) => /e\.g\./i.test(t.instruction));
+  ok(withEg.length >= 8, `the library still documents itself (${withEg.length} examples)`,
+    "these are worth keeping where a person reads them");
+  for (const t of withEg.slice(0, 4)) {
+    ok(!/e\.g\./i.test(withoutExample(t.instruction)), `${t.id}: no example reaches the prompt`);
+    ok(withoutExample(t.instruction).length > 24, `${t.id}: and the instruction survives it`,
+      "an instruction that needs its example to make sense is an instruction that was never written");
+  }
+
+  // The one that matters most: the first reply anybody ever gets.
+  const first = ALL_TACTICS.find((t) => t.id === "exact_mirror");
+  ok(first && /e\.g\./i.test(first.instruction), "the first-turn tactic carries one");
+  ok(first && !/chest/i.test(withoutExample(first.instruction)),
+    "and the example's own words do not reach a first-time visitor",
+    "weight 90 at ventCount <= 1 — this is the opening line of the whole product");
+
+  const built = buildSystemPrompt({
+    grounding: groundNow(),
+    classification: classify("my chest dey tight since morning"),
+    tactic: first,
+    ctx: { body: "chest", pressure: 70, duality: null, mood: null, recentTactics: [] },
+    memory: [],
+  });
+  ok(!/e\.g\./i.test(built), "and no assembled prompt carries an example at all");
+
+  /*
+    Variety, fed from what it actually said last time rather than from a rule
+    telling it to be varied.
+  */
+  const row = (reply) => ({
+    user_message: "work is heavy", ai_reply: reply,
+    created_at: "2026-08-22T00:00:00Z", body_tapped: null, chair_picked: null, mood_score: null,
+  });
+  const openings = recentOpenings([row("Sixteen hours and no rest. Where does it sit?"), row("Sixteen hours again. What changed?")]);
+  is(openings.length, 2, "the last two openings are read back");
+  ok(openings.every((o) => o.split(" ").length <= 4), "four words each, not a transcript");
+  is(recentOpenings([row(null), row("")]).length, 0, "and a turn with no reply contributes nothing");
+
+  const varied = buildSystemPrompt({
+    grounding: groundNow(),
+    classification: classify("work is heavy again"),
+    tactic: first,
+    ctx: { body: null, pressure: null, duality: null, mood: null, recentTactics: [] },
+    memory: [row("Sixteen hours and no rest. Where does it sit?")],
+  });
+  ok(/Do not open this one anywhere near that/.test(varied),
+    "and the prompt says not to open that way again",
+    "recentTactics blocked the move and never the phrasing");
+
+  /*
+    THE RETRY HAD NO CONVERSATION.
+
+    The one call made specifically to produce a less generic reply was the
+    only call in the product with no history behind it — `[{ user: message }]`
+    and nothing else. A retry stripped of context can only be more generic
+    than the attempt it replaces.
+  */
+  const route = fs
+    .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ");
+  is((route.match(/const modelMessages =/g) ?? []).length, 1,
+    "the conversation is built once");
+  is((route.match(/messages: modelMessages,/g) ?? []).length, 2,
+    "and both the attempt and the retry send it",
+    "two expressions of 'the conversation so far' is two things that can disagree, and they did");
+
+  /*
+    And the phrases the failsafe catches are no longer listed in the prompt.
+    Twelve worked examples of self-help phrasing, in front of a model, every
+    turn: telling something not to say "that must be hard" is showing it "that
+    must be hard". The guarantee never came from the list — `failsafe.ts`
+    inspects the finished reply against the same table, deterministically and
+    for free.
+  */
+  const contractText = OFFICE_RULES.replace(/\s+/g, " ");
+  const listed = BANNED_PHRASES.filter((b) => !b.ours && contractText.includes(b.say));
+  is(listed.length, 0,
+    `the contract names none of them${listed.length ? ` (${listed.map((b) => b.say).join(", ")})` : ""}`,
+    "a prompt line is a request; the failsafe is a guarantee, and the request was priming the fall");
+  ok(/failsafe/i.test(fs.readFileSync(path.join(ROOT, "src/lib/vent/voice.ts"), "utf8")),
+    "and the file says where the guarantee moved to");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
