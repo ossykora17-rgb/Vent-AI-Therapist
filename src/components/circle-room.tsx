@@ -232,39 +232,40 @@ export function CircleRoom({ id }: { id: string }) {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/95 backdrop-blur-glass">
+        {/*
+          The room's name first, and one quiet line under it.
+
+          This was four things stacked in ninety pixels: a phase word, six
+          seat dots, a count, a clock, the name, a bordered KEEPER pill and a
+          theme toggle. Seven pieces of chrome above a room where somebody is
+          about to say the hardest thing they have said this month — and none
+          of them is the thing they came for.
+
+          Screenshotted at 4:22am by the person who built it, and the word he
+          used was "jam packed". He was right, and the diagnosis worth keeping
+          is the second one: it looked machine-made. Not ugly — *anxious*.
+          Every fact the system knew, laid out because it knew it.
+
+          A person designing this puts the name where a name goes and says the
+          rest in one sentence. The dots are gone: six borders to say a number
+          that is already written in words two characters to the right. The
+          KEEPER pill loses its border and becomes what it is, a word about
+          who you are here.
+
+          Nothing is hidden. Phase, count, clock and role are all still on
+          screen — they are just one line instead of a dashboard.
+        */}
         <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
           <div className="min-w-0">
-            <p className="label-mono flex flex-wrap items-center gap-x-2 gap-y-1 leading-none">
-              <span>{state?.phaseLabel ?? "Circle"}</span>
-              <span aria-hidden="true" className="flex items-center gap-1">
-                {Array.from({ length: state?.maxSeats ?? 6 }, (_, i) => (
-                  <span
-                    key={i}
-                    className={cn(
-                      "block h-[7px] w-[7px] rounded-full border transition-colors duration-500",
-                      i < (state?.seats ?? 0)
-                        ? state?.seatsPresent?.[i]
-                          ? "border-ink bg-ink"
-                          : "border-line/40 bg-line/20"
-                        : "border-line/25",
-                    )}
-                  />
-                ))}
-              </span>
-              <span className="whitespace-nowrap">{state?.present ?? 0} here · {mins} min</span>
-            </p>
-            {/* The room's name, not its filing category. Derived from the
-                tag and the hour it opened in Lagos — nothing generated. */}
-            <h1 className="truncate font-display text-xl font-bold tracking-[-0.02em]">
+            <h1 className="truncate font-display text-xl font-bold leading-tight tracking-[-0.02em]">
               {state ? roomName(state.circle.tag, state.circle.created_at) : "…"}
             </h1>
+            <p className="label-mono mt-0.5 truncate leading-none">
+              {state?.phaseLabel ?? "Circle"} · {state?.present ?? 0} here · {mins}m
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            {state?.role && (
-              <span className="label-mono rounded-full border border-gold/40 px-3 py-1">
-                {state.role}
-              </span>
-            )}
+          <div className="flex shrink-0 items-center gap-3">
+            {state?.role && <span className="label-mono text-ash">{state.role}</span>}
             <ThemeToggle />
           </div>
         </div>
@@ -350,17 +351,41 @@ export function CircleRoom({ id }: { id: string }) {
               the screen was quietly overriding it. Say what is actually true
               at each moment instead.
             */}
-            <p className="glass p-4 text-[15px] leading-[1.6]">
-              <span className="label-mono">
-                {state.seats < 2 ? "Waiting" : state.phase === "breathe" ? "Breathing" : "Keeper"}
-              </span>
-              <br />
-              {state.seats < 2
-                ? "You are the first one here. The circle opens when somebody else sits down."
-                : state.phase === "breathe"
+            {/*
+              No plate while nobody is here.
+
+              Waiting alone in a room, this was a bordered card saying you
+              were alone, sitting directly on top of a second bordered card
+              explaining the voice feature — two framed panels and a floating
+              feedback pill, stacked, in a room with one person in it.
+
+              The plate is what a *voice* speaks from here. Nobody has spoken.
+              Framing the fact that the room is empty makes the emptiness into
+              an object, and it is not an object, it is a condition. Left on
+              the spine with air around it, it reads as waiting; on a plate it
+              read as a notice about waiting, which is a machine telling you
+              about a state it is in.
+
+              The plate comes back the moment there is a voice — the Keeper's
+              intention and the breathing instruction are both somebody
+              speaking, and both keep it.
+            */}
+            {state.seats < 2 ? (
+              <p className="max-w-[42ch] py-2 text-[15px] leading-[1.7] text-ash">
+                You are the first one here. The circle opens when somebody else
+                sits down.
+              </p>
+            ) : (
+              <p className="glass p-4 text-[15px] leading-[1.6]">
+                <span className="label-mono">
+                  {state.phase === "breathe" ? "Breathing" : "Keeper"}
+                </span>
+                <br />
+                {state.phase === "breathe"
                   ? "Three minutes before anybody speaks. In through the nose, longer on the way out."
                   : state.intention}
-            </p>
+              </p>
+            )}
 
             {/* When the Closing is up, everything said recedes. Not hidden —
                 still there, just no longer what the room is about. */}
@@ -618,12 +643,26 @@ export function CircleRoom({ id }: { id: string }) {
               with nothing added to fill it: the air falls on both sides of the
               sentence instead of all of it underneath.
             */}
-            {messages.length === 0 && (
-              <div className="flex min-h-[38dvh] flex-col justify-center">
+            {/*
+              Said once, by whichever line is true.
+
+              Alone in a room, this printed "Nobody has spoken yet. Someone
+              goes first." directly under "You are the first one here" — two
+              sentences about the same emptiness, forty percent of the
+              viewport apart, with nothing between them. The same duplicate
+              readout the chat composer had when "some" appeared twice, and
+              found the same way: by looking at it.
+
+              The line above owns the case where nobody else has arrived,
+              because "somebody has to go first" is not true yet — there is
+              nobody to go first in front of. This owns the case where people
+              are here and quiet, which is the one worth naming, because
+              silence with somebody in it is the whole feeling of a circle.
+            */}
+            {messages.length === 0 && (state.present ?? 1) > 1 && (
+              <div className="flex min-h-[30dvh] flex-col justify-center">
                 <p className="text-center text-sm text-ash">
-                  {(state.present ?? 1) > 1
-                    ? `Nobody has spoken yet. ${state.present} people are here, waiting with you.`
-                    : "Nobody has spoken yet. Someone goes first."}
+                  Nobody has spoken yet. {state.present} people are here, waiting with you.
                 </p>
               </div>
             )}
@@ -661,29 +700,41 @@ export function CircleRoom({ id }: { id: string }) {
                 {ruleError}
               </p>
             )}
-            <div className="mb-2 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setReflecting(false)}
-                aria-pressed={!reflecting}
-                className={cn(
-                  "min-h-[44px] flex-1 rounded-card border text-sm transition-colors duration-300",
-                  !reflecting ? "border-gold bg-gold/15" : "border-line/15",
-                )}
-              >
-                Share
-              </button>
-              <button
-                type="button"
-                onClick={() => setReflecting(true)}
-                aria-pressed={reflecting}
-                className={cn(
-                  "min-h-[44px] flex-1 rounded-card border text-sm transition-colors duration-300",
-                  reflecting ? "border-gold bg-gold/15" : "border-line/15",
-                )}
-              >
-                Reflect one line
-              </button>
+            {/*
+              Two words, not two slabs.
+
+              These were full-width filled pills side by side, taking a whole
+              44px row above the box — a segmented control, which is a shape
+              from settings screens. Under them sat the input, and under that
+              a line of rules: three stacked rows of chrome before anybody
+              could say anything.
+
+              The same fix the chat composer got. What you are doing is one
+              word, what you could do instead is the other, and the one you
+              are not doing recedes rather than competing. It is a sentence
+              about the room — "you are sharing / you are reflecting" — rather
+              than a pair of buttons asking you to configure a mode.
+
+              Both stay full 44px targets. Recession here is weight and
+              colour, never hit area: this is a phone at 4am.
+            */}
+            <div className="mb-1.5 flex items-center gap-4">
+              {([false, true] as const).map((mode) => (
+                <button
+                  key={String(mode)}
+                  type="button"
+                  onClick={() => setReflecting(mode)}
+                  aria-pressed={reflecting === mode}
+                  className={cn(
+                    "label-mono flex min-h-[44px] items-center underline-offset-[6px] transition-colors duration-300",
+                    reflecting === mode
+                      ? "text-ink underline decoration-gold"
+                      : "text-ash hover:text-ink",
+                  )}
+                >
+                  {mode ? "Reflect" : "Share"}
+                </button>
+              ))}
             </div>
 
             <div className="flex items-end gap-2">
@@ -728,10 +779,23 @@ export function CircleRoom({ id }: { id: string }) {
                 {busy ? "…" : "Say"}
               </button>
             </div>
-            <p className="mt-2 text-[12px] leading-relaxed text-ash">
+            {/*
+              The rule, once, at the size of a rule.
+
+              "No advice, no you-statements. Speak to the circle." sat under
+              the box at the same weight as everything else, on every render,
+              to somebody who had not broken it yet. A room that opens by
+              listing what you must not do is a room you behave in rather than
+              speak in — and the rule is enforced on the server anyway, with a
+              refusal written to teach when it actually fires.
+
+              So it is quieter and shorter. `ruleError` above is where this
+              subject belongs when it is real; this is only the reminder.
+            */}
+            <p className="mt-2 text-[11px] leading-snug text-ash/80">
               {reflecting
-                ? "One line only. What you heard — not what you'd do."
-                : "No advice, no you-statements. Speak to the circle."}
+                ? "One line — what you heard, not what you'd do."
+                : "No advice. Speak to the circle."}
             </p>
           </div>
         </footer>
