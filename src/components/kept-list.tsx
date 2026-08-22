@@ -124,11 +124,23 @@ export function KeptList() {
             Nothing is kept yet. A session that goes somewhere leaves one line
             behind; the rest is up to you.
           </p>
+          {/*
+            Not the nav's mark.
+
+            This wore `label-mono` with a gold underline — which is exactly and
+            only how `RoomNav` says "you are standing here". Two meanings for
+            one mark, on the same screen as the nav using it for the other one.
+
+            The landing already had the idiom for this: a door to another room
+            is a plain underlined sentence with an arrow. Gold fill is reserved
+            for the action a room exists to perform, and Memory does not
+            perform sessions.
+          */}
           <Link
             href="/chat"
-            className="label-mono mt-5 inline-flex min-h-[44px] items-center text-ink underline decoration-gold underline-offset-[6px]"
+            className="mt-5 inline-flex min-h-[44px] items-center text-body font-semibold text-ink underline underline-offset-4"
           >
-            Open a session
+            Open a session →
           </Link>
         </div>
       )}
