@@ -99,13 +99,13 @@ export function Breathing({ onClose }: { onClose: () => void }) {
         />
       </div>
 
-      <p aria-live="polite" className="mt-2 text-[15px] font-semibold">
+      <p aria-live="polite" className="mt-2 text-body font-semibold">
         {label}
       </p>
       <button
         type="button"
         onClick={onClose}
-        className="mt-4 min-h-[44px] w-full text-sm text-ash underline underline-offset-4"
+        className="mt-4 min-h-[44px] w-full text-body text-ash underline underline-offset-4"
       >
         Done
       </button>
@@ -128,7 +128,7 @@ export function Journaling({
   return (
     <div className="glass mt-4 animate-slide-up p-4">
       <p className="label-mono mb-2">Journalling prompt</p>
-      <p className="text-[15px] leading-[1.6]">{prompt}</p>
+      <p className="text-body leading-[1.6]">{prompt}</p>
 
       <label htmlFor="journal-entry" className="sr-only">
         Your answer
@@ -149,14 +149,14 @@ export function Journaling({
             if (text.trim()) onSubmit(text.trim());
           }}
           disabled={!text.trim()}
-          className="min-h-[44px] flex-1 rounded-card bg-gold px-4 text-sm font-semibold text-on-gold disabled:opacity-40"
+          className="min-h-[44px] flex-1 rounded-card bg-gold px-4 text-body font-semibold text-on-gold disabled:opacity-40"
         >
           Save it
         </button>
         <button
           type="button"
           onClick={onClose}
-          className="min-h-[44px] rounded-card border border-line/15 px-4 text-sm"
+          className="min-h-[44px] rounded-card border border-line/15 px-4 text-body"
         >
           Close
         </button>
@@ -184,7 +184,7 @@ export function ToolRow({
         <button
           type="button"
           onClick={onBreathe}
-          className="min-h-[44px] rounded-full border border-gold/50 px-4 text-sm font-medium"
+          className="min-h-[44px] rounded-full border border-gold/50 px-4 text-body font-medium"
         >
           Breathing 4·2·6
         </button>
@@ -193,7 +193,7 @@ export function ToolRow({
         <button
           type="button"
           onClick={onJournal}
-          className="min-h-[44px] rounded-full border border-gold/50 px-4 text-sm font-medium"
+          className="min-h-[44px] rounded-full border border-gold/50 px-4 text-body font-medium"
         >
           Journalling prompt
         </button>

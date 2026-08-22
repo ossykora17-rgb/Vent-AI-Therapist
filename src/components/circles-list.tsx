@@ -8,7 +8,7 @@ import { anonId } from "@/lib/anon";
 import { CHAIRS, tensionForChair } from "@/lib/vent/chairs";
 import { carryingWord } from "@/lib/community/carrying";
 import { roomName } from "@/lib/circles/naming";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { RoomHeader } from "@/components/room-header";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
@@ -128,25 +128,29 @@ export function CirclesList() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/95 backdrop-blur-glass">
-        <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
-          <div>
-            <p className="label-mono leading-none">Mycelium</p>
-            <h1 className="font-display text-2xl font-bold leading-tight tracking-[-0.02em]">
-              Circles
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/chat"
-              className="flex h-11 items-center rounded-full border border-line/10 px-4 text-sm"
-            >
-              Vent alone
-            </Link>
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
+      {/*
+        The fourth room finally gets the same front door.
+
+        `RoomHeader` was written because "four rooms in a house each built its
+        own front door", and then it was fitted to three of them. This was the
+        fourth, and it kept a masthead nobody else had: the wordmark
+        "Mycelium" — which is the internal name of the circle rules in
+        `rules.ts` and appears nowhere a person can see — over an `<h1>`
+        reading "Circles", beside a pill to "Vent alone".
+
+        Two things wrong, and the second is not cosmetic. The title said the
+        word the nav underlines in gold two lines lower, which is the duplicate
+        readout again. And the pill was the only way out: from the lobby you
+        could reach the session and nothing else, so one of the four doors in
+        the house opened onto a room with one exit. History and Memory were
+        unreachable from Circles, and a person who came in through the landing
+        page's second door had no way to find them at all.
+
+        The circle *room* still keeps its own header, deliberately, and that
+        rule has not changed: a row of exits across a forty-five minute session
+        with five other people turns a room into a tab.
+      */}
+      <RoomHeader />
 
       <main id="main" className="mx-auto w-full max-w-[640px] flex-1 px-4 py-5">
         <p className="label-mono flex items-center gap-2">
@@ -177,14 +181,14 @@ export function CirclesList() {
         */}
         {!loading && circles.length === 0 && !creating && (
           <div className="mt-6">
-            <p className="font-display text-[22px] leading-[1.3]">
+            <p className="font-display text-heading leading-[1.3]">
               Nobody is sitting yet.
             </p>
-            <p className="mt-3 max-w-[46ch] text-[15px] leading-[1.7] text-ash">
+            <p className="mt-3 max-w-[46ch] text-body leading-[1.7] text-ash">
               Six seats, forty-five minutes, no advice. Open one and someone
               carrying the same thing will find it.
             </p>
-            <p className="mt-3 max-w-[46ch] text-[15px] leading-[1.7] text-ash">
+            <p className="mt-3 max-w-[46ch] text-body leading-[1.7] text-ash">
               You are a seat number, never a name. If you speak, your voice is
               pitched down first — not recognisably yours. Nothing said in a
               circle is kept after it closes.
@@ -192,7 +196,7 @@ export function CirclesList() {
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="mt-5 min-h-[48px] w-full rounded-card bg-gold px-6 text-sm font-semibold text-on-gold"
+              className="mt-5 min-h-[48px] w-full rounded-card bg-gold px-6 text-body font-semibold text-on-gold"
             >
               Open a circle
             </button>
@@ -220,7 +224,7 @@ export function CirclesList() {
         {carrying && !creating && (
           <div className="mt-6 border-l border-gold/25 pl-5">
             <p className="label-mono mb-2">This week, in the house</p>
-            <p className="max-w-[44ch] text-[15px] leading-[1.7]">
+            <p className="max-w-[44ch] text-body leading-[1.7]">
               {/* "More than" when the window was full. The number is a floor
                   at that point, not a count, and stating a ceiling as a fact
                   is the same class of claim this codebase keeps removing. */}
@@ -235,7 +239,7 @@ export function CirclesList() {
               ))}
               .
             </p>
-            <p className="mt-2 max-w-[44ch] text-[15px] leading-[1.6] text-ash">
+            <p className="mt-2 max-w-[44ch] text-body leading-[1.6] text-ash">
               Counts only. Nothing anybody said is kept, here or anywhere.
             </p>
           </div>
@@ -251,10 +255,7 @@ export function CirclesList() {
                   type="button"
                   onClick={() => setTag(v)}
                   aria-pressed={tag === v}
-                  className={cn(
-                    "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
-                    tag === v ? "border-gold bg-gold text-on-gold" : "border-line/15",
-                  )}
+                  className="chip"
                 >
                   {label}
                 </button>
@@ -269,10 +270,7 @@ export function CirclesList() {
                   type="button"
                   onClick={() => setChair(seat.id)}
                   aria-pressed={chair === seat.id}
-                  className={cn(
-                    "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
-                    chair === seat.id ? "border-gold bg-gold text-on-gold" : "border-line/15",
-                  )}
+                  className="chip"
                 >
                   {seat.label}
                 </button>
@@ -284,14 +282,14 @@ export function CirclesList() {
                 type="button"
                 onClick={() => void create()}
                 disabled={busy}
-                className="min-h-[48px] flex-1 rounded-card bg-gold px-4 text-sm font-semibold text-on-gold disabled:opacity-40"
+                className="min-h-[48px] flex-1 rounded-card bg-gold px-4 text-body font-semibold text-on-gold disabled:opacity-40"
               >
                 {busy ? "Opening…" : "Open it — 45 min"}
               </button>
               <button
                 type="button"
                 onClick={() => setCreating(false)}
-                className="min-h-[48px] rounded-card border border-line/15 px-4 text-sm"
+                className="min-h-[48px] rounded-card border border-line/15 px-4 text-body"
               >
                 Cancel
               </button>
@@ -361,7 +359,7 @@ export function CirclesList() {
                       medium — the weight of a settings row — sitting between a
                       status dot and a countdown, so the one human thing on the
                       card read as its least important field. */}
-                  <p className="mt-1.5 font-display text-[22px] font-bold leading-[1.15] tracking-[-0.01em]">
+                  <p className="mt-1.5 font-display text-heading font-bold leading-[1.15] tracking-[-0.01em]">
                     {roomName(c.tag, c.created_at)}
                   </p>
 
@@ -407,7 +405,7 @@ export function CirclesList() {
                     a link is a broken control — and this is the whole card's
                     job, not a corner of it.
                   */}
-                  <p className="mt-3 border-t border-line/10 pt-3 text-[15px] font-medium">
+                  <p className="mt-3 border-t border-line/10 pt-3 text-body font-medium">
                     {c.seats === 6 ? "Room is full" : "Take a seat →"}
                   </p>
                 </Link>
@@ -420,14 +418,14 @@ export function CirclesList() {
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="mt-4 min-h-[48px] w-full rounded-card border border-line/15 text-sm"
+            className="mt-4 min-h-[48px] w-full rounded-card border border-line/15 text-body"
           >
             Open a different circle
           </button>
         )}
 
         {!persisting && (
-          <p className="glass mt-4 p-4 text-sm leading-relaxed">
+          <p className="glass mt-4 p-4 text-body leading-relaxed">
             <span className="label-mono">No rooms tonight</span>
             <br />
             Circles cannot open on this deployment yet. The private session is
@@ -437,7 +435,7 @@ export function CirclesList() {
       </main>
 
       <footer className="mx-auto w-full max-w-[640px] px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
-        <p className="text-[13px] leading-relaxed text-ash">
+        <p className="text-fine leading-relaxed text-ash">
           Mind Weave Circles is peer support, not licensed therapy, not medical
           advice, and not affiliated with AA. What&apos;s said in a circle stays
           in the circle — nothing is recorded and every word is deleted within

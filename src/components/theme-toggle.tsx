@@ -60,7 +60,7 @@ export function ThemeToggle() {
       aria-pressed={dark}
       className="flex h-11 w-11 items-center justify-center rounded-full border border-line/10 bg-card/60 text-ink backdrop-blur-glass transition-colors duration-300 hover:bg-card"
     >
-      <span aria-hidden="true" className="text-base leading-none">
+      <span aria-hidden="true" className="text-body leading-none">
         {dark ? "☾" : "☀"}
       </span>
     </button>

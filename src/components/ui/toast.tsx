@@ -91,14 +91,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             >
               {t.tone === "error" ? "!" : t.tone === "success" ? "✓" : "i"}
             </span>
-            <p className="flex-1 text-sm font-medium leading-snug">
+            <p className="flex-1 text-body font-medium leading-snug">
               {t.message}
             </p>
             <button
               type="button"
               onClick={() => dismiss(t.id)}
               aria-label="Dismiss notification"
-              className="-my-3 -mr-2 flex min-h-[44px] w-11 shrink-0 items-center justify-center text-lg font-bold leading-none"
+              className="-my-3 -mr-2 flex min-h-[44px] w-11 shrink-0 items-center justify-center text-heading font-bold leading-none"
             >
               ×
             </button>

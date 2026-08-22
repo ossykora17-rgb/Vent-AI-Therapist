@@ -120,11 +120,11 @@ export function Onboarding({
       role="dialog"
       aria-modal="true"
       aria-label="Getting started"
-      // Deeper than the page, not the same warm paper at 80%. The card has to
-      // read as floating in a room rather than as a box dropped on a page —
-      // ink at low alpha darkens whatever is behind it in both themes, where
-      // paper/80 just washed it out.
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/25 backdrop-blur-glass sm:items-center"
+      // The card has to read as floating in a dimmed room rather than as a box
+      // dropped on a page. `.scrim` is that dimming, written once and keyed to
+      // `--vignette` — see globals.css for why the `bg-ink/25` that used to be
+      // here brightened the dark theme instead of darkening it.
+      className="scrim fixed inset-0 z-50 flex items-end justify-center sm:items-center"
     >
       {/*
         The room, not a dialog.
@@ -160,8 +160,30 @@ export function Onboarding({
 
         {step === 0 && (
           <>
-            <h2 className="reply">In my office, you pick where you sit. Which chair is you today?</h2>
-            <div className="mt-5 space-y-2">
+            <h2 className="reply">
+              In my office, you pick where you sit. Which chair is you today?
+            </h2>
+            {/*
+              Three rows, not three cards.
+
+              This was three `rounded-card border` boxes inside a `presence`
+              card inside a full-screen scrim — boxes in boxes in boxes, at the
+              first thing VENT ever shows anybody. Each box was 56px tall and
+              held one short label and one shorter hint, so most of what was on
+              screen was the containers.
+
+              The landing page solved the identical problem one screen earlier:
+              its litany used to be three cards in a grid and is now three lines
+              on a gold spine. This is the same list of three, one tap later, so
+              it is the same shape — hairline between the rows, and the rule on
+              the left goes gold when a chair is yours. That state only shows
+              when somebody comes Back, which is exactly when it matters.
+
+              The label and the hint sit on one baseline rather than stacked,
+              which is how a dictionary sets a word and its sense, and it takes
+              the block from 180px to about 150px without dropping a word.
+            */}
+            <div className="mt-5">
               {CHAIRS.map(({ id: value, label, hint }) => (
                 <button
                   key={value}
@@ -170,15 +192,11 @@ export function Onboarding({
                     setChair(value);
                     setStep(1);
                   }}
-                  className={cn(
-                    "flex min-h-[56px] w-full flex-col items-start justify-center rounded-card border px-4 py-3 text-left transition-colors duration-300",
-                    chair === value
-                      ? "border-gold bg-gold/15"
-                      : "border-line/15 hover:border-gold/50",
-                  )}
+                  aria-pressed={chair === value}
+                  className="pressable focusable flex min-h-[52px] w-full flex-wrap items-baseline gap-x-3 border-b border-l-2 border-line/10 border-l-transparent py-3 pl-3 text-left last:border-b-0 aria-pressed:border-l-gold"
                 >
-                  <span className="text-[15px] font-semibold">{label}</span>
-                  <span className="text-[13px] text-ash">{hint}</span>
+                  <span className="text-body font-semibold">{label}</span>
+                  <span className="text-fine text-ash">{hint}</span>
                 </button>
               ))}
             </div>
@@ -188,7 +206,19 @@ export function Onboarding({
         {step === 1 && (
           <>
             <h2 className="reply">Pick the object for how you feel.</h2>
-            <div className="mt-5 grid grid-cols-2 gap-2">
+            {/*
+              The same chips the next question uses.
+
+              Six equal words in a 2×3 grid of 56px outlined boxes, and then
+              one tap later the same person is offered six equal words as
+              round chips. Two component languages for one act, back to back,
+              inside thirty seconds — which is what "AI made" looks like from
+              the outside: every screen invents its own control.
+
+              Chips win because the next screen already uses them and because
+              six of them wrap into about 150px instead of 180px of boxes.
+            */}
+            <div className="mt-5 flex flex-wrap gap-2">
               {OBJECTS.map(({ id: value, label }) => (
                 <button
                   key={value}
@@ -197,12 +227,8 @@ export function Onboarding({
                     setObject(value);
                     setStep(2);
                   }}
-                  className={cn(
-                    "min-h-[56px] rounded-card border px-3 text-[15px] font-medium transition-colors duration-300",
-                    object === value
-                      ? "border-gold bg-gold/15"
-                      : "border-line/15 hover:border-gold/50",
-                  )}
+                  aria-pressed={object === value}
+                  className="chip"
                 >
                   {label}
                 </button>
@@ -236,10 +262,7 @@ export function Onboarding({
                   type="button"
                   onClick={() => setCarry(w)}
                   aria-pressed={carry === w}
-                  className={cn(
-                    "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
-                    carry === w ? "border-gold bg-gold text-on-gold" : "border-line/15",
-                  )}
+                  className="chip"
                 >
                   {w}
                 </button>
@@ -256,7 +279,8 @@ export function Onboarding({
                     setDrop(w);
                     void finish(w);
                   }}
-                  className="min-h-[44px] rounded-full border border-line/15 px-4 text-sm transition-colors duration-300 hover:border-gold"
+                  aria-pressed={drop === w}
+                  className="chip"
                 >
                   {w}
                 </button>
@@ -277,7 +301,7 @@ export function Onboarding({
             <button
               type="button"
               onClick={() => setStep((s) => s - 1)}
-              className="min-h-[44px] shrink-0 text-sm text-ash underline underline-offset-4"
+              className="min-h-[44px] shrink-0 text-fine text-ash underline underline-offset-4"
             >
               Back
             </button>
@@ -285,7 +309,7 @@ export function Onboarding({
           <button
             type="button"
             onClick={skip}
-            className="min-h-[44px] flex-1 text-right text-sm text-ash underline underline-offset-4"
+            className="min-h-[44px] flex-1 text-right text-fine text-ash underline underline-offset-4"
           >
             Skip — just let me talk
           </button>

@@ -101,18 +101,18 @@ export function KeptList() {
     <RoomHeader />
 
     <main id="main" className="mx-auto w-full max-w-[640px] flex-1 px-4 pb-16 pt-6">
-      <h2 className="font-display text-[22px] font-bold tracking-[-0.01em]">
+      <h2 className="font-display text-heading font-bold tracking-[-0.01em]">
         What is kept
       </h2>
-      <p className="mt-3 max-w-[52ch] text-[15px] leading-[1.7] text-ash">
+      <p className="mt-3 max-w-[52ch] text-body leading-[1.7] text-ash">
         Nothing here has your name on it. It is tied to this device, and you can
         take any of it back.
       </p>
 
-      {loading && <p className="mt-8 text-sm text-ash">Looking…</p>}
+      {loading && <p className="mt-8 text-body text-ash">Looking…</p>}
 
       {!loading && !reachable && (
-        <p className="mt-8 max-w-[52ch] text-[15px] leading-[1.7] text-ash">
+        <p className="mt-8 max-w-[52ch] text-body leading-[1.7] text-ash">
           Could not reach what is kept just now. Nothing has been lost — try
           again in a moment.
         </p>
@@ -120,7 +120,7 @@ export function KeptList() {
 
       {empty && reachable && (
         <div className="mt-10">
-          <p className="max-w-[46ch] text-[15px] leading-[1.7] text-ash">
+          <p className="max-w-[46ch] text-body leading-[1.7] text-ash">
             Nothing is kept yet. A session that goes somewhere leaves one line
             behind; the rest is up to you.
           </p>
@@ -148,7 +148,7 @@ export function KeptList() {
           <button
             type="button"
             onClick={() => void forget()}
-            className="focusable mt-5 min-h-[44px] text-[15px] text-ash underline underline-offset-4"
+            className="focusable mt-5 min-h-[44px] text-body text-ash underline underline-offset-4"
           >
             Forget this
           </button>

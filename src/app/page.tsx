@@ -41,19 +41,36 @@ export default async function LandingPage() {
         <h1 className="font-display text-[clamp(3.5rem,18vw,4.5rem)] font-bold leading-[0.95] tracking-[-0.02em]">
           VENT
         </h1>
-        <p className="mt-3 font-display text-xl italic text-ash">
+        <p className="mt-3 font-display text-heading italic text-ash">
           Carve your truth.
         </p>
 
-        <p className="mt-6 max-w-[46ch] text-[15px] leading-[1.6] text-ash">
-          Somewhere to put the thing you can&apos;t say out loud yet. It knows
-          what day it is, it remembers what you said last time, and it will not
-          tell you to drop your shoulders three times in a row.
+        {/*
+          One sentence, because the litany below is the other one.
+
+          This said "Somewhere to put the thing you can't say out loud yet. It
+          knows what day it is, it remembers what you said last time, and it
+          will not tell you to drop your shoulders three times in a row." —
+          and then, four hundred pixels down, three lines saying those same
+          three things at greater length and better.
+
+          The same claim twice on the same screen, at the top of the funnel,
+          in the most important copy in the product. It is the duplicate
+          readout this codebase has now shipped six times, and this is the
+          most expensive place it has appeared: a compressed list steals the
+          surprise from the expanded one, so by the time somebody reaches the
+          good writing they have already read it.
+
+          The opening line has one job — say what this is. The litany proves
+          it. Neither needs to do the other's work.
+        */}
+        <p className="mt-6 max-w-[42ch] text-body leading-[1.6] text-ash">
+          Somewhere to put the thing you can&apos;t say out loud yet.
         </p>
 
         <Link
           href="/chat"
-          className="mt-8 flex min-h-[52px] w-full max-w-[280px] items-center justify-center rounded-card bg-gold px-6 text-[15px] font-semibold text-on-gold shadow-glass transition-opacity duration-300 hover:opacity-90"
+          className="mt-8 flex min-h-[52px] w-full max-w-[280px] items-center justify-center rounded-card bg-gold px-6 text-body font-semibold text-on-gold shadow-glass transition-opacity duration-300 hover:opacity-90"
         >
           Come in
         </Link>
@@ -80,18 +97,29 @@ export default async function LandingPage() {
           <div className="mt-10 max-w-[46ch] border-l border-gold/25 pl-5">
             <p className="label-mono mb-2">Or don&apos;t do it alone</p>
             {rooms.count > 0 ? (
-              <p className="text-[15px] leading-[1.7] text-ash">
-                <span className="font-display text-[15px] text-ink/85">
+              <p className="text-body leading-[1.7] text-ash">
+                <span className="font-display text-body text-ink/85">
                   {rooms.names.join(" · ")}
                 </span>
                 <br />
-                {rooms.count === 1 ? "One room is" : `${rooms.count} rooms are`}{" "}
-                open right now, {rooms.seatsOpen}{" "}
-                {rooms.seatsOpen === 1 ? "seat" : "seats"} between them. Six
-                people, forty-five minutes, then every word is deleted.
+                {/* "between them" needs a them. With one room open it read
+                    "One room is open right now, 3 seats between them." — the
+                    plural branch of a sentence whose subject had just gone
+                    singular, on the landing page, in the line whose whole job
+                    is to sound like a person telling you who is awake. */}
+                {rooms.count === 1
+                  ? `One room is open right now, ${rooms.seatsOpen} ${
+                      rooms.seatsOpen === 1 ? "seat" : "seats"
+                    } left in it.`
+                  : `${rooms.count} rooms are open right now, ${
+                      rooms.seatsOpen
+                    } ${
+                      rooms.seatsOpen === 1 ? "seat" : "seats"
+                    } between them.`}{" "}
+                Six people, forty-five minutes, then every word is deleted.
               </p>
             ) : (
-              <p className="text-[15px] leading-[1.7] text-ash">
+              <p className="text-body leading-[1.7] text-ash">
                 Nobody is sitting right now. You can open a room and it waits
                 for whoever comes — six people, forty-five minutes, then every
                 word is deleted.
@@ -99,7 +127,7 @@ export default async function LandingPage() {
             )}
             <Link
               href="/circles"
-              className="mt-3 inline-flex min-h-[44px] items-center text-[15px] font-semibold text-ink underline underline-offset-4"
+              className="mt-3 inline-flex min-h-[44px] items-center text-body font-semibold text-ink underline underline-offset-4"
             >
               {rooms.count > 0 ? "Take a seat →" : "Open a room →"}
             </Link>
@@ -125,7 +153,7 @@ export default async function LandingPage() {
           ].map((line) => (
             <li
               key={line}
-              className="max-w-[42ch] font-display text-[15px] leading-[1.5] text-ink/85"
+              className="max-w-[42ch] font-display text-body leading-[1.5] text-ink/85"
               style={{ textWrap: "pretty" } as React.CSSProperties}
             >
               {line}
@@ -140,9 +168,21 @@ export default async function LandingPage() {
           something the code actually does — no account exists to make, the id
           is generated on the device, and /memory deletes everything.
         */}
-        <div className="mt-12 max-w-[46ch]">
-          <p className="label-mono mb-2">Nobody knows it is you</p>
-          <p className="text-[15px] leading-[1.7] text-ash">
+        {/*
+          No label over this one.
+
+          "NOBODY KNOWS IT IS YOU" sat above a paragraph opening "No name, no
+          email, no password" — a heading announcing what the first six words
+          say. Five uppercase mono labels on one page is a page where the
+          label has stopped meaning "this is a signpost" and started meaning
+          "here is another section", which is the shape that reads as machine
+          made: every idea in its own labelled box.
+
+          Two labels left on this page, and both point at something a person
+          might act on rather than at prose they are about to read anyway.
+        */}
+        <div className="mt-12 max-w-[42ch]">
+          <p className="text-body leading-[1.7] text-ash">
             No name, no email, no password — there is no account to make. You
             are a random id made on your phone, and{" "}
             {/* /history, not /memory. /memory is the signed-in vector list;
@@ -174,9 +214,13 @@ export default async function LandingPage() {
           this page.
         */}
         {!isSupabaseConfigured && (
-          <p className="glass mt-6 p-4 text-sm leading-relaxed">
-            <span className="label-mono">This device only</span>
-            <br />
+          /*
+            No plate on this one either. A plate here is a voice speaking, and
+            this is a condition — the same distinction the circle room learned
+            when waiting alone stopped being framed. Stated on the spine, in
+            fine print, because it is true and it is not the point of the page.
+          */
+          <p className="mt-8 max-w-[42ch] text-fine leading-relaxed text-ash">
             Nothing you say is being kept beyond this visit yet — close the tab
             and it is gone. Everything else works exactly as it should.
           </p>
@@ -193,7 +237,7 @@ export default async function LandingPage() {
           reached by tapping. A promise a person cannot go and read is a
           slogan.
         */}
-        <p className="mt-3 text-[13px] text-ash">
+        <p className="mt-3 text-fine text-ash">
           <Link href="/privacy" className="underline underline-offset-2">
             Privacy
           </Link>

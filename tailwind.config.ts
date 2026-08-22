@@ -34,6 +34,49 @@ const config: Config = {
     },
     ringColor: ({ theme }) => ({ ...theme("colors"), DEFAULT: rgb("gold") }),
     ringOffsetColor: ({ theme }) => theme("colors"),
+    /*
+      Five steps, and the other ten cannot be typed.
+
+      The scale itself was decided a commit ago — 11 the label, 13 fine print,
+      15 the voice, 22 a heading, 56 the drop — after counting fifteen distinct
+      sizes across the components and understanding that two blocks four pixels
+      apart read as different without reading as ranked, which is what makes a
+      screen restless.
+
+      Deciding it fixed the fifteen instances. It did not fix the class, because
+      `text-sm`, `text-lg`, `text-2xl` and the rest of Tailwind's default ramp
+      still resolved — so the scale lived in a commit message and in the head of
+      whoever last read it, and the next component written in a hurry would
+      reach for `text-sm` and be right back at fourteen-versus-fifteen. Fifty-
+      seven of them already had.
+
+      This is `fontSize` on `theme`, not on `extend`: it *replaces* the default
+      ramp rather than adding to it. Same move, and the same reason, as the
+      `borderWidth: 3` and `shadow-brut` deletions below — a design system is
+      singular only when the old one cannot be typed.
+
+      Named, not numbered, because the name is the argument. `text-body` says
+      what the size is for; `text-sm` says only that it is smaller than
+      something. A step you have to justify by name is a step nobody adds by
+      accident.
+
+      One deliberate absence: there is no fluid step here. The landing logotype
+      and the 404 numeral are set with arbitrary `clamp()` values, because they
+      are lettering rather than text — sized against the viewport, not against
+      the paragraph. Check 82 knows about exactly those two and fails any third.
+    */
+    fontSize: {
+      /** Signposts. Mono, uppercase, tracked — see `.label-mono`. */
+      label: ["11px", { lineHeight: "1.45" }],
+      /** Fine print: conditions, timestamps, the disclaimer's second line. */
+      fine: ["13px", { lineHeight: "1.5" }],
+      /** The voice. Everything a person reads or presses. */
+      body: ["15px", { lineHeight: "1.6" }],
+      /** A heading. The one step that is a real jump, which is the point. */
+      heading: ["22px", { lineHeight: "1.25" }],
+      /** The drop: one number, one word, once per screen at most. */
+      drop: ["56px", { lineHeight: "0.9" }],
+    },
     extend: {
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],

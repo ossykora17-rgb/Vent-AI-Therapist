@@ -348,7 +348,7 @@ export function HistoryList() {
             </p>
             {/* The count is the claim. Anything past it is the product taking
                 credit for somebody else's week. */}
-            <p className="mt-3 text-[15px] leading-[1.6] text-ash">
+            <p className="mt-3 text-body leading-[1.6] text-ash">
               You set both of those numbers. That is your own record, not a
               score we gave you.
             </p>
@@ -416,7 +416,7 @@ export function HistoryList() {
               {answers.map((entry) => (
                 <li key={entry.q} className="border-l-2 border-gold/40 pl-4">
                   {entry.text && (
-                    <p className="mb-1 text-[15px] leading-[1.6] text-ash">
+                    <p className="mb-1 text-body leading-[1.6] text-ash">
                       {entry.text}
                     </p>
                   )}
@@ -459,9 +459,9 @@ export function HistoryList() {
             <ul className="mt-4 flex flex-col gap-3">
               {handoff.referrals.map((r) => (
                 <li key={r.org} className="border-t border-line/10 pt-3">
-                  <p className="text-[15px] font-semibold">{r.org}</p>
-                  <p className="mt-1 text-[15px] leading-[1.55] text-ash">{r.what}</p>
-                  <p className="mt-1 text-[13px] text-ash">
+                  <p className="text-body font-semibold">{r.org}</p>
+                  <p className="mt-1 text-body leading-[1.55] text-ash">{r.what}</p>
+                  <p className="mt-1 text-fine text-ash">
                     {r.tel && (
                       <a href={`tel:${r.tel}`} className="underline underline-offset-2">
                         {r.label ?? r.tel}
@@ -500,23 +500,37 @@ export function HistoryList() {
               <dl className="mt-4 space-y-2 border-l-2 border-line/15 pl-3">
                 <div>
                   <dt className="label-mono">First</dt>
-                  <dd className="text-[15px] leading-[1.6] text-ash">{pattern.firstWords}</dd>
+                  <dd className="text-body leading-[1.6] text-ash">{pattern.firstWords}</dd>
                 </div>
                 <div>
                   <dt className="label-mono">Latest</dt>
-                  <dd className="text-[15px] leading-[1.6] text-ash">{pattern.latestWords}</dd>
+                  <dd className="text-body leading-[1.6] text-ash">{pattern.latestWords}</dd>
                 </div>
               </dl>
             )}
 
             {/* Their words, their meaning. Naming what somebody's life is about
                 is the one thing this product will not do for them. */}
-            <p className="mt-4 text-[15px] leading-[1.6] text-ash">
+            <p className="mt-4 text-body leading-[1.6] text-ash">
               That is the count, not the meaning. The meaning is yours.
             </p>
           </section>
         )}
 
+        {/*
+          A filter for nothing.
+
+          The search box and the mood slider rendered before the list did, so
+          the first thing somebody with no vents saw on this page was two
+          controls for narrowing an empty set — and the emptiness itself was
+          announced underneath them, on a centred glass plate.
+
+          `rows` is everything; `filtered` is what survived these two controls.
+          Gating on `rows` keeps the bar the moment there is anything at all to
+          search, including when a search has just hidden all of it — which is
+          exactly when somebody needs the box in order to clear it.
+        */}
+        {rows.length > 0 && (
         <div className="flex flex-col gap-2 sm:flex-row">
           <label htmlFor="history-search" className="sr-only">
             Search your vents
@@ -541,6 +555,7 @@ export function HistoryList() {
             />
           </label>
         </div>
+        )}
 
         {loading && (
           <div className="mt-4 space-y-3" aria-busy="true">
@@ -550,19 +565,43 @@ export function HistoryList() {
           </div>
         )}
 
+        {/*
+          No plate, not centred — the third time this correction has been made
+          and the first time it has been made here.
+
+          The chat's empty state learned it, then the circles lobby learned it
+          under a comment saying "an empty lobby should look like an empty
+          lobby", and History kept a centred glass card announcing that there
+          was nothing in it. A plate is a voice speaking; an absence is not a
+          voice. Framing emptiness draws a box around it and makes it the
+          content of the page.
+
+          Same words, same door, on the spine the entries themselves hang from
+          — so what somebody sees is the beginning of their own record rather
+          than a notice about it.
+        */}
         {!loading && rows.length === 0 && (
-          <div className="glass mt-4 p-6 text-center">
-            <p className="font-display text-xl font-bold">No vents yet</p>
-            <p className="mt-2 text-sm text-ash">Come in. Say small. Hear plenty.</p>
+          <div className="mt-6">
+            <p className="font-display text-heading leading-[1.3]">
+              Nothing here yet.
+            </p>
+            <p className="mt-3 max-w-[46ch] text-body leading-[1.7] text-ash">
+              This fills itself as you talk. Everything you say in a session
+              lands here, in order, and it is only ever yours.
+            </p>
             {!persisted && (
-              <p className="mt-3 text-[13px] text-ash">
-                Storage isn&apos;t connected on this deployment, so nothing is
-                being kept between visits yet.
+              <p className="mt-3 max-w-[46ch] text-fine leading-relaxed text-ash">
+                {/* "Storage isn't connected on this deployment" was the
+                    operator's sentence, on the page a person opens to look for
+                    their own words. Same fix as the landing: say what it means
+                    for them. */}
+                Nothing you say is being kept beyond this visit yet — close the
+                tab and it is gone.
               </p>
             )}
             <Link
               href="/chat"
-              className="mt-5 inline-flex min-h-[48px] items-center rounded-card bg-gold px-6 text-sm font-semibold text-on-gold"
+              className="mt-5 inline-flex min-h-[48px] items-center rounded-card bg-gold px-6 text-body font-semibold text-on-gold"
             >
               Come in
             </Link>
@@ -570,7 +609,7 @@ export function HistoryList() {
         )}
 
         {!loading && rows.length > 0 && filtered.length === 0 && (
-          <p className="glass mt-4 p-5 text-center text-sm text-ash">
+          <p className="mt-6 max-w-[46ch] text-body leading-[1.7] text-ash">
             Nothing matches that. Loosen the filter.
           </p>
         )}
@@ -677,14 +716,14 @@ export function HistoryList() {
                               toast("Couldn't copy — long-press to select it.", "info");
                             }
                           }}
-                          className="min-h-[44px] flex-1 rounded-card border border-line/15 text-sm"
+                          className="min-h-[44px] flex-1 rounded-card border border-line/15 text-body"
                         >
                           Copy reply
                         </button>
                         <button
                           type="button"
                           onClick={() => void remove(r.id)}
-                          className="min-h-[44px] rounded-card border border-line/15 px-4 text-sm text-ash"
+                          className="min-h-[44px] rounded-card border border-line/15 px-4 text-body text-ash"
                         >
                           Delete
                         </button>
@@ -711,14 +750,14 @@ export function HistoryList() {
             <button
               type="button"
               onClick={exportJson}
-              className="focusable min-h-[44px] rounded-card text-[13px] text-ash underline underline-offset-4"
+              className="focusable min-h-[44px] rounded-card text-fine text-ash underline underline-offset-4"
             >
               Export my data
             </button>
             <button
               type="button"
               onClick={() => void clearAll()}
-              className="focusable min-h-[44px] rounded-card text-[13px] text-ash underline underline-offset-4"
+              className="focusable min-h-[44px] rounded-card text-fine text-ash underline underline-offset-4"
             >
               Delete everything
             </button>
@@ -731,7 +770,7 @@ export function HistoryList() {
 
 function Tag({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-full border border-line/15 px-2 py-[2px] font-mono text-[11px] uppercase tracking-[0.08em] text-ash">
+    <span className="rounded-full border border-line/15 px-2 py-[2px] font-mono text-label uppercase tracking-[0.08em] text-ash">
       {children}
     </span>
   );

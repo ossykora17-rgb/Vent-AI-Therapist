@@ -73,7 +73,7 @@ export function Modal({
       <div
         aria-hidden="true"
         onClick={dismissible ? onClose : undefined}
-        className="absolute inset-0 bg-ink/60"
+        className="scrim absolute inset-0"
       />
 
       <div
@@ -91,7 +91,7 @@ export function Modal({
         <div className="flex items-start justify-between gap-3 border-b border-line/10 p-4">
           <h2
             id={titleId}
-            className="font-display text-[15px] font-bold tracking-[-0.01em]"
+            className="font-display text-body font-bold tracking-[-0.01em]"
           >
             {title}
           </h2>
@@ -100,14 +100,14 @@ export function Modal({
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="pressable focusable -m-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-lg leading-none text-ash hover:bg-ink/5 hover:text-ink"
+              className="pressable focusable -m-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-heading leading-none text-ash hover:bg-ink/5 hover:text-ink"
             >
               ×
             </button>
           )}
         </div>
 
-        <div className="p-4 text-sm leading-relaxed">{children}</div>
+        <div className="p-4 text-body leading-relaxed">{children}</div>
 
         {footer && (
           <div className="flex flex-col gap-2 border-t border-line/10 p-4 sm:flex-row sm:justify-end">

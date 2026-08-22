@@ -515,7 +515,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
         */}
         <div className="min-w-0">
           <p className="label-mono">Voice · audio only</p>
-          <p className="mt-1 text-sm text-ink">
+          <p className="mt-1 text-body text-ink">
             {status === "live"
               ? "Your voice is pitched down. Nobody hears which seat you are in."
               : "Your voice is pitched down before it leaves your phone."}
@@ -531,7 +531,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
               disabled={muted}
               title={latched ? "Close the microphone" : "Keep the microphone open"}
               className={cn(
-                "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
+                "min-h-[44px] rounded-full border px-4 text-body transition-colors duration-300",
                 latched ? "border-gold bg-gold/15" : "border-line/15",
                 muted && "opacity-40",
               )}
@@ -544,7 +544,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
             onClick={status === "live" ? leave : join}
             disabled={status === "joining"}
             className={cn(
-              "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
+              "min-h-[44px] rounded-full border px-4 text-body transition-colors duration-300",
               status === "live" ? "border-line/25" : "border-line/15",
               status === "joining" && "opacity-60",
             )}
@@ -591,7 +591,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
             onPointerCancel={() => setTalkingSafely(false)}
             onPointerLeave={() => setTalkingSafely(false)}
             className={cn(
-              "flex h-16 w-full touch-none select-none items-center justify-center rounded-card border text-[15px] font-semibold transition-all duration-200",
+              "flex h-16 w-full touch-none select-none items-center justify-center rounded-card border text-body font-semibold transition-all duration-200",
               talking || latched
                 ? "border-gold bg-gold/20 text-ink"
                 : "border-line/20 text-ash",
@@ -634,8 +634,8 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
         of chips can only ever repeat it.
       */}
 
-      {notice && <p className="mt-3 text-sm text-ash" aria-live="polite">{notice}</p>}
-      {error && <p className="mt-3 text-sm text-ash">{error}</p>}
+      {notice && <p className="mt-3 text-body text-ash" aria-live="polite">{notice}</p>}
+      {error && <p className="mt-3 text-body text-ash">{error}</p>}
 
       {/* Audio elements land here. Hidden, but in the DOM — a detached element
           does not play in Safari. */}
