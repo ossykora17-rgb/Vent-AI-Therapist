@@ -7566,6 +7566,79 @@ check("72 The lights go down in both themes", () => {
   is(strays.length, 0,
     `every full-bleed overlay uses it${strays.length ? ` (${strays.join("; ")})` : ""}`,
     "a hand-rolled scrim is a second answer to a question that has one");
+
+});
+
+check("73 The live-one mark is only ever worn by the live one", () => {
+  /*
+    A gold underline under a mono label means "this is the live one" — the
+    room you are standing in, the composer mode you are typing into. `RoomNav`
+    says so in its own docstring: "this product has exactly one way of saying
+    'this is the live one' and it should mean that everywhere."
+
+    Memory's empty state offered "OPEN A SESSION" in exactly that treatment,
+    on the same screen as the nav using it to mean the opposite thing. A link
+    to somewhere else, dressed as where you already are. History was a third
+    dialect again — the same door as a gold-filled pill — so one product had
+    three renderings of "go to the session", one of them indistinguishable
+    from "you are already there".
+
+    The rule is not "only the nav may wear it". The circle composer's
+    Share/Reflect switch wears it correctly, and should: it is the same
+    statement about the same kind of thing. The rule is that whatever wears it
+    must be *saying* it — an element with `aria-current` or `aria-pressed`, so
+    the mark and the announcement cannot disagree. A door has neither.
+
+    The first version of this scanned per `className="..."` attribute and
+    reported that nobody wore the mark at all, because the nav builds its
+    classes through `cn()` with the label in one string literal and the
+    decoration in another. A check that finds nothing passes.
+  */
+  const worn = [];
+  const unannounced = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.name.endsWith(".tsx")) {
+        const src = fs.readFileSync(full, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+        for (const m of src.matchAll(/decoration-gold/g)) {
+          worn.push(path.basename(full));
+          // Backwards to the opening tag, which is where the announcement is.
+          const window = src.slice(Math.max(0, m.index - 500), m.index);
+          if (!/aria-(current|pressed)=/.test(window)) {
+            unannounced.push(`${path.basename(full)}:${src.slice(0, m.index).split("\n").length}`);
+          }
+        }
+      }
+    }
+  };
+  walk(path.join(ROOT, "src"));
+
+  ok(worn.length >= 2, `the mark is in use (${[...new Set(worn)].join(", ")})`,
+    "if this finds nothing the assertion below is vacuous");
+  is(unannounced.length, 0,
+    `everything wearing it also announces it${unannounced.length ? ` (${unannounced.join(", ")})` : ""}`,
+    "a link to somewhere else dressed as where you already are");
+
+  /*
+    And the *current* branch specifically. `decoration-gold` appears twice in
+    the nav — once for the room you are in and once for hover — so asserting
+    that the file merely contains it passes a nav that has stopped marking
+    anything and only lights up under a cursor no phone has.
+  */
+  const nav = fs.readFileSync(path.join(ROOT, "src/components/room-nav.tsx"), "utf8");
+  ok(/aria-current/.test(nav), "the nav announces the current room");
+  // `aria-current={current ? "page" : undefined}` is also a `current ?`
+  // ternary and comes first in the file, so take the branch that is a class
+  // list rather than the first one that matches the shape.
+  const branches = [...nav.matchAll(/current\s*\?\s*"((?:[^"\\]|\\.)*)"/g)]
+    .map((m) => m[1])
+    .filter((b) => /\btext-/.test(b));
+  is(branches.length, 1, "the nav has one styled current-room branch");
+  ok(branches[0] && /decoration-gold/.test(branches[0]),
+    "and marks it with the gold underline",
+    `the current branch is "${branches[0] ?? "not where this expected it"}"`);
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

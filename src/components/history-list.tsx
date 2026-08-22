@@ -599,11 +599,15 @@ export function HistoryList() {
                 tab and it is gone.
               </p>
             )}
+            {/* Gold fill is the action a room exists for — opening a circle
+                in the lobby, sending a vent in the session. History's job is
+                to show what is there; the way out to the session is a door,
+                and doors are underlined sentences here. */}
             <Link
               href="/chat"
-              className="mt-5 inline-flex min-h-[48px] items-center rounded-card bg-gold px-6 text-body font-semibold text-on-gold"
+              className="mt-5 inline-flex min-h-[44px] items-center text-body font-semibold text-ink underline underline-offset-4"
             >
-              Come in
+              Come in →
             </Link>
           </div>
         )}
