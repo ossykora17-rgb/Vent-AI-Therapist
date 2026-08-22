@@ -309,6 +309,32 @@ Half a repair is more dangerous than none, because the comment above it now
 says the problem is handled. Every one of those comments is still there and
 still reads as true.
 
+**And the sharpest version yet: both halves repaired, and the line between them
+throwing the answer away.** `?carve=1` is the button on two screens whose only
+job is to answer "is it gone". `setCarve` was fixed to return whether the write
+landed, and carries three paragraphs saying so, under a contract in
+`store/types.ts` reading *"a carve that did not land must not be reported as
+kept"*. Both screens were fixed to read `data.deleted === "carve"` from the body
+rather than the status — the feedback bug's lesson, correctly applied. And the
+route in the middle did `await store.setCarve(userId, null)`, dropped the
+boolean, and reported `deleted: "carve"` unconditionally. Two correct fixes
+facing each other across one line that ignored both.
+
+It survived because `setCarve` is the *only* mutation in `supabase-store.ts`
+that reports by returning instead of throwing — `done()` raises for everything
+else, so every other delete path is honest for free and the caller was written
+for that world. And it is non-throwing for a good reason: `42703` with 0011
+pending is a normal state, not a fault. Which means the two shapes where it lied
+are the two shapes a *first* Supabase deployment passes through — `42501` before
+the grants land, `42703` before 0011 does. Neither has a store of `null`, so
+`no-store-verify` cannot see them, and no suite here has ever run a store that
+exists and fails. `FORGET_FAILED` — "Could not clear that. It is still here." —
+was unreachable code the whole time.
+
+Check 87 asserts it, and sweeps the class: every store method that reports by
+returning a boolean must have its answer read at every call site. There was
+exactly one left.
+
 So when you fix a string or a claim, the question is not whether this one is
 right. It is:
 

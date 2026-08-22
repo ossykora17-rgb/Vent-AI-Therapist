@@ -868,9 +868,41 @@ async function handleDELETE(request: Request) {
   // to do it — the sentence they did not write is exactly the one they are
   // most likely to want removed on its own.
   if (forgetCarve) {
-    await store.setCarve(userId, null);
+    /*
+      The answer is read, because this is the one store method that reports by
+      returning rather than by throwing.
+
+      Every other mutation in `supabase-store.ts` goes through `done()`, which
+      throws `StoreUnavailableError` — so `deleteVent` and `deleteAll` below
+      fail loudly, the handler answers non-2xx, and both screens correctly say
+      the deletion did not hold. `setCarve` is deliberately not like that: a
+      deployment with 0011 pending answers `42703` on this column, which is a
+      normal state rather than a fault, so it catches, logs and returns false.
+
+      This line was written for the throwing world and dropped the boolean on
+      the floor, then reported `deleted: "carve"` — the exact field both
+      screens read — with nothing behind it. `setCarve` carries three
+      paragraphs about having been fixed to return what happened, under a
+      contract in `store/types.ts` reading "a carve that did not land must not
+      be reported as kept". Both halves were right. The line between them threw
+      the answer away.
+
+      Which deployment shape makes this false? The one this repository has
+      never run and is about to: Supabase configured, schema half-applied.
+      `42501` with no GRANT, `42703` with 0011 pending — in both, the room said
+      "Forgotten." about a sentence it was still holding, on the two screens
+      whose entire job is that question.
+
+      `deleted: 0` with `had: true` is the honest shape and needs no new field:
+      there was a carve, nothing was deleted, and the store is still keeping
+      things. Both callers already turn that into FORGET_FAILED — "Could not
+      clear that. It is still here." — which until now was unreachable.
+    */
+    const cleared = await store.setCarve(userId, null);
     return NextResponse.json(
-      { deleted: "carve", persisted: true, storage: store.kind, had: true },
+      cleared
+        ? { deleted: "carve", persisted: true, storage: store.kind, had: true }
+        : { deleted: 0, persisted: true, storage: store.kind, had: true },
       { headers: { "cache-control": "no-store" } },
     );
   }
