@@ -946,7 +946,7 @@ export function VentChat() {
                     <button
                       type="button"
                       onClick={() => void forgetCarve()}
-                      className="focusable mt-4 min-h-[44px] text-[14px] text-ash underline underline-offset-4"
+                      className="focusable mt-4 min-h-[44px] text-[15px] text-ash underline underline-offset-4"
                     >
                       Forget this
                     </button>
@@ -1270,7 +1270,7 @@ export function VentChat() {
             <button
               type="button"
               onClick={() => setAskHeld(false)}
-              className="focusable mt-3 min-h-[44px] text-[14px] text-ash underline underline-offset-4"
+              className="focusable mt-3 min-h-[44px] text-[15px] text-ash underline underline-offset-4"
             >
               Nothing this week
             </button>
@@ -1529,7 +1529,7 @@ export function VentChat() {
                     },
                   ]);
                 }}
-                className="focusable min-h-[44px] text-[14px] text-ash underline underline-offset-4"
+                className="focusable min-h-[44px] text-[15px] text-ash underline underline-offset-4"
               >
                 Leave it
               </button>

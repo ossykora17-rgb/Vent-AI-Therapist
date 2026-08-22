@@ -47,7 +47,7 @@ import { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL } from "@/lib/vent/intent";
 export function Disclaimer({ className = "" }: { className?: string }) {
   return (
     <div className={`text-ash ${className}`.trim()}>
-      <p className="text-[12px] leading-snug">
+      <p className="text-[13px] leading-snug">
         Mind Weave VENT is an AI — not a person, and not a licensed therapist.
       </p>
       <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] leading-snug">

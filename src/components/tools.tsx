@@ -99,7 +99,7 @@ export function Breathing({ onClose }: { onClose: () => void }) {
         />
       </div>
 
-      <p aria-live="polite" className="mt-2 text-[17px] font-semibold">
+      <p aria-live="polite" className="mt-2 text-[15px] font-semibold">
         {label}
       </p>
       <button

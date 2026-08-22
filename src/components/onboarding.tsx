@@ -198,7 +198,7 @@ export function Onboarding({
                     setStep(2);
                   }}
                   className={cn(
-                    "min-h-[56px] rounded-card border px-3 text-[14px] font-medium transition-colors duration-300",
+                    "min-h-[56px] rounded-card border px-3 text-[15px] font-medium transition-colors duration-300",
                     object === value
                       ? "border-gold bg-gold/15"
                       : "border-line/15 hover:border-gold/50",

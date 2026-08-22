@@ -25,8 +25,8 @@ export function LegalPage({
 
         <div
           className={[
-            "mt-6 space-y-4 text-[16px] leading-[1.6]",
-            "[&_h2]:mt-7 [&_h2]:font-mono [&_h2]:text-[12px] [&_h2]:uppercase",
+            "mt-6 space-y-4 text-[15px] leading-[1.6]",
+            "[&_h2]:mt-7 [&_h2]:font-mono [&_h2]:text-[13px] [&_h2]:uppercase",
             "[&_h2]:tracking-[0.1em] [&_h2]:text-ash",
             "[&_a]:underline [&_a]:underline-offset-2",
             "[&_strong]:font-semibold",

@@ -75,6 +75,8 @@ export function CircleRoom({ id }: { id: string }) {
   const [carry, setCarry] = React.useState<string | null>(null);
   const [dropped, setDropped] = React.useState<string | null>(null);
   const [quote, setQuote] = React.useState<{ text: string; author: string } | null>(null);
+  /* Which seats are speaking, from the voice room, for the ring to draw. */
+  const [speakingSeats, setSpeakingSeats] = React.useState<number[]>([]);
   const endRef = React.useRef<HTMLDivElement>(null);
   const footerRef = React.useRef<HTMLElement>(null);
   // The room had the bug the chat had already fixed. See the hook.
@@ -475,7 +477,7 @@ export function CircleRoom({ id }: { id: string }) {
                       <p className="label-mono mb-1">
                         {m.mine ? "You" : `Seat ${m.seat}`} · heard
                       </p>
-                      <p className="said text-[14px]">{m.content}</p>
+                      <p className="said text-[15px]">{m.content}</p>
                     </li>
                   );
                 }
@@ -513,7 +515,7 @@ export function CircleRoom({ id }: { id: string }) {
                   it; the words themselves were still furniture.
                 */}
                 <p className="label-mono mb-2">Closing</p>
-                <h2 className="mb-5 font-display text-[24px] leading-[1.2] tracking-[-0.01em]">
+                <h2 className="mb-5 font-display text-[22px] leading-[1.2] tracking-[-0.01em]">
                   Where did you land?
                 </h2>
 
@@ -644,6 +646,7 @@ export function CircleRoom({ id }: { id: string }) {
               anonId={me}
               enabled={Boolean(state.voice)}
               keeper={state.role === "keeper"}
+              onSpeaking={setSpeakingSeats}
             />
 
             {/*
@@ -724,6 +727,7 @@ export function CircleRoom({ id }: { id: string }) {
                   seatsPresent={state.seatsPresent}
                   maxSeats={state.maxSeats}
                   mySeat={state.mySeat}
+                  speaking={speakingSeats}
                 />
               </div>
             )}

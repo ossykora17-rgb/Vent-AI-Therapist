@@ -45,7 +45,7 @@ export default async function LandingPage() {
           Carve your truth.
         </p>
 
-        <p className="mt-6 max-w-[46ch] text-[16px] leading-[1.6] text-ash">
+        <p className="mt-6 max-w-[46ch] text-[15px] leading-[1.6] text-ash">
           Somewhere to put the thing you can&apos;t say out loud yet. It knows
           what day it is, it remembers what you said last time, and it will not
           tell you to drop your shoulders three times in a row.
@@ -81,7 +81,7 @@ export default async function LandingPage() {
             <p className="label-mono mb-2">Or don&apos;t do it alone</p>
             {rooms.count > 0 ? (
               <p className="text-[15px] leading-[1.7] text-ash">
-                <span className="font-display text-[17px] text-ink/85">
+                <span className="font-display text-[15px] text-ink/85">
                   {rooms.names.join(" · ")}
                 </span>
                 <br />
@@ -125,7 +125,7 @@ export default async function LandingPage() {
           ].map((line) => (
             <li
               key={line}
-              className="max-w-[42ch] font-display text-[17px] leading-[1.5] text-ink/85"
+              className="max-w-[42ch] font-display text-[15px] leading-[1.5] text-ink/85"
               style={{ textWrap: "pretty" } as React.CSSProperties}
             >
               {line}
@@ -193,7 +193,7 @@ export default async function LandingPage() {
           reached by tapping. A promise a person cannot go and read is a
           slogan.
         */}
-        <p className="mt-3 text-[12px] text-ash">
+        <p className="mt-3 text-[13px] text-ash">
           <Link href="/privacy" className="underline underline-offset-2">
             Privacy
           </Link>

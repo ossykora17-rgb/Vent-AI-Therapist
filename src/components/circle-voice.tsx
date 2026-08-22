@@ -30,9 +30,20 @@ interface Props {
   enabled: boolean;
   /** Only a Keeper is shown the room's volume. The server checks it again. */
   keeper: boolean;
+  /**
+   * Which seats are speaking, handed up to the room that draws them.
+   *
+   * The ring already shows six chairs and which is yours. It was built to
+   * show speech too and had nothing to tell it — the only component that
+   * knows is this one, and it was rendering the same information as a list of
+   * text chips underneath. Lifting it puts presence, identity and speech in
+   * one object instead of three, which is the difference between a diagram
+   * and a decoration.
+   */
+  onSpeaking?: (seats: number[]) => void;
 }
 
-export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
+export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: Props) {
   const [status, setStatus] = React.useState<Status>("idle");
   const [error, setError] = React.useState<string | null>(null);
   // Shut on arrival. See the push-to-talk comment below for why.
@@ -54,6 +65,27 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
   // the real microphone open and the AudioContext running. A live mic light
   // after you left the room is the single most alarming thing this app could
   // do to somebody who came here to be unheard.
+  /*
+    How many mute/unmute events are ours and not the Keeper's.
+
+    `RoomEvent.TrackMuted` fires for *every* mute on the track, including the
+    ones this component performs itself — and it performs two. The microphone
+    is muted the instant it is published, deliberately, so the room does not
+    hear the first thing you say before you have decided to say it. And
+    push-to-talk mutes and unmutes on every press.
+
+    Both arrived at the handler below as "somebody muted your track", which
+    reported them as governance: *The Keeper closed your microphone.* To a
+    person sitting alone in a room they opened themselves, as the Keeper.
+    Worse than the wrong sentence — it also set `muted`, which disables Open
+    mic, so joining voice silenced you permanently and told you the Keeper had
+    done it. The one control in here that has to work could never be pressed.
+
+    A counter rather than a boolean because push-to-talk can fire faster than
+    React commits state, and two of ours in flight must not let a real one
+    through in between.
+  */
+  const ownMutesRef = React.useRef(0);
   const micRef = React.useRef<MediaStream | null>(null);
   const maskRef = React.useRef<{ stop: () => void } | null>(null);
 
@@ -71,6 +103,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
     setStatus("idle");
     setVoices([]);
     setSpeaking([]);
+    onSpeaking?.([]);
     setSeat(null);
   }, [releaseAudio]);
 
@@ -125,23 +158,40 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
           track.detach().forEach((el) => el.remove());
         })
         .on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
-          setSpeaking(speakers.map((p) => p.identity));
+          const ids = speakers.map((p) => p.identity);
+          setSpeaking(ids);
+          // `seat-3` → 3. Anything that does not parse is dropped rather than
+          // drawn at index NaN — an identity shape this file does not own is
+          // not a chair to light up.
+          onSpeaking?.(
+            ids
+              .map((id) => Number(id.replace("seat-", "")))
+              .filter((n) => Number.isInteger(n)),
+          );
         })
         .on(RoomEvent.ParticipantConnected, () => setVoices(identities(room)))
         .on(RoomEvent.ParticipantDisconnected, () => setVoices(identities(room)))
         .on(RoomEvent.TrackMuted, (_pub, participant: Participant) => {
           // Told, never silently silenced. If the Keeper closed your
           // microphone you find out from the room, not from being ignored.
-          if (participant.identity === grant.identity) {
-            setMuted(true);
-            setNotice("The Keeper closed your microphone. The room is still here in text.");
+          if (participant.identity !== grant.identity) return;
+          // Ours, and expected. Push-to-talk and the mute-on-arrival both
+          // land here; neither is somebody else acting on you.
+          if (ownMutesRef.current > 0) {
+            ownMutesRef.current -= 1;
+            return;
           }
+          setMuted(true);
+          setNotice("The Keeper closed your microphone. The room is still here in text.");
         })
         .on(RoomEvent.TrackUnmuted, (_pub, participant: Participant) => {
-          if (participant.identity === grant.identity) {
-            setMuted(false);
-            setNotice("Your microphone is open again.");
+          if (participant.identity !== grant.identity) return;
+          if (ownMutesRef.current > 0) {
+            ownMutesRef.current -= 1;
+            return;
           }
+          setMuted(false);
+          setNotice("Your microphone is open again.");
         })
         .on(RoomEvent.Disconnected, () => {
           roomRef.current = null;
@@ -213,6 +263,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
         // this the room hears the first thing you say before you have decided
         // to say it — which for somebody who just walked into a room of
         // strangers is the worst possible first second.
+        ownMutesRef.current += 1;
         await publication.mute();
         setTalking(false);
         setLatched(false);
@@ -322,6 +373,19 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
     if (!room) return;
     const pub = [...room.localParticipant.audioTrackPublications.values()][0];
     if (pub) {
+      /*
+        Counted before the call, not after.
+
+        Push-to-talk fires this on every press and every release, and each one
+        raises `TrackMuted`/`TrackUnmuted` for our own identity. Uncounted,
+        letting go of the button reported the Keeper closing your microphone —
+        the same wrong sentence as the mute on arrival, once per word you said.
+
+        Incremented ahead of the await because the event can arrive before the
+        promise resolves; a counter bumped afterwards is a counter that is
+        still zero when the handler reads it.
+      */
+      ownMutesRef.current += 1;
       if (open) await pub.unmute();
       else await pub.mute();
     } else {
@@ -453,7 +517,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
           <p className="label-mono">Voice · audio only</p>
           <p className="mt-1 text-sm text-ink">
             {status === "live"
-              ? `${voices.length} ${voices.length === 1 ? "voice" : "voices"} here. You are ${seat}, pitched down.`
+              ? "Your voice is pitched down. Nobody hears which seat you are in."
               : "Your voice is pitched down before it leaves your phone."}
           </p>
         </div>
@@ -539,53 +603,36 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
                 ? "Speaking — let go to stop"
                 : "Hold to speak"}
           </button>
-          <p className="label-mono mt-2 text-center">
-            {latched ? "Tap “Open mic” to close it again" : "Or hold the space bar"}
-          </p>
+          {/*
+            Only when there is something the button itself does not say.
+
+            "Or hold the space bar" sat under a 64px bar reading "Hold to
+            speak" — a second instruction for the same action, in smaller
+            type, to somebody already holding a phone. The latched case is
+            different and stays: the bar then reads "Microphone open", and how
+            to close it again is genuinely not on screen anywhere else.
+          */}
+          {latched && (
+            <p className="label-mono mt-2 text-center">
+              Tap “Open mic” to close it again
+            </p>
+          )}
         </div>
       )}
 
-      {status === "live" && voices.length > 0 && (
-        <ul className="mt-3 flex flex-wrap gap-2" aria-live="polite">
-          {voices.map((id) => (
-            <li
-              key={id}
-              // Lit, not merely darker.
-              //
-              // This went from grey text to black text — the doc comment at
-              // the top of this file promises "a lit ring on a seat" and what
-              // it delivered was a shade change you could miss across the
-              // room. In a voice circle, who is speaking is the only evidence
-              // there are people here at all; it is what a face does in a
-              // room, and it has to be unmistakable at a glance.
-              //
-              // Gold, because the whole product has one light and this is it
-              // landing on whoever is talking.
-              className={cn(
-                "label-mono flex items-center gap-2 rounded-full border px-3 py-1 transition-all duration-300",
-                speaking.includes(id)
-                  ? "border-gold bg-gold/15 text-ink shadow-[0_0_0_3px_rgb(var(--gold)/0.12)]"
-                  : "border-line/15 text-ash",
-              )}
-            >
-              <span>
-                {id === seat ? `${id} (you)` : id}
-                {speaking.includes(id) ? " · speaking" : ""}
-              </span>
-              {keeper && id !== seat && (
-                <button
-                  type="button"
-                  onClick={() => muteSeat(id, true)}
-                  disabled={working === id}
-                  className="underline underline-offset-2 disabled:opacity-50"
-                >
-                  {working === id ? "…" : "mute"}
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      {/*
+        The seat chips are gone; the ring above them is the seat display.
+
+        This listed `SEAT-1 (YOU)` under a drawing that already shows six
+        chairs with yours in gold, four hundred pixels apart, in a panel that
+        also said "You are seat-1" in prose. The same fact three times — the
+        duplicate readout this product has now shipped five times, and the
+        first one to appear three ways at once.
+
+        The ring is the better of the three by a distance: it shows who is
+        here, which chair is yours, and now which of them is talking. A list
+        of chips can only ever repeat it.
+      */}
 
       {notice && <p className="mt-3 text-sm text-ash" aria-live="polite">{notice}</p>}
       {error && <p className="mt-3 text-sm text-ash">{error}</p>}
