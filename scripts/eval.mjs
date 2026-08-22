@@ -7087,6 +7087,82 @@ check("67 A silent microphone is never published as a masked one", () => {
     "'this browser can't' is false for somebody whose browser only wanted a second tap");
 });
 
+check("68 A room does not tell you the same thing twice", () => {
+  /*
+    "Jam packed", and it looked machine-made. Both true, and the second is the
+    diagnosis worth keeping: not ugly — *anxious*. Every fact the system knew,
+    laid out because it knew it.
+
+    Screenshotted at 4:22am by the person who built it, waiting alone in a
+    circle. Above the fold: a phase word, six seat dots, a head count, a
+    clock, the room's name, a bordered role pill and a theme toggle — then a
+    framed card saying he was the only one there, then a second framed card
+    explaining the voice feature in three sentences, then, forty percent of
+    the viewport lower, a second sentence saying nobody had spoken.
+
+    Two things are being asserted here and they are the same thing twice over.
+
+    ONE EMPTINESS. "You are the first one here" and "Nobody has spoken yet.
+    Someone goes first" are one fact with two sentences — and the second is
+    not even true when you are alone, because there is nobody to go first in
+    front of. This is the third instance of the duplicate readout in this
+    product: "SOME" printed by the slider and by the strip below it, the drop
+    toast parked over the drop card, and now this. Every one found by looking
+    at a screenshot, none by a check.
+
+    ONE RULE, NOT THREE. The voice panel said "audio only", then "No camera,
+    ever", then "your seat number is all anyone hears", then "your voice is
+    pitched down" — four promises to somebody who had not asked a question.
+    Three reassurances stacked is not reassurance, it is nerves, and it reads
+    as a product worried about being trusted to a person who was about to.
+  */
+  const room = fs.readFileSync(path.join(ROOT, "src/components/circle-room.tsx"), "utf8");
+  const voice = fs.readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8");
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+  /*
+    The transcript placeholder is guarded on somebody else being present. It
+    is the guard that makes the two sentences mutually exclusive, so it is the
+    guard that is asserted rather than the wording of either.
+  */
+  const code = strip(room);
+  const placeholder = code.indexOf("Nobody has spoken yet");
+  ok(placeholder > 0, "the quiet-room line is findable");
+  const guard = code.slice(Math.max(0, placeholder - 400), placeholder);
+  ok(/present\s*\?\?\s*1\)\s*>\s*1|present\s*>\s*1/.test(guard),
+    "it only speaks when somebody else is here to have not spoken",
+    "alone, the line above already said it — and 'someone goes first' is false with nobody to go first");
+
+  /*
+    And the alone case says it once. Two sentences about an empty room, one
+    of them on a plate, is the shape that was screenshotted.
+  */
+  is((code.match(/first one here/g) ?? []).length, 1,
+    "being first is stated in exactly one place");
+
+  // The voice offer makes one claim before it is taken up. The pitch shift is
+  // the surprising one and the one about them; "audio only" carries the rest.
+  const offer = strip(voice);
+  ok(!/No camera, ever/.test(offer),
+    "the voice offer does not stack a second reassurance nobody asked for",
+    "three promises to somebody who has not asked a question reads as nerves");
+  is((offer.match(/pitched down/g) ?? []).length, 2,
+    "the one claim worth making is made once per state, and no more");
+
+  /*
+    The header carries the room's name first. Seven pieces of chrome above a
+    room where somebody is about to say the hardest thing they have said this
+    month, and none of them the thing they came for.
+  */
+  const header = code.slice(code.indexOf("<header"), code.indexOf("</header>"));
+  ok(/<h1/.test(header) && header.indexOf("<h1") < header.indexOf("phaseLabel"),
+    "the name comes before the telemetry",
+    "a phase, a count and a clock above the room's own name is a dashboard");
+  ok(!/maxSeats \?\? 6/.test(header),
+    "the seat dots are gone",
+    "six borders drawing a number that is written in words two characters away");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

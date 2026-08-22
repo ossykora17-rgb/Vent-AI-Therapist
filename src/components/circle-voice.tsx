@@ -375,16 +375,34 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
           be the exact bug this codebase keeps removing, on the one screen
           where being wrong has a person on the other end of it.
         */}
+        {/*
+          One sentence before, not three.
+
+          This said "Voice · audio only", then "No camera, ever. Your seat
+          number is all anyone hears", then "Your voice is pitched down before
+          it leaves your phone" — a label and two reassurances, stacked, above
+          a button nobody had pressed yet.
+
+          Three promises to somebody who has not asked a question is not
+          reassurance, it is nerves. It reads the way a product reads when it
+          is worried about being trusted, and the effect on a person who *was*
+          about to trust it is the opposite of the one intended.
+
+          The pitch shift is the claim worth making, because it is the
+          surprising one and it is the one about them. "Audio only" carries
+          the camera, because there is no camera to carry. And the seat-number
+          detail is true, small, and belongs where somebody looking for it
+          would look — the terms page — not in front of a person deciding
+          whether to speak.
+
+          Live, it says who is in the room, which is the only thing that has
+          changed and the only thing worth a second line.
+        */}
         <div className="min-w-0">
           <p className="label-mono">Voice · audio only</p>
-          <p className="mt-1 text-sm text-ash">
-            {status === "live"
-              ? `${voices.length} ${voices.length === 1 ? "voice" : "voices"} in the room. You are ${seat}.`
-              : "No camera, ever. Your seat number is all anyone hears."}
-          </p>
           <p className="mt-1 text-sm text-ink">
             {status === "live"
-              ? "Your voice is pitched down — not recognisably yours."
+              ? `${voices.length} ${voices.length === 1 ? "voice" : "voices"} here. You are ${seat}, pitched down.`
               : "Your voice is pitched down before it leaves your phone."}
           </p>
         </div>
