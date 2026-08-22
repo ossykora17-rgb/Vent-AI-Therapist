@@ -16,6 +16,7 @@
     "heartbeat": "node scripts/heartbeat-data.mjs",
     "gate": "node scripts/heartbeat-data.mjs --gate",
     "live-checks": "bash .github/live-checks.sh",
+    "no-store": "node scripts/no-store-verify.mjs",
     "quality": "node scripts/quality.mjs"
   },
   "dependencies": {

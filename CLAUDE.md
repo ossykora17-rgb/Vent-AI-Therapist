@@ -20,8 +20,8 @@ constraint. It outranks elegance, cleverness, and feature count.
 ```bash
 npm run local      # the whole product, no accounts, no cloud  → :3001
 npm run gate       # selector + eval + pipelines + live-verify → merge or don't
-npm run live-checks # boots its own build on :3001, runs the live half alone
-npm run eval       # 14 checks, no server; add a URL for the live room
+npm run live-checks # boots its own build twice — with a store and without
+npm run eval       # 85 checks, no server; add a URL for the live room
 npm run heartbeat  # what changed, what is dirty, who should fix it
 npm run data       # store → data/sft.jsonl + data/eval.jsonl
 npm run rlhf       # ratings → data/dpo.jsonl, and what is losing
@@ -143,13 +143,25 @@ Ask it of every user-facing string that makes a claim, and of every assertion
 that expects a status code. Before it ships. It is read by a person, because
 no gate can ask it — a gate only ever runs in the shape it was written in.
 
-Every automated path here has a store. `live-checks.sh` sets
-`VENT_LOCAL_STORE=1`, CI sets it, dev falls back to `FileStore`. So the one
+Every automated path here had a store. `live-checks.sh` set
+`VENT_LOCAL_STORE=1`, CI set it, dev falls back to `FileStore`. So the one
 configuration with no store — production with no Supabase env vars, which is
-what a fresh Vercel project *is* — is the one configuration nothing runs. It
+what a fresh Vercel project *is* — was the one configuration nothing ran. It
 was also the one real people were using.
 
-That gap has now produced the same bug seven times, wearing seven faces:
+**That is no longer true, and the list below is why it had to stop being
+true.** `live-checks.sh` now runs a second pass with `env -u VENT_LOCAL_STORE
+NODE_ENV=production` and `scripts/no-store-verify.mjs` against it: twelve
+assertions that only mean anything when nothing is configured — no page 5xxs,
+no refusal is written for whoever deployed this, no write path claims to have
+kept anything. It found two live bugs on its first run, and one of them was a
+sentence CLAUDE.md already listed as fixed.
+
+Do not read that as the gap being closed. It is one shape, now covered. The
+question below is the thing that generalises; the second pass is only the
+answer for the shape that had already cost eleven bugs.
+
+That gap has now produced the same bug thirteen times, wearing thirteen faces:
 
 - A voice token with a flat 50-minute TTL. Correct from where the author sat,
   wrong from where the circle sat: a seat taken at minute 44 held a live
@@ -207,7 +219,29 @@ That gap has now produced the same bug seven times, wearing seven faces:
   one depended on the request. The transcript deletion was true either way, so
   the failure tied a guarantee that always holds to one that had just broken.
 
-Eleven findings, two mechanisms. The first, and the one most of them share:
+- The refusal the lobby prints, still saying the thing this file says was
+  fixed. `POST /api/circles` answered 503 with *"Circles need storage. Run
+  locally or configure Supabase."* and `circles-list.tsx` toasts `d.message`
+  verbatim, so somebody at 2am who tapped Open a circle was handed our
+  vendor's name and a shell command. This file already lists that sentence
+  among the faces and records it as repaired — the repair reached the lobby's
+  own copy of the string and not the route's, which is the copy the lobby
+  actually prints. A fixed bug with a live copy is not a fixed bug.
+
+  The same screen offered a full-width gold **Open a circle** above it, and
+  explained four hundred pixels lower, on a glass plate, that circles could
+  not open. A door onto a 503, under the rule that the room never offers a
+  door that opens onto a 501.
+
+- A thank-you for a rating that was dropped. `POST /api/feedback` answers
+  **200** with `persisted: false` when there is no store, and the client
+  thanked people on `res.ok` — through a branch written to close exactly this
+  hole, under a comment reading *"silently losing them corrupts the one place
+  the product learns what is losing."* It read the status and never read the
+  body: one of the two doors closed, and the other left open under a note
+  explaining why the door mattered.
+
+Thirteen findings, two mechanisms. The first, and the one most of them share:
 **the suite tests the shape its author is standing in.** Checks 12, 14, 16 and 17 close instances — 14 stubs `fetch` and
 makes every provider failure that reached a real person fail a build instead;
 16 reads the store as text and fails any select list with a space in it; 17
@@ -236,3 +270,26 @@ probe in the wrong shape — a sentence written before, or without, the answer.
 Ask of any string that says something happened:
 
 *Did this wait for the thing, and did it read what came back?*
+
+## And a third, which is the one to watch for now
+
+**A fix that reached the copy in front of it and not the one that ships.**
+
+The twelfth and thirteenth faces are both this, and neither is a bug that got
+missed — both are bugs that got *fixed*, in a file next to the one that
+mattered. The lobby's copy of "Circles need storage" was rewritten and the
+route's copy, the one the lobby actually prints, was not. The feedback client
+stopped throwing the response away and started reading the status, in a branch
+written under a comment about silently losing ratings, and never read the body.
+
+Half a repair is more dangerous than none, because the comment above it now
+says the problem is handled. Every one of those comments is still there and
+still reads as true.
+
+So when you fix a string or a claim, the question is not whether this one is
+right. It is:
+
+*Where else does this sentence exist, and which copy does the screen read?*
+
+`grep` for the sentence, not for the file you were looking at. If there are two
+copies, the fix is one copy — a constant, imported — and not two edits.

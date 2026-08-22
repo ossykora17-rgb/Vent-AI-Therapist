@@ -8,6 +8,29 @@ import { withStore } from "@/lib/http/with-store";
 
 export const dynamic = "force-dynamic";
 
+/*
+  Written for the person tapping the button, not for whoever deploys this.
+
+  It said "Circles need storage. Run locally or configure Supabase." and the
+  lobby toasts `d.message` verbatim, so somebody at 2am who tapped Open a
+  circle was handed our vendor's name and a shell command. CLAUDE.md already
+  records this exact sentence being fixed once — it lists "in the circles
+  lobby it went further and told them to run `npm run local`" among the faces
+  of the deployment-shape bug — and that fix reached the lobby's own copy of
+  the string and not the route's, which is the one the lobby actually prints.
+
+  The operator has /api/health, the heartbeat and the deploy logs, none of
+  which are on this screen. What a person needs is what it means for them and
+  whether the thing they came for still works. It does: the private session
+  answers with no store at all, only without keeping anything.
+
+  One constant, because there are two branches — no store, and an insert the
+  database refused — and from where somebody is sitting those are the same
+  event. Two hand-typed copies of one sentence is how the first one drifted.
+*/
+const NO_CIRCLES_HERE =
+  "Rooms aren't open here yet. The private session still works — come in and talk.";
+
 const createSchema = z.object({
   anonId: z.string().min(8).max(64),
   tag: z
@@ -126,7 +149,7 @@ async function handlePOST(request: Request) {
   const store = getStore();
   if (!store) {
     return NextResponse.json(
-      { error: "no_storage", message: "Circles need storage. Run locally or configure Supabase." },
+      { error: "no_storage", message: NO_CIRCLES_HERE },
       { status: 503 },
     );
   }
@@ -158,7 +181,7 @@ async function handlePOST(request: Request) {
   } catch (error) {
     console.error("[circles] could not open a circle", error);
     return NextResponse.json(
-      { error: "no_storage", message: "Circles need storage. Run locally or configure Supabase." },
+      { error: "no_storage", message: NO_CIRCLES_HERE },
       { status: 503, headers: { "cache-control": "no-store" } },
     );
   }

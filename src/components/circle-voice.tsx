@@ -133,7 +133,10 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
       if (!r.ok) {
         setError(
           r.status === 501
-            ? "Voice isn't configured on this instance."
+            // "Voice isn't configured on this instance" is a sentence about
+            // our deployment. The room is not broken and nothing is lost — the
+            // circle works, typed, exactly as it always does.
+            ? "Voice isn't switched on here. The room still works — type."
             : grant.message ?? "Couldn't open the voice room.",
         );
         setStatus("error");

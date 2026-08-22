@@ -5164,9 +5164,23 @@ check("48 No screen says it happened without reading the answer", () => {
     .replace(/\/\*[\s\S]*?\*\//g, " ")
     .replace(/\/\/[^\n]*/g, " ");
   const flush = anon.slice(anon.indexOf("export async function flushQueue"));
-  ok(/persisted/.test(flush.slice(0, flush.indexOf("return sent"))),
+  const drain = flush.slice(0, flush.indexOf("return sent"));
+  ok(/persisted/.test(drain),
     "the offline drain reads `persisted`, not just the status code",
     "a 200 that saved nothing must not clear the last copy of somebody's words");
+  /*
+    And reads it as `!== true`.
+
+    `persisted === false` and `persisted !== true` agree on every response
+    this route can currently produce, and stop agreeing the moment one is
+    added that omits the key: a body with no `persisted` is not `false`, so
+    the vent counts as sent and is spliced out of the last copy of it. The
+    assertion above passed both spellings, which made it a check on a word
+    rather than on a decision.
+  */
+  ok(/persisted\s*!==\s*true/.test(drain),
+    "and treats an answer that does not say so as not saved",
+    "absent is not false — here that difference deletes words written offline");
 
   const history = fs.readFileSync(path.join(ROOT, "src/components/history-list.tsx"), "utf8");
   const clear = history.slice(history.indexOf("async function clearAll"));
@@ -7639,6 +7653,187 @@ check("73 The live-one mark is only ever worn by the live one", () => {
   ok(branches[0] && /decoration-gold/.test(branches[0]),
     "and marks it with the gold underline",
     `the current branch is "${branches[0] ?? "not where this expected it"}"`);
+});
+
+check("74 Nothing thanks you for something it dropped", () => {
+  /*
+    `toast("Thank you. Na so we dey improve.", "success")` fired on `res.ok`.
+
+    The feedback route answers **200** with `{persisted: false, storage:
+    "none"}` when `getStore()` returns null — production with no Supabase env
+    vars, which is what a fresh Vercel project is and what real people were
+    using. The rating went on the floor and the person was thanked for it.
+
+    What makes it worth a check rather than a fix is where the bug was
+    standing. That `res.ok` branch was itself written to close this hole: the
+    429 was found, the response stopped being thrown away, and the comment
+    above it says "silently losing them corrupts the one place the product
+    learns what is losing." It read the status and never read the body, so it
+    closed one of the two doors and left the other one open under a note
+    explaining why the door mattered.
+
+    Every other surface in the product already does this correctly and each
+    one had to learn it separately — `anchored`, `saved`, `deleted`, `sealed`,
+    `sent` — which is six copies of a rule and no statement of it. This is the
+    statement: **a claim that something happened must read what came back, not
+    what was sent.** `res.ok` is what was sent, answered.
+  */
+  const OUTCOME = /\b(persisted|saved|anchored|deleted|had|sealed|sent|kept|carve)\b/;
+  const files = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.name.endsWith(".tsx")) files.push(full);
+    }
+  };
+  walk(path.join(ROOT, "src"));
+
+  let claims = 0;
+  const unread = [];
+  for (const f of files) {
+    // Comments here quote the sentences they are warning about, including the
+    // successes. Strip them, or the check reads its own postmortems.
+    const src = fs.readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+    for (const m of src.matchAll(/"success"/g)) {
+      // The tone argument of a toast, not the union in `ui/toast.tsx`.
+      const before = src.slice(Math.max(0, m.index - 1400), m.index);
+      if (!/\btoast\(/.test(before)) continue;
+      claims++;
+      /*
+        A claim with no request behind it is a local truth — "Copied." after
+        `clipboard.writeText`. Only a claim about something that crossed the
+        network has to have read the answer.
+      */
+      if (/\bfetch\(/.test(before) && !OUTCOME.test(before)) {
+        unread.push(`${path.basename(f)}:${src.slice(0, m.index).split("\n").length}`);
+      }
+    }
+  }
+
+  ok(claims >= 6, `the product makes claims worth checking (${claims})`,
+    "if this finds no successes the assertion below is vacuous");
+  is(unread.length, 0,
+    `every one of them read the answer${unread.length ? ` (${unread.join(", ")})` : ""}`,
+    "res.ok is what was sent, answered — a 200 that wrote nothing is still a 200");
+
+  /*
+    And the instance, pinned.
+
+    The sweep above is a proximity rule: it catches a *new* surface that
+    thanks somebody on `res.ok`, which is what it is for. It cannot see a
+    condition being weakened in place, because the word it looks for is still
+    on the page. So the one path that actually shipped this bug gets an
+    assertion of its own, the way check 58 pins the light that says words are
+    being saved.
+
+    Read from the two files together, because the claim and the thing it
+    claims about live in different ones: the route must be able to answer 200
+    without having written, and the client must refuse to celebrate that.
+  */
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/feedback/route.ts"), "utf8");
+  ok(/persisted:\s*false/.test(route),
+    "the feedback route can answer 200 having written nothing");
+  ok(/persisted:\s*true/.test(route),
+    "and says so the other way when it has");
+
+  const fab = fs.readFileSync(path.join(ROOT, "src/components/feedback-fab.tsx"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ");
+  const thanks = fab.indexOf('"Thank you');
+  ok(thanks > 0, "the thank-you is still there");
+  const guard = fab.slice(0, thanks);
+  ok(/persisted\s*!==\s*true|persisted\s*===\s*false|!\s*data\??\.\s*persisted/.test(guard),
+    "and nothing reaches it without persisted coming back true",
+    "the 429 branch was written to close this hole and read the status without reading the body");
+});
+
+check("75 No sentence a person reads is about our deployment", () => {
+  /*
+    "Circles need storage. Run locally or configure Supabase."
+
+    The lobby toasts `d.message` verbatim, so somebody at 2am who tapped
+    Open a circle was handed our vendor's name and a shell command. CLAUDE.md
+    already lists that sentence among the faces of the deployment-shape bug
+    and records it as fixed — the fix reached the lobby's own copy of the
+    string and not the route's, which is the copy the lobby actually prints.
+    Fixing the surface and leaving the source is how a fixed bug stays live.
+
+    The audience for a sentence like that was never an operator. An operator
+    has /api/health, the heartbeat and the deploy logs, none of which are on
+    the screen where this appears. What a person needs is what it means for
+    them and whether the thing they came for still works.
+
+    So: no vendor, no environment variable, no shell command, and no word for
+    a copy of the software, in anything a person can be shown. The operator
+    surfaces are exempt by name — /api/health, /api/heartbeat and the
+    token-gated export exist to be read by whoever deploys this, and telling
+    *them* to set LIVEKIT_API_KEY is the whole point.
+  */
+  const FORBIDDEN = /\bSupabase\b|\bnpm run\b|LIVEKIT_|ANTHROPIC_|NEXT_PUBLIC_|SERVICE_ROLE|\.env\b|\benv var|\blocalhost\b|\bthis deployment\b|\bthis instance\b|\bnot configured on\b/;
+  const OPERATOR = ["health", "heartbeat", "export"];
+
+  const files = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(e.name)) files.push(full);
+    }
+  };
+  walk(path.join(ROOT, "src/app"));
+  walk(path.join(ROOT, "src/components"));
+
+  let scanned = 0;
+  const leaks = [];
+  for (const f of files) {
+    const rel = path.relative(ROOT, f);
+    if (OPERATOR.some((o) => rel.includes(`/api/${o}/`))) continue;
+
+    const src = fs
+      .readFileSync(f, "utf8")
+      // Comments explain the strings they are about, by quoting them.
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/\/\/[^\n]*/g, " ")
+      // A class list is a string with spaces in it and nobody reads it.
+      .replace(/className=(?:"[^"]*"|\{`[^`]*`\})/g, " ");
+
+    /*
+      Two corpora, because the first version only had one and missed the
+      loudest instance in the product.
+
+      It read string literals, and "Circles cannot open on this deployment
+      yet" is not a string literal — it is JSX text, typed straight into a
+      `<p>`, which is how most sentences in this product are written. The
+      check passed while the sentence was on the screen. A browser opened in
+      the unconfigured shape found it in about four seconds.
+
+      So: quoted prose, *and* the text between tags. The second pattern
+      deliberately refuses anything containing a brace, so an interpolated
+      expression is skipped rather than half-read.
+    */
+    const prose = [
+      ...[...src.matchAll(/"([^"\n]*\s[^"\n]*)"|'([^'\n]*\s[^'\n]*)'/g)].map((m) => m[1] ?? m[2] ?? ""),
+      ...[...src.matchAll(/>([^<>{}]{12,})</g)].map((m) => m[1].replace(/\s+/g, " ").trim()),
+    ];
+    for (const text of prose) {
+      scanned++;
+      if (FORBIDDEN.test(text)) leaks.push(`${path.basename(f)}: ${text.slice(0, 56)}`);
+    }
+  }
+
+  ok(scanned > 200, `there are sentences to read (${scanned})`,
+    "if this finds almost no strings the assertion below is vacuous");
+  is(leaks.length, 0,
+    `none of them is about our deployment${leaks.length ? ` — ${leaks.join(" | ")}` : ""}`,
+    "the person on this screen did not deploy anything and cannot fix it");
+
+  /*
+    And the operator surfaces still speak to an operator, so this check
+    cannot be satisfied by scrubbing the vocabulary everywhere.
+  */
+  const health = fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8");
+  ok(/SUPABASE|LIVEKIT|ANTHROPIC/.test(health),
+    "and the health endpoint still names what is missing");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
