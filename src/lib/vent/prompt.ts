@@ -1,5 +1,7 @@
 import { groundingBlock, type Grounding } from "./grounding";
 import { NO_MEMORY_LINE, OFFICE_RULES, REPLY_SENTENCE_CAP } from "./voice";
+import { researchBlock, type Technique } from "./research";
+import { learnedBlock, type LearnedRule } from "./learned";
 import { objectLabel, objectReads } from "./chairs";
 import type { Pattern } from "./pattern";
 import { scan, scanBlock } from "./scan";
@@ -537,6 +539,22 @@ export interface BuildPromptArgs {
   opening?: Opening | null;
   /** Eight words from the last session that had one. Null is the common case. */
   carve?: string | null;
+  /**
+   * One move looked up this morning for this pressure, or null.
+   *
+   * Keyed to the tag and cached for a day, so it is shared by everybody
+   * carrying the same thing rather than bought per turn — see `research.ts`
+   * for why a per-message search is the wrong build.
+   */
+  technique?: Technique | null;
+  /**
+   * Rules the nightly audit proposed and the gate accepted, newest first.
+   *
+   * Defaults to `LEARNED_RULES`, so nothing has to pass it — but it is a
+   * parameter rather than a straight import because a check that cannot hand
+   * this a full list cannot measure what a full list costs the budget.
+   */
+  learned?: readonly LearnedRule[];
 }
 
 export function buildSystemPrompt({
@@ -551,6 +569,8 @@ export function buildSystemPrompt({
   message,
   opening = null,
   carve = null,
+  technique = null,
+  learned,
 }: BuildPromptArgs): string {
   const state = [
     ctx.body && `They said it sits in the ${ctx.body}.`,
@@ -609,6 +629,16 @@ export function buildSystemPrompt({
     openingBlock(opening),
     "",
     flavourBlock(flavour),
+    "",
+    // Before the tactic, because it is background the tactic is chosen
+    // against — and after the context rules, because "use it only if it fits
+    // what they said" is the same instruction rule 3 gives everything else.
+    researchBlock(technique),
+    "",
+    // What the room got wrong before. Renders nothing until an audit has
+    // proposed something and the gate has accepted it, so a deployment that
+    // has never run one carries not a token for this.
+    learnedBlock(learned),
     "",
     `THIS TURN — the move to make (express it in your own voice, do not quote it):\n${tactic.instruction}`,
     "",

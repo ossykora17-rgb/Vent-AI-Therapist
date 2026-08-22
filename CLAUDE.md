@@ -21,7 +21,8 @@ constraint. It outranks elegance, cleverness, and feature count.
 npm run local      # the whole product, no accounts, no cloud  → :3001
 npm run gate       # selector + eval + pipelines + live-verify → merge or don't
 npm run live-checks # boots its own build twice — with a store and without
-npm run eval       # 87 checks, no server; add a URL for the live room
+npm run eval       # 89 checks, no server; add a URL for the live room
+npm run audit      # grade last 50 turns; --dry is free, --apply writes a diff
 npm run heartbeat  # what changed, what is dirty, who should fix it
 npm run data       # store → data/sft.jsonl + data/eval.jsonl
 npm run rlhf       # ratings → data/dpo.jsonl, and what is losing
@@ -74,6 +75,8 @@ own copy passes while the product regresses.
 | Concern | File |
 | --- | --- |
 | The office: banned phrases, reply contract | `src/lib/vent/voice.ts` |
+| One move from outside, per pressure, cached | `src/lib/vent/research.ts` |
+| What the audit proposed and the gate kept | `src/lib/vent/learned.ts` |
 | Intent routing, crisis, meta-vs-vent | `src/lib/vent/intent.ts` |
 | 32 tactics, 3-turn block, somatic gate | `src/lib/vent/tactics.ts` |
 | Memory: vents only, six-turn cap | `src/lib/vent/memory.ts` |
@@ -122,6 +125,13 @@ their areas: `.claude/skills/data-quality/` and `.claude/skills/circles-quality/
   the corpus — and a bare `/same thing/` routed it to an apology.
 
 ## Credit discipline
+
+The nightly audit and the web lookup are the two paid jobs added since this
+was written, and both are shaped by it. The lookup is keyed to the pressure
+and cached a day, so it is ten calls a day for the whole userbase rather than
+one per message. The audit runs the free deterministic graders first and only
+asks a model about replies that broke *no* stated rule and are still flat —
+one call, ten samples, and none at all on a night with nothing flat.
 
 Most messages never reach a model: crisis, factual, greeting and meta are all
 answered locally, for free. Only a real vent spends tokens. The eval suite,

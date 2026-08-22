@@ -10,6 +10,7 @@ import { blendEfficacy, getEfficacy, measurePersonalEfficacy } from "@/lib/vent/
 import { findPattern, type Pattern } from "@/lib/vent/pattern";
 import { coverage, COVERAGE_FLOOR } from "@/lib/vent/scan";
 import { buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
+import { research } from "@/lib/vent/research";
 import { MEMORY_TURNS, memoryFetchSize, selectMemory } from "@/lib/vent/memory";
 import { noModelKeyReply } from "@/lib/vent/fallback";
 import { MAX_TOKENS, classifyModelError, modelFailureReply } from "@/lib/vent/model";
@@ -351,6 +352,16 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
     turnsToday,
     pattern,
     message: input.message,
+    /*
+      The outside world, and it cannot hold the room open.
+
+      Cached for a day and keyed to the pressure rather than the person, so
+      this is a cache read on all but the first vent of the day for a given
+      tag. `research` never throws and never returns anything it did not have
+      a URL for; on the miss that does cost a round trip, the ceiling is the
+      module's own and the reply is unaffected either way.
+    */
+    technique: await research(classification.realWorldTag),
     // Free when there is no store and null on every failure inside the store,
     // so a session simply opens knowing nothing — which is what it did before
     // the Carver existed.
