@@ -148,7 +148,7 @@ export function KeptList() {
           <button
             type="button"
             onClick={() => void forget()}
-            className="focusable mt-5 min-h-[44px] text-[14px] text-ash underline underline-offset-4"
+            className="focusable mt-5 min-h-[44px] text-[15px] text-ash underline underline-offset-4"
           >
             Forget this
           </button>

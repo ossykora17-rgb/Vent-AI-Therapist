@@ -460,7 +460,7 @@ export function HistoryList() {
               {handoff.referrals.map((r) => (
                 <li key={r.org} className="border-t border-line/10 pt-3">
                   <p className="text-[15px] font-semibold">{r.org}</p>
-                  <p className="mt-1 text-[14px] leading-[1.55] text-ash">{r.what}</p>
+                  <p className="mt-1 text-[15px] leading-[1.55] text-ash">{r.what}</p>
                   <p className="mt-1 text-[13px] text-ash">
                     {r.tel && (
                       <a href={`tel:${r.tel}`} className="underline underline-offset-2">

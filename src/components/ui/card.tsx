@@ -22,7 +22,7 @@ export function CardTitle({
     <h3
       className={cn(
         // The display face, because that is the voice everywhere else.
-        "mb-2 font-display text-[17px] font-bold tracking-[-0.01em]",
+        "mb-2 font-display text-[15px] font-bold tracking-[-0.01em]",
         className,
       )}
       {...props}

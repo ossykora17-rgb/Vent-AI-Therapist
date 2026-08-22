@@ -235,7 +235,7 @@ export function CirclesList() {
               ))}
               .
             </p>
-            <p className="mt-2 max-w-[44ch] text-[14px] leading-[1.6] text-ash">
+            <p className="mt-2 max-w-[44ch] text-[15px] leading-[1.6] text-ash">
               Counts only. Nothing anybody said is kept, here or anywhere.
             </p>
           </div>
@@ -361,7 +361,7 @@ export function CirclesList() {
                       medium — the weight of a settings row — sitting between a
                       status dot and a countdown, so the one human thing on the
                       card read as its least important field. */}
-                  <p className="mt-1.5 font-display text-[19px] font-bold leading-[1.15] tracking-[-0.01em]">
+                  <p className="mt-1.5 font-display text-[22px] font-bold leading-[1.15] tracking-[-0.01em]">
                     {roomName(c.tag, c.created_at)}
                   </p>
 
@@ -437,7 +437,7 @@ export function CirclesList() {
       </main>
 
       <footer className="mx-auto w-full max-w-[640px] px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
-        <p className="text-[12px] leading-relaxed text-ash">
+        <p className="text-[13px] leading-relaxed text-ash">
           Mind Weave Circles is peer support, not licensed therapy, not medical
           advice, and not affiliated with AA. What&apos;s said in a circle stays
           in the circle — nothing is recorded and every word is deleted within

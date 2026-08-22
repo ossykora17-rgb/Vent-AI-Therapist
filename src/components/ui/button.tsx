@@ -51,9 +51,9 @@ const VARIANTS: Record<Variant, string> = {
 
 // 44px floor everywhere — the iOS/Android minimum tap target.
 const SIZES: Record<Size, string> = {
-  sm: "min-h-[44px] px-4 text-[14px]",
+  sm: "min-h-[44px] px-4 text-[15px]",
   md: "min-h-[48px] px-5 text-[15px]",
-  lg: "min-h-[56px] px-6 text-[16px]",
+  lg: "min-h-[56px] px-6 text-[15px]",
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(

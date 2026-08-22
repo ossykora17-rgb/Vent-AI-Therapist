@@ -7238,6 +7238,141 @@ check("69 A security header does not silently disable the feature it guards", ()
   }
 });
 
+check("70 A mute you performed is not a mute somebody did to you", () => {
+  /*
+    Reported from a live circle: "The Keeper closed your microphone" — to
+    somebody sitting alone in a room they had opened themselves, as the
+    Keeper. Nobody had closed anything.
+
+    `RoomEvent.TrackMuted` fires for every mute on the track, including the
+    ones this component performs, and it performs two. The microphone is muted
+    the instant it is published, deliberately, so the room does not hear the
+    first thing you say before you have decided to say it. And push-to-talk
+    mutes and unmutes on every single press.
+
+    Both arrived at the handler as "somebody muted your track".
+
+    The wrong sentence is the smaller half. It also set `muted`, which
+    disables Open mic — so joining voice silenced you permanently, blamed a
+    Keeper who had done nothing, and left the one control in this component
+    that has to work impossible to press. Combined with the Permissions-Policy
+    that stopped `getUserMedia` from ever resolving, voice had two independent
+    reasons never to work, and each would have masked the other.
+
+    A counter rather than a boolean: push-to-talk can fire faster than React
+    commits state, and two of ours in flight must not let a real one through
+    between them.
+  */
+  const src = fs.readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+  ok(/ownMutesRef/.test(code),
+    "the component tracks which mutes are its own",
+    "every mute looked like governance, including the two it performs itself");
+
+  /*
+    Counted at every site that mutes. A mute this file performs without
+    incrementing is a mute that will be reported as the Keeper's.
+  */
+  const performed = (code.match(/\.(mute|unmute)\(\)/g) ?? []).length;
+  const counted = (code.match(/ownMutesRef\.current \+= 1/g) ?? []).length;
+  ok(counted >= 2 && performed >= 2,
+    `every mute this component performs is counted (${counted} counters, ${performed} calls)`);
+
+  /*
+    And the governance branch is downstream of the check, not beside it.
+    Setting `muted` before consulting the counter would disable Open mic on
+    our own mute and then quietly correct the sentence — half the bug, which
+    is the half that matters.
+  */
+  const handler = code.slice(code.indexOf("TrackMuted"), code.indexOf("TrackUnmuted"));
+  ok(handler.indexOf("ownMutesRef") < handler.indexOf("setMuted(true)"),
+    "the counter is consulted before the microphone is marked closed",
+    "`muted` is what disables Open mic — setting it first is the whole failure");
+
+  /*
+    The ring is the seat display, and now the speech display too.
+
+    `SEAT-1 (YOU)` was listed under a drawing that already shows six chairs
+    with yours in gold, in a panel that also said "You are seat-1" in prose:
+    the same fact three ways at once. `speaking` existed on the ring from the
+    day it was drawn and nothing ever told it anything.
+  */
+  const room = fs.readFileSync(path.join(ROOT, "src/components/circle-room.tsx"), "utf8");
+  ok(/onSpeaking/.test(code) && /onSpeaking=/.test(room),
+    "who is speaking reaches the ring that draws the seats",
+    "the only component that knows was rendering it as text chips instead");
+  ok(!/\(YOU\)/.test(code),
+    "and the chips that repeated it are gone",
+    "a list of seats under a drawing of the seats is the same readout twice");
+});
+
+check("71 There is a type scale, and everything is on it", () => {
+  /*
+    "Things are just jumping out in my face."
+
+    Counted across the components: fifteen distinct type sizes. 11, 12, 13,
+    14, 15, 16, 17, 19, 22, 24 and 56 pixels, plus three Tailwind presets. Not
+    a scale — a list of numbers picked one at a time, each reasonable on its
+    own and none of them related to the others.
+
+    That is what makes a screen feel restless. Two blocks four pixels apart in
+    size read as *different* without reading as *ranked*, so the eye keeps
+    checking which one matters and never settles. It is the same defect as the
+    seven-piece header, one layer down: every element asserting itself,
+    nothing establishing hierarchy.
+
+    Five steps now, and each has one job:
+
+      11  the label. Uppercase mono, for signposts and metadata.
+      13  fine print. The disclaimer, a timestamp, a hint.
+      15  the voice. Everything a person reads as a sentence — replies,
+          questions, what somebody said. Fifty-four uses; this is the product.
+      22  a heading. What a page or a moment is.
+      56  the drop. One use, once per session, and it is the only number this
+          product produces about whether any of it worked.
+
+    Fourteen to fifteen is invisible. Fifteen to twenty-two is a step. That
+    difference is the whole point: a scale people can feel is a scale with
+    gaps in it.
+  */
+  const SCALE = new Set(["11", "13", "15", "22", "56"]);
+  const files = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.name.endsWith(".tsx")) files.push(full);
+    }
+  };
+  walk(path.join(ROOT, "src"));
+  ok(files.length > 10, `components were found (${files.length})`);
+
+  const strays = [];
+  for (const file of files) {
+    const src = fs.readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+    for (const m of src.matchAll(/text-\[(\d+)px\]/g)) {
+      if (!SCALE.has(m[1])) strays.push(`${path.basename(file)}:${m[1]}px`);
+    }
+  }
+  is(strays.length, 0,
+    `every type size is on the scale — 11, 13, 15, 22, 56${strays.length ? ` (${[...new Set(strays)].join(", ")})` : ""}`,
+    "a size four pixels from another one reads as different without reading as ranked");
+
+  /*
+    And the scale is actually used, not merely unviolated. A check that only
+    forbids strays passes a codebase with one size in it.
+  */
+  const all = files.flatMap((f) =>
+    [...fs.readFileSync(f, "utf8").matchAll(/text-\[(\d+)px\]/g)].map((m) => m[1]),
+  );
+  const used = new Set(all);
+  ok(used.size >= 4, `the scale has steps in use (${[...used].sort((a, b) => a - b).join(", ")})`);
+  ok(all.filter((s) => s === "15").length > all.length / 3,
+    "and the body size is the dominant one",
+    "a product whose commonest size is not its reading size is a product of labels");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
