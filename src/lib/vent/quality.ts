@@ -1,5 +1,5 @@
 import { containsAdvice } from "@/lib/circles/rules";
-import { BANNED_PHRASES, FILE_LANGUAGE, REPLY_SENTENCE_CAP } from "./voice";
+import { askedForSkill, BANNED_PHRASES, FILE_LANGUAGE, genericTask, REPLY_SENTENCE_CAP } from "./voice";
 import { coverage, COVERAGE_FLOOR } from "./scan";
 
 /**
@@ -189,6 +189,29 @@ export function gradeReply(
   for (const re of BANNED) {
     const m = reply.match(re);
     if (m) add("generic", "major", `phrase VOICE bans: "${m[0]}"`);
+  }
+
+  /*
+    A task that fits anybody, handed to somebody who did not ask for one.
+
+    "If your reply could be sent to any human on earth, it failed."
+
+    The only grader in this file whose verdict depends on the *message* as well
+    as the reply, and that is the rule rather than an inconsistency: "try a
+    breathing exercise" is a failure right up until somebody types "what should
+    I do", and then it is the answer to the question. A ban with no exemption
+    would make the room refuse the one request it is qualified to grant, so the
+    exemption is read from their own words — `askedForSkill` — and not from a
+    setting or a turn count.
+
+    Major rather than fatal, alongside `generic`, and for the same reason: it
+    is the voice leaking, not a promise broken or advice reaching somebody. The
+    failsafe still spends a retry on it, because the whole point is that nobody
+    reads it.
+  */
+  if (!askedForSkill(c.message)) {
+    const task = genericTask(reply);
+    if (task) add("generic_task", "major", `a task that fits anybody: "${task.match}" — ${task.why}`);
   }
 
   // ── did it answer what was said ──────────────────────────────────────────

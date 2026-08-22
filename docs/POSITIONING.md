@@ -16,7 +16,8 @@ A comparison that only works if nobody checks it is not an advantage.
 | | VENT | Woebot | Wysa | Replika |
 | --- | --- | --- | --- | --- |
 | **Memory across sessions** | Six-turn window + a carve, an open thread derived from the session gap, and per-person efficacy. `memory.ts`, `prompt.ts` | Session-scoped by design; CBT modules, not recall | Session-scoped; some journal continuity | Persistent profile and long-term memory, marketed as its main feature |
-| **Human tone** | Enforced, not aspired to: 23 banned phrases fail the **build**, and a reply carrying one is regenerated before anybody reads it. `voice.ts`, `failsafe.ts` | Scripted decision trees; deliberately consistent | Scripted + LLM hybrid | Free-form; optimises for engagement |
+| **Human tone** | Enforced, not aspired to: 24 phrases and unasked-for tasks fail the **build**, and a reply carrying one is regenerated before anybody reads it. `voice.ts`, `failsafe.ts` | Scripted decision trees; deliberately consistent | Scripted + LLM hybrid | Free-form; optimises for engagement |
+| **What a reply is for** | Understanding, not fixing. A coping task nobody asked for is rejected and regenerated before it is sent; the exemption is the person's own words asking for one. `voice.ts`, `quality.ts` | CBT exercises are the product — the module is the reply | Opens with an exercise; toolkit-led | No position; optimises for the next message |
 | **Learning speed** | Nightly audit proposes rules from real sessions; the gate decides. Per-tag web lookup, cached daily. `audit.mjs`, `research.ts` | Clinical release cycle — slow on purpose | Clinical release cycle | Continuous, engagement-driven |
 | **Crisis handling** | Local, free, always runs — before any model call, in every deployment shape, including one with no keys at all. Verified by live check 3 and no-store check 6 | Documented crisis routing | Documented crisis routing, SOS toolkit | Widely reported failures |
 | **Privacy** | No account exists to make. Anonymous id generated on the device, one tap deletes everything, circle transcripts deleted at close and never used as training data | Account-based | Account-based; anonymous option | Account-based |
@@ -55,9 +56,18 @@ the ones worth defending:
 2. **The voice is a build failure, not a style guide.** Every other product on
    this list improves tone by writing better prompts. Here, a banned phrase in
    any authored string fails CI (check 76), a duplicated sentence fails CI
-   (check 81), and a model reply carrying one is regenerated before it is sent
-   (check 82). Tone drift is the default outcome of shipping for a year;
-   nothing here can drift without turning a build red.
+   (check 81), a coping task nobody asked for fails CI (check 86), and a model
+   reply carrying any of them is regenerated before it is sent (check 82). Tone
+   drift is the default outcome of shipping for a year; nothing here can drift
+   without turning a build red.
+
+   The task ban is the one worth reading the code for, because it is the only
+   one that is *conditional*. "You've got this" is wrong in every message this
+   product will ever send. "Try a breathing exercise" is wrong right up until
+   somebody asks what to do, and then it is the answer — so the ban lifts on
+   their words and nothing else. A category where every competitor's instinct
+   is to hand over an exercise, and the honest version of that is a room that
+   knows the difference between being asked and deciding for them.
 
 3. **No account.** Not "anonymous mode" — there is no user table to be
    anonymous in. That is the difference between a promise and an architecture,
@@ -65,9 +75,9 @@ the ones worth defending:
 
 ### Where we are behind, honestly
 
-- **Clinical validation.** Woebot has published RCTs. We have 2,892 assertions
-  and zero trials. Those are not the same kind of evidence and it would be
-  dishonest to put them in the same column.
+- **Clinical validation.** Woebot has published RCTs. We have over three
+  thousand assertions and zero trials. Those are not the same kind of evidence
+  and it would be dishonest to put them in the same column.
 - **Long-term memory depth.** Replika's whole product is recall; ours is a
   six-turn window plus a derived thread. That is deliberate at this size —
   exact retrieval beats similarity search at tens of turns — but it is a

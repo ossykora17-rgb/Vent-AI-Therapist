@@ -39,7 +39,18 @@ import { wasAuthored } from "./tactics";
  */
 
 /** Grader labels worth spending a second call to avoid. */
-const REJECT = new Set(["advice", "promise", "generic", "recites", "empty"]);
+/*
+  `generic_task` joined this list last, and it is the only member that reads
+  the person's message as well as the reply.
+
+  "Your job is not to fix. Your job is to understand." A coping task nobody
+  asked for is the single most common way this room stops being a therapy
+  office and becomes a wellness app, and it is objectively visible in the text
+  — which is the test for whether a rule belongs in a gate at all. The
+  exemption lives in `askedForSkill`: if they asked, it is not an offence, and
+  the grader never fires.
+*/
+const REJECT = new Set(["advice", "promise", "generic", "generic_task", "recites", "empty"]);
 
 export interface Verdict {
   /** Null when the reply may be sent. */
@@ -97,6 +108,17 @@ function correctionFor(graders: string[]): string {
   }
   if (seen.has("generic")) {
     lines.push("- That was a sentence that fits any conversation on earth. Say something only this person's message could produce.");
+  }
+  if (seen.has("generic_task")) {
+    /*
+      Says what to do instead, not what was done wrong.
+
+      Every other line here names a rule; this one has to replace a habit, and
+      a correction that only forbids leaves the model with a hole where its
+      closing move was. The replacement is the actual instruction — go back to
+      what they said and take one more thing out of it.
+    */
+    lines.push("- They did not ask for anything to do. Delete the task. Ask about the part of their message you skipped.");
   }
   if (seen.has("recites")) {
     lines.push("- Do not narrate the record. Their sentence, said back, is listening; a count is a database talking.");
