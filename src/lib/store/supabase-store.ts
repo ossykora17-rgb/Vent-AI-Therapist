@@ -1,4 +1,7 @@
 import "server-only";
+import { TABLE_CONTRACT } from "./contract";
+import type { Note } from "@/lib/vent/notes";
+import type { StoredNote } from "./file-store";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isExpired, MAX_SEATS, TRANSCRIPT_TTL_MS } from "@/lib/circles/rules";
 import { TYPING_WINDOW_MS } from "@/lib/circles/presence";
@@ -377,6 +380,47 @@ export class SupabaseStore implements Store {
     }
   }
 
+  async listNotes(userId: string): Promise<StoredNote[]> {
+    const data = ok("listNotes", await this.db
+      .from("vent_notes")
+      // The contract, not a hand-typed list. Check 16 exists because a select
+      // joined with ", " asked PostgREST for a column named " user_id" for months.
+      .select(TABLE_CONTRACT.vent_notes)
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: true }));
+    return (data ?? []) as unknown as StoredNote[];
+  }
+
+  /**
+   * One upsert, not a read then a write.
+   *
+   * `on_conflict` names the unique index's columns, so Postgres does the
+   * dedupe — a second session that learns more about the same sister updates
+   * the row. The read-then-write shape is what put seven people in a six-seat
+   * circle, and it would do the same thing here: two tabs closing at once and
+   * the same subject stored twice.
+   *
+   * The subject is lower-cased because the index names plain columns and
+   * cannot name `lower(subject)`. Both stores do it, so both dedupe the same.
+   */
+  async saveNotes(userId: string, notes: readonly Note[]): Promise<number> {
+    if (notes.length === 0) return 0;
+    const now = new Date().toISOString();
+    const rows = notes.map((n) => ({
+      user_id: userId,
+      kind: n.kind,
+      subject: n.subject.trim().toLowerCase(),
+      detail: n.detail.trim(),
+      updated_at: now,
+    }));
+    const wrote = ok("saveNotes", await this.db
+      .from("vent_notes")
+      .upsert(rows, { onConflict: "user_id,kind,subject" })
+      .select("id"));
+    return (wrote as unknown[] | null)?.length ?? 0;
+  }
+
   async deleteAll(userId: string): Promise<void> {
     done("deleteAll", await this.db.from("vents").delete().eq("user_id", userId));
     // Clearing everything means clearing the person too. A half-done delete
@@ -387,6 +431,12 @@ export class SupabaseStore implements Store {
     // That is the argument for putting it here rather than in a side table —
     // a separate row is a thing a future delete path can forget, and this one
     // cannot be forgotten.
+    /*
+      The notes go with the person, and Postgres does it: the foreign key is
+      `on delete cascade`, so there is no statement here to forget. The file
+      store has to filter explicitly, and check 83 asserts both — two backends
+      behind one interface must destroy the same things.
+    */
     done("deleteAll:user", await this.db.from("vent_users").delete().eq("id", userId));
   }
 

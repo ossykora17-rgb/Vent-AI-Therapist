@@ -1,3 +1,4 @@
+import { NOTES_INSTRUCTION, parseNotes, type Note } from "./notes";
 /**
  * THE CARVER — eight words for the wound.
  *
@@ -66,6 +67,8 @@ rather than repeating it. If it is a different wound, carve the new one.
 
 If there is nothing whole enough to carve, return remembers false and an
 empty carve. Saying nothing is correct far more often than it feels.
+
+${NOTES_INSTRUCTION}
 </job>
 
 Output only JSON: {"carve": "your ${CARVE_MAX_WORDS} words", "remembers": true}`;
@@ -73,6 +76,17 @@ Output only JSON: {"carve": "your ${CARVE_MAX_WORDS} words", "remembers": true}`
 export interface Carve {
   carve: string;
   remembers: boolean;
+  /**
+   * What else is worth remembering, from the same call.
+   *
+   * Not a second request. The Carver already reads the session at the end of
+   * it, and asking a second model "what did you learn about this person" would
+   * be a second bill for a second reading of the same words — on a product
+   * whose whole economic argument is that most messages never reach a model.
+   * Everything that survives `parseNotes` is written; the ordinary answer is
+   * an empty array and it costs nothing.
+   */
+  notes: Note[];
 }
 
 /**
@@ -95,7 +109,11 @@ export function parseCarve(raw: string): Carve | null {
   }
 
   if (typeof parsed !== "object" || parsed === null) return null;
-  const { carve, remembers } = parsed as { carve?: unknown; remembers?: unknown };
+  const { carve, remembers, notes } = parsed as {
+    carve?: unknown;
+    remembers?: unknown;
+    notes?: unknown;
+  };
 
   if (remembers !== true) return null;
   if (typeof carve !== "string") return null;
@@ -106,7 +124,13 @@ export function parseCarve(raw: string): Carve | null {
   // carve — "pops sick / fear of being useless son" — is eight.
   if (text.split(/\s+/).filter((w) => w !== "/").length > CARVE_MAX_WORDS) return null;
 
-  return { carve: text, remembers: true };
+  /*
+    The notes are parsed separately and never block the carve. A model that
+    writes a good line and a bad note has still written a good line, and
+    losing it to a fourth array element that named a condition would be the
+    batch failing over its worst member.
+  */
+  return { carve: text, remembers: true, notes: parseNotes(notes).keep };
 }
 
 /** Whether this session is worth spending a call on at all. */

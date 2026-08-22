@@ -2,6 +2,7 @@ import { groundingBlock, type Grounding } from "./grounding";
 import { NO_MEMORY_LINE, OFFICE_RULES, REPLY_SENTENCE_CAP } from "./voice";
 import { researchBlock, type Technique } from "./research";
 import { learnedBlock, type LearnedRule } from "./learned";
+import { notesBlock, type Note } from "./notes";
 import { objectLabel, objectReads } from "./chairs";
 import type { Pattern } from "./pattern";
 import { scan, scanBlock } from "./scan";
@@ -555,6 +556,11 @@ export interface BuildPromptArgs {
    * this a full list cannot measure what a full list costs the budget.
    */
   learned?: readonly LearnedRule[];
+  /**
+   * What the room knows about them across sessions — the office, not the
+   * transcript. Capped in `notesBlock`, and `loss` never reaches the model.
+   */
+  notes?: readonly Note[];
 }
 
 export function buildSystemPrompt({
@@ -571,6 +577,7 @@ export function buildSystemPrompt({
   carve = null,
   technique = null,
   learned,
+  notes = [],
 }: BuildPromptArgs): string {
   const state = [
     ctx.body && `They said it sits in the ${ctx.body}.`,
@@ -610,6 +617,7 @@ export function buildSystemPrompt({
     // Order is oldest to newest: what was carried across sessions, then what
     // recurs across weeks, then what they tapped a minute ago.
     [
+      notesBlock(notes),
       threadBlock(openThread(memory)),
       carveBlock(carve),
       patternBlock(pattern),
@@ -639,6 +647,11 @@ export function buildSystemPrompt({
     // proposed something and the gate has accepted it, so a deployment that
     // has never run one carries not a token for this.
     learnedBlock(learned),
+    "",
+    // Before the tactic, with the other assembled context, and governed by the
+    // same three rules — name the thing, never the file, and their sentence
+    // outranks all of it.
+    notesBlock(notes),
     "",
     `THIS TURN — the move to make (express it in your own voice, do not quote it):\n${tactic.instruction}`,
     "",
