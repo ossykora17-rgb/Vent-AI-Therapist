@@ -125,7 +125,9 @@ export interface Provider {
  * `model_not_found` naming the id, which is a two-minute fix instead of a
  * week of guessing. It has already cost this project a week once.
  */
-const MODEL = {
+/* Exported so nothing else keeps a second copy of a model id. The last two
+   hardcoded strings in this repo were both models that did not exist. */
+export const MODEL = {
   anthropic: process.env.VENT_MODEL_ANTHROPIC || "claude-sonnet-5",
   // An alias, not a snapshot. The comment sixty lines down already recorded
   // that `gemini-2.5-flash` was retired for new accounts — and the default

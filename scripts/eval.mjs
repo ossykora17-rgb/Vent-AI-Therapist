@@ -39,6 +39,12 @@ const { noModelKeyReply } = await app("src/lib/vent/fallback.ts");
 const { BANNED_PHRASES, FILE_LANGUAGE, bannedPhrase, REPLY_SENTENCE_CAP, NO_MEMORY_LINE, OFFICE_RULES, PRODUCT_LINE } =
   await app("src/lib/vent/voice.ts");
 const { openThread, threadBlock } = await app("src/lib/vent/prompt.ts");
+const { parseTechnique, researchBlock, QUERIES, ALLOWED } =
+  await app("src/lib/vent/research.ts");
+const { knownProblems, flatReplies, parseProposals, echoesThem, wasAuthored, auditPrompt } =
+  await app("src/lib/vent/audit.ts");
+const { acceptable, prune, learnedBlock, MAX_LEARNED, MAX_RULE_CHARS, LEARNED_RULES } =
+  await app("src/lib/vent/learned.ts");
 const { RPC_CONTRACT } = await app("src/lib/store/contract.ts");
 const { measurePersonalEfficacy, blendEfficacy, PERSONAL_SPAN } =
   await app("src/lib/vent/efficacy.ts");
@@ -58,7 +64,32 @@ function check(name, fn) {
   current = { name, asserts: [], failed: [] };
   results.push(current);
   try {
-    fn();
+    const out = fn();
+    /*
+      An async body given to the sync runner is a check that stops at its
+      first `await` and reports green.
+
+      `fn()` is not awaited here — deliberately, because 80 of these are
+      synchronous and the report has to print in order. So an `async` body
+      returns a promise at its first suspension point, `current` goes null,
+      and every assertion after that await records against nothing. It does
+      not throw and it does not warn: the check simply gets shorter.
+
+      That is not hypothetical. Check 78 was written `async` for one
+      convenience `await`, silently dropped five assertions after it, and a
+      mutation that deleted the guard it was built around passed the suite.
+      A check that finds nothing passes — the oldest lesson in this file, and
+      here it was the harness doing it rather than a regex.
+
+      `checkAsync` exists for the handful that genuinely need the network.
+      Everything else must be synchronous, and now it must prove it.
+    */
+    if (out && typeof out.then === "function") {
+      current.failed.push(
+        "async body passed to check() — use checkAsync, or make it synchronous. " +
+          "Every assertion after the first await is recorded against nothing.",
+      );
+    }
   } catch (error) {
     current.failed.push(`threw: ${error.message}`);
   }
@@ -2292,6 +2323,33 @@ check("24 The system prompt has a budget, and every block earns its place", () =
     message,
     opening: { object: "tight_knot", carrying: "Guilt", putDown: "Tiredness" },
     carve: "pops sick / fear of being useless son",
+    /*
+      The lookup counts against the ceiling, or the ceiling is not the ceiling.
+
+      A block that only renders in production is a block outside the budget,
+      and this check exists because exactly that kind of growth went unnoticed
+      once already. `research()` returns null with no Anthropic key — which is
+      most deployments — so the heaviest prompt has to be built with a
+      technique in hand rather than with whatever the environment holds.
+    */
+    technique: {
+      move: "Ask them to name the smallest bill they could clear this week, then stop.",
+      source: "https://pubmed.ncbi.nlm.nih.gov/00000000/",
+      tag: "family",
+    },
+    /*
+      A full learned list, at the cap and at the character limit.
+
+      `LEARNED_RULES` ships empty, so building the heaviest prompt from the
+      real constant would measure a ceiling that rises the first night the
+      audit accepts anything. The cap is what the budget has to hold.
+    */
+    learned: Array.from({ length: MAX_LEARNED }, (_, i) => ({
+      id: `r${i}`,
+      rule: "x".repeat(MAX_RULE_CHARS),
+      found: "a reply",
+      added: "2026-08-22",
+    })),
   });
 
   // No tokenizer dependency — the gate has none and keeps none. Characters
@@ -2319,7 +2377,27 @@ check("24 The system prompt has a budget, and every block earns its place", () =
     nothing pinned to it is a budget that absorbs the next block silently,
     which is the failure this check was written for.
   */
-  const BUDGET = 3350;
+  /*
+    3,350 → 3,400 for the lookup from outside, pinned the same way.
+
+    `researchBlock` is ~45 tokens and only renders when a technique came back
+    with a URL behind it — which, being cached per pressure for a day, is most
+    turns in a configured deployment and none in an unconfigured one. The
+    ceiling covers the configured case, because a ceiling that only holds in
+    the cheaper shape is not a ceiling.
+  */
+  /*
+    3,400 → 3,480 for what the room learned about itself.
+
+    Capped and earned: `learnedBlock` renders nothing until a nightly audit
+    proposed something and the gate accepted it, so a deployment that has never
+    run one carries not a token for it. Three rules at ninety characters is the
+    ceiling, and it is measured here against a list that is *full* — a budget
+    measured against the empty list this ships with would rise on its own the
+    first night anything was accepted, which is the silent growth this whole
+    check exists to catch.
+  */
+  const BUDGET = 3480;
   ok(tokens <= BUDGET,
     "the heaviest possible prompt stays inside its budget",
     `${tokens} tokens vs ${BUDGET}`);
@@ -2327,6 +2405,9 @@ check("24 The system prompt has a budget, and every block earns its place", () =
     "and the contract the ceiling was raised for is in it",
     "otherwise the raise paid for something that is no longer there");
   ok(heaviest.includes("OPEN THREAD"), "as is the thread it also bought");
+  ok(heaviest.includes("ONE MOVE FROM OUTSIDE"), "and the move looked up for it");
+  ok(heaviest.includes("WHAT THIS ROOM GOT WRONG BEFORE"),
+    "and the rules the audit earned a place for");
 
   // A floor as well as a ceiling. If this collapses, a block stopped
   // rendering and every reply quietly got worse with nothing failing.
@@ -8103,6 +8184,253 @@ check("77 A thread nobody closed comes back once", () => {
   ok(built.includes("OPEN THREAD"), "and the built prompt carries it");
   ok(built.includes("my brother still has not called since the burial"),
     "in their own words");
+});
+
+check("78 What comes back from outside is a move, never a finding", () => {
+  /*
+    "Search the internet for new therapy approaches before replying."
+
+    The obvious build — search on every message, paste the results in — breaks
+    three rules already written down here, and the third decides the shape.
+    Credit discipline: a search per turn is a second billed call per turn on a
+    product whose economic argument is that most messages never reach a model.
+    Silence beats a guess: a model asked what the research says will produce a
+    fluent paragraph with or without sources. And never invent a fact.
+
+    So what a lookup may return is a *technique* — a thing to do in the next
+    minute — and never a claim, a statistic or a study result. A person at 2am
+    told "a 2024 trial found that…" by a chatbot is the forbidden thing, and it
+    stays forbidden even when the trial is real.
+
+    Every assertion here is a refusal, because every refusal is a sentence that
+    would otherwise have reached somebody. Zero calls: `parseTechnique` is the
+    boundary and it is pure.
+  */
+  const good = JSON.stringify({
+    move: "Ask them to name the smallest bill they could clear this week, then stop.",
+    source: "https://pubmed.ncbi.nlm.nih.gov/12345678/",
+  });
+  const t = parseTechnique(good, "economy");
+  ok(t?.move.startsWith("Ask them"), "a move with a URL behind it is kept");
+  is(t?.tag, "economy", "and it carries the pressure it was looked up for");
+
+  is(parseTechnique("not json at all", "economy"), null, "prose is refused");
+  is(parseTechnique(JSON.stringify({ move: null }), "economy"), null,
+    "and so is the model's own way of saying it found nothing");
+  is(parseTechnique(JSON.stringify({ move: "Ask them about money." }), "economy"), null,
+    "a move with no source is refused",
+    "no URL, no technique — that is the whole difference between searching and asking");
+  is(parseTechnique(JSON.stringify({ move: "Ask about money.", source: "a study I know" }), "economy"),
+    null, "and a source that is not a link is not a source");
+
+  /*
+    The one the prompt asks for and a model under pressure to be useful will
+    hand back anyway. The prompt is a request; this is the guard.
+  */
+  for (const finding of [
+    "Tell them that studies show naming the amount reduces avoidance.",
+    "Explain that 68% of participants improved after writing the number down.",
+    "Share the meta-analysis on debt anxiety with them.",
+  ]) {
+    is(parseTechnique(JSON.stringify({ move: finding, source: "https://apa.org/x" }), "economy"),
+      null, `refused as a finding: "${finding.slice(0, 38)}…"`,
+      "it is handed a move to make, never a fact to repeat");
+  }
+
+  // Fenced JSON is what a model actually returns half the time.
+  ok(parseTechnique("```json\n" + good + "\n```", "economy") !== null,
+    "a fenced answer is still read");
+
+  /*
+    The block hands over the move and keeps the URL. The source exists so a
+    person auditing this can see where a move came from; putting it in front
+    of a model is handing it a citation to quote, and a reply that cites a
+    paper at somebody is the fail state with a footnote.
+  */
+  const block = researchBlock(t);
+  ok(block?.includes("Ask them"), "the move reaches the prompt");
+  ok(!block?.includes("pubmed"), "the source does not",
+    "a model shown a URL will cite it");
+  ok(/Never say where it came from/i.test(block ?? ""), "and it is told not to attribute");
+  is(researchBlock(null), null, "with nothing found, the prompt says nothing at all");
+
+  /*
+    A closed list of queries, so a search string is never assembled from
+    something somebody typed. A free-text query built from a vent would send a
+    stranger's sentence to a search engine, which is the opposite of every
+    promise on the landing page.
+  */
+  const src = fs.readFileSync(path.join(ROOT, "src/lib/vent/research.ts"), "utf8");
+  ok(Object.keys(QUERIES).length >= 8, `the pressures have queries (${Object.keys(QUERIES).length})`);
+  ok(!/content:\s*`[^`]*\$\{(?:message|input|text|vent)/.test(src),
+    "and no query is built from a person's words");
+  ok(!("not-a-tag" in QUERIES) && /!QUERIES\[tag\]/.test(src),
+    "an unknown tag is never looked up",
+    "the closed table is the guard, not a string somebody typed");
+
+  // The allowlist is the difference between the literature and the internet.
+  ok(ALLOWED.length >= 5 && ALLOWED.every((d) => /^[a-z0-9.-]+$/.test(d)),
+    `the search is fenced to ${ALLOWED.length} domains`,
+    "an open search for therapy techniques lands on life-coach blogs — the register this product exists to avoid");
+  ok(ALLOWED.some((d) => d.includes("ncbi") || d.includes("apa.org")),
+    "and they are places a clinician would actually read");
+
+  /*
+    The tool variant matters. `web_search_20260209` runs code execution under
+    the hood, which is why `code_execution` must not also be declared — two
+    execution environments confuse the model about which one it is in.
+  */
+  ok(/web_search_20260209/.test(src), "the dynamic-filtering search tool is the one declared");
+  ok(!/code_execution/.test(src.replace(/\/\*[\s\S]*?\*\//g, " ")),
+    "and nothing declares a second execution environment beside it");
+
+  /*
+    A server tool that fails answers 200 with an error object where a success
+    is an array. A caller that indexes before branching reads a field off an
+    error and carries on as though it had a result.
+  */
+  ok(/Array\.isArray\(b\.content\)/.test(src),
+    "a failed search is told apart from an empty one",
+    "web search errors do not throw — they arrive as a 200 with an object where a list was");
+});
+
+check("79 The room proposes, the gate decides", () => {
+  /*
+    "Runs a nightly self-audit, finds where it sounded generic, writes new
+    rules to itself, updates its own prompt."
+
+    Every word of that is right except the last four. A prompt that rewrites
+    itself unsupervised has no floor, and the failure is never dramatic: each
+    night's rule is individually reasonable, the tenth contradicts the third,
+    nobody can say when the voice changed, and there is no version to go back
+    to because there was never a diff.
+
+    So the loop is: `scripts/audit.mjs` proposes, `learned.ts` holds, the gate
+    decides. Applying a proposal edits a version-controlled file — every rule
+    the room gave itself is a diff somebody can read, blame and revert, and it
+    cannot reach anybody until this suite passes on it.
+
+    Everything below is free. The audit's expensive half is one call about the
+    replies the graders could not judge; its cheap half is all of this.
+  */
+
+  // ── the brake ─────────────────────────────────────────────────────────────
+  is(acceptable("Name the amount out loud before asking anything else."), null,
+    "a concrete, checkable rule is accepted");
+  ok(acceptable("Be more empathetic with people in debt."),
+    "an intention is refused", "nothing can grade 'be more'");
+  ok(acceptable("Sound warm and genuine when they are angry."),
+    "and so is a quality", "'warm' cannot be read off a reply");
+  ok(acceptable("Give them advice when they seem stuck."),
+    "a rule that reopens a house rule is refused",
+    "advice, promises and diagnosis are settled — a nightly job does not get to revisit them");
+  ok(acceptable("Tell them you've got this when they finish."),
+    "and a rule that quotes a banned phrase is refused",
+    "a rule that quotes the failure it fixes is how a ban becomes an instruction");
+  ok(acceptable("x".repeat(MAX_RULE_CHARS + 1)), `over ${MAX_RULE_CHARS} characters is refused`);
+  ok(acceptable("short"), "and so is something too short to be a rule");
+
+  // ── what may come back from the one call ──────────────────────────────────
+  const today = "2026-08-22";
+  const good = JSON.stringify([
+    { rule: "Name the amount out loud before asking anything else.", found: "three replies never named it" },
+  ]);
+  const a1 = parseProposals(good, today);
+  is(a1.accepted.length, 1, "a rule with evidence behind it is accepted");
+  is(a1.accepted[0].added, today, "and dated, so the oldest can be dropped");
+  ok(a1.accepted[0].id.length > 0, "and given a stable id for blame");
+
+  const noEvidence = JSON.stringify([{ rule: "Name the amount out loud first." }]);
+  is(parseProposals(noEvidence, today).accepted.length, 0,
+    "a rule with no reply behind it is refused",
+    "that is a rule the model reasoned its way to, which is the failure mode of asking a model what it did wrong");
+  is(parseProposals("here are my thoughts", today).accepted.length, 0, "prose is refused");
+
+  // ── the list stays a list ─────────────────────────────────────────────────
+  const many = Array.from({ length: 9 }, (_, i) => ({
+    id: `r${i}`, rule: `rule ${i}`, found: "x", added: `2026-08-0${i + 1}`,
+  }));
+  const kept = prune(many);
+  is(kept.length, MAX_LEARNED, `only ${MAX_LEARNED} survive`);
+  is(kept[0].id, "r8", "and they are the newest",
+    "an accumulating list nobody prunes is sediment, not memory");
+  is(learnedBlock([]), null, "an empty list renders nothing at all",
+    "a deployment that never ran an audit must not carry a token for this");
+  ok(learnedBlock(kept)?.includes("rule 8"), "a full one reaches the prompt");
+  is(LEARNED_RULES.length, 0, "and this ships empty",
+    "a seeded rule is one no real session produced");
+
+  /*
+    ── the trap this walked into on its first run ──────────────────────────
+
+    A fallback is not a reply. With no model key a vent gets the tactic's
+    authored `hold` — English prose written for a room rather than for this
+    message — and `quality.ts` already records what happens when that is
+    graded as model output: ten majors, every Pidgin case flagged for
+    answering in English.
+
+    The first version of this audit reported exactly that against the local
+    store: five majors, every one an authored line from `tactics.ts` that no
+    model had ever seen. The store has no provider column and adding one would
+    only help rows written after the migration — but the authored replies are
+    a closed set, so an exact match against the tactic library identifies them
+    for every row already stored.
+  */
+  const authored = ALL_TACTICS.find((t) => t.hold)?.hold;
+  ok(wasAuthored(authored), "an authored fallback is recognised as one");
+  ok(!wasAuthored("Say the thing you have not said yet. What is under it?"),
+    "and a real reply is not");
+
+  const row = (over) => ({
+    id: "x", user_message: "abeg my rent don pass me, i no fit breathe",
+    ai_reply: "x", created_at: "2026-08-22T00:00:00Z", intent_type: "vent",
+    language: "pidgin", ...over,
+  });
+  is(knownProblems([row({ ai_reply: authored })]).length, 0,
+    "so the audit never grades one",
+    "an authored line marked as a Pidgin failure is a finding about nobody");
+  ok(knownProblems([row({ ai_reply: "You should just talk to your landlord about it." })]).length > 0,
+    "while a real violation is still caught");
+
+  /*
+    Flat is an absence, not a violation — which is why a grader cannot see it
+    and why this is the only set worth spending a call on.
+  */
+  ok(echoesThem("my landlord raised the rent again", "The rent, again. What changed this month?"),
+    "a reply carrying one of their own uncommon words echoes them");
+  ok(!echoesThem("my landlord raised the rent again", "That sounds like a lot to carry."),
+    "and one that carries none does not",
+    "the cheapest honest test of 'use their words back to them'");
+
+  const flat = flatReplies([
+    row({ id: "a", ai_reply: "That sounds like a lot to carry." }),
+    row({ id: "b", ai_reply: "Rent, again. Which part of it is loudest right now?" }),
+  ]);
+  is(flat.map((r) => r.id).join(","), "a", "no question and no echo is flat; a real reply is not");
+  is(flatReplies([row({ ai_reply: authored })]).length, 0,
+    "and an authored fallback is never flat either");
+
+  /*
+    The script's shape, asserted where it costs money. A nightly job that calls
+    a model when it found nothing is a bill for a quiet night.
+  */
+  const script = fs.readFileSync(path.join(ROOT, "scripts/audit.mjs"), "utf8");
+  const beforeCall = script.slice(0, script.indexOf("client.messages.create"));
+  ok(/flat\.length === 0[\s\S]{0,400}process\.exit\(0\)/.test(beforeCall),
+    "a night with nothing flat makes no call",
+    "the graders are free and they are the whole answer most nights");
+  ok(/--dry/.test(beforeCall) && /ANTHROPIC_API_KEY/.test(beforeCall),
+    "and it can be run with no key at all");
+  ok(!/LEARNED_RULES/.test(beforeCall.slice(0, beforeCall.indexOf("--apply") + 1)) || /APPLY/.test(script),
+    "applying is opt-in");
+  ok(script.indexOf("--apply") < script.indexOf("fs.writeFileSync(file"),
+    "and nothing in src/ is written without it");
+
+  // One question asked of the model, and it forbids the shapes above.
+  const ask = auditPrompt([{ said: "x", reply: "y" }]);
+  ok(/JSON only|Return JSON/.test(ask), "the ask is for JSON");
+  ok(/not 'be more empathetic'|cannot be graded/.test(ask),
+    "and it says what a rule may not be, before the parser has to refuse it");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

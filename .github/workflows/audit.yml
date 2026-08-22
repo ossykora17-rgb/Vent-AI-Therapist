@@ -1,0 +1,77 @@
+name: nightly audit
+
+# The room, reading its own sessions back.
+#
+# 03:00 WAT (02:00 UTC) — after the late hour this product is actually used
+# and before anybody looks at it in the morning, so a proposal is waiting
+# rather than arriving mid-session.
+#
+# WHAT THIS JOB IS ALLOWED TO DO
+#
+# Propose. Nothing here writes to `src/`, opens a pull request, or changes a
+# prompt. `--apply` is deliberately absent from the command below: applying a
+# rule is a diff somebody reads, and a scheduled job that edits the prompt at
+# 3am is exactly the unsupervised loop `src/lib/vent/learned.ts` refuses to be.
+# The artifact is the deliverable; a person merges or does not.
+#
+# WHAT IT COSTS
+#
+# Usually nothing. `gradeReply` is deterministic and free and it already knows
+# every rule this product states — advice, promises, reciting, banned phrases,
+# coverage, length, language. Only replies that broke *no* stated rule and are
+# still flat reach a model, in one call, capped at ten samples. A night with
+# none makes no call at all and the job still finishes green.
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # No `npm ci`. The audit imports from `src/` through the same zero-
+      # dependency loader the gate uses, so a fresh checkout runs it — the one
+      # rule in CLAUDE.md that keeps this suite runnable from a bare worktree.
+      - name: Pull the rows this deployment actually has
+        id: rows
+        env:
+          BASE: ${{ secrets.VENT_BASE_URL }}
+          TOKEN: ${{ secrets.VENT_BACKUP_TOKEN }}
+        run: |
+          # Skips cleanly rather than failing when the backup token is not set.
+          # An unconfigured deployment is not a broken one, and a red cross on
+          # a nightly job trains people to ignore red crosses.
+          if [ -z "$TOKEN" ] || [ -z "$BASE" ]; then
+            echo "no export token configured — nothing to read tonight."
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          curl -sf -H "authorization: Bearer $TOKEN" \
+            "$BASE/api/export" -o /tmp/rows.json
+          echo "skip=0" >> "$GITHUB_OUTPUT"
+
+      - name: Grade, and ask only about what the graders could not judge
+        if: steps.rows.outputs.skip == '0'
+        env:
+          VENT_AUDIT_ROWS: /tmp/rows.json
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npm run audit
+
+      - name: Keep the report
+        if: steps.rows.outputs.skip == '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit
+          path: data/audit/
+          if-no-files-found: ignore
+          retention-days: 30
