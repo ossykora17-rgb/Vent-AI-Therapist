@@ -374,16 +374,34 @@ export class FileStore implements Store {
   async listMembers(circleId: string): Promise<CircleMemberRow[]> {
     return this.read()
       .circleMembers.filter((m) => m.circle_id === circleId)
-      .sort((a, b) => a.joined_at.localeCompare(b.joined_at));
+      /*
+        Id as the tie-break, matching the Supabase order exactly.
+
+        Two members written in the same millisecond tie on `joined_at`, and
+        the two backends broke that tie differently — this one by V8's stable
+        sort, PostgREST by whatever the planner returned. Seat numbers come
+        off this position, so the same room could number people differently
+        depending on where it was deployed.
+      */
+      .sort((a, b) => a.joined_at.localeCompare(b.joined_at) || a.id.localeCompare(b.id));
   }
 
   async addMember(
     m: Omit<CircleMemberRow, "id" | "joined_at" | "last_seen_at" | "typing_until">,
-  ): Promise<void> {
+  ): Promise<boolean> {
+    /*
+      Atomic here by construction — `write` serialises through one promise
+      queue, so the read and the insert cannot interleave. That is exactly why
+      this store could never reproduce the seat race that lives in the
+      Supabase one, and why the fix had to be written for a shape nothing
+      local can exercise.
+    */
+    let took = false;
     await this.write((db) => {
       const seats = db.circleMembers.filter((x) => x.circle_id === m.circle_id);
       if (seats.length >= MAX_SEATS) return;
       if (seats.some((x) => x.anon_id === m.anon_id)) return;
+      took = true;
       const now = new Date().toISOString();
       db.circleMembers.push({
         ...m,
@@ -395,6 +413,15 @@ export class FileStore implements Store {
         id: randomUUID(),
         joined_at: now,
       });
+    });
+    return took;
+  }
+
+  async removeMember(circleId: string, anonId: string): Promise<void> {
+    await this.write((db) => {
+      db.circleMembers = db.circleMembers.filter(
+        (x) => !(x.circle_id === circleId && x.anon_id === anonId),
+      );
     });
   }
 

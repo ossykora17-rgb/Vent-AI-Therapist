@@ -21,7 +21,7 @@ constraint. It outranks elegance, cleverness, and feature count.
 npm run local      # the whole product, no accounts, no cloud  → :3001
 npm run gate       # selector + eval + pipelines + live-verify → merge or don't
 npm run live-checks # boots its own build twice — with a store and without
-npm run eval       # 89 checks, no server; add a URL for the live room
+npm run eval       # 91 checks, no server; add a URL for the live room
 npm run audit      # grade last 50 turns; --dry is free, --apply writes a diff
 npm run heartbeat  # what changed, what is dirty, who should fix it
 npm run data       # store → data/sft.jsonl + data/eval.jsonl
@@ -304,3 +304,8 @@ right. It is:
 
 `grep` for the sentence, not for the file you were looking at. If there are two
 copies, the fix is one copy — a constant, imported — and not two edits.
+
+Check 81 asks it for you now: no sentence a person reads may live in two files.
+It found three the day it was written — the chair question in the circle lobby
+and the circle room, the failed-deletion sentence in the chat and on the Memory
+page, and the product's own title in two metadata files.

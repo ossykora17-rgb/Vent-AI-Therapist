@@ -171,13 +171,16 @@ async function handlePOST(request: Request) {
       ends_at: new Date(now.getTime() + CIRCLE_MINUTES * 60_000).toISOString(),
     });
 
-    // Whoever opens the circle holds it.
-    await store.addMember({
+    // Whoever opens the circle holds it — and if that seat did not land, the
+    // circle exists with no Keeper in it, which is a room nobody can open.
+    // Better to fail the creation than to hand back a room with a hole in it.
+    const took = await store.addMember({
       circle_id: circle.id,
       anon_id: input.anonId,
       role: roleForSeat(0),
       pressure_seeded: input.pressure != null ? Math.round(input.pressure) : null,
     });
+    if (!took) throw new Error("the creator's own seat did not land");
   } catch (error) {
     console.error("[circles] could not open a circle", error);
     return NextResponse.json(

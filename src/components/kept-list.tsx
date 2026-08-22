@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { FORGET_FAILED } from "@/lib/vent/voice";
 import Link from "next/link";
 import { anonId } from "@/lib/anon";
 import { useToast } from "@/components/ui/toast";
@@ -87,10 +88,10 @@ export function KeptList() {
         setCarve(null);
         toast("Forgotten.", "success");
       } else {
-        toast("Could not clear that. It is still here.", "info");
+        toast(FORGET_FAILED, "info");
       }
     } catch {
-      toast("Could not clear that. It is still here.", "info");
+      toast(FORGET_FAILED, "info");
     }
   }
 
