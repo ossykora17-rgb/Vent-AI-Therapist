@@ -45,8 +45,12 @@ export default function PrivacyPage() {
       */}
       <h2>Your words and the AI</h2>
       <p>
+        {/* "This deployment may use" — a word for a copy of the software,
+            in the one document written to be read by somebody who has never
+            deployed anything. The naming of the processors below is required
+            and stays; the jargon around it does not. */}
         When you vent, your message and your recent history are sent to an AI
-        provider to generate the reply. This deployment may use any of{" "}
+        provider to generate the reply. Mind Weave may use any of{" "}
         <strong>Anthropic</strong>, <strong>Google</strong>,{" "}
         <strong>Groq</strong>, <strong>Zhipu</strong>,{" "}
         <strong>DeepSeek</strong>,{" "}

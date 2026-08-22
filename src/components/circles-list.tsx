@@ -153,6 +153,11 @@ export function CirclesList() {
       <RoomHeader />
 
       <main id="main" className="mx-auto w-full max-w-[640px] flex-1 px-4 py-5">
+        {/* No count where there is nothing to count. "No circles carving now"
+            is a live reading of a lobby, and with no store there is no lobby
+            to read — it would sit above a paragraph saying so and quietly
+            contradict it. */}
+        {persisting && (
         <p className="label-mono flex items-center gap-2">
           {circles.length > 0 && (
             <span aria-hidden="true" className="h-2 w-2 rounded-full bg-gold motion-safe:animate-pulse" />
@@ -163,6 +168,7 @@ export function CirclesList() {
               ? "No circles carving now"
               : `${circles.length} ${circles.length === 1 ? "circle" : "circles"} carving now`}
         </p>
+        )}
 
         {loading && (
           <div className="mt-4 space-y-3" aria-busy="true">
@@ -179,7 +185,48 @@ export function CirclesList() {
           know it was me". That answer belongs here, before the button, not
           inside the room after they have committed.
         */}
-        {!loading && circles.length === 0 && !creating && (
+        {/*
+          A door that opens onto 503.
+
+          In a deployment with no store this page showed "Nobody is sitting
+          yet", offered a full-width gold "Open a circle", and then explained
+          four hundred pixels lower, on a glass plate, that circles cannot
+          open. Tapping the button answered 503 and toasted our vendor's name.
+
+          Three separate rules broken at once, and every one of them is
+          written down in this repository: never promise what the code cannot
+          keep; the room never offers a door that opens onto 501; and a plate
+          is a voice speaking, not a place to put a condition. Nothing here
+          ran in this shape, so nothing noticed.
+
+          The lobby now answers the question once. Either rooms can open and
+          this is an empty lobby, or they cannot and it says so where the
+          invitation used to be.
+        */}
+        {!loading && !persisting && !creating && (
+          <div className="mt-6">
+            <p className="font-display text-heading leading-[1.3]">
+              Rooms aren&apos;t open here yet.
+            </p>
+            <p className="mt-3 max-w-[46ch] text-body leading-[1.7] text-ash">
+              Six seats, forty-five minutes, no advice, and every word deleted
+              at the end — that is a circle, and there is no way to hold one
+              here tonight.
+            </p>
+            <p className="mt-3 max-w-[46ch] text-body leading-[1.7] text-ash">
+              The private session is open, and for what you came with it is
+              the better room anyway. Nobody reads it but you and the machine.
+            </p>
+            <Link
+              href="/chat"
+              className="mt-5 inline-flex min-h-[44px] items-center text-body font-semibold text-ink underline underline-offset-4"
+            >
+              Come in →
+            </Link>
+          </div>
+        )}
+
+        {!loading && persisting && circles.length === 0 && !creating && (
           <div className="mt-6">
             <p className="font-display text-heading leading-[1.3]">
               Nobody is sitting yet.
@@ -414,7 +461,7 @@ export function CirclesList() {
           })}
         </ol>
 
-        {circles.length > 0 && !creating && (
+        {persisting && circles.length > 0 && !creating && (
           <button
             type="button"
             onClick={() => setCreating(true)}
@@ -424,14 +471,6 @@ export function CirclesList() {
           </button>
         )}
 
-        {!persisting && (
-          <p className="glass mt-4 p-4 text-body leading-relaxed">
-            <span className="label-mono">No rooms tonight</span>
-            <br />
-            Circles cannot open on this deployment yet. The private session is
-            open and it is the better room for tonight anyway.
-          </p>
-        )}
       </main>
 
       <footer className="mx-auto w-full max-w-[640px] px-4 pb-[max(16px,env(safe-area-inset-bottom))]">

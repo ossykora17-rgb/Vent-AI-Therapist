@@ -40,6 +40,34 @@ export function FeedbackFab() {
         return;
       }
 
+      /*
+        And the other half of the same lesson, which the fix above walked
+        straight past.
+
+        `res.ok` was made load-bearing when the 429 was found, and 429 is only
+        one of the two ways a rating goes nowhere. The route answers **200**
+        with `{persisted: false, storage: "none"}` when `getStore()` returns
+        null — production with no Supabase env vars, which is what a fresh
+        Vercel project is and what real people were actually using. So the
+        rating was dropped on the floor and the person was thanked for it,
+        through a branch that had just been written to stop exactly that.
+
+        The same sentence as `I've saved it, word for word`, one surface over,
+        and worse in one respect: ratings are the input to the preference
+        pipeline. A thank-you over a dropped rating does not merely mislead
+        one person — it makes the product's only measurement of what is losing
+        quietly incomplete, in precisely the deployment shape nothing here
+        runs in.
+      */
+      const data = await res.json().catch(() => null);
+      if (data?.persisted !== true) {
+        toast("Heard — but nothing is being kept beyond this visit yet.", "info");
+        setOpen(false);
+        setRating(0);
+        setMessage("");
+        return;
+      }
+
       toast("Thank you. Na so we dey improve.", "success");
       setOpen(false);
       setRating(0);

@@ -89,8 +89,22 @@ export async function flushQueue(): Promise<number> {
         stays queued until it is genuinely kept, and gets another attempt on
         the next drain rather than a silent deletion.
       */
+      /*
+        `!== true`, not `=== false`, and the difference is somebody's words.
+
+        Every 200 this route can currently answer carries `persisted`, so the
+        two read the same today. They stop reading the same the moment a
+        response is added that does not carry it — a shape with no key is not
+        `false`, so the vent would count as sent and be spliced out of the
+        queue, which is the last copy of something written with no connection.
+
+        The rest of this codebase states the rule in the other direction —
+        an absent record is not a failed deletion — because there the harm is
+        crying failure over nothing. Here the harm is silence over a loss, so
+        the burden flips: absence is not success. Only the word `true` is.
+      */
       const body = await res.json().catch(() => null);
-      if (!body || body.persisted === false) break;
+      if (body?.persisted !== true) break;
       sent++;
     } catch {
       break;

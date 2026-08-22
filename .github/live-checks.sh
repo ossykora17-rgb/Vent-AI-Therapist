@@ -77,3 +77,57 @@ fi
 
 node scripts/eval.mjs "http://localhost:$PORT"
 node scripts/live-verify.mjs "http://localhost:$PORT"
+
+# ── and then the shape nothing runs in ──────────────────────────────────────
+#
+# Everything above ran with VENT_LOCAL_STORE=1, because almost every assertion
+# in the live half is about something being kept. That is also the reason
+# CLAUDE.md's longest list exists: every automated path in this repository has
+# a store, so production with no Supabase env vars — which is exactly what a
+# fresh Vercel project is, and what real people were using — is the one
+# configuration nothing ever exercised. The same bug has come back through
+# that gap eleven times.
+#
+# So the second pass is not these checks with a flag flipped. `no-store-verify`
+# asserts the things that are only true, and only checkable, when nothing is
+# configured: that no page 5xxs, that every refusal is written for the person
+# reading it rather than for whoever deployed this, and that no write path
+# claims to have kept anything.
+#
+# The kill-and-wait between the passes is load-bearing for the reason written
+# at the top of this file, and it is not theoretical: writing this, a leftover
+# `next-server` from the first pass answered the second one for three runs. It
+# reported the old build's copy of a sentence that had already been fixed —
+# a stale server producing a *failure*, which is the lucky direction. The
+# unlucky direction is the same thing producing a pass.
+kill -- -"$SERVER" 2>/dev/null || kill "$SERVER" 2>/dev/null || true
+for _ in $(seq 1 30); do
+  curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1 || break
+  sleep 1
+done
+if curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1; then
+  echo "the first server would not let go of :$PORT — refusing to test against it."
+  exit 1
+fi
+
+# `env -u` rather than an unset: the variable may be exported by the caller,
+# by CI, or by a shell profile, and only removing it from the child's
+# environment is the same in all three. NODE_ENV=production is what makes
+# `getStore()` refuse to fall back to a file, which is the whole shape.
+setsid env -u VENT_LOCAL_STORE NODE_ENV=production \
+  VENT_EXTERNAL_FIXTURE=scripts/fixtures/external \
+  npx next start -p "$PORT" >"$LOG.nostore" 2>&1 &
+SERVER=$!
+
+for _ in $(seq 1 30); do
+  curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1 && break
+  sleep 1
+done
+
+if ! curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1; then
+  echo "the unconfigured server never came up:"
+  tail -30 "$LOG.nostore"
+  exit 1
+fi
+
+node scripts/no-store-verify.mjs "http://localhost:$PORT"
