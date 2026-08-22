@@ -19,6 +19,14 @@ import { classifyModelError, wasCutOff, type ModelVerdict } from "./model";
  * with no key is skipped, never attempted, never reported as broken.
  */
 
+/**
+ * The default a call gets when its caller does not name one.
+ *
+ * Exported so a route can be checked against it rather than against a number
+ * somebody remembered — see check 64.
+ */
+export const PROVIDER_DEADLINE_MS = 50_000;
+
 export interface ProviderCall {
   system: string;
   messages: Array<{ role: "user" | "assistant"; content: string }>;
@@ -33,6 +41,21 @@ export interface ProviderCall {
    * default has to be the expensive, safe one.
    */
   depth?: "fast" | "deep";
+  /**
+   * How long this particular call may take, in milliseconds.
+   *
+   * Defaulted rather than fixed, because a deadline is a property of the
+   * caller and this file had it as a property of the adapter. `/api/carve`
+   * declared `maxDuration = 30` — deliberately, it is background work and
+   * check 22 holds it to that — while every call it made was permitted fifty
+   * seconds. So the platform killed the function before the code could fail:
+   * no classifier, no fallthrough, no log line, and a session quietly not
+   * remembered.
+   *
+   * The rule is arithmetic: a call may not outlast the route that makes it.
+   */
+  deadlineMs?: number;
+
   /**
    * Where to put words as they arrive, when somebody is waiting on them.
    *
@@ -475,7 +498,7 @@ export function openAiCompatible(
         // API call. Gemini resolved its id, then timed out at thirty seconds
         // and was reported unreachable — the network was fine, the clock was
         // wrong. maxDuration on the route is 60s, so this fits inside it.
-        signal: AbortSignal.timeout(50_000),
+        signal: AbortSignal.timeout(call.deadlineMs ?? PROVIDER_DEADLINE_MS),
       });
 
       // An error is JSON on both paths — a provider that refuses a streamed

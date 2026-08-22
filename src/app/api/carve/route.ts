@@ -14,7 +14,33 @@ import {
 } from "@/lib/vent/carve";
 
 export const dynamic = "force-dynamic";
+/*
+  Thirty, and the call inside it is bounded to fit.
+
+  Vercel's runtime error table, over seven days: one
+  `Task timed out after 30 seconds` on this route. It declares thirty and the
+  provider adapter permitted every call fifty — so a slow chain here could
+  never fail gracefully. The platform killed the function first: no
+  `classifyModelError`, no fallthrough to the next provider, no line in any
+  log this project writes.
+
+  Raising this to sixty was the obvious fix and the wrong one. Check 22 holds
+  this route below the vent route's budget on purpose: nobody is waiting on
+  this request — `submitMood` fires it with `void fetch` — and background work
+  has no business holding a sixty-second function open. The check was right
+  and the deadline was in the wrong file.
+
+  So the call is bounded to fit the route rather than the route stretched to
+  fit the call. `CARVE_DEADLINE_MS` leaves ten seconds of headroom for the
+  read, the write and the cold start around it.
+
+  The general rule is arithmetic and check 64 now does it: a call may not
+  outlast the route that makes it.
+*/
 export const maxDuration = 30;
+
+/** Twenty seconds for the model, ten for everything around it. */
+const CARVE_DEADLINE_MS = 20_000;
 
 /**
  * THE CARVER — eight words for the wound, written once at the end of a
@@ -109,6 +135,7 @@ async function handlePOST(req: Request) {
       // Eight words out. The ceiling is small because the job is small, and a
       // model given room to explain itself will write a case note instead.
       maxTokens: 120,
+      deadlineMs: CARVE_DEADLINE_MS,
       messages: [{ role: "user", content: carvePrompt(messages, earlier) }],
     });
     carve = parseCarve(answered.text)?.carve ?? null;

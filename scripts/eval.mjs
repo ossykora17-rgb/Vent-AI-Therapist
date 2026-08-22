@@ -6681,6 +6681,118 @@ check("63 The arrival reading is a reading, or it is nothing", () => {
     "showing 'some' for a number nobody gave is the same invention, rendered");
 });
 
+check("64 No route gives up before the work it does is allowed to finish", () => {
+  /*
+    Found in Vercel's runtime error table, not here:
+
+      Vercel Runtime Timeout Error: Task timed out after 30 seconds
+      count=1 routes=/api/carve
+
+    `/api/carve` declared `maxDuration = 30`. The provider adapter aborts its
+    own call at fifty. So a slow chain on that route could never fail
+    gracefully — the platform killed the function first, which means no
+    `classifyModelError`, no fallthrough to the next provider, and no line in
+    any log this project writes.
+
+    One occurrence in seven days, which is the number that makes it worth
+    fixing rather than the number that makes it urgent. Nobody is waiting on
+    that request — `submitMood` fires it with `void fetch` — so the only
+    symptom is a session quietly not remembered. The Carver *is* the memory,
+    and it failed in the one way memory failing looks exactly like memory
+    working.
+
+    The general rule is arithmetic and nobody was doing it: a function told to
+    give up at thirty seconds cannot contain a call permitted to run for
+    fifty. Every route that can reach a model is checked against every
+    deadline that module can impose.
+  */
+  const providers = fs.readFileSync(path.join(ROOT, "src/lib/vent/providers.ts"), "utf8");
+  /*
+    The default, by name, and any deadline still written as a literal.
+
+    Read first as `AbortSignal.timeout(\d+)` only — which was correct until
+    the same commit moved that number behind `PROVIDER_DEADLINE_MS` so callers
+    could lower it. The regex then matched only the 15s discovery timeout, the
+    ceiling silently dropped from fifty seconds to fifteen, and every route
+    cleared a bar that had fallen through the floor. The check went green *by
+    losing sight of the thing it measures*, in the same commit that introduced
+    the constant.
+
+    Which is check 45's lesson for the third time: a scan anchored on a
+    literal passes and fails on how something is written. Anchor on the name
+    the code uses, and keep the literal path for anything not yet named.
+  */
+  const named = /export const PROVIDER_DEADLINE_MS\s*=\s*(\d[\d_]*)/.exec(providers);
+  ok(named, "the provider deadline has a name the checks can read",
+    "an inline literal is a number that moves without anything noticing");
+  const deadlines = [
+    ...(named ? [Number(named[1].replace(/_/g, ""))] : []),
+    ...[...providers.matchAll(/AbortSignal\.timeout\((\d[\d_]*)\)/g)]
+      .map((m) => Number(m[1].replace(/_/g, ""))),
+  ];
+  ok(deadlines.length > 0, "the provider adapter bounds its own calls");
+  const longest = Math.max(...deadlines) / 1000;
+  is(longest, 50, "and the longest a call may run is fifty seconds",
+    "if this number moves, every route's budget has to move with it");
+
+  /*
+    Any route that reaches the chain, found by import rather than by a list —
+    a hand-kept list is how the next route to call a model gets missed.
+  */
+  const routes = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.name === "route.ts") routes.push(full);
+    }
+  };
+  walk(path.join(ROOT, "src/app/api"));
+
+  let checked = 0;
+  for (const file of routes) {
+    const src = fs.readFileSync(file, "utf8");
+    const callsModel = /generateReply|probeChain|from "@\/lib\/vent\/providers"/.test(src);
+    if (!callsModel) continue;
+    checked += 1;
+
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+    const declared = /export const maxDuration = (\d+)/.exec(code);
+    const name = path.relative(path.join(ROOT, "src/app"), file);
+    ok(declared,
+      `${name} declares a maxDuration`,
+      "the platform default is short enough to kill a model call mid-answer");
+    if (!declared) continue;
+
+    /*
+      Against the deadline this route actually imposes, not the default.
+
+      A route may bound its own calls below the adapter's default — `/api/carve`
+      does, because it is background work that must not hold a long function
+      open, and check 22 holds it under the vent route's budget on purpose. The
+      first version of this assertion compared every route to the default and
+      therefore demanded carve be raised to sixty, which is the fix check 22
+      exists to prevent. Two checks disagreeing is one of them being wrong;
+      this was the new one.
+    */
+    const own = /deadlineMs:\s*([A-Za-z_$][\w$]*|\d[\d_]*)/.exec(code);
+    let budget = longest;
+    if (own) {
+      const literal = /^\d/.test(own[1])
+        ? Number(own[1].replace(/_/g, ""))
+        : Number(
+            new RegExp(`${own[1]}\\s*=\\s*(\\d[\\d_]*)`).exec(code)?.[1]?.replace(/_/g, "") ?? NaN,
+          );
+      ok(Number.isFinite(literal), `${name}'s own deadline resolves to a number`);
+      if (Number.isFinite(literal)) budget = literal / 1000;
+    }
+    ok(Number(declared[1]) >= budget,
+      `${name} allows at least the ${budget}s its own model call may take`,
+      "a function killed by the platform gets no classifier, no fallthrough and no log line");
+  }
+  ok(checked >= 2, `routes that can reach a model were found (${checked})`);
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

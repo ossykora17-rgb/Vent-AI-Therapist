@@ -73,8 +73,34 @@ export async function closeVoiceRoom(circleId: string): Promise<void> {
       ),
     ]);
   } catch (error) {
-    // A room that never opened returns an error, and so does an unreachable
-    // SFU. Neither may fail the close.
-    console.error("[voice] could not close the voice room", error);
+    /*
+      A room that never opened is not a failure, and this logged it as one.
+
+      The line this replaces already knew — "a room that never opened returns
+      an error, and so does an unreachable SFU" — and then handed both to
+      `console.error` under one message. Most circles here are text only, so
+      the ordinary outcome of closing one is LiveKit answering `404 not_found`
+      for a room that was correctly never created.
+
+      Production said so within a day of the lobby sweep shipping: five error
+      entries, three users, and every one of them a text circle closing
+      exactly as designed. That is a monitoring surface trained to cry wolf,
+      and the cost is not the noise — it is that the next entry, the one that
+      means the SFU is unreachable and rooms are outliving their circles, now
+      arrives indistinguishable from five that meant nothing.
+
+      This repo already has the mirror of this written down: "a failure bucket
+      with nothing in it". This is a bucket with only noise in it, which hides
+      the same thing from the other side.
+
+      404 is the expected shape and says so quietly. Everything else is still
+      an error, because everything else still is one.
+    */
+    const status = (error as { status?: number })?.status;
+    if (status === 404) {
+      console.info("[voice] no room to close — this circle was text only");
+    } else {
+      console.error("[voice] could not close the voice room", error);
+    }
   }
 }

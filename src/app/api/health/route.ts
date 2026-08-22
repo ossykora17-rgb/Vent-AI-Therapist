@@ -17,6 +17,23 @@ import { allProviders, configuredProviders, probeChain, skipped } from "@/lib/ve
 
 export const dynamic = "force-dynamic";
 
+/*
+  This route walks the whole provider chain and declared no deadline at all.
+
+  Found by check 64 the moment it was written — it asks every route that can
+  reach a model whether it allows the time that model call may take, and this
+  one had no answer to give. The platform default is short enough to kill a
+  chain probe partway, and the failure mode is the worst one available here: a
+  health endpoint that times out looks, from outside, exactly like a
+  deployment that is down. The thing you check when something is wrong,
+  reporting a fault of its own making.
+
+  Sixty, because `probeChain` tries providers in sequence and one of them may
+  legitimately spend the full provider deadline before the next is asked. The
+  probe is cached for a minute, so this is not a cost anybody pays twice.
+*/
+export const maxDuration = 60;
+
 /**
  * Deployment smoke test. Reports which integrations are wired and whether the
  * database actually answers — not just whether the keys are present.
