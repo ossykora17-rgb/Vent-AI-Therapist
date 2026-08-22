@@ -52,7 +52,18 @@ export function supabaseBase(raw: string): string {
 
 export const env = {
   supabaseUrl: supabaseBase(s(process.env.NEXT_PUBLIC_SUPABASE_URL)),
-  supabaseAnonKey: s(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+  /*
+    Gone with the account system that was its only reader.
+
+    It fed two things: the browser client, and a proxy that refreshed a
+    Supabase auth cookie on every single request — page loads, API calls, the
+    lot — for an auth system nobody could reach. A round trip per request, on
+    behalf of a login that no longer exists.
+
+    Kept as a comment rather than silently dropped because the variable is
+    still set in Vercel and somebody will wonder why nothing reads it. Nothing
+    reads it. It can be deleted there whenever.
+  */
   supabaseServiceRoleKey: s(process.env.SUPABASE_SERVICE_ROLE_KEY),
   anthropicApiKey: s(process.env.ANTHROPIC_API_KEY),
   /** Every other provider speaks the OpenAI shape — see lib/vent/providers. */
@@ -93,8 +104,20 @@ export const env = {
     "http://localhost:3000",
 } as const;
 
+/*
+  Configured means the store can be built, which means the service role.
+
+  This was `url && anonKey` — correct while an anonymous browser client was
+  the second half of the pair. It is not any more: every read and write in
+  this product goes through the service-role client, and a deployment with a
+  URL and an anon key and no service key can do nothing at all while
+  reporting itself configured.
+
+  The same distinction `/api/health` already draws with `no_service_key`,
+  arriving one file earlier.
+*/
 export const isSupabaseConfigured = Boolean(
-  env.supabaseUrl && env.supabaseAnonKey,
+  env.supabaseUrl && env.supabaseServiceRoleKey,
 );
 
 /**
@@ -159,18 +182,3 @@ export const isLivekitConfigured = Boolean(
 export const isPaystackConfigured = Boolean(
   env.paystackSecretKey && env.paystackPublicKey,
 );
-
-export function requireSupabaseEnv() {
-  if (!isSupabaseConfigured) {
-    throw new Error(
-      "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
-    );
-  }
-  return { url: env.supabaseUrl, anonKey: env.supabaseAnonKey };
-}
-
-/** Absolute URL builder — required for OAuth/email redirects. */
-export function absoluteUrl(path: string) {
-  const base = env.siteUrl.replace(/\/$/, "");
-  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
-}
