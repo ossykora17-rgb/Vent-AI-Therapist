@@ -7163,6 +7163,81 @@ check("68 A room does not tell you the same thing twice", () => {
     "six borders drawing a number that is written in words two characters away");
 });
 
+check("69 A security header does not silently disable the feature it guards", () => {
+  /*
+    Voice had never worked in production. Not once, for anybody.
+
+    `vercel.json` sent `Permissions-Policy: microphone=()`, and the empty
+    allowlist means *no origin may use this* — including the site that set it.
+    So `getUserMedia` rejected with `NotAllowedError` immediately, with no
+    permission prompt at all, on every browser, for every person who ever
+    pressed Join. The browser had already been told, by us, that this site
+    does not use microphones.
+
+    The header was added to be careful. It disabled the entire feature it was
+    meant to protect, silently, for the whole life of the deployment — and the
+    error message blamed the browser for obeying it.
+
+    Nothing could have caught this from inside the app. The header lives in
+    deployment config, it is applied by the platform, and every local run and
+    every live check talks to a server that does not send it. That is this
+    repo's oldest question wearing its newest coat: *which deployment shape
+    makes this false?* The one with the CDN in front of it — which is to say,
+    the only one real people use.
+
+    So the config is read as text, which is the one place it is visible from.
+  */
+  const raw = fs.readFileSync(path.join(ROOT, "vercel.json"), "utf8");
+  const policy = /"Permissions-Policy"[\s\S]{0,120}?"value"\s*:\s*"([^"]*)"/.exec(raw)?.[1];
+  ok(policy, "the Permissions-Policy header is findable in the deployment config");
+  if (!policy) return;
+
+  const directive = (name) =>
+    new RegExp(`\\b${name}\\s*=\\s*\\(([^)]*)\\)`).exec(policy)?.[1]?.trim();
+
+  /*
+    `microphone=()` is the bug and `microphone=(self)` is the fix. Absent is
+    also fine — no directive means the default, which permits same-origin —
+    but an empty allowlist is an explicit refusal aimed at ourselves.
+  */
+  const mic = directive("microphone");
+  ok(mic === undefined || mic.includes("self"),
+    "the microphone is permitted to this origin",
+    "`microphone=()` refuses the site that wrote it — getUserMedia throws with no prompt");
+
+  /*
+    And the camera stays shut, which is the half of this header that was
+    always doing real work. There is no camera call anywhere in this product
+    and there is not going to be: six anonymous strangers on video is a
+    different product and a harder promise. A header saying so is a guarantee
+    a reader can check without trusting the code.
+  */
+  const cam = directive("camera");
+  is(cam, "", "the camera is refused outright, which is the promise the room makes");
+
+  /*
+    Voice is reachable at all, which is the thing the header was blocking.
+    Asserted here rather than trusted, because a future tidy that removes the
+    call would make the assertion above vacuously true.
+  */
+  const voice = fs.readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8");
+  ok(/getUserMedia\(/.test(voice), "something actually asks for a microphone");
+  ok(!/video\s*:/.test(voice.replace(/\/\*[\s\S]*?\*\//g, " ")),
+    "and nothing asks for a camera",
+    "the header's promise has to be true in the code as well as in the config");
+
+  /*
+    Each refusal is named. `getUserMedia` rejects with a DOMException whose
+    `name` is the whole diagnosis — permission, no device, device busy,
+    insecure context — and one sentence covering all of them is how the real
+    cause here stayed invisible.
+  */
+  const code = voice.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  for (const n of ["NotAllowedError", "NotFoundError", "NotReadableError", "SecurityError"]) {
+    ok(code.includes(n), `${n} is told apart from the others`);
+  }
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
