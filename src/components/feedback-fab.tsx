@@ -85,7 +85,7 @@ export function FeedbackFab() {
           //
           // `--composer-h` is set by the footer from its own bounding box, so
           // this cannot drift again when the disclaimer rewraps.
-          className="fixed bottom-[calc(env(safe-area-inset-bottom)+var(--composer-h,232px)+12px)] right-3 z-40 min-h-[44px] rounded-full border border-line/15 bg-card/80 px-4 text-xs font-medium shadow-glass-sm backdrop-blur-glass"
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+var(--composer-h,232px)+12px)] right-3 z-40 min-h-[44px] rounded-full border border-line/15 bg-card/80 px-4 text-label font-medium shadow-glass-sm backdrop-blur-glass"
         >
           How we dey do?
         </button>
@@ -109,7 +109,7 @@ export function FeedbackFab() {
                   aria-label={`${n} out of 5`}
                   aria-pressed={rating === n}
                   className={cn(
-                    "h-11 flex-1 rounded-card border text-sm font-semibold transition-colors duration-300",
+                    "h-11 flex-1 rounded-card border text-body font-semibold transition-colors duration-300",
                     rating >= n ? "border-gold bg-gold text-on-gold" : "border-line/15",
                   )}
                 >
@@ -127,7 +127,7 @@ export function FeedbackFab() {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Anything else? (optional)"
-              className="mt-3 w-full resize-none rounded-card border border-line/15 bg-card/60 px-3 py-2 text-sm placeholder:text-ash"
+              className="mt-3 w-full resize-none rounded-card border border-line/15 bg-card/60 px-3 py-2 text-body placeholder:text-ash"
             />
 
             <div className="mt-3 flex gap-2">
@@ -135,14 +135,14 @@ export function FeedbackFab() {
                 type="button"
                 onClick={() => void submit()}
                 disabled={!rating || sending}
-                className="min-h-[44px] flex-1 rounded-card bg-gold px-4 text-sm font-semibold text-on-gold disabled:opacity-40"
+                className="min-h-[44px] flex-1 rounded-card bg-gold px-4 text-body font-semibold text-on-gold disabled:opacity-40"
               >
                 {sending ? "Sending…" : "Send"}
               </button>
               <button
                 type="button"
                 onClick={() => void share()}
-                className="min-h-[44px] rounded-card border border-line/15 px-4 text-sm"
+                className="min-h-[44px] rounded-card border border-line/15 px-4 text-body"
               >
                 Share
               </button>
@@ -150,7 +150,7 @@ export function FeedbackFab() {
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close feedback"
-                className="min-h-[44px] w-11 rounded-card border border-line/15 text-sm"
+                className="min-h-[44px] w-11 rounded-card border border-line/15 text-body"
               >
                 ×
               </button>

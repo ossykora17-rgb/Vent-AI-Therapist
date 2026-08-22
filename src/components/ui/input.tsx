@@ -61,7 +61,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         />
 
         {hint && !error && (
-          <p id={hintId} className="mt-2 text-[13px] leading-[1.6] text-ash">
+          <p id={hintId} className="mt-2 text-fine leading-[1.6] text-ash">
             {hint}
           </p>
         )}
@@ -69,7 +69,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           <p
             id={errorId}
             role="alert"
-            className="mt-2 border-l-2 border-gold pl-3 text-[13px] leading-[1.6] text-ink"
+            className="mt-2 border-l-2 border-gold pl-3 text-fine leading-[1.6] text-ink"
           >
             {error}
           </p>

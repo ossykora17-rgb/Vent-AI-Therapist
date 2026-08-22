@@ -22,7 +22,7 @@ export function CardTitle({
     <h3
       className={cn(
         // The display face, because that is the voice everywhere else.
-        "mb-2 font-display text-[15px] font-bold tracking-[-0.01em]",
+        "mb-2 font-display text-body font-bold tracking-[-0.01em]",
         className,
       )}
       {...props}
@@ -36,7 +36,7 @@ export function CardBody({
 }: React.HTMLAttributes<HTMLParagraphElement>) {
   return (
     <div
-      className={cn("text-[15px] leading-[1.7] text-ash", className)}
+      className={cn("text-body leading-[1.7] text-ash", className)}
       {...props}
     />
   );

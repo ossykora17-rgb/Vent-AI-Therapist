@@ -806,7 +806,22 @@ export function VentChat() {
   return (
     <div className="flex min-h-dvh flex-col">
       {showOnboarding && <Onboarding onDone={completeOnboarding} />}
-      <FeedbackFab />
+      {/*
+        Nothing to rate yet.
+
+        This floated unconditionally, so the first thing on an empty session —
+        the loudest object on the screen, a white pill twelve pixels above the
+        composer — was VENT asking "How we dey do?" of somebody who had not
+        said a word. It asks for a verdict on a room they have not entered, and
+        it does it in the gap where the answer is supposed to go.
+
+        Two replies, not one. After one reply the question is about a sentence;
+        after two it is about a conversation, which is the thing the rating
+        actually feeds — the preference pipeline compares replies to each
+        other, and a rating cast before there is a second one has nothing to be
+        a preference between.
+      */}
+      {lines.filter((l) => l.speaker === "vent").length >= 2 && <FeedbackFab />}
 
       <RoomHeader />
 
@@ -891,10 +906,10 @@ export function VentChat() {
         */}
         {lines.length === 0 && !thinking && (
           <div className="py-6">
-            <p className="font-display text-[22px] leading-[1.3] tracking-[-0.01em]">
+            <p className="font-display text-heading leading-[1.3] tracking-[-0.01em]">
               {kept ? "You're back." : "Come in. Say small. Hear plenty."}
             </p>
-            <p className="mt-3 max-w-[48ch] text-[15px] leading-[1.7] text-ash">
+            <p className="mt-3 max-w-[48ch] text-body leading-[1.7] text-ash">
               {kept
                 ? "I kept what you left here. Pick it up or start somewhere else — both are fine."
                 : "Nobody reads this but you and the machine. It does not have to be tidy, or finished, or even true yet — start in the middle if that is where you are."}
@@ -946,7 +961,7 @@ export function VentChat() {
                     <button
                       type="button"
                       onClick={() => void forgetCarve()}
-                      className="focusable mt-4 min-h-[44px] text-[15px] text-ash underline underline-offset-4"
+                      className="focusable mt-4 min-h-[44px] text-body text-ash underline underline-offset-4"
                     >
                       Forget this
                     </button>
@@ -993,7 +1008,7 @@ export function VentChat() {
               */
               <li key={line.id} className="settle flex justify-end">
                 <div className="max-w-[70%] border-r border-gold/30 pr-4 text-right">
-                  <p className="label-mono mb-1.5 text-[11px] tracking-[0.14em]">You</p>
+                  <p className="label-mono mb-1.5 text-label tracking-[0.14em]">You</p>
                   {/* Their words, exactly as typed — line breaks and all. */}
                   <p className="said">{line.text}</p>
                 </div>
@@ -1074,13 +1089,13 @@ export function VentChat() {
             <div className="flex flex-col gap-2 sm:flex-row">
               <a
                 href={`tel:${crisis.nigeria.replace(/\s/g, "")}`}
-                className="flex min-h-[44px] flex-1 items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-on-gold"
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-card bg-gold px-4 text-body font-semibold text-on-gold"
               >
                 Call {crisis.nigeria}
               </a>
               <a
                 href={`tel:${crisis.emergency}`}
-                className="flex min-h-[44px] flex-1 items-center justify-center rounded-card border border-line/20 px-4 text-sm font-semibold"
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-card border border-line/20 px-4 text-body font-semibold"
               >
                 Emergency {crisis.emergency}
               </a>
@@ -1091,7 +1106,7 @@ export function VentChat() {
                 setGated(false);
                 setCrisis(null);
               }}
-              className="mt-3 min-h-[44px] w-full text-sm text-ash underline underline-offset-4"
+              className="mt-3 min-h-[44px] w-full text-body text-ash underline underline-offset-4"
             >
               I am safe now — continue venting
             </button>
@@ -1188,14 +1203,14 @@ export function VentChat() {
               <button
                 type="button"
                 onClick={acceptBreaking}
-                className="pressable focusable min-h-[48px] rounded-card bg-gold px-5 text-[15px] font-semibold text-on-gold"
+                className="pressable focusable min-h-[48px] rounded-card bg-gold px-5 text-body font-semibold text-on-gold"
               >
                 Ask me
               </button>
               <button
                 type="button"
                 onClick={declineBreaking}
-                className="pressable focusable min-h-[48px] rounded-card border border-line/15 px-5 text-[15px] font-semibold"
+                className="pressable focusable min-h-[48px] rounded-card border border-line/15 px-5 text-body font-semibold"
               >
                 Not tonight
               </button>
@@ -1221,7 +1236,7 @@ export function VentChat() {
                   type="button"
                   onClick={() => submitMood(n)}
                   aria-label={`${n} out of 10, where 1 is heaviest`}
-                  className="tabular h-11 w-11 rounded-full border border-line/15 text-sm font-semibold transition-colors duration-300 hover:border-gold hover:bg-gold hover:text-on-gold"
+                  className="tabular h-11 w-11 rounded-full border border-line/15 text-body font-semibold transition-colors duration-300 hover:border-gold hover:bg-gold hover:text-on-gold"
                 >
                   {n}
                 </button>
@@ -1260,7 +1275,7 @@ export function VentChat() {
                 type="button"
                 onClick={() => void submitHeld()}
                 disabled={!heldDraft.trim() || heldSaving}
-                className="pressable focusable min-h-[48px] rounded-card bg-gold px-5 text-[15px] font-semibold text-on-gold disabled:opacity-40"
+                className="pressable focusable min-h-[48px] rounded-card bg-gold px-5 text-body font-semibold text-on-gold disabled:opacity-40"
               >
                 Keep it
               </button>
@@ -1270,7 +1285,7 @@ export function VentChat() {
             <button
               type="button"
               onClick={() => setAskHeld(false)}
-              className="focusable mt-3 min-h-[44px] text-[15px] text-ash underline underline-offset-4"
+              className="focusable mt-3 min-h-[44px] text-body text-ash underline underline-offset-4"
             >
               Nothing this week
             </button>
@@ -1339,10 +1354,10 @@ export function VentChat() {
           <div className="presence closing mt-6 p-6 sm:p-8">
             <p className="nameplate mb-4">What you put down</p>
             <p className="flex items-baseline gap-3">
-              <span className="tabular font-display text-[56px] font-bold leading-[0.9] tracking-[-0.03em]">
+              <span className="tabular font-display text-drop font-bold leading-[0.9] tracking-[-0.03em]">
                 {drop}
               </span>
-              <span className="text-[15px] leading-[1.5] text-ash">
+              <span className="text-body leading-[1.5] text-ash">
                 points lighter
                 <br />
                 than when you sat down
@@ -1421,7 +1436,7 @@ export function VentChat() {
                   onClick={() => setBody(body === b ? null : b)}
                   aria-pressed={body === b}
                   className={cn(
-                    "min-h-[44px] rounded-full border px-4 text-xs font-mono uppercase tracking-[0.1em] transition-colors duration-300",
+                    "min-h-[44px] rounded-full border px-4 text-label font-mono uppercase tracking-[0.1em] transition-colors duration-300",
                     body === b
                       ? "border-gold bg-gold text-on-gold"
                       : "border-line/15 text-ash",
@@ -1529,7 +1544,7 @@ export function VentChat() {
                     },
                   ]);
                 }}
-                className="focusable min-h-[44px] text-[15px] text-ash underline underline-offset-4"
+                className="focusable min-h-[44px] text-body text-ash underline underline-offset-4"
               >
                 Leave it
               </button>

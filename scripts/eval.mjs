@@ -4432,7 +4432,16 @@ check("37 Every utility written actually compiles to something", () => {
     }
   })(path.join(ROOT, "src"));
 
-  const UTIL = /\b((?:bg|text|border|ring|divide|from|to|via|fill|stroke|outline|shadow|placeholder|accent|caret|decoration)-[a-z][a-z-]*)\/(\d{1,3})\b/g;
+  /*
+    Digits belong in the name.
+
+    This was `[a-z][a-z-]*`, which cannot match `slate-500` — so the one shape
+    every deleted Tailwind colour actually has was the one shape this regex
+    could not see. A mutation putting `text-slate-500/70` into a component
+    passed the suite. The alpha-step and keyword assertions below had the same
+    blind spot for as long as they have existed.
+  */
+  const UTIL = /\b((?:bg|text|border|ring|divide|from|to|via|fill|stroke|outline|shadow|placeholder|accent|caret|decoration)-[a-z][a-z0-9-]*)\/(\d{1,3})\b/g;
 
   /*
     Inside a className, never in prose.
@@ -4443,6 +4452,25 @@ check("37 Every utility written actually compiles to something", () => {
     this; the lesson did not travel two hundred lines down the file.
   */
   const CLASSNAMES = /className=(?:"([^"]*)"|\{`([^`]*)`\}|\{cn\(([\s\S]{0,800}?)\)\})/g;
+
+  /*
+    The palette, read from the config rather than restated here. A suite that
+    keeps its own copy of the table passes while the product regresses.
+  */
+  const cfg = fs.readFileSync(path.join(ROOT, "tailwind.config.ts"), "utf8");
+  const at = cfg.indexOf("colors: {");
+  const end = cfg.indexOf("ringColor:");
+  ok(at >= 0 && end > at, "the config still declares a palette where this expects one",
+    "an indexOf that returns -1 slices from the top of the file and the palette below becomes whatever the config's keys happen to be");
+  const colourBlock = cfg.slice(at + "colors: {".length, end);
+  const PALETTE = new Set(
+    [...colourBlock.matchAll(/^\s*"?([a-z][a-z0-9-]*)"?:/gm)].map((m) => m[1]),
+  );
+  // `gray: { 400: ... }` is nested — Preflight's ::placeholder needs it.
+  if (PALETTE.has("gray")) PALETTE.add("gray-400");
+  ok(PALETTE.has("gold") && PALETTE.has("ink") && PALETTE.size >= 8,
+    `the palette was read from the config (${PALETTE.size} names)`,
+    "if this cannot find the colours, every assertion below it is vacuous");
 
   for (const f of files) {
     const rel = path.relative(ROOT, f);
@@ -4476,6 +4504,35 @@ check("37 Every utility written actually compiles to something", () => {
       ok(!/-(current|transparent|inherit)$/.test(base),
         `${rel}: ${base}/${opacity} cannot carry an alpha`,
         "currentColor is a keyword, not an rgb triple");
+
+      /*
+        And the colour exists.
+
+        This check's title has always claimed more than it delivered: it
+        verified the alpha step and the keyword trap, and never once asked
+        whether the *colour* was one this project has. `theme.colors` is a
+        replacement, not an extension — Tailwind's entire default palette was
+        deleted the day the design system became singular — so `bg-slate-200/60`
+        emits no CSS at all and the element keeps whatever it inherited.
+
+        Written after the same defect was found one utility family over:
+        `theme.fontSize` is now a replacement too, and fifty-seven `text-sm`
+        survived in the components precisely because a missing utility fails
+        silently rather than loudly. An alpha modifier is proof the author
+        meant a colour, which is what makes this safe to assert here and
+        nowhere near `text-center`.
+      */
+      /*
+        `border-l-gold/70` is a colour with a side in front of it, and the
+        first version of this read the side as part of the name. Strip the
+        family, then strip an edge or an offset if one is sitting there.
+      */
+      const colourName = base
+        .replace(/^[a-z]+-/, "")
+        .replace(/^(x|y|t|r|b|l|s|e|offset)-/, "");
+      ok(PALETTE.has(colourName),
+        `${rel}: ${base}/${opacity} names a colour this project has`,
+        `not in the palette (${[...PALETTE].join(", ")}) — a deleted Tailwind colour emits nothing`);
     }
   }
 
@@ -7336,41 +7393,179 @@ check("71 There is a type scale, and everything is on it", () => {
     difference is the whole point: a scale people can feel is a scale with
     gaps in it.
   */
-  const SCALE = new Set(["11", "13", "15", "22", "56"]);
+  /*
+    Deciding the scale was not the fix, and this check was the proof.
+
+    The first version of it forbade `text-[Npx]` outside the five, and passed
+    the day it was written. It could not see the actual problem: `text-sm`,
+    `text-lg`, `text-2xl` and the rest of Tailwind's default ramp still
+    resolved, so the scale lived in a commit message rather than in the build.
+    Fifty-seven `text-sm` — fourteen pixels, one away from the reading size —
+    were sitting in the components while a green check reported a type scale.
+
+    So the scale moved into `theme.fontSize`, which *replaces* the default ramp
+    instead of extending it, and the five steps got names: a size you have to
+    justify by name is a size nobody adds by accident.
+
+    That makes this check load-bearing rather than decorative, because a
+    Tailwind utility that no longer exists does not error — it generates no CSS
+    at all, and the element quietly inherits whatever its parent was. Wrong is
+    visible. Silent is not. `text-sm` on a heading inside a 15px block now
+    renders at 15px and looks deliberate.
+  */
+  const STEPS = { label: "11px", fine: "13px", body: "15px", heading: "22px", drop: "56px" };
+  const config = fs.readFileSync(path.join(ROOT, "tailwind.config.ts"), "utf8");
+
+  ok(/\bfontSize:\s*\{/.test(config), "the config declares a font scale");
+  const afterExtend = config.slice(config.indexOf("extend: {"));
+  ok(!/\bfontSize:\s*\{/.test(afterExtend),
+    "and declares it on `theme`, not on `theme.extend`",
+    "extending keeps text-sm, text-lg and text-2xl alive beside the scale, which is how fifty-seven of them got written");
+  for (const [name, px] of Object.entries(STEPS)) {
+    ok(new RegExp(`\\b${name}:\\s*\\["${px}"`).test(config), `${name} is ${px}`);
+  }
+
   const files = [];
   const walk = (dir) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, e.name);
       if (e.isDirectory()) walk(full);
-      else if (e.name.endsWith(".tsx")) files.push(full);
+      else if (/\.(tsx|css)$/.test(e.name)) files.push(full);
     }
   };
   walk(path.join(ROOT, "src"));
-  ok(files.length > 10, `components were found (${files.length})`);
+  ok(files.length > 10, `surfaces were found (${files.length})`);
 
-  const strays = [];
+  // Comments in these files quote the sizes they are explaining, including
+  // the dead ones. Strip them or the check reads its own footnotes.
+  const bodyOf = (f) => fs.readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+
+  const DEAD = /\btext-(xs|sm|base|lg|[2-9]?xl)\b/g;
+  const dead = [];
+  const arbitrary = [];
+  const named = [];
   for (const file of files) {
-    const src = fs.readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
-    for (const m of src.matchAll(/text-\[(\d+)px\]/g)) {
-      if (!SCALE.has(m[1])) strays.push(`${path.basename(file)}:${m[1]}px`);
-    }
+    const src = bodyOf(file);
+    for (const m of src.matchAll(DEAD)) dead.push(`${path.basename(file)}:${m[0]}`);
+    for (const m of src.matchAll(/text-\[(\d+)px\]/g)) arbitrary.push(`${path.basename(file)}:${m[0]}`);
+    for (const m of src.matchAll(/\btext-(label|fine|body|heading|drop)\b/g)) named.push(m[1]);
   }
-  is(strays.length, 0,
-    `every type size is on the scale — 11, 13, 15, 22, 56${strays.length ? ` (${[...new Set(strays)].join(", ")})` : ""}`,
-    "a size four pixels from another one reads as different without reading as ranked");
+
+  is(dead.length, 0,
+    `nothing reaches for a size the build no longer has${dead.length ? ` (${[...new Set(dead)].join(", ")})` : ""}`,
+    "a deleted Tailwind utility does not error, it emits nothing — the element inherits its parent and the mistake is invisible");
+  is(arbitrary.length, 0,
+    `and nothing writes a pixel size by hand${arbitrary.length ? ` (${[...new Set(arbitrary)].join(", ")})` : ""}`,
+    "text-[14px] is exactly the sixth size the named steps exist to prevent");
 
   /*
-    And the scale is actually used, not merely unviolated. A check that only
-    forbids strays passes a codebase with one size in it.
+    One exception, named rather than tolerated: the landing logotype is set in
+    `clamp()` against the viewport, because it is lettering and not text. The
+    404 numeral used to be a second one at up to 144px and is now the drop
+    step, which is both on the scale and considerably quieter.
   */
-  const all = files.flatMap((f) =>
-    [...fs.readFileSync(f, "utf8").matchAll(/text-\[(\d+)px\]/g)].map((m) => m[1]),
-  );
-  const used = new Set(all);
-  ok(used.size >= 4, `the scale has steps in use (${[...used].sort((a, b) => a - b).join(", ")})`);
-  ok(all.filter((s) => s === "15").length > all.length / 3,
-    "and the body size is the dominant one",
-    "a product whose commonest size is not its reading size is a product of labels");
+  const clamps = files.filter((f) => /text-\[clamp\(/.test(bodyOf(f))).map((f) => path.basename(f));
+  is(clamps.join(","), "page.tsx",
+    "the one fluid size left is the landing logotype",
+    "every clamp() is a size outside the scale; there should be one, and it should be lettering");
+
+  /*
+    And the scale is used, not merely unviolated. A check that only forbids
+    strays passes a codebase with one size in it.
+  */
+  const used = new Set(named);
+  is(used.size, 5, `all five steps are in use (${[...used].sort().join(", ")})`);
+  ok(named.filter((s) => s === "body").length > named.length / 2,
+    "and the reading size is the commonest one",
+    "a product whose dominant size is not the size of a sentence is a product of labels");
+});
+
+check("72 The lights go down in both themes", () => {
+  /*
+    The scrim behind onboarding was `bg-ink/25`, under a comment explaining
+    that ink at low alpha "darkens whatever is behind it in both themes, where
+    paper/80 just washed it out."
+
+    `--ink` is the *text* colour. It is 26 26 26 on marble and 254 252 248 on
+    charcoal, because text has to invert with the page. So `bg-ink/25` in the
+    dark theme is a 25% white veil laid over a near-black page: it does not dim
+    the room, it fogs it — the precise failure the comment was written to
+    describe, produced by the fix, in the component the comment sits in. The
+    modal's scrim did the same thing at 60%, which put a near-white sheet
+    behind a dark card.
+
+    Sampled at 2x, the dark-theme onboarding backdrop was lighter than the card
+    floating on it. Half the first screen anybody sees, and it read as a smear
+    rather than as a room with the lights down.
+
+    `--vignette` is the token that already means "what this room darkens
+    toward" — warm brown on marble, black on charcoal — and it was already
+    doing exactly this job at the corners of the canvas. A scrim is that
+    instruction applied to the whole room.
+
+    The invariant is not "use this token". It is that whatever a scrim is made
+    of has to be dark in *every* theme, which is a thing this file can measure.
+  */
+  const css = fs.readFileSync(path.join(ROOT, "src/app/globals.css"), "utf8");
+
+  const scrim = css.match(/\.scrim\s*\{([\s\S]*?)\}/);
+  ok(scrim, "there is one scrim, written once");
+  ok(/--vignette/.test(scrim?.[1] ?? ""), "and it is made of the darkening token");
+
+  // Relative luminance, so the assertion is about what an eye receives rather
+  // than about which variable name was typed.
+  const lum = (rgb) => {
+    const [r, g, b] = rgb.map((v) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const readVar = (block, name) => {
+    const m = css.slice(css.indexOf(block)).match(new RegExp(`--${name}:\\s*(\\d+)\\s+(\\d+)\\s+(\\d+)`));
+    return m ? [+m[1], +m[2], +m[3]] : null;
+  };
+
+  const vLight = readVar(":root {", "vignette");
+  const vDark = readVar(".dark {", "vignette");
+  ok(vLight && vDark, "the token is defined in both themes");
+  for (const [theme, v] of [["light", vLight], ["dark", vDark]]) {
+    ok(lum(v) < 0.1, `the ${theme} scrim darkens (luminance ${lum(v).toFixed(3)})`,
+      "a scrim that lightens is fog, and the page behind it becomes unreadable rather than deferred");
+  }
+
+  /*
+    The other half, and the reason the wrong colour was reachable: `--ink` is
+    the one token that must flip, so it is the one token a scrim must never be
+    made of. Stated here so the next person reading this check can see why the
+    obvious choice was wrong.
+  */
+  const iLight = readVar(":root {", "ink");
+  const iDark = readVar(".dark {", "ink");
+  ok(lum(iLight) < 0.1 && lum(iDark) > 0.5,
+    "and --ink inverts with the theme, which is why it could not be the scrim");
+
+  // Nothing paints its own. Two scrims at two alphas were two people guessing
+  // at one gesture, and only one of them can be corrected in one place.
+  const strays = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.name.endsWith(".tsx")) {
+        const src = fs.readFileSync(full, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+        for (const m of src.matchAll(/className=(?:"|\{")([^"]*inset-0[^"]*)"/g)) {
+          if (/\bbg-(ink|paper|card)\b|\bbg-(ink|paper|card)\//.test(m[1])) {
+            strays.push(`${path.basename(full)}: ${m[1].slice(0, 48)}`);
+          }
+        }
+      }
+    }
+  };
+  walk(path.join(ROOT, "src"));
+  is(strays.length, 0,
+    `every full-bleed overlay uses it${strays.length ? ` (${strays.join("; ")})` : ""}`,
+    "a hand-rolled scrim is a second answer to a question that has one");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

@@ -222,9 +222,9 @@ export function CircleRoom({ id }: { id: string }) {
   if (notFound) {
     return (
       <main id="main" className="flex min-h-dvh flex-col items-center justify-center px-4 text-center">
-        <p className="font-display text-2xl font-bold">That circle has closed.</p>
-        <p className="mt-2 text-sm text-ash">The words are already gone. That&apos;s the deal.</p>
-        <Link href="/circles" className="mt-6 flex min-h-[48px] items-center rounded-card bg-gold px-6 text-sm font-semibold text-on-gold">
+        <p className="font-display text-heading font-bold">That circle has closed.</p>
+        <p className="mt-2 text-body text-ash">The words are already gone. That&apos;s the deal.</p>
+        <Link href="/circles" className="mt-6 flex min-h-[48px] items-center rounded-card bg-gold px-6 text-body font-semibold text-on-gold">
           See open circles
         </Link>
       </main>
@@ -261,7 +261,7 @@ export function CircleRoom({ id }: { id: string }) {
         */}
         <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
           <div className="min-w-0">
-            <h1 className="truncate font-display text-xl font-bold leading-tight tracking-[-0.02em]">
+            <h1 className="truncate font-display text-heading font-bold leading-tight tracking-[-0.02em]">
               {state ? roomName(state.circle.tag, state.circle.created_at) : "…"}
             </h1>
             <p className="label-mono mt-0.5 truncate leading-none">
@@ -294,19 +294,19 @@ export function CircleRoom({ id }: { id: string }) {
         {crisis && (
           <div className="glass mb-4 border-gold/60 p-4">
             <p className="label-mono mb-2">This isn&apos;t the room for that</p>
-            <p className="text-[15px] leading-[1.6]">
+            <p className="text-body leading-[1.6]">
               I&apos;m really concerned about you. A circle can&apos;t hold this —
               you need a person, now.
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <a href={`tel:${CRISIS_TEL}`} className="flex min-h-[44px] flex-1 items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-on-gold">
+              <a href={`tel:${CRISIS_TEL}`} className="flex min-h-[44px] flex-1 items-center justify-center rounded-card bg-gold px-4 text-body font-semibold text-on-gold">
                 Call {CRISIS_LINES.nigeria}
               </a>
-              <a href={`tel:${EMERGENCY_TEL}`} className="flex min-h-[44px] flex-1 items-center justify-center rounded-card border border-line/20 px-4 text-sm font-semibold">
+              <a href={`tel:${EMERGENCY_TEL}`} className="flex min-h-[44px] flex-1 items-center justify-center rounded-card border border-line/20 px-4 text-body font-semibold">
                 Emergency {CRISIS_LINES.emergency}
               </a>
             </div>
-            <Link href="/chat" className="mt-3 block min-h-[44px] text-center text-sm text-ash underline underline-offset-4">
+            <Link href="/chat" className="mt-3 block min-h-[44px] text-center text-body text-ash underline underline-offset-4">
               Take it to a private vent instead
             </Link>
           </div>
@@ -315,7 +315,7 @@ export function CircleRoom({ id }: { id: string }) {
         {state && !state.joined && (
           <div className="glass p-5">
             <p className="label-mono mb-3">Before you sit</p>
-            <ul className="space-y-2 text-[15px] leading-[1.6]">
+            <ul className="space-y-2 text-body leading-[1.6]">
               {AGREEMENT.map((line) => (
                 <li key={line} className="flex gap-2">
                   <span aria-hidden="true" className="text-gold">·</span>
@@ -331,17 +331,14 @@ export function CircleRoom({ id }: { id: string }) {
                   type="button"
                   onClick={() => setChair(c.id)}
                   aria-pressed={chair === c.id}
-                  className={cn(
-                    "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
-                    chair === c.id ? "border-gold bg-gold text-on-gold" : "border-line/15",
-                  )}
+                  className="chip"
                 >
                   {c.label}
                 </button>
               ))}
             </div>
 
-            <label className="mt-4 flex min-h-[44px] items-center gap-3 text-sm">
+            <label className="mt-4 flex min-h-[44px] items-center gap-3 text-body">
               <input
                 type="checkbox"
                 checked={consented}
@@ -354,7 +351,7 @@ export function CircleRoom({ id }: { id: string }) {
               type="button"
               onClick={() => void join()}
               disabled={!consented || busy}
-              className="mt-4 min-h-[48px] w-full rounded-card bg-gold text-sm font-semibold text-on-gold disabled:opacity-40"
+              className="mt-4 min-h-[48px] w-full rounded-card bg-gold text-body font-semibold text-on-gold disabled:opacity-40"
             >
               {busy ? "Taking a seat…" : "Take a seat"}
             </button>
@@ -390,12 +387,12 @@ export function CircleRoom({ id }: { id: string }) {
               speaking, and both keep it.
             */}
             {state.seats < 2 ? (
-              <p className="max-w-[36ch] text-center text-[15px] leading-[1.7] text-ash">
+              <p className="max-w-[36ch] text-center text-body leading-[1.7] text-ash">
                 You are the first one here. The circle opens when somebody else
                 sits down.
               </p>
             ) : (
-              <p className="glass p-4 text-[15px] leading-[1.6]">
+              <p className="glass p-4 text-body leading-[1.6]">
                 <span className="label-mono">
                   {state.phase === "breathe" ? "Breathing" : "Keeper"}
                 </span>
@@ -477,7 +474,7 @@ export function CircleRoom({ id }: { id: string }) {
                       <p className="label-mono mb-1">
                         {m.mine ? "You" : `Seat ${m.seat}`} · heard
                       </p>
-                      <p className="said text-[15px]">{m.content}</p>
+                      <p className="said text-body">{m.content}</p>
                     </li>
                   );
                 }
@@ -496,7 +493,7 @@ export function CircleRoom({ id }: { id: string }) {
                       <p className="label-mono mb-1">
                         Seat {m.seat} · {m.role}
                       </p>
-                      <p className="text-[15px] leading-[1.6]">{m.content}</p>
+                      <p className="text-body leading-[1.6]">{m.content}</p>
                     </div>
                   </li>
                 );
@@ -515,13 +512,13 @@ export function CircleRoom({ id }: { id: string }) {
                   it; the words themselves were still furniture.
                 */}
                 <p className="label-mono mb-2">Closing</p>
-                <h2 className="mb-5 font-display text-[22px] leading-[1.2] tracking-[-0.01em]">
+                <h2 className="mb-5 font-display text-heading leading-[1.2] tracking-[-0.01em]">
                   Where did you land?
                 </h2>
 
                 {mood === null ? (
                   <>
-                    <p className="text-[15px] leading-[1.6]">
+                    <p className="text-body leading-[1.6]">
                       You just heard your own word said back to you. Rate where
                       you are now, 1–10.
                     </p>
@@ -532,7 +529,7 @@ export function CircleRoom({ id }: { id: string }) {
                           type="button"
                           onClick={() => setMood(n)}
                           aria-label={`Feeling ${n} out of 10`}
-                          className="h-11 w-11 rounded-full border border-line/15 text-sm font-semibold transition-colors duration-300 hover:bg-gold hover:text-on-gold"
+                          className="h-11 w-11 rounded-full border border-line/15 text-body font-semibold transition-colors duration-300 hover:bg-gold hover:text-on-gold"
                         >
                           {n}
                         </button>
@@ -543,7 +540,7 @@ export function CircleRoom({ id }: { id: string }) {
                   <>
                     {state.pressureSeeded !== null && (
                       <>
-                        <p className="text-[15px] leading-[1.6]">
+                        <p className="text-body leading-[1.6]">
                           Down{" "}
                           <span className="font-semibold">
                             {tensionDrop(state.pressureSeeded, mood)} points
@@ -578,10 +575,7 @@ export function CircleRoom({ id }: { id: string }) {
                           type="button"
                           onClick={() => setCarry(w)}
                           aria-pressed={carry === w}
-                          className={cn(
-                            "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
-                            carry === w ? "border-gold bg-gold text-on-gold" : "border-line/15",
-                          )}
+                          className="chip"
                         >
                           {w}
                         </button>
@@ -606,10 +600,7 @@ export function CircleRoom({ id }: { id: string }) {
                             );
                           }}
                           aria-pressed={dropped === w}
-                          className={cn(
-                            "min-h-[44px] rounded-full border px-4 text-sm transition-colors duration-300",
-                            dropped === w ? "border-gold bg-gold text-on-gold" : "border-line/15",
-                          )}
+                          className="chip"
                         >
                           {w}
                         </button>
@@ -626,7 +617,7 @@ export function CircleRoom({ id }: { id: string }) {
                         </p>
                         {quote && (
                           <figure className="mt-4 border-l-2 border-line/20 pl-3">
-                            <blockquote className="text-[15px] italic leading-[1.6] text-ash">
+                            <blockquote className="text-body italic leading-[1.6] text-ash">
                               {quote.text}
                             </blockquote>
                             <figcaption className="label-mono mt-1">{quote.author}</figcaption>
@@ -718,7 +709,7 @@ export function CircleRoom({ id }: { id: string }) {
               */
               <div className="flex flex-col items-center gap-6 py-6">
                 {(state.present ?? 1) > 1 && (
-                  <p className="max-w-[34ch] text-center text-[15px] leading-[1.7] text-ash">
+                  <p className="max-w-[34ch] text-center text-body leading-[1.7] text-ash">
                     Nobody has spoken yet. {state.present} people are here,
                     waiting with you.
                   </p>
@@ -735,7 +726,7 @@ export function CircleRoom({ id }: { id: string }) {
             {/* The whole point of #5: silence with somebody in it reads
                 differently from silence on its own. */}
             {state.typingOthers > 0 && (
-              <p aria-live="polite" className="mt-4 flex items-center gap-2 text-sm text-ash">
+              <p aria-live="polite" className="mt-4 flex items-center gap-2 text-body text-ash">
                 <span aria-hidden="true" className="flex gap-1">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ash [animation-delay:0ms]" />
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ash [animation-delay:200ms]" />
@@ -761,7 +752,7 @@ export function CircleRoom({ id }: { id: string }) {
         <footer ref={footerRef} className="sticky bottom-0 border-t border-line/10 bg-paper/95 backdrop-blur-glass">
           <div className="mx-auto max-w-[640px] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
             {ruleError && (
-              <p role="alert" className="mb-2 rounded-card border border-gold/50 p-3 text-[13px] leading-relaxed">
+              <p role="alert" className="mb-2 rounded-card border border-gold/50 p-3 text-fine leading-relaxed">
                 {ruleError}
               </p>
             )}
@@ -839,7 +830,7 @@ export function CircleRoom({ id }: { id: string }) {
                   name. This way the name is stable and it is the right word.
                 */
                 aria-label="Say"
-                className="flex h-12 min-w-[64px] items-center justify-center rounded-card bg-gold px-4 text-sm font-semibold text-on-gold disabled:opacity-40"
+                className="flex h-12 min-w-[64px] items-center justify-center rounded-card bg-gold px-4 text-body font-semibold text-on-gold disabled:opacity-40"
               >
                 {busy ? "…" : "Say"}
               </button>
@@ -857,7 +848,7 @@ export function CircleRoom({ id }: { id: string }) {
               So it is quieter and shorter. `ruleError` above is where this
               subject belongs when it is real; this is only the reminder.
             */}
-            <p className="mt-2 text-[11px] leading-snug text-ash/80">
+            <p className="mt-2 text-label leading-snug text-ash/80">
               {reflecting
                 ? "One line — what you heard, not what you'd do."
                 : "No advice. Speak to the circle."}

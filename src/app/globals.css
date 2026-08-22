@@ -468,7 +468,7 @@
    * than a colour anyway, and one that survives being read.
    */
   .nameplate {
-    @apply flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.22em] text-ash;
+    @apply flex items-center gap-3 font-mono text-label uppercase tracking-[0.22em] text-ash;
   }
 
   .nameplate::after {
@@ -521,7 +521,11 @@
     transition:
       transform 140ms var(--ease-settle),
       box-shadow 140ms var(--ease-settle),
-      background-color 140ms var(--ease-settle);
+      background-color 140ms var(--ease-settle),
+      /* Border and text move with the fill, or a chip's edge lags its own
+         selection by 160ms and the pill looks like it is catching up. */
+        border-color 140ms var(--ease-settle),
+      color 140ms var(--ease-settle);
   }
 
   .pressable:active:not(:disabled) {
@@ -550,7 +554,82 @@
   }
 
   .label-mono {
-    @apply font-mono text-[12px] uppercase tracking-[0.1em] text-ash;
+    @apply font-mono text-label uppercase tracking-[0.1em] text-ash;
+  }
+
+  /*
+   * One word you can pick, written once.
+   *
+   * This exact string —
+   *
+   *     min-h-[44px] rounded-full border px-4 text-[15px] transition-colors
+   *     duration-300
+   *
+   * — followed by this exact ternary —
+   *
+   *     on ? "border-gold bg-gold text-on-gold" : "border-line/15"
+   *
+   * — appeared six times across four components: the chair row in the circle
+   * lobby, the tag row beside it, the seat picker, the carry and drop rows in
+   * the closing ritual, and the carry row in onboarding. Six copies of one
+   * idea, which is how the two carry rows — the same ritual, one at the front
+   * door and one at the exit — ended up with different hover behaviour.
+   *
+   * The state is `aria-pressed`, and that is the point rather than a detail.
+   * Every copy of the ternary read a local boolean and painted it; three of
+   * the six then forgot to announce it, so a screen reader was told there were
+   * six buttons and not which one was chosen. Driving the paint *from* the
+   * announcement makes them impossible to disagree: if it looks selected it is
+   * selected, in both renderings of the page.
+   *
+   * Not used for the voice panel's two controls. `Open mic` latched and
+   * `Leave` are modes rather than choices, and a live microphone should read
+   * as a lit edge, not as a filled gold pill announcing itself.
+   */
+  /*
+   * The lights going down — in both themes, which is new.
+   *
+   * There were two scrims, `bg-ink/60` behind the modal and `bg-ink/25` behind
+   * onboarding, and the comment on the second one said ink at low alpha
+   * "darkens whatever is behind it in both themes, where paper/80 just washed
+   * it out."
+   *
+   * `--ink` is 26 26 26 in light and 254 252 248 in dark. It is the *text*
+   * colour, so of course it flips. `bg-ink/25` in dark mode is a 25% white veil
+   * laid over charcoal: it does not darken the page, it fogs it — the exact
+   * failure the comment was written to describe, in the exact component the
+   * comment is attached to, produced by the fix. Behind the modal, at 60%, the
+   * dark theme got a near-white sheet with a dark card cut out of it.
+   *
+   * `--vignette` is the token that already means "what this room darkens
+   * toward": warm brown on marble, black on charcoal, and it was already doing
+   * this job at the corners of the canvas. A scrim is the same instruction
+   * applied to the whole room, so it is the same token, and it cannot invert
+   * because darkening is what it is for.
+   *
+   * One alpha, not two. A modal at 0.6 and an arrival at 0.25 were two people's
+   * guesses about the same gesture.
+   */
+  .scrim {
+    @apply backdrop-blur-glass;
+    background-color: rgb(var(--vignette) / 0.45);
+  }
+
+  .chip {
+    @apply pressable focusable inline-flex min-h-[44px] items-center rounded-full border px-4 text-body;
+    border-color: rgb(var(--line) / 0.15);
+  }
+
+  .chip:hover:not(:disabled) {
+    border-color: rgb(var(--gold) / 0.5);
+  }
+
+  .chip[aria-pressed="true"] {
+    @apply border-gold bg-gold text-on-gold;
+  }
+
+  .chip:disabled {
+    @apply cursor-not-allowed opacity-45;
   }
 
   /*
@@ -566,7 +645,7 @@
    * surfaces nobody had put side by side.
    */
   .said {
-    @apply whitespace-pre-wrap text-[15px] leading-[1.65] text-ink/75;
+    @apply whitespace-pre-wrap text-body leading-[1.65] text-ink/75;
     text-wrap: pretty;
   }
 

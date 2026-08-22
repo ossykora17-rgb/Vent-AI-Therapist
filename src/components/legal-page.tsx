@@ -19,14 +19,14 @@ export function LegalPage({
       </header>
 
       <main id="main" className="mx-auto w-full max-w-[640px] flex-1 px-4 py-6">
-        <h1 className="font-display text-4xl font-bold tracking-[-0.02em]">
+        <h1 className="font-display text-heading font-bold tracking-[-0.02em]">
           {title}
         </h1>
 
         <div
           className={[
-            "mt-6 space-y-4 text-[15px] leading-[1.6]",
-            "[&_h2]:mt-7 [&_h2]:font-mono [&_h2]:text-[13px] [&_h2]:uppercase",
+            "mt-6 space-y-4 text-body leading-[1.6]",
+            "[&_h2]:mt-7 [&_h2]:font-mono [&_h2]:text-fine [&_h2]:uppercase",
             "[&_h2]:tracking-[0.1em] [&_h2]:text-ash",
             "[&_a]:underline [&_a]:underline-offset-2",
             "[&_strong]:font-semibold",
@@ -42,13 +42,13 @@ export function LegalPage({
         <div className="mt-6 flex flex-wrap gap-3">
           <Link
             href="/chat"
-            className="flex min-h-[48px] items-center rounded-card bg-gold px-6 text-sm font-semibold text-on-gold"
+            className="flex min-h-[48px] items-center rounded-card bg-gold px-6 text-body font-semibold text-on-gold"
           >
             Come in
           </Link>
           <Link
             href={title === "Privacy" ? "/terms" : "/privacy"}
-            className="flex min-h-[48px] items-center rounded-card border border-line/15 px-6 text-sm"
+            className="flex min-h-[48px] items-center rounded-card border border-line/15 px-6 text-body"
           >
             {title === "Privacy" ? "Terms" : "Privacy"}
           </Link>

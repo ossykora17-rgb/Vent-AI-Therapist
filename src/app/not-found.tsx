@@ -7,10 +7,10 @@ export default function NotFound() {
       id="main"
       className="flex min-h-dvh flex-col items-center justify-center px-4 text-center"
     >
-      <p className="font-display text-[clamp(4rem,20vw,9rem)] font-bold leading-none tracking-[-0.04em]">
+      <p className="font-display text-drop font-bold tracking-[-0.04em]">
         404
       </p>
-      <p className="mb-8 mt-2 max-w-sm text-sm leading-relaxed text-ash">
+      <p className="mb-8 mt-2 max-w-sm text-body leading-relaxed text-ash">
         This page doesn&apos;t exist. Nothing you did.
       </p>
       <Link href="/">
