@@ -10,6 +10,7 @@ import { FeedbackFab } from "@/components/feedback-fab";
 import { Onboarding, hasOnboarded, type OnboardingResult } from "@/components/onboarding";
 import { Breathing, Journaling, ToolRow, shouldOfferBreathing } from "@/components/tools";
 import { anonId, queueVent } from "@/lib/anon";
+import { FORGET_FAILED } from "@/lib/vent/voice";
 import { cn } from "@/lib/utils";
 import { carryingWord } from "@/lib/community/carrying";
 import { useComposerHeight } from "@/lib/ui/use-composer-height";
@@ -769,10 +770,10 @@ export function VentChat() {
         setKeptOpen(false);
         toast("Forgotten.", "success");
       } else {
-        toast("Could not clear that. It is still here.", "info");
+        toast(FORGET_FAILED, "info");
       }
     } catch {
-      toast("Could not clear that. It is still here.", "info");
+      toast(FORGET_FAILED, "info");
     }
   }
 

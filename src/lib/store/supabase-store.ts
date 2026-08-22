@@ -474,19 +474,78 @@ export class SupabaseStore implements Store {
       .from("circle_members")
       .select("*")
       .eq("circle_id", circleId)
-      .order("joined_at", { ascending: true }));
+      /*
+        Two keys, because one is not a total order.
+
+        `joined_at` is `now()` at insert, and two people taking the last two
+        seats in the same millisecond tie on it — after which PostgREST
+        returns whatever the planner felt like, and the file store returned
+        insertion order. Seat numbers are derived from this position, so the
+        same room could number the same people differently depending on where
+        it was deployed.
+      */
+      .order("joined_at", { ascending: true })
+      .order("id", { ascending: true }));
     return (data ?? []) as unknown as CircleMemberRow[];
   }
 
+  /**
+   * Take a seat, and prove it.
+   *
+   * This was read-then-insert, which cannot hold six seats. Two people join a
+   * five-seat room at the same moment, both read five, both pass the check,
+   * both insert — seven people in a six-seat circle, a seventh chair the ring
+   * cannot draw, a `seat-7` voice identity, and a phase machine that assumes
+   * six. Postgres has no cheap way to say "at most six rows per circle"
+   * without a trigger, and a migration is not something a caller can rely on
+   * having been applied.
+   *
+   * So: insert optimistically, then re-read and check where we landed. The
+   * ordering is total and identical in both stores, so both racers agree on
+   * who is seventh, and the seventh stands up again without coordinating with
+   * anybody. One extra read on a join, and only the loser pays for a delete.
+   *
+   * The file store cannot reproduce any of this — its `write` serialises — so
+   * this is a fix for a shape nothing local will ever exercise. That is the
+   * oldest lesson in CLAUDE.md and it applies to the store as much as to the
+   * suite.
+   */
   async addMember(
     m: Omit<CircleMemberRow, "id" | "joined_at" | "last_seen_at" | "typing_until">,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const existing = await this.listMembers(m.circle_id);
-    if (existing.length >= MAX_SEATS) return;
-    if (existing.some((x) => x.anon_id === m.anon_id)) return;
-    done("addMember", await this.db
+    if (existing.length >= MAX_SEATS) return false;
+    if (existing.some((x) => x.anon_id === m.anon_id)) return false;
+
+    /*
+      `.select()` on the insert, so the answer is rows and not the absence of
+      an error. Check 60's rule, and it costs nothing here — the row comes
+      back on the same round trip.
+    */
+    const wrote = ok("addMember", await this.db
       .from("circle_members")
-      .insert({ ...m, last_seen_at: new Date().toISOString() }));
+      .insert({ ...m, last_seen_at: new Date().toISOString() })
+      .select("id"));
+    const landed = ((wrote as unknown[] | null)?.length ?? 0) > 0;
+    if (!landed) return false;
+
+    const after = await this.listMembers(m.circle_id);
+    const seat = after.findIndex((x) => x.anon_id === m.anon_id);
+    if (seat >= MAX_SEATS) {
+      await this.removeMember(m.circle_id, m.anon_id);
+      return false;
+    }
+    // Not found means somebody removed it between the insert and this read.
+    // The caller does not hold a seat and must not be told that it does.
+    return seat >= 0;
+  }
+
+  async removeMember(circleId: string, anonId: string): Promise<void> {
+    done("removeMember", await this.db
+      .from("circle_members")
+      .delete()
+      .eq("circle_id", circleId)
+      .eq("anon_id", anonId));
   }
 
   async touchMember(circleId: string, anonId: string, typing: boolean): Promise<void> {

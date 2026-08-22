@@ -1,4 +1,4 @@
-import { PRODUCT_LINE } from "@/lib/vent/voice";
+import { PRODUCT_LINE, PRODUCT_TITLE } from "@/lib/vent/voice";
 import { CRISIS_LINES } from "@/lib/vent/intent";
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter } from "next/font/google";
@@ -39,12 +39,12 @@ const fraunces = Fraunces({
 
 export const metadata: Metadata = {
   title: {
-    default: "Mind Weave Vent — Truth Anchor — Calm AI Therapy Grounded in Reality",
-    template: "%s · Mind Weave Vent",
+    default: `${PRODUCT_TITLE} — Calm AI Therapy Grounded in Reality`,
+    template: `%s · ${PRODUCT_TITLE.split(" — ")[0]}`,
   },
   description:
     `Autonomous AI therapy grounded in real time. Vent, track mood, breathe, journal. Light and dark mode. Nigeria support ${CRISIS_LINES.nigeria}.`,
-  applicationName: "Mind Weave Vent",
+  applicationName: PRODUCT_TITLE.split(" — ")[0],
   manifest: "/manifest.webmanifest",
   // Declared explicitly rather than via app/icon.svg: the file-based
   // convention claims /icon.svg and collides with the static file the
@@ -54,7 +54,7 @@ export const metadata: Metadata = {
     apple: [{ url: "/icon.svg" }],
   },
   openGraph: {
-    title: "Mind Weave Vent — Truth Anchor",
+    title: PRODUCT_TITLE,
     description: `${PRODUCT_LINE} Calm AI support, grounded in reality.`,
     type: "website",
   },

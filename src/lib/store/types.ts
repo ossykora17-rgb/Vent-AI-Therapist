@@ -269,8 +269,34 @@ export interface Store {
   createCircle(c: Omit<CircleRow, "id" | "created_at">): Promise<CircleRow>;
   closeCircle(id: string): Promise<void>;
 
+  /**
+   * Everybody in the room, in the order they arrived.
+   *
+   * Total and identical across both backends. Seat numbers are derived from
+   * this position — `seatOf` in the messages route, the `seat-N` voice
+   * identity, the ring the room draws — so two stores that break a
+   * `joined_at` tie differently would hand the same person different seats
+   * depending on where the deployment keeps its rows.
+   */
   listMembers(circleId: string): Promise<CircleMemberRow[]>;
-  addMember(m: Omit<CircleMemberRow, "id" | "joined_at" | "last_seen_at" | "typing_until">): Promise<void>;
+  /**
+   * Take a seat. **True only if a row was actually written.**
+   *
+   * It used to return `void`, and both implementations quietly declined a
+   * full room — which the route could not see, so it answered 201 with a role
+   * to somebody who had no seat. That is the shape of the worst bug this
+   * product ever shipped: a promise the code could not keep, made to the
+   * person least able to absorb it.
+   */
+  addMember(
+    m: Omit<CircleMemberRow, "id" | "joined_at" | "last_seen_at" | "typing_until">,
+  ): Promise<boolean>;
+  /**
+   * Give the seat back. Used to undo a join that lost a race, and by nothing
+   * else — leaving a circle is not a feature, it is a thing that happens when
+   * the clock runs out.
+   */
+  removeMember(circleId: string, anonId: string): Promise<void>;
   /** "I am still here", and optionally "and I am writing". */
   touchMember(circleId: string, anonId: string, typing: boolean): Promise<void>;
 

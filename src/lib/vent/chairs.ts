@@ -19,6 +19,17 @@ export interface Chair {
   tension: number;
 }
 
+/**
+ * The question, asked once.
+ *
+ * Hand-typed in the circle lobby and again in the circle room — the same
+ * question, in the two places somebody meets it, with nothing connecting
+ * them. Every table in this file exists because chair tensions lived in four
+ * files once; the sentence that introduces the table had the same problem and
+ * nobody noticed because it is prose.
+ */
+export const CHAIR_QUESTION = "Which chair are you today?";
+
 export const CHAIRS: readonly Chair[] = [
   { id: "tight_edge", label: "Tight edge", hint: "Perched. Ready to leave.", tension: 78 },
   { id: "sunk", label: "Sunk in", hint: "Heavy. Not moving.", tension: 62 },

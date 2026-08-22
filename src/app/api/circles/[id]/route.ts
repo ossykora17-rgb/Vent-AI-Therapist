@@ -219,15 +219,35 @@ async function handlePOST(request: Request, { params }: Params) {
   }
 
   const role = roleForSeat(members.length);
-  await store.addMember({
+  /*
+    Read what came back, because a seat is not a request.
+
+    `addMember` used to return `void` and quietly decline a full room, so this
+    answered **201 with a role** to somebody who had no seat — and then the
+    room drew a chair for them, the voice route minted a token for them, and
+    the first thing they learned was that nobody could hear them.
+
+    That is the shape of the worst bug this product ever shipped: a promise
+    the code could not keep, made to the person least able to absorb it. The
+    check above catches the ordinary full room; this catches the two people
+    who took the last seat at the same instant, which is the only way past it
+    and the only one the file store cannot reproduce.
+  */
+  const took = await store.addMember({
     circle_id: id,
     anon_id: anonId,
     role,
     pressure_seeded: pressure != null ? Math.round(pressure) : null,
   });
 
+  // Counted after the write, never inferred from the read before it.
+  const after = await store.listMembers(id);
+  if (!took) {
+    return NextResponse.json({ error: "full", seats: after.length }, { status: 409 });
+  }
+
   return NextResponse.json(
-    { role, seats: members.length + 1, storage: store.kind },
+    { role, seats: after.length, storage: store.kind },
     { status: 201, headers: { "cache-control": "no-store" } },
   );
 }

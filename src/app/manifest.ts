@@ -1,9 +1,9 @@
-import { PRODUCT_LINE } from "@/lib/vent/voice";
+import { PRODUCT_LINE, PRODUCT_TITLE } from "@/lib/vent/voice";
 import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Mind Weave Vent — Truth Anchor",
+    name: PRODUCT_TITLE,
     short_name: "VENT",
     description: `${PRODUCT_LINE} Calm AI support, grounded in reality.`,
     start_url: "/chat",

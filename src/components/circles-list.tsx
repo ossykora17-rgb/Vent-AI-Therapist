@@ -5,7 +5,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { anonId } from "@/lib/anon";
-import { CHAIRS, tensionForChair } from "@/lib/vent/chairs";
+import { CHAIRS, tensionForChair, CHAIR_QUESTION } from "@/lib/vent/chairs";
 import { carryingWord } from "@/lib/community/carrying";
 import { roomName } from "@/lib/circles/naming";
 import { RoomHeader } from "@/components/room-header";
@@ -309,7 +309,7 @@ export function CirclesList() {
               ))}
             </div>
 
-            <p className="label-mono mb-2 mt-4">Which chair are you today?</p>
+            <p className="label-mono mb-2 mt-4">{CHAIR_QUESTION}</p>
             <div className="flex flex-wrap gap-2">
               {CHAIRS.map((seat) => (
                 <button

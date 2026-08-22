@@ -4,7 +4,7 @@ import { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL } from "@/lib/vent/intent";
 import * as React from "react";
 import Link from "next/link";
 import { anonId } from "@/lib/anon";
-import { CHAIRS, tensionDrop, tensionForChair, tensionNow } from "@/lib/vent/chairs";
+import { CHAIRS, tensionDrop, tensionForChair, tensionNow, CHAIR_QUESTION } from "@/lib/vent/chairs";
 import { CircleVoice } from "@/components/circle-voice";
 import { CircleSeats } from "@/components/circle-seats";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -323,7 +323,7 @@ export function CircleRoom({ id }: { id: string }) {
                 </li>
               ))}
             </ul>
-            <p className="label-mono mb-2 mt-5">Which chair are you today?</p>
+            <p className="label-mono mb-2 mt-5">{CHAIR_QUESTION}</p>
             <div className="flex flex-wrap gap-2">
               {CHAIRS.map((c) => (
                 <button

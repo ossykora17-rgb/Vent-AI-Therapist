@@ -195,6 +195,26 @@ export const NO_MEMORY_LINE = "I don't have that from before yet.";
  * became this: a sentence that says what the room is instead of what the
  * person should do. Everything that needs a description imports it.
  */
+/**
+ * The product's name, as a person sees it. Metadata in two files had its own
+ * copy each.
+ */
+export const PRODUCT_TITLE = "Mind Weave Vent — Truth Anchor";
+
+/**
+ * What the room says when a deletion did not happen.
+ *
+ * The chat and the Memory page both offer "Forget this", both call the same
+ * route, and both read the same field of the same answer — `kept-list.tsx`
+ * says so in its own docstring: "a second implementation of 'is it gone' is a
+ * second answer to the only question that matters on this page." It imported
+ * the logic and then hand-typed the sentence twice.
+ *
+ * A sentence about a promise that was not kept is the last place two copies
+ * should be allowed to drift.
+ */
+export const FORGET_FAILED = "Could not clear that. It is still here.";
+
 export const PRODUCT_LINE =
   "Somewhere to put the thing you can't say out loud yet.";
 

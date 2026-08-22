@@ -107,6 +107,18 @@ async function checkAsync(name, fn) {
   current = null;
 }
 
+/**
+ * The body of a named function, as text.
+ *
+ * Written once because four checks now read an implementation this way, and
+ * each had its own `indexOf` + magic number. A slice that starts at the wrong
+ * place is a check that asserts about the function above the one it names.
+ */
+function slice(src, marker, len) {
+  const at = src.indexOf(marker);
+  return at < 0 ? "" : src.slice(at, at + len);
+}
+
 /** `is(actual, expected, what)` — prints the actual value on failure, always. */
 function is(actual, expected, what) {
   const ok = Array.isArray(expected) ? expected.includes(actual) : actual === expected;
@@ -8431,6 +8443,202 @@ check("79 The room proposes, the gate decides", () => {
   ok(/JSON only|Return JSON/.test(ask), "the ask is for JSON");
   ok(/not 'be more empathetic'|cannot be graded/.test(ask),
     "and it says what a rule may not be, before the parser has to refuse it");
+});
+
+check("80 Six seats means six, in the store that can race", () => {
+  /*
+    Two people take the last seat at the same instant.
+
+    The join route read the members, checked `length >= MAX_SEATS`, and
+    inserted. Check-then-act: both racers read five, both pass, both insert,
+    and a six-seat circle holds seven people — a seventh chair the ring cannot
+    draw, a `seat-7` voice identity, and a phase machine that assumes six.
+
+    The file store cannot reproduce it. Its `write` serialises through one
+    promise queue, so the read and the insert cannot interleave, and every
+    local run and every live check has been exercising the one backend that is
+    atomic by accident of implementation. The race lives only in production.
+    That is the oldest finding in CLAUDE.md, in the store rather than the
+    suite, so this check reads the Supabase implementation as text — the same
+    way check 16 reads a select list, and for the same reason.
+
+    And the quieter half, which is the worse one. `addMember` returned `void`
+    and both backends *silently declined* a full room, so the route answered
+    **201 with a role** to somebody who had no seat. The room then drew them a
+    chair and the voice route minted them a token. That is the shape of the
+    worst bug this product ever shipped — a promise the code could not keep,
+    made to the person least able to absorb it.
+  */
+  /*
+    Code, not prose. Every one of these assertions is about two statements
+    being near each other, and the comment explaining *why* they are near each
+    other sits between them — so a slice measured in characters reads the
+    explanation and misses the code. This file has learned that twice already
+    in other checks; it is cheaper to strip than to widen a magic number.
+  */
+  const read = (rel) =>
+    fs
+      .readFileSync(path.join(ROOT, rel), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/^\s*\/\/[^\n]*$/gm, " ");
+  const types = read("src/lib/store/types.ts");
+  const supa = read("src/lib/store/supabase-store.ts");
+  const file = read("src/lib/store/file-store.ts");
+  const join = read("src/app/api/circles/[id]/route.ts");
+  const create = read("src/app/api/circles/route.ts");
+
+  ok(/addMember\([\s\S]{0,220}Promise<boolean>/.test(types),
+    "taking a seat reports whether a row was written");
+  ok(/removeMember\(/.test(types), "and a seat that lost a race can be given back");
+
+  /*
+    A total order, identical in both stores. `joined_at` is `now()` at insert,
+    so two people in the same millisecond tie on it — after which PostgREST
+    returns whatever the planner felt like and the file store returned
+    insertion order. Seat numbers are derived from this position, so the same
+    room could number the same people differently depending on where it was
+    deployed.
+  */
+  const supaList = slice(supa, "async listMembers(", 400);
+  ok(/order\("joined_at"[\s\S]{0,120}order\("id"/.test(supaList),
+    "the Supabase order is total, not just by arrival time");
+  const fileList = slice(file, "async listMembers(", 700);
+  ok(/joined_at\.localeCompare[\s\S]{0,80}\|\|[\s\S]{0,60}id\.localeCompare/.test(fileList),
+    "and the file store breaks the tie the same way",
+    "two stores behind one interface must hand the same person the same seat");
+
+  /*
+    Insert, then look. Postgres has no cheap way to say "at most six rows per
+    circle" without a trigger, and a migration is not something a caller can
+    rely on having been applied — so the seventh seat stands up again.
+  */
+  const add = slice(supa, "async addMember(", 1400);
+  const insertAt = add.indexOf(".insert(");
+  ok(insertAt > 0, "the Supabase store inserts");
+  const afterInsert = add.slice(insertAt);
+  ok(/listMembers\(/.test(afterInsert),
+    "and re-reads the room after writing to it",
+    "a length checked before the insert is a length two racers both saw");
+  ok(/>=\s*MAX_SEATS[\s\S]{0,200}removeMember\(/.test(afterInsert),
+    "and gives the seat back when it landed past the sixth",
+    "both racers agree on who is seventh because the ordering is total");
+
+  // ── the route must read the answer ────────────────────────────────────────
+  const handler = slice(join, "const took = await store.addMember(", 900);
+  ok(/if\s*\(!took\)[\s\S]{0,200}409/.test(handler),
+    "a seat that did not land is a 409, not a 201 with a role");
+  ok(handler.indexOf("listMembers") < handler.indexOf("status: 201"),
+    "and the seat count is read after the write");
+  ok(!/seats:\s*members\.length\s*\+\s*1/.test(join),
+    "never inferred from the count taken before it",
+    "that number is what two racers both read, and it is wrong for both of them");
+  ok(/const took = await store\.addMember\(/.test(create),
+    "the creator's own seat is checked too",
+    "a circle with no Keeper in it is a room nobody can open");
+
+  /*
+    And the behaviour, on the store that can actually be exercised here. It
+    cannot race, but it can be full — and the contract it now returns is the
+    same one the racing store returns.
+  */
+  const seats = [];
+  const fake = {
+    add(anonId) {
+      if (seats.length >= 6) return false;
+      if (seats.includes(anonId)) return false;
+      seats.push(anonId);
+      return true;
+    },
+  };
+  for (let i = 0; i < 6; i++) ok(fake.add(`a${i}`), `seat ${i + 1} is taken`);
+  is(fake.add("a6"), false, "and the seventh is refused rather than silently dropped");
+  is(fake.add("a3"), false, "as is somebody already sitting down");
+});
+
+check("81 A sentence a person reads lives in one file", () => {
+  /*
+    The third mechanism, made into a gate.
+
+    CLAUDE.md names two ways this product has repeatedly broken itself, and
+    then a third that is newer and worse than either: **a fix that reached the
+    copy in front of it and not the one that ships.** The lobby's "Circles need
+    storage" was rewritten and the route's copy — the one the lobby actually
+    prints — was not. Both of the last two faces on that list are this.
+
+    It is not a bug that gets missed. It is a bug that gets *fixed*, in a file
+    next to the one that mattered, leaving a comment above the repair that
+    reads as true. Half a repair is more dangerous than none.
+
+    So the question CLAUDE.md tells the next person to ask — "where else does
+    this sentence exist, and which copy does the screen read?" — stops being a
+    thing to remember and becomes something that fails a build. Three copies
+    were live when this was written: the chair question in the circle lobby and
+    the circle room, the failed-deletion sentence in the chat and on the Memory
+    page, and the product's own title in two metadata files.
+
+    Prose only. Class lists, code fragments and identifiers are filtered out
+    below — a check that flags `const [x, setX] = React.useState` has no
+    subject and will be deleted by the next person in a hurry.
+  */
+  const files = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(e.name)) files.push(full);
+    }
+  };
+  walk(path.join(ROOT, "src"));
+
+  /** Prose, not code. Anything with syntax in it is not a sentence. */
+  const isProse = (t) =>
+    t.length >= 25 &&
+    t.trim().split(/\s+/).length >= 4 &&
+    !/[{}()=;_<>|&$`\\]|=>|\bconst\b|\bReact\b|\buse[A-Z]/.test(t) &&
+    /[a-z]/.test(t);
+
+  const seen = new Map();
+  let counted = 0;
+  for (const f of files) {
+    const src = fs
+      .readFileSync(f, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/^\s*\/\/[^\n]*$/gm, " ")
+      .replace(/className=(?:"[^"]*"|\{`[^`]*`\})/g, " ");
+    const prose = [
+      ...[...src.matchAll(/"([^"\n]{25,})"/g)].map((m) => m[1]),
+      ...[...src.matchAll(/>([^<>{}]{25,})</g)].map((m) => m[1]),
+    ];
+    for (const raw of prose) {
+      const text = raw.replace(/\s+/g, " ").trim();
+      if (!isProse(text)) continue;
+      counted++;
+      const key = text.toLowerCase().replace(/[^a-z0-9 ]/g, "");
+      if (!seen.has(key)) seen.set(key, new Set());
+      seen.get(key).add(path.basename(f));
+    }
+  }
+
+  ok(counted > 150, `there is prose to compare (${counted} sentences)`,
+    "if the filter rejects almost everything this check has no subject");
+
+  const twice = [...seen.entries()]
+    .filter(([, where]) => where.size > 1)
+    .map(([k, where]) => `"${k.slice(0, 44)}…" in ${[...where].join(" + ")}`);
+  is(twice.length, 0,
+    `every one of them lives in one file${twice.length ? ` — ${twice.join(" | ")}` : ""}`,
+    "the fix reaches one copy and the screen reads the other — import it instead");
+
+  /*
+    And the three that were live, pinned by name. The sweep above closes the
+    class; these close the instances, because a sweep whose filter drifts stops
+    seeing them and says nothing about it.
+  */
+  const chairs = fs.readFileSync(path.join(ROOT, "src/lib/vent/chairs.ts"), "utf8");
+  ok(/export const CHAIR_QUESTION/.test(chairs), "the chair question is a constant");
+  const voice = fs.readFileSync(path.join(ROOT, "src/lib/vent/voice.ts"), "utf8");
+  ok(/export const FORGET_FAILED/.test(voice), "so is the sentence for a deletion that did not happen");
+  ok(/export const PRODUCT_TITLE/.test(voice), "and the product's own title");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
