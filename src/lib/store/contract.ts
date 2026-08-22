@@ -78,14 +78,25 @@ export const TABLE_CONTRACT: Readonly<Record<string, string>> = {
 /**
  * Tables the product reads but the store does not own.
  *
- * `profiles` and `memories` belong to the auth and vector-memory surfaces.
- * They are probed too — a health check that only covers what one module
- * touches is a health check with a blind spot the size of the other modules.
+ * Empty, and that is a statement rather than an oversight.
+ *
+ * It held `profiles` and `memories` — the auth and vector-memory surfaces. An
+ * anonymous product had grown an account system: a login, a signup, a
+ * dashboard nothing linked to, and a Memory page reading an endpoint behind
+ * `requireUser()`. Nobody has ever been signed in here, because the whole
+ * premise is that saying the thing you cannot say out loud does not come with
+ * a name attached. So those two tables were probed on every health check, on
+ * behalf of code no person could reach.
+ *
+ * A contract describes what the code depends on. Probing a table nothing
+ * reads is the same shape as every green light in this file's history: a
+ * check reporting on something other than the thing.
+ *
+ * Kept as a named, empty export rather than deleted, because the next surface
+ * this product grows that reads a table the store does not own belongs here,
+ * and a comment is cheaper than rediscovering why.
  */
-export const AUXILIARY_CONTRACT: Readonly<Record<string, string>> = {
-  profiles: "id",
-  memories: "id,user_id,key,value,created_at",
-} as const;
+export const AUXILIARY_CONTRACT: Readonly<Record<string, string>> = {} as const;
 
 export const FULL_CONTRACT = { ...TABLE_CONTRACT, ...AUXILIARY_CONTRACT };
 
