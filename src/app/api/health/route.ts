@@ -411,6 +411,22 @@ export async function GET() {
       writable,
       ...(writeError ? { writeError } : {}),
       /*
+        Whether a second copy of any of this exists.
+
+        Supabase Hobby keeps no automated backups, so without this the answer
+        is "no" and nothing anywhere says so. That is the quietest possible
+        failure: everything green, every promise kept, and one incident from
+        losing every carve and held note in the product — the only promise
+        here that cannot be repaired by shipping a fix.
+
+        Reported as configuration rather than as a probe, and named so: this
+        says a token exists, not that last night's copy succeeded. The
+        workflow fails loudly when a copy is incomplete, which is the right
+        place for that, and `backups: "off"` is the thing a person needs to
+        see on the page they already read.
+      */
+      backups: env.backupToken ? "configured" : "off",
+      /*
         Which database this actually is.
 
         A missing column reads as a failed migration, and the migration is

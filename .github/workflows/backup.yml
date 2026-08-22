@@ -1,0 +1,97 @@
+name: backup
+
+# The copy that exists for the one failure nothing else covers.
+#
+# Supabase Hobby keeps no automated backups. Everything in this product that
+# a person would grieve — their carve, what held them, what they wrote at 2am
+# — lives in one database with no second copy anywhere.
+#
+# Circle transcripts are deliberately not in it. They are destroyed when a
+# circle closes and that deletion is the promise the room is built on; a
+# nightly job copying them somewhere durable would turn a room that forgets
+# into a room that remembers forever, off-site. See the route.
+#
+# Three things here are load-bearing rather than tidy:
+#
+#   1. It fails the job when the export is incomplete. A backup that silently
+#      dropped a table is the shape of every other bug in this repo: an
+#      artifact that looks exactly like a good one until the day it is needed.
+#      `complete: false` is louder than a missing run.
+#   2. The artifact is never printed. `curl -o` writes to a file and nothing
+#      in this job cats it — a job log is readable by anybody with repo access
+#      and would otherwise contain everybody's history in plain text.
+#   3. It is skipped, not failed, when no token is set. A repository that has
+#      not turned this on should not have a red cross every morning; the
+#      health endpoint is where "backups are off" belongs, because that is the
+#      surface somebody reads on purpose.
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # 03:00 WAT, the quietest hour here
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Take the copy
+        id: take
+        env:
+          TOKEN: ${{ secrets.VENT_BACKUP_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "VENT_BACKUP_TOKEN is not set — backups are off. Nothing to do."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BASE="${VENT_URL:-https://vent-ai-therapist.vercel.app}"
+          CODE=$(curl -sS --max-time 90 \
+            -H "authorization: Bearer $TOKEN" \
+            -o backup.json -w '%{http_code}' \
+            "$BASE/api/export")
+
+          # 501 means the deployment has no token even though this repo does,
+          # which is a real mismatch and worth a red run: somebody set one side.
+          if [ "$CODE" != "200" ] && [ "$CODE" != "207" ]; then
+            echo "export returned $CODE"
+            node -e 'try{const b=require("./backup.json");console.log(b.error,b.message||"")}catch{}'
+            exit 1
+          fi
+
+          node -e '
+            const b = require("./backup.json");
+            const counts = Object.entries(b.tables || {})
+              .map(([t, n]) => `${t}=${n}`).join(" ");
+            console.log(`taken ${b.takenAt} · commit ${b.commit}`);
+            console.log(`rows ${counts}`);
+            console.log(`excluded ${(b.excluded || []).join(", ") || "nothing"}`);
+            if (!b.complete) {
+              for (const [t, e] of Object.entries(b.errors || {})) {
+                console.log(`  ${t}: [${e.code ?? "?"}] ${e.hint ?? "no hint"}`);
+              }
+              for (const t of b.truncated || []) console.log(`  ${t}: hit the row cap`);
+              // A partial copy is reported and still kept — half a backup is
+              // worth more than none, and a green tick over it is worth less
+              // than nothing.
+              process.exitCode = 1;
+            }
+          '
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+
+      # Kept even when the step above failed, for the same reason it fails:
+      # a partial copy is still the only copy.
+      - name: Keep it
+        if: steps.take.outputs.skipped != 'true' && hashFiles('backup.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: vent-backup-${{ github.run_id }}
+          path: backup.json
+          retention-days: 90
+          # Artifacts are private to the repository. This is somebody's
+          # history; it never becomes a release asset and never leaves here.
+          if-no-files-found: error

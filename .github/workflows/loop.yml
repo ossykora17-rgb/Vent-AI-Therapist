@@ -13,7 +13,14 @@ name: loop
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # 07:00 WAT, when somebody would look
+    # Hourly, not daily.
+    #
+    # It ran once at 07:00 WAT, which is a nine-hour blind spot over exactly
+    # the hours this product is for — somebody opening a venting app at 2am
+    # is the person a silent outage costs most. Hourly is free, the run takes
+    # fourteen seconds, and the issue step already refuses to open a second
+    # issue for the same day, so a persistent fault still speaks once.
+    - cron: "0 * * * *"
   workflow_dispatch:
 
 permissions:

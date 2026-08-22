@@ -471,6 +471,35 @@ async function main() {
       `carve=${carve.status} deleted=${JSON.stringify(carveBody.deleted)}`);
   }
 
+  /*
+    16 — the door that holds everybody's history is shut.
+
+    Check 65 reads the route. This asks the deployment, because the whole
+    point of that route is that it is reachable from the internet, and the
+    failure mode is not an error — it is a 200 with everybody's life in it.
+
+    Two shapes, and both must refuse. A build with no token configured must
+    answer 501 and never a row; a build with one must refuse a wrong token
+    with 401 and, again, never a row. This suite runs in the first shape, so
+    the first is what it can prove — and it proves it by looking at the body,
+    not just the status, because "no rows" is the assertion and a status code
+    is not a body.
+  */
+  {
+    const bare = await fetch(`${BASE}/api/export`);
+    const withJunk = await fetch(`${BASE}/api/export`, {
+      headers: { authorization: "Bearer definitely-not-the-token" },
+    });
+    const body = await bare.text();
+    const leaked = /"data"\s*:\s*\{[^}]/.test(body) || /user_message|anon_id/.test(body);
+    const shut = [501, 401].includes(bare.status) && [501, 401].includes(withJunk.status);
+
+    record(16, "The export refuses without the right token, and returns no rows either way",
+      shut && !leaked,
+      `bare=${bare.status} wrong-token=${withJunk.status} leaked=${leaked} ` +
+      `(expect 501 or 401, no rows)`);
+  }
+
   // 10 — degradation, read straight off health.
   record(10, "Keys / degradation", true,
     `storage=${health.storage} persisting=${hasDb} anthropic=${hasAi} — no 500s on any path above`);
