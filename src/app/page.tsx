@@ -41,9 +41,16 @@ export default async function LandingPage() {
         <h1 className="font-display text-[clamp(3.5rem,18vw,4.5rem)] font-bold leading-[0.95] tracking-[-0.02em]">
           VENT
         </h1>
-        <p className="mt-3 font-display text-heading italic text-ash">
-          Carve your truth.
-        </p>
+        {/*
+          The tagline is gone, and nothing replaced it.
+
+          "Carve your truth." sat in italics under the logotype and then, three
+          lines lower, the paragraph said what this is — better, and in a
+          sentence rather than a slogan. An imperative in italics on the first
+          screen is a motivational page, which is the one thing this product
+          is not; and the duplicate readout, which this file has now been
+          caught doing twice, is the other reason.
+        */}
 
         {/*
           One sentence, because the litany below is the other one.

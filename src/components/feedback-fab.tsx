@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { anonId } from "@/lib/anon";
+import { PRODUCT_LINE } from "@/lib/vent/voice";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
@@ -83,7 +84,7 @@ export function FeedbackFab() {
     const url = typeof window !== "undefined" ? window.location.origin : "";
     const data = {
       title: "Mind Weave VENT",
-      text: "Somewhere to carve your truth.",
+      text: PRODUCT_LINE,
       url,
     };
     try {

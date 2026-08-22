@@ -1,3 +1,4 @@
+import { PRODUCT_LINE } from "@/lib/vent/voice";
 import { CRISIS_LINES } from "@/lib/vent/intent";
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter } from "next/font/google";
@@ -54,7 +55,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Mind Weave Vent — Truth Anchor",
-    description: "Carve your truth. Calm AI support, grounded in reality.",
+    description: `${PRODUCT_LINE} Calm AI support, grounded in reality.`,
     type: "website",
   },
   robots: { index: true, follow: true },

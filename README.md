@@ -1,6 +1,6 @@
 # Mind Weave VENT — Truth Anchor
 
-> Carve your truth.
+> Somewhere to put the thing you can't say out loud yet.
 
 Somewhere to put the thing you can't say out loud yet. It knows what day it
 is, it remembers your exact words, and it will not tell you to drop your

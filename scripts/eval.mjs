@@ -36,6 +36,9 @@ const { guardianVerdict, THRESHOLD } = await app("src/lib/external/guardian.ts")
 // The campfire's own lines, imported once so no check keeps a copy of them.
 const { MYCELIUM: MYCELIUM_RULE } = await app("src/lib/circles/rules.ts");
 const { noModelKeyReply } = await app("src/lib/vent/fallback.ts");
+const { BANNED_PHRASES, FILE_LANGUAGE, bannedPhrase, REPLY_SENTENCE_CAP, NO_MEMORY_LINE, OFFICE_RULES, PRODUCT_LINE } =
+  await app("src/lib/vent/voice.ts");
+const { openThread, threadBlock } = await app("src/lib/vent/prompt.ts");
 const { RPC_CONTRACT } = await app("src/lib/store/contract.ts");
 const { measurePersonalEfficacy, blendEfficacy, PERSONAL_SPAN } =
   await app("src/lib/vent/efficacy.ts");
@@ -834,7 +837,15 @@ check("15c The pattern reaches the prompt, and is forbidden from being announced
   // The do-not-recite ban lives in CONTEXT_RULES now — one statement covering
   // the pattern, the carve and the opening. Asserted where it has to be true:
   // in the prompt the model is actually sent.
-  ok(/NEVER SAY IT BACK/.test(built),
+  /*
+    The marker moved when the rule did. It read "NEVER SAY IT BACK", which
+    banned naming the thing at all — and naming the thing is the whole of
+    MEMORY FIRST. The rule now separates quoting them (allowed, and the point)
+    from narrating our record (banned). Four checks grepped the old heading;
+    a rename that leaves a check grepping a string nothing writes is a check
+    that has quietly stopped having a subject.
+  */
+  ok(/NEVER THE FILE/.test(built),
     "and the ban on reading it back rides along with it");
   ok(/brought\s*\n?\s*this up four times/.test(built),
     "with the counting example, so the ban is concrete rather than abstract");
@@ -1885,8 +1896,6 @@ check("21 The door's answers reach the room, and personality has one home", () =
   });
   ok(/tangled/.test(full), "the object carries how it behaves, not just its name");
   ok(/guilt/.test(full) && /tiredness/.test(full), "both words reach the prompt");
-  ok(/tapped rather than written/.test(full),
-    "the low fidelity of a six-word list is stated, not hidden");
   // The recite ban and "their words win" are stated once, in CONTEXT_RULES,
   // for all three assembled blocks — so they are asserted on the assembled
   // prompt rather than on this block.
@@ -1896,10 +1905,24 @@ check("21 The door's answers reach the room, and personality has one home", () =
     tactic: ALL_TACTICS[0], ctx: { ...base }, memory: [],
     opening: { object: "tight_knot", carrying: "Guilt", putDown: "Tiredness" },
   });
-  ok(/NEVER SAY IT BACK/.test(withOpening),
+  ok(/NEVER THE FILE/.test(withOpening),
     "and the model is forbidden from reading the form back to them");
   ok(/THEIR SENTENCE OUTRANKS/.test(withOpening),
     "and what they type outranks what they tapped");
+  /*
+    Asserted on the assembled prompt, not on the block.
+
+    `openingBlock` used to end with its own two-line caveat — "tapped rather
+    than written, and the only thing you know about them" — which is a second
+    wording of CONTEXT_RULES rule 3, the rule written specifically to delete
+    the near-duplicate prose those three blocks were each carrying. It came
+    out; the statement did not. It reaches the model through the shared rules,
+    which render whenever any block they govern does, so what has to be true
+    is that the *prompt* says it — and that is what this now checks.
+  */
+  ok(/inferred, tapped off a\s*\n?\s*list|may simply\s*\n?\s*be wrong/.test(withOpening),
+    "the low fidelity of a six-word list is stated, not hidden",
+    "a tap treated as a confession is how you confidently address the wrong wound");
 
   // A partial answer is the normal case, not an error case.
   const partial = openingBlock({ object: null, carrying: "Anger", putDown: null });
@@ -2045,7 +2068,7 @@ await checkAsync("22 The carve is kept, read back, and erased with them", async 
   });
   ok(/may simply\s*\n?\s*be wrong/.test(withCarve),
     "it is marked fallible, because it was written about them and not by them");
-  ok(/NEVER SAY IT BACK/.test(withCarve), "and quoting it back is banned");
+  ok(/NEVER THE FILE/.test(withCarve), "and quoting it back is banned");
 
   // ── the promise that makes it safe to hold at all ───────────────────────
   //
@@ -2275,10 +2298,35 @@ check("24 The system prompt has a budget, and every block earns its place", () =
   // per token is stable enough for English prose to budget against, and a
   // budget that is roughly right beats one that does not exist.
   const tokens = Math.round(heaviest.length / 3.7);
-  const BUDGET = 3200;
+  /*
+    3,200 → 3,350, and the raise is tied to what bought it.
+
+    The office contract — the reply shape, the ratio, the phrases that end a
+    session — is ~280 tokens of *specified* content, and the open thread is
+    ~70 more. That is not the creep this check exists to catch: `HOW THEY
+    WALKED IN` grew to be the second-largest block in the prompt while
+    carrying three tapped words, and nothing could have failed it.
+
+    So most of it was paid for rather than waived. Four duplications came out
+    for it — WHAT YOU NEVER PROMISE compressed from 789 tokens to 221 with
+    every prohibition intact, HOW YOU SPEAK's first two bullets (now said
+    once, in the contract), the four-engine preamble that each engine already
+    restates, and the caveat under HOW THEY WALKED IN that CONTEXT_RULES rule
+    3 covers. About 180 tokens of essay for 350 of instruction.
+
+    The ceiling moves with an assertion attached: the two blocks that
+    justified it must actually be in the heaviest prompt. A raised budget with
+    nothing pinned to it is a budget that absorbs the next block silently,
+    which is the failure this check was written for.
+  */
+  const BUDGET = 3350;
   ok(tokens <= BUDGET,
     "the heaviest possible prompt stays inside its budget",
     `${tokens} tokens vs ${BUDGET}`);
+  ok(heaviest.includes("THE OFFICE") && heaviest.includes("EVERY REPLY"),
+    "and the contract the ceiling was raised for is in it",
+    "otherwise the raise paid for something that is no longer there");
+  ok(heaviest.includes("OPEN THREAD"), "as is the thread it also bought");
 
   // A floor as well as a ceiling. If this collapses, a block stopped
   // rendering and every reply quietly got worse with nothing failing.
@@ -2320,12 +2368,12 @@ check("24 The system prompt has a budget, and every block earns its place", () =
   const src = fs.readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8");
   const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
   ok(/const CONTEXT_RULES = /.test(code), "the shared rules exist");
-  is((code.match(/Do not say it back|Never say it back|NEVER SAY IT BACK/g) ?? []).length, 1,
+  is((code.match(/Do not say it back|Never say it back|NEVER THE FILE/g) ?? []).length, 1,
     "and the do-not-recite rule is stated exactly once in the whole prompt");
 
   // Nothing lost in the consolidation: all three prohibitions still reach a
   // model that is handed any assembled context.
-  ok(/NEVER SAY IT BACK/.test(heaviest), "the recite ban survives");
+  ok(/NEVER THE FILE/.test(heaviest), "the recite ban survives");
   ok(/LET IT AIM/.test(heaviest), "so does the aim rule");
   ok(/THEIR SENTENCE OUTRANKS/.test(heaviest), "and so does their words winning");
 
@@ -2778,7 +2826,9 @@ check("29 The rate limiter knows who it is refusing", () => {
     });
   const PAYWALL = /out of (tokens|credits)|upgrade to continue|limit reached|you have used your|as an AI\b/i;
   const offenders = walk(path.join(ROOT, "src"))
-    .filter((f) => !/lib\/vent\/quality\.ts$/.test(f))
+    // Two files name these phrases in order to forbid them: the grader and the
+    // table it now imports from.
+    .filter((f) => !/lib\/vent\/(quality|voice)\.ts$/.test(f))
     .filter((f) => PAYWALL.test(fs.readFileSync(f, "utf8")))
     .map((f) => path.relative(ROOT, f));
   ok(offenders.length === 0,
@@ -7834,6 +7884,225 @@ check("75 No sentence a person reads is about our deployment", () => {
   const health = fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8");
   ok(/SUPABASE|LIVEKIT|ANTHROPIC/.test(health),
     "and the health endpoint still names what is missing");
+});
+
+check("76 The office has one voice, and nothing we wrote breaks it", () => {
+  /*
+    "YOU RUN A THERAPY OFFICE, NOT A MOTIVATIONAL PAGE."
+
+    Six phrases were named as banned, and two of them were ours: "carve your
+    truth" was the product's tagline *and* the placeholder inside the box
+    somebody types their worst sentence into, and "how tight is it" was the
+    label over the pressure strip — a poem where a number out of ten was
+    meant. A phrase we invented is not exempt for being ours. It is worse for
+    being ours, because it is in eight files.
+
+    The rule already existed, in the one place nothing reads: `quality.ts`
+    kept a private `BANNED` array for grading *model* output, run by a command
+    that costs money and is not in the gate. Nothing checked the strings we
+    write ourselves. So the product could ship a scripted sentence in its own
+    interface, forever, under a rule that forbade it.
+
+    `voice.ts` is the table now — the prompt is assembled from it, the grader
+    imports it, and this check fails the build on any authored string that
+    violates it.
+  */
+  const SPEC = ["rattling the handle", "carve your truth", "how tight is it",
+                "you've got this", "you are worthy", "step into your power"];
+  for (const phrase of SPEC) {
+    const hit = bannedPhrase(phrase);
+    ok(hit !== null, `"${phrase}" is banned`, "named in the office spec");
+  }
+  ok(BANNED_PHRASES.length > SPEC.length,
+    `and the generics came with it (${BANNED_PHRASES.length} phrases)`);
+  /*
+    Every regex still matches its own phrase.
+
+    The prompt is generated from `say` and the build check runs on `re`, so a
+    regex that drifts from the phrase beside it silently stops enforcing the
+    thing the prompt is still forbidding — the two halves of one row
+    disagreeing with nobody to notice. This is the cheapest possible guard
+    against that and it covers both tables.
+  */
+  for (const b of [...BANNED_PHRASES, ...FILE_LANGUAGE]) {
+    ok(b.re.test(b.say), `"${b.say}" is matched by its own rule`,
+      `${b.re} does not match the phrase written next to it`);
+  }
+  ok(BANNED_PHRASES.every((b) => typeof b.why === "string" && b.why.length > 8),
+    "every one says what it does to the person reading it",
+    "a ban with no reason gets deleted by the next person in a hurry");
+
+  /*
+    Recalling is not reciting, and the old rule could not tell them apart.
+
+    The grader failed `/last time you\b/` and the prompt banned the phrase by
+    name — so the single most useful sentence a therapist has was a grading
+    offence. Quoting *their* sentence is being heard; narrating *our* record
+    is being processed, and only the second is bookkeeping.
+  */
+  ok(bannedPhrase("Last time you said your brother still hasn't called") === null,
+    "quoting them back is allowed",
+    "MEMORY FIRST is the whole spec — a room that will not name the thing has forgotten it");
+  const files = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(e.name)) files.push(full);
+    }
+  };
+  walk(path.join(ROOT, "src"));
+
+  /*
+    Two files quote these phrases by construction: the table itself, and the
+    grader that imports it. Everything else in the product is authored copy.
+  */
+  /*
+    Three files name these phrases in order to forbid them: the table, the
+    grader that imports it, and the prompt that lists them for the model. The
+    prompt no longer *types* them — `OFFICE_RULES` generates the list from
+    `say` — but the generated string still lands in a template literal here.
+  */
+  const DEFINES = ["voice.ts", "quality.ts", "prompt.ts"];
+  let scanned = 0;
+  const broken = [];
+  for (const f of files) {
+    if (DEFINES.includes(path.basename(f))) continue;
+    const src = fs
+      .readFileSync(f, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/\/\/[^\n]*/g, " ")
+      .replace(/className=(?:"[^"]*"|\{`[^`]*`\})/g, " ");
+    const prose = [
+      ...[...src.matchAll(/"([^"\n]*\s[^"\n]*)"|'([^'\n]*\s[^'\n]*)'/g)].map((m) => m[1] ?? m[2] ?? ""),
+      ...[...src.matchAll(/`([^`]{12,})`/g)].map((m) => m[1]),
+      ...[...src.matchAll(/>([^<>{}]{12,})</g)].map((m) => m[1].replace(/\s+/g, " ").trim()),
+    ];
+    for (const text of prose) {
+      scanned++;
+      const hit = bannedPhrase(text) ?? (/\bwe\b/.test(text) ? null : null);
+      if (hit) broken.push(`${path.basename(f)}: "${hit.match}" — ${hit.why}`);
+    }
+  }
+  ok(scanned > 300, `there is authored copy to check (${scanned} strings)`,
+    "if this finds almost nothing the assertion below is vacuous");
+  is(broken.length, 0,
+    `nothing we wrote says one of them${broken.length ? ` — ${broken.join(" | ")}` : ""}`,
+    "a slogan in the box at the moment somebody starts typing is the room advertising itself");
+
+  // And the tagline is gone from the eight places it was hand-typed.
+  ok(PRODUCT_LINE.length > 20 && bannedPhrase(PRODUCT_LINE) === null,
+    "the product's own line is a sentence, not a slogan");
+
+  /*
+    One table, one truth — asserted structurally rather than by eye. The
+    grader used to hold its own copy of the phrases and its own sentence cap,
+    which is how a suite passes while the product regresses.
+  */
+  const quality = fs.readFileSync(path.join(ROOT, "src/lib/vent/quality.ts"), "utf8");
+  ok(/from "\.\/voice"/.test(quality), "the grader imports the table");
+  ok(/BANNED_PHRASES\.map/.test(quality) && /FILE_LANGUAGE\.map/.test(quality),
+    "and derives its lists from it rather than restating them");
+  ok(/REPLY_SENTENCE_CAP/.test(quality),
+    "and grades length against the number the prompt is built from",
+    "the prompt said three to four and this complained at six — two sentences with nobody in charge");
+
+  const prompt = fs.readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8");
+  ok(/OFFICE_RULES/.test(prompt), "the system prompt is assembled from the office contract");
+  ok(!/[Tt]hree to four sentences/.test(prompt),
+    "and no longer carries its own sentence count",
+    `REPLY_SENTENCE_CAP is ${REPLY_SENTENCE_CAP}`);
+  for (const rule of ["Ask one question that digs", "Four parts reflecting"]) {
+    ok(OFFICE_RULES.includes(rule), `the contract carries: ${rule.slice(0, 40)}`);
+  }
+  /*
+    The other two rules of the spec live where they belong rather than in a
+    third copy: MEMORY FIRST is CONTEXT_RULES rule 1, because it governs every
+    assembled block and not only the reply, and the honest fallback is in
+    `memoryBlock` because that is the only place that knows there is nothing.
+  */
+  const promptSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8");
+  ok(/Name the concrete detail/.test(promptSrc),
+    "MEMORY FIRST is stated where the context rules are",
+    "naming the specific thing is the whole of the spec's first rule");
+
+  // The honest half of MEMORY FIRST reaches the prompt with no rows.
+  ok(memoryBlock([]).includes(NO_MEMORY_LINE),
+    "with nothing from before, the prompt hands over the exact sentence",
+    "a model with a warm brief and no memory invents having remembered");
+  ok(FILE_LANGUAGE.length >= 6, `and the bookkeeping stays banned (${FILE_LANGUAGE.length})`);
+});
+
+check("77 A thread nobody closed comes back once", () => {
+  /*
+    TRACK THREADS was the one rule in the office spec this product had no
+    machinery for. The carve is a line the model wrote *about* them; the
+    pattern is a count; memory is a window of turns with no notion of which
+    ones are finished. None of them can answer "we didn't finish talking
+    about X".
+
+    No new column and no migration: the newest vent older than the session gap
+    is, by construction, the last thing said in a sitting that has ended.
+  */
+  const HOUR = 3600_000;
+  const now = new Date("2026-08-22T12:00:00Z");
+  const row = (message, hoursAgo) => ({
+    user_message: message,
+    ai_reply: null,
+    created_at: new Date(now.getTime() - hoursAgo * HOUR).toISOString(),
+    body_tapped: null,
+    chair_picked: null,
+    mood_score: null,
+  });
+
+  is(openThread([], now), null, "a first visit has no thread");
+
+  /*
+    Silence beats a guess, and this is the case that would have broken it: a
+    second message ten minutes after the first is the same sitting, and
+    calling it unfinished business would have the room announce a thread
+    somebody is in the middle of saying.
+  */
+  is(openThread([row("rent is due and salary never enter", 0.2)], now), null,
+    "and neither does a turn from the sitting they are in");
+
+  const thread = openThread(
+    [row("my brother still has not called since the burial", 30),
+     row("work is work", 26),
+     row("just tired today", 0.1)],
+    now,
+  );
+  ok(thread !== null, "a sitting that ended leaves one");
+  is(thread?.said, "work is work",
+    "and it is the last thing they said in it, not the first",
+    "the newest row under the cutoff is where the sitting stopped");
+  is(thread?.at, "2026-08-21", "dated from their turn, not from today");
+
+  // Their words, quoted, and never our summary of them.
+  const block = threadBlock(thread);
+  ok(block?.includes('"work is work"'), "the block quotes them exactly");
+  ok(/drop it/.test(block ?? ""), "and says to drop it if today is a different subject",
+    "a thread raised against what they actually came in with is an interrogation");
+  is(threadBlock(null), null, "and with no thread it says nothing at all");
+
+  /*
+    Long enough to be a thread. A three-word turn quoted back a day later as
+    unfinished business is the room inventing significance, which is the same
+    failure as an invented exchange rate.
+  */
+  is(openThread([row("ok", 30)], now), null, "a fragment is not a thread");
+
+  // It reaches the assembled prompt rather than only existing.
+  const built = buildSystemPrompt({
+    grounding: groundNow(),
+    classification: classify("everything is heavy again today", null),
+    tactic: ALL_TACTICS[0],
+    ctx: { body: null, pressure: null, duality: null, mood: null, recentTactics: [] },
+    memory: [row("my brother still has not called since the burial", 30)],
+  });
+  ok(built.includes("OPEN THREAD"), "and the built prompt carries it");
+  ok(built.includes("my brother still has not called since the burial"),
+    "in their own words");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

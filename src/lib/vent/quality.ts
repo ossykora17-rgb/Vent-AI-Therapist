@@ -1,6 +1,6 @@
 import { containsAdvice } from "@/lib/circles/rules";
+import { BANNED_PHRASES, FILE_LANGUAGE, REPLY_SENTENCE_CAP } from "./voice";
 import { coverage, COVERAGE_FLOOR } from "./scan";
-import { CARRY_WORDS, OBJECTS } from "./chairs";
 
 /**
  * What a reply has to be, checked without asking a second model.
@@ -56,48 +56,37 @@ export interface GoldenCase {
 }
 
 /** Phrases `VOICE` bans outright. Any of them is the generic voice leaking. */
-const BANNED = [
-  /\bI understand\b/i,
-  /\bI'?m here for you\b/i,
-  /\bthat must be (hard|difficult|tough)\b/i,
-  /\btell me more\b/i,
-  /\bhow does that make you feel\b/i,
-  /\bI'?m (so )?sorry to hear\b/i,
-  /\bas an AI\b/i,
-];
+/*
+  Imported, not restated.
+
+  This array was the only place in the repository that knew which phrases end
+  a session before it starts — and nothing in the live path read it, and
+  nothing checked the strings *we* write. So "Carve your truth" could sit in
+  the box somebody types their worst sentence into, forever, while a grader
+  nobody runs held the rule against it.
+
+  `voice.ts` is that table now. The grader imports it, the system prompt is
+  built from it, and check 76 fails the build if any authored string in this
+  repository violates it. A suite that checks its own copy passes while the
+  product regresses — this file already knew that and had the copy anyway.
+*/
+const BANNED = BANNED_PHRASES.map((b) => b.re);
 
 /**
  * Reading assembled context back as a receipt. Banned once, in CONTEXT_RULES,
  * for the carve, the pattern and what they tapped on the way in.
  */
-const RECITES = [
-  /\byou mentioned\b/i,
-  /\byou said (earlier|before|last time)\b/i,
-  /\blast time you\b/i,
-  /\byou'?ve (mentioned|brought this up|told me)\b/i,
-  /\b\d+ (of your |)sessions?\b/i,
-  /*
-    The onboarding selection read back, and it has to name the thing.
+/*
+  Also imported — and narrowed, deliberately.
 
-    This was a bare `/you (chose|picked|selected)/`, and the dry run against
-    the 51 authored replies flagged two of them — "What's the number she'd
-    hear in your voice if you picked today?" and "You chose them and they
-    spent it". Both are ordinary English about picking up a phone and
-    trusting somebody. A grader that fires on those would have taught the
-    model to avoid a common verb.
+  This used to fail `/last time you\b/`, which made the most useful sentence
+  a therapist has ("last time you said your brother still hasn't called") a
+  grading offence. The rule was aimed at the wrong half: quoting *their*
+  sentence is being heard, narrating *our* record is being processed. See
+  FILE_LANGUAGE in voice.ts for where that line now sits.
+*/
+const RECITES = FILE_LANGUAGE.map((b) => b.re);
 
-    Caught for zero tokens, before a single call was spent, which is the
-    entire reason the dry mode exists. The vocabulary comes from
-    `@/lib/vent/chairs` so the grader and the screen cannot drift.
-  */
-  new RegExp(
-    `\\byou (chose|picked|selected) (the )?(${[
-      ...OBJECTS.map((o) => o.label),
-      ...CARRY_WORDS,
-    ].join("|")})\\b`,
-    "i",
-  ),
-];
 
 /**
  * Promises the code cannot keep. The oldest bug in this repo: a reply that
@@ -213,7 +202,17 @@ export function gradeReply(
 
   // ── voice ────────────────────────────────────────────────────────────────
   const n = sentences(reply);
-  if (n > 5) add("length", "minor", `${n} sentences — VOICE says three to four`);
+  /*
+    Keyed to the number the prompt is built from, not to a second one.
+
+    The prompt asked for three to four sentences and this complained at six —
+    a two-sentence gap where the reply was long by the contract and fine by
+    the grader, which is how a reply gets to be a paragraph without anything
+    objecting. `REPLY_SENTENCE_CAP` is now the only number, and it is 3.
+  */
+  if (n > REPLY_SENTENCE_CAP) {
+    add("length", "minor", `${n} sentences — the office says ${REPLY_SENTENCE_CAP}`);
+  }
   if (reply.length > 700) add("length", "minor", `${reply.length} chars is a paragraph, not a reply`);
 
   // Never mix the two in one reply. Only checked on Pidgin cases: an English
