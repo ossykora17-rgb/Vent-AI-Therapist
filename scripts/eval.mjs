@@ -9365,6 +9365,145 @@ check("86 Nobody is handed a task that would fit anybody", () => {
     "the claims end up in a deck and nobody can say where the number came from");
 });
 
+check("87 A deletion is reported by what the store answered", () => {
+  /*
+    "Forgotten." — said about a sentence the room was still holding.
+
+    `?carve=1` is the button on two screens whose only job is to answer "is it
+    gone". Both read `data.deleted === "carve"` from the body, which is the
+    right half of this and the lesson from the feedback bug already applied.
+    `setCarve` returns whether the write landed, under a contract in
+    `store/types.ts` reading "a carve that did not land must not be reported as
+    kept", and carrying three paragraphs about having been fixed to do exactly
+    that.
+
+    Both halves were correct. The route between them did `await
+    store.setCarve(userId, null)` and threw the boolean on the floor, then
+    reported `deleted: "carve"` with nothing behind it.
+
+    WHY IT SURVIVED EVERY EXISTING SHAPE
+
+    Because `setCarve` is the only mutation in `supabase-store.ts` that reports
+    by returning instead of by throwing. Every other one goes through `done()`,
+    which raises `StoreUnavailableError` — so `deleteVent` and `deleteAll`
+    answer non-2xx on failure and both screens are told the truth for free. The
+    caller was written for the throwing world.
+
+    And `setCarve` is non-throwing for a good reason: a deployment with 0011
+    pending answers `42703` on that column, which is a normal state rather than
+    a fault. So the two shapes where this lied are the two shapes a first-time
+    Supabase deployment actually passes through — `42501` before the grants
+    land, `42703` before 0011 does — neither of which has a store of `null`,
+    and neither of which any suite here has ever run.
+  */
+  const route = fs
+    .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+
+  const forget = slice(route, "if (forgetCarve)", 700);
+  ok(forget.length > 200, "the carve-deletion branch is found",
+    "a marker that misses slices prose and asserts nothing");
+  ok(/(const|let)\s+\w+\s*=\s*await store\.setCarve\(/.test(forget),
+    "what setCarve answered is kept",
+    "the one store method that reports by returning was called for its side effect");
+  ok(!/^\s*await store\.setCarve\(/m.test(forget),
+    "and never called bare",
+    "`await store.setCarve(userId, null)` discards the only evidence the deletion happened");
+  ok(/deleted:\s*0/.test(forget) && /deleted:\s*"carve"/.test(forget),
+    "the answer has both outcomes in it",
+    "one outcome means the branch reports a constant, whatever happened");
+
+  /*
+    And the two screens still read the field the route sets, rather than the
+    status — which is the half that was already right and is the easiest thing
+    to undo while fixing the other half. Check 81 keeps the sentence itself in
+    one file; this keeps the *test* in one shape across both readers.
+  */
+  for (const f of ["src/components/kept-list.tsx", "src/components/chat/vent-chat.tsx"]) {
+    const src = fs.readFileSync(path.join(ROOT, f), "utf8");
+    ok(/data\?\.deleted === "carve"/.test(src),
+      `${path.basename(f)} reads the outcome, not the status code`,
+      "200 with a body saying nothing was deleted is the shape this route answers");
+    ok(/FORGET_FAILED/.test(src), `${path.basename(f)} has the honest sentence to fall back to`);
+  }
+
+  /*
+    Both backends report honestly, so the route above has something true to
+    read in either. Asserted on the shipping classes rather than on a mock: a
+    suite that checks its own copy passes while the product regresses.
+  */
+  /*
+    Comments stripped before slicing, for the second time in two checks.
+
+    `setCarve` carries twenty lines explaining why it returns what it returns,
+    so an unstripped 900-character slice from the marker sits entirely inside
+    the note about the code and never reaches a line of it. The probe read the
+    explanation and reported on the implementation — the same shape as check
+    86's first version, found the same way, one check apart.
+  */
+  const bare = (p) => fs
+    .readFileSync(path.join(ROOT, p), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  const supa = bare("src/lib/store/supabase-store.ts");
+  const file = bare("src/lib/store/file-store.ts");
+  for (const [name, src] of [["supabase", supa], ["file", file]]) {
+    const body = slice(src, "async setCarve", 900);
+    ok(/\breturn\b/.test(body), `${name} store's setCarve body is what was read`,
+      "a slice that lands in a comment asserts about the note, not the code");
+    ok(/return (?:hit|\(data\?\.length)/.test(body) || /return false/.test(body),
+      `${name} store answers whether the row moved`,
+      "an UPDATE that matches nothing does not complain, and Postgres reports no error for it");
+  }
+  /*
+    And it reports failure by returning, in every branch.
+
+    The first version of this asserted `/return false;/` somewhere in the body,
+    and a mutation that made the *error* branch throw sailed past it — because
+    the `catch` at the bottom still had its own `return false`. One `throw`
+    anywhere in here puts the method back in the world the caller was wrongly
+    written for, and turns a deployment with 0011 pending into 500s on a
+    button. The property is "never throws", so that is what is asserted.
+  */
+  const setCarveBody = slice(supa, "async setCarve", 900);
+  ok(/return false;/.test(setCarveBody),
+    "the Supabase one reports a caught error as a failure",
+    "42703 with 0011 pending is a normal state — which is exactly why the caller must read the answer");
+  ok(!/\bthrow\b/.test(setCarveBody),
+    "and never throws out of it",
+    "one throw and the route's `cleared` can no longer be false — the branch it guards becomes dead");
+
+  /*
+    The class, not just this instance. Every store method that reports by
+    returning a boolean must have its answer read at every call site; this is
+    the sweep that found the one above was the only one left.
+  */
+  const BOOLEAN_METHODS = ["setCarve", "addHeld", "addBreaking", "addMember", "anchorLatestVent"];
+  const dropped = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(e.name)) {
+        const src = fs
+          .readFileSync(full, "utf8")
+          .replace(/\/\*[\s\S]*?\*\//g, " ")
+          .replace(/\/\/[^\n]*/g, " ");
+        for (const m of BOOLEAN_METHODS) {
+          // A call whose line starts with `await` and assigns to nothing.
+          const re = new RegExp(`(^|[;{}]\\s*)await\\s+\\w+\\.${m}\\(`, "m");
+          if (re.test(src)) dropped.push(`${path.basename(full)}: ${m}`);
+        }
+      }
+    }
+  };
+  walk(path.join(ROOT, "src"));
+  is(dropped.join(" | "), "",
+    `no call to a boolean-returning store method throws its answer away (${BOOLEAN_METHODS.length} methods swept)`,
+    "these are the methods that cannot throw — dropping the return is the only way to not know");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
