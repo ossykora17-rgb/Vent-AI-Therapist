@@ -222,13 +222,49 @@ export function CircleVoice({ circleId, anonId, enabled, keeper }: Props) {
       setVoices(identities(room));
       setStatus("live");
     } catch (e) {
-      // A refused microphone and an unreachable SFU look the same to a person
-      // in a circle, so say which it was.
+      /*
+        Five ways to be refused a microphone, and this said one sentence for
+        all of them — the second time in this file, and the first fix did not
+        cover it because it was one `await` earlier.
+
+        `getUserMedia` rejects with a *name*, and the names are the whole
+        diagnosis:
+
+          NotAllowedError    the person said no — or a Permissions-Policy did
+          NotFoundError      there is no microphone on this device
+          NotReadableError   something else has it: a call, another tab
+          SecurityError      not a secure context, so http rather than https
+          AbortError         the hardware gave up
+
+        The one that mattered here is the one no wording could have surfaced.
+        `vercel.json` sent `Permissions-Policy: microphone=()`, and `()` means
+        *no origin may use this*, including the site that set it. So every
+        person who ever pressed Join got `NotAllowedError` with no permission
+        prompt at all — the browser had already been told, by us, that this
+        site does not use microphones. Voice had never worked in production,
+        not once, and the message blamed the browser for obeying a header we
+        wrote.
+
+        The header was added to be careful. It disabled the feature it was
+        protecting, silently, for the entire life of the deployment.
+
+        So the name is logged, and the person is told the thing that is true
+        of their case — which for four of the five is something they can act
+        on, and for the fifth was never theirs to fix.
+      */
+      const name = e instanceof DOMException ? e.name : "";
       const message = e instanceof Error ? e.message : String(e);
+      if (name) console.warn("[voice] microphone refused:", name, message);
       setError(
-        /permission|NotAllowed/i.test(message)
-          ? "Your browser refused the microphone. The room is still here in text."
-          : `Couldn't reach the voice room. ${message}`,
+        name === "NotAllowedError"
+          ? "The microphone was blocked. Check the permission for this site in your browser settings — the room is still here in text."
+          : name === "NotFoundError"
+            ? "No microphone on this device. The room is still here in text."
+            : name === "NotReadableError"
+              ? "Something else is using the microphone — a call, or another tab. The room is still here in text."
+              : name === "SecurityError"
+                ? "Voice needs a secure connection. The room is still here in text."
+                : `Couldn't reach the voice room. ${message}`,
       );
       setStatus("error");
       roomRef.current = null;
