@@ -13,6 +13,19 @@ interface Held {
 }
 
 /**
+ * A sentence the room worked out about somebody.
+ *
+ * The only thing on this page written *about* a person rather than *by* one —
+ * which is exactly why it needed to be here and needed a button.
+ */
+interface KeptNote {
+  id: string;
+  kind: string;
+  subject: string;
+  detail: string;
+}
+
+/**
  * What this product actually keeps about you.
  *
  * The Memory page used to read `/api/memories`, which is the vector-memory
@@ -39,6 +52,7 @@ export function KeptList() {
   const { toast } = useToast();
   const [carve, setCarve] = React.useState<string | null>(null);
   const [held, setHeld] = React.useState<Held[]>([]);
+  const [notes, setNotes] = React.useState<KeptNote[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [reachable, setReachable] = React.useState(true);
 
@@ -48,15 +62,21 @@ export function KeptList() {
     Promise.all([
       fetch(`/api/carve?anonId=${id}`).then((r) => (r.ok ? r.json() : null)),
       fetch(`/api/held?anonId=${id}`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`/api/notes?anonId=${id}`).then((r) => (r.ok ? r.json() : null)),
     ])
-      .then(([c, h]) => {
+      .then(([c, h, n]) => {
         if (!live) return;
         // Absent is the ordinary answer here and it is not a failure. A first
         // visit, a session too short to carve, a wipe — all of them are empty,
         // and empty has its own sentence below rather than an error.
-        if (c === null && h === null) setReachable(false);
+        //
+        // All three, not the first two. With notes added, a page where only
+        // the notes endpoint answered would have reported the whole surface
+        // unreachable while rendering rows from it.
+        if (c === null && h === null && n === null) setReachable(false);
         if (typeof c?.carve === "string" && c.carve.trim()) setCarve(c.carve.trim());
         if (Array.isArray(h?.held)) setHeld(h.held as Held[]);
+        if (Array.isArray(n?.notes)) setNotes(n.notes as KeptNote[]);
       })
       .catch(() => {
         if (live) setReachable(false);
@@ -95,7 +115,32 @@ export function KeptList() {
     }
   }
 
-  const empty = !loading && !carve && held.length === 0;
+  /**
+   * Take one back, and say so only once it is gone.
+   *
+   * Reads the body rather than the status, like `forget()` above it — the
+   * lesson from a route that answered 200 while dropping the thing. The row
+   * leaves the list only after the server said it left the store.
+   */
+  async function forgetNote(id: string) {
+    try {
+      const res = await fetch(
+        `/api/notes?anonId=${encodeURIComponent(anonId())}&id=${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      );
+      const data = res.ok ? await res.json().catch(() => null) : null;
+      if (data?.deleted === true) {
+        setNotes((all) => all.filter((n) => n.id !== id));
+        toast("Forgotten.", "success");
+      } else {
+        toast(FORGET_FAILED, "info");
+      }
+    } catch {
+      toast(FORGET_FAILED, "info");
+    }
+  }
+
+  const empty = !loading && !carve && held.length === 0 && notes.length === 0;
 
   return (
     <>
@@ -165,6 +210,40 @@ export function KeptList() {
           >
             Forget this
           </button>
+        </section>
+      )}
+
+      {/*
+        What it worked out, which is the half nobody could see.
+
+        Sat directly under the carve because it is the same category — written
+        about somebody rather than by them — and the carve had a button from
+        the day it existed while these had neither a page nor a way back.
+
+        Shown as the room holds them: the kind, and the sentence. Not softened
+        into prose, because the whole point of this section is that a person
+        can read the actual line and say no. A tidied summary of a note is a
+        second version of the note, and the one they could not check would be
+        the one still in the prompt.
+      */}
+      {notes.length > 0 && (
+        <section className="mt-10">
+          <p className="label-mono">What it worked out</p>
+          <ol className="mt-4 space-y-5">
+            {notes.map((n) => (
+              <li key={n.id} className="border-l border-ash/25 pl-4">
+                <p className="label-mono">{n.kind}</p>
+                <p className="said mt-1 max-w-[46ch]">{n.detail}</p>
+                <button
+                  type="button"
+                  onClick={() => void forgetNote(n.id)}
+                  className="focusable mt-2 min-h-[44px] text-body text-ash underline underline-offset-4"
+                >
+                  Forget this
+                </button>
+              </li>
+            ))}
+          </ol>
         </section>
       )}
 

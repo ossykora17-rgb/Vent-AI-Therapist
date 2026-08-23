@@ -380,6 +380,16 @@ export class SupabaseStore implements Store {
     }
   }
 
+  async deleteNote(userId: string, noteId: string): Promise<void> {
+    // Scoped by user_id too, so an id from another user deletes nothing.
+    // `done()` raises, so a caller cannot report this as gone when it is not.
+    done("deleteNote", await this.db
+      .from("vent_notes")
+      .delete()
+      .eq("user_id", userId)
+      .eq("id", noteId));
+  }
+
   async listNotes(userId: string): Promise<StoredNote[]> {
     const data = ok("listNotes", await this.db
       .from("vent_notes")
