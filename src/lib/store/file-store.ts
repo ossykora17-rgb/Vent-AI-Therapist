@@ -333,6 +333,13 @@ export class FileStore implements Store {
     });
   }
 
+  async deleteNote(userId: string, noteId: string): Promise<void> {
+    // Scoped by user too, so an id from another person removes nothing.
+    await this.write((db) => {
+      db.notes = db.notes.filter((n) => !(n.id === noteId && n.user_id === userId));
+    });
+  }
+
   async listNotes(userId: string): Promise<StoredNote[]> {
     return this.read()
       .notes.filter((n) => n.user_id === userId)

@@ -10113,6 +10113,138 @@ check("92 When the thinking is the problem, the question is not about the thing"
   }
 });
 
+check("93 What it worked out about you is on the page, with a button", () => {
+  /*
+    The notes were the only thing this product kept that nobody could see.
+
+    The Carver writes them, `notesBlock` reads them into every prompt, and
+    there was no surface anywhere that listed them and no way to take one back.
+    The carve had both from the day it existed — and `kept-list.tsx` explains
+    why in its own docstring, "long-term memory without a delete button is not
+    a feature", one section above where the notes were not rendered.
+
+    Clark & Chalmers give four conditions for something outside your head to
+    count as part of your cognition, and the fourth is that the content was
+    *previously consciously endorsed*. A note nobody has seen fails it by
+    construction: a proposition about somebody, held by a machine, read back
+    into every conversation, that they never agreed to and could not contest.
+    `keepable()` refusing to write a diagnosis is not the same as letting
+    somebody correct a wrong note.
+  */
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/notes/route.ts"), "utf8");
+  const bare = route.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  ok(/export const GET/.test(bare), "there is a way to read them");
+  ok(/export const DELETE/.test(bare), "and a way to take one back");
+  ok(/store\.deleteNote\(userId, id\)/.test(bare),
+    "the delete is scoped to the person asking",
+    "an id from somebody else must remove nothing");
+
+  /*
+    No boolean to drop, by design.
+
+    `deleteNote` throws rather than returning, which is what `deleteVent` and
+    `deleteAll` do and what `setCarve` does not. Check 87 exists because the
+    one store method reporting by return value had its answer dropped by the
+    route sitting between two correct halves. This route cannot repeat it:
+    there is no shape where it reports a deletion that did not happen.
+  */
+  const types = fs.readFileSync(path.join(ROOT, "src/lib/store/types.ts"), "utf8");
+  ok(/deleteNote\(userId: string, noteId: string\): Promise<void>;/.test(types),
+    "and it throws rather than reporting by return",
+    "a method that answers with a boolean is one call site away from being ignored");
+  for (const [name, file] of [["supabase", "supabase-store.ts"], ["file", "file-store.ts"]]) {
+    const src = fs
+      .readFileSync(path.join(ROOT, "src/lib/store", file), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/\/\/[^\n]*/g, " ");
+    ok(/async deleteNote\(/.test(src), `${name} store implements it`);
+    /*
+      The method, and only the method.
+
+      The first version of this took a fixed 400-character slice from the
+      marker, which runs past the closing brace and into `listNotes` — whose
+      body contains `user_id`. So a mutation that deleted the user scope from
+      `deleteNote` entirely passed this assertion, on the strength of a word
+      belonging to the next function. Two mutations, both of them the
+      cross-user delete, and both green.
+
+      A probe that reads past the thing it is asserting about is the shape
+      CLAUDE.md records twice already. Cut at the next method.
+    */
+    const from = src.indexOf("async deleteNote");
+    const rest = src.slice(from);
+    const body = rest.slice(0, rest.indexOf("\n  async ", 1) + 1 || 600);
+    ok(body.length > 40 && body.length < 500,
+      `  and ${name}'s body is what was read (${body.length} chars)`,
+      "a slice that runs into the next method asserts about the next method");
+    /*
+      Past the signature, because the signature declares `userId`.
+
+      The second version of this asserted `/userId/` over the whole method and
+      both cross-user mutations still passed — on the parameter name. Declaring
+      the argument is not using it, and the entire question here is whether the
+      delete is scoped by it. Three attempts at one assertion, each one reading
+      something adjacent to the thing it was about.
+    */
+    const used = body.slice(body.indexOf("{") + 1);
+    ok(/userId/.test(used), `  ${name} scopes the delete by user, not just declares it`,
+      "an unscoped delete by id lets one person clear another person's row");
+  }
+
+  // ── the screen ───────────────────────────────────────────────────────────
+  const ui = fs.readFileSync(path.join(ROOT, "src/components/kept-list.tsx"), "utf8");
+  ok(/\/api\/notes\?anonId=/.test(ui), "the page asks for them");
+  ok(/notes\.map\(/.test(ui), "renders each one");
+  ok(/\{n\.detail\}/.test(ui),
+    "showing the sentence the room actually holds",
+    "a tidied summary is a second version, and the unchecked one stays in the prompt");
+  ok(/forgetNote\(n\.id\)/.test(ui), "with a button on each");
+
+  /*
+    And it reads the body, not the status — the feedback bug's lesson, which
+    this page already applies to the carve immediately above.
+  */
+  ok(/data\?\.deleted === true/.test(ui),
+    "the row leaves the list only when the server said it left the store",
+    "200 with a body saying nothing was deleted is a shape this codebase has shipped twice");
+  ok(/FORGET_FAILED/.test(slice(ui, "async function forgetNote", 900)),
+    "and a failure says so in the sentence written for it");
+
+  /*
+    The empty state counts them. It read `!carve && held.length === 0`, so a
+    person whose only stored thing was a note would have been told the room
+    keeps nothing, on the page rendering it.
+  */
+  ok(/notes\.length === 0/.test(slice(ui, "const empty =", 200)),
+    "and a page holding only notes does not call itself empty");
+
+  /*
+    Unreachable means all three unreachable. The guard read `c === null && h
+    === null`, and adding a third endpoint to it was not optional: a page where
+    only the notes call failed would have declared the whole surface
+    unreachable while rendering rows from the other two.
+  */
+  ok(/c === null && h === null && n === null/.test(ui),
+    "and one endpoint answering is not the whole page failing");
+
+  /*
+    Clearing everything still takes them, in both backends. Postgres does it
+    with `on delete cascade`; the file store needs a statement, and a statement
+    is a thing a delete path can forget.
+  */
+  const fileStore = fs.readFileSync(path.join(ROOT, "src/lib/store/file-store.ts"), "utf8");
+  ok(/db\.notes = db\.notes\.filter\(\(n\) => n\.user_id !== userId\)/.test(fileStore),
+    "wipe-everything clears the notes too");
+  const ddl = fs.readFileSync(path.join(ROOT, "supabase/APPLY.sql"), "utf8");
+  ok(/references public\.vent_users\(id\) on delete cascade/.test(ddl),
+    "and Postgres cascades them off the person");
+
+  // Free, in every shape. No classifier, no model, no lookup.
+  ok(!/generateReply|research\(|classify\(/.test(bare),
+    "and none of it spends a token",
+    "reading what is kept about you must not cost anything or it will be rationed");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

@@ -253,6 +253,21 @@ export interface Store {
    * from a boolean.
    */
   saveNotes(userId: string, notes: readonly Note[]): Promise<number>;
+  /**
+   * Take one back.
+   *
+   * Throws when the delete could not be attempted, the way `deleteVent` and
+   * `deleteAll` do, rather than reporting by return value the way `setCarve`
+   * does. That is deliberate and it is the lesson from the `?carve=1` bug: a
+   * method that reports failure by returning is one call site away from having
+   * its answer dropped, and this one answers the only question that matters on
+   * that page. A throw cannot be ignored.
+   *
+   * Deleting a row that is not there is not an error. The question a person is
+   * asking is "is it gone", and for a note that was never theirs the answer is
+   * yes — scoped by `user_id` so an id from somebody else removes nothing.
+   */
+  deleteNote(userId: string, noteId: string): Promise<void>;
 
   // ── Circles ─────────────────────────────────────────────────────────────
   listOpenCircles(): Promise<Array<CircleRow & { seats: number }>>;

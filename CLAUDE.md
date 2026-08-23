@@ -80,6 +80,16 @@ the transition, whichever request notices first. A closed circle answers 404
 from the room and 410 from every other surface — never an empty list, because
 `{messages: []}` still tells a caller the room is there.
 
+**Anything the room holds about somebody is on a page, with a button.** Not a
+courtesy — Clark & Chalmers' fourth condition for a genuine cognitive extension
+is that the content was consciously endorsed, and a note nobody has seen fails
+it by construction. `keepable()` refusing to write a diagnosis is not the same
+as letting somebody correct a wrong note. The carve had both from the day it
+existed and the notes had neither for a month, one section down the same page.
+Show the sentence the prompt actually reads, never a tidied version of it: a
+summary is a second copy, and the one they could not check is the one still in
+the prompt.
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.
@@ -111,6 +121,7 @@ own copy passes while the product regresses.
 | 32 tactics, 3-turn block, somatic gate | `src/lib/vent/tactics.ts` |
 | Memory: vents only, six-turn cap | `src/lib/vent/memory.ts` |
 | The office across sessions, and no diagnosis | `src/lib/vent/notes.ts` |
+| What it worked out, shown and deletable | `src/app/api/notes/route.ts` |
 | The first three messages, and the alliance line | `src/lib/vent/intake.ts` |
 | Chair → tension → drop | `src/lib/vent/chairs.ts` |
 | Circle phases, governance, Keeper lines | `src/lib/circles/rules.ts` |
