@@ -62,6 +62,17 @@ where the line falls, because it is not "no actions" — the library's own drop
 set is a breathing instruction and passes, because it is aimed at the exact
 place in the body they named. Generic is the offence. Task is not.
 
+**When the thinking is the problem, do not ask about the thing.** Wells' CAS:
+distress is maintained by the *process* — worry, rumination, threat-monitoring
+— not by the content, so a good question about the content is one more lap with
+the room's blessing on it. `inTheLoop()` in `tactics.ts` is the one reading;
+`FEEDS_THE_LOOP` vetoes three tactics on it and `selectProbe` filters to the
+MCT set. It is a filter and never a weight, because a weight wins one contest
+and then the three-turn block hands the turn to another content question.
+The detector must never widen to bare `/think/` — everybody here is thinking
+about something, and a room that treats all of them as ruminating stops doing
+content work at all.
+
 **Close means close.** `sweepIfOver()` in `src/lib/circles/sweep.ts` is the
 only implementation of "is this circle over". Call it from every route that
 touches a circle. It deletes the transcript and ends the voice room once, on
@@ -92,7 +103,7 @@ own copy passes while the product regresses.
 | Concern | File |
 | --- | --- |
 | The office: banned phrases, unasked-for tasks, reply contract | `src/lib/vent/voice.ts` |
-| 50 extraction questions — MI, Yalom, Rogers | `src/lib/vent/probes.ts` |
+| 58 extraction questions — MI, Yalom, Rogers, Wells | `src/lib/vent/probes.ts` |
 | Reject and regenerate, before anybody reads it | `src/lib/vent/failsafe.ts` |
 | One move from outside, per pressure, cached | `src/lib/vent/research.ts` |
 | What the audit proposed and the gate kept | `src/lib/vent/learned.ts` |

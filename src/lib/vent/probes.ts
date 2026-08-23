@@ -1,3 +1,5 @@
+import { inTheLoop } from "./tactics";
+
 /**
  * Fifty questions, and not one of them is in the system prompt.
  *
@@ -44,7 +46,7 @@
  */
 
 /** Where the question comes from. Recorded so a losing school is visible. */
-export type School = "mi" | "yalom" | "rogers";
+export type School = "mi" | "yalom" | "rogers" | "wells";
 
 export interface Probe {
   id: string;
@@ -60,6 +62,15 @@ export interface Probe {
    * carries nothing to copy.
    */
   ask: string;
+  /**
+   * Safe to ask somebody in the loop.
+   *
+   * A question about the process, the belief about the process, or where
+   * attention is — one that cannot be answered by thinking harder about the
+   * thing. Every other question in this file can, which is what makes it
+   * rumination fuel for the wrong person.
+   */
+  process?: true;
   /** What it opens. Documentation — never sent to a model. */
   opens: string;
   fits: (m: string) => boolean;
@@ -82,6 +93,14 @@ const NUMB = /\b(numb|blank|nothing|empty|tired|exhausted|don'?t care|whatever)\
 // `tactics.ts` — `diagnos\b` matches neither "diagnosed" nor "diagnosis".
 const BIG = /\b(dying|died|death|cancer|terminal|funeral|burial|grief|hospital|test results?)\b|\b(diagnos|palliativ|hospice)/i;
 const PERFORM = /\b(fine|okay|it'?s nothing|no big deal|anyway|whatever|i'?m good)\b/i;
+/*
+  The loop, imported rather than restated.
+
+  `inTheLoop` lives in `tactics.ts` because `FEEDS_THE_LOOP` reads the same
+  patterns, and a second copy here is how a suite passes while the product
+  regresses. One table, one truth — including when the table is a predicate.
+*/
+const LOOP = (m: string) => inTheLoop(m);
 const WANT = /\b(want|wish|hope|dream|if only|supposed to|meant to)\b/i;
 
 /**
@@ -334,8 +353,68 @@ const ROGERS: Probe[] = [
     fits: always },
 ];
 
-/** All fifty, in one place, so nothing keeps a second copy. */
-export const PROBES: readonly Probe[] = [...MI, ...YALOM, ...ROGERS];
+/**
+ * Metacognitive Therapy — Wells, and the S-REF model with Matthews.
+ *
+ * The one school here that is not about content, and the reason it had to be
+ * added the day after the other three shipped.
+ *
+ * MCT's finding is that distress is maintained by the *Cognitive Attentional
+ * Syndrome* — worry, rumination, threat-monitoring — and by beliefs about
+ * thinking itself ("I can't stop", "worrying keeps me ready"). Not by what the
+ * thoughts are about. Which produces the conclusion that matters here and is
+ * genuinely counterintuitive: **for somebody in the loop, a good question about
+ * the content feeds the loop.** "Which exact moment do you keep going back to"
+ * is a fine question and it is rumination fuel, asked of the wrong person, with
+ * the room's blessing on it.
+ *
+ * `tactics.ts` already had this instinct without the theory. `FEEDS_THE_LOOP`
+ * vetoes `socratic`, `thought_record` and `double_standard` for people watching
+ * themselves, under a comment reading "every one of them is a request to think
+ * about the thought — which is the activity the person cannot stop". That is
+ * Wells, arrived at from a bug report.
+ *
+ * So these eight are what is asked instead. Every one is about the process, the
+ * belief about the process, or where attention is — and none of them can be
+ * answered by thinking harder about the thing, which is the test.
+ */
+const WELLS: Probe[] = [
+  { id: "wells_how_long", school: "wells", process: true, weight: 90,
+    ask: "How long have you been going round on this today?",
+    opens: "the process as a thing with a duration, which nobody has counted",
+    fits: LOOP },
+  { id: "wells_what_it_does", school: "wells", process: true, weight: 88,
+    ask: "What does the going-over actually do for you?",
+    opens: "the positive metacognitive belief — worry as preparation, or as safety",
+    fits: LOOP },
+  { id: "wells_drop_it", school: "wells", process: true, weight: 84,
+    ask: "If you left it alone until tomorrow, what would go wrong?",
+    opens: "the belief tested rather than argued with",
+    fits: LOOP },
+  { id: "wells_who_starts", school: "wells", process: true, weight: 86,
+    ask: "Does it start, or do you start it?",
+    opens: "the uncontrollability belief, which is the one that keeps people in it",
+    fits: LOOP },
+  { id: "wells_has_it_moved", school: "wells", process: true, weight: 82,
+    ask: "Has any amount of thinking about it moved it yet?",
+    opens: "their own evidence, which they already have and have never been asked for",
+    fits: LOOP },
+  { id: "wells_where_attention", school: "wells", process: true, weight: 80,
+    ask: "Right now — is your attention in the room, or in the loop?",
+    opens: "attention as something with a location and therefore a choice",
+    fits: LOOP },
+  { id: "wells_last_not_this", school: "wells", process: true, weight: 76,
+    ask: "What's the last thing you noticed today that wasn't this?",
+    opens: "an external anchor, and often the answer is nothing — which is the finding",
+    fits: LOOP },
+  { id: "wells_thought_as_event", school: "wells", process: true, weight: 78,
+    ask: "When it arrives, do you look at it or do you go with it?",
+    opens: "detached mindfulness — the thought as an event rather than an instruction",
+    fits: LOOP },
+];
+
+/** All fifty-eight, in one place, so nothing keeps a second copy. */
+export const PROBES: readonly Probe[] = [...MI, ...YALOM, ...ROGERS, ...WELLS];
 
 /**
  * Whether a question fits everybody.
@@ -376,7 +455,29 @@ export function isBroad(p: Probe): boolean {
 export function selectProbe(message: string, recent: readonly string[] = []): Probe | null {
   const blocked = new Set(recent.slice(-3));
   const rank = (p: Probe) => (isBroad(p) ? 0 : 1000) + p.weight;
-  const eligible = PROBES
+
+  /*
+    When the thinking is the problem, a question about the content is fuel.
+
+    This is Wells, and it is the one place in this file where a *good* question
+    is the wrong move. "Which exact moment do you keep going back to?" is a
+    fine question. Asked of somebody who has just said they cannot stop going
+    back to it, it is the loop with the room's blessing on it — one more lap,
+    requested by the thing they came to for help.
+
+    A filter and not a weight, for the same reason `nothingCanMove` is a filter
+    in `tactics.ts`: a weight wins one contest, once, and then the three-turn
+    block takes it out of the running and the runner-up speaks. On turn two of
+    a rumination the runner-up would be another content question. These are not
+    moves that rank lower here. They are moves that make it worse.
+
+    `FEEDS_THE_LOOP` has vetoed three tactics on this reading since before the
+    probe library existed. This is the same veto, applied to the half of the
+    reply that was added afterwards and inherited none of it.
+  */
+  const pool = inTheLoop(message) ? PROBES.filter((p) => p.process) : PROBES;
+
+  const eligible = pool
     .filter((p) => p.fits(message))
     .sort((a, b) => rank(b) - rank(a));
   return eligible.find((p) => !blocked.has(p.id)) ?? eligible[0] ?? null;
