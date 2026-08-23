@@ -47,7 +47,7 @@ const { parseTechnique, researchBlock, QUERIES, ALLOWED } =
 const { knownProblems, flatReplies, parseProposals, auditPrompt } =
   await app("src/lib/vent/audit.ts");
 const { echoesThem } = await app("src/lib/vent/echo.ts");
-const { wasAuthored } = await app("src/lib/vent/tactics.ts");
+const { wasAuthored, inTheLoop } = await app("src/lib/vent/tactics.ts");
 const { inspectReply } = await app("src/lib/vent/failsafe.ts");
 const { gradeReply } = await app("src/lib/vent/quality.ts");
 const { openingLine, allianceLine, shouldSayAlliance, ALLIANCE_AT } =
@@ -9527,7 +9527,7 @@ check("87 A deletion is reported by what the store answered", () => {
     "these are the methods that cannot throw — dropping the return is the only way to not know");
 });
 
-check("88 Fifty questions, and the room asks one of them", () => {
+check("88 The room asks one question, chosen against their words", () => {
   /*
     "Give me 50 specific questions VENT should ask instead of giving tasks."
 
@@ -9548,12 +9548,24 @@ check("88 Fifty questions, and the room asks one of them", () => {
     So: a table, one selected per turn against their own words, three-turn
     block, and only the selected one is sent.
   */
-  is(PROBES.length, 50, `fifty questions (${PROBES.length})`);
+  /*
+    At least the fifty that were asked for, and the count is derived.
+
+    This read `is(PROBES.length, 50)` and failed the moment MCT added eight —
+    a hand-typed integer one table away from the thing it counts, which is the
+    bug CLAUDE.md records under "a number is a sentence". The floor is the
+    deliverable; the total is whatever the schools add up to.
+  */
+  const bySchool = ["mi", "yalom", "rogers", "wells"].map((s) => PROBES.filter((p) => p.school === s));
+  ok(PROBES.length >= 50, `at least fifty questions (${PROBES.length})`);
+  is(bySchool.reduce((n, g) => n + g.length, 0), PROBES.length,
+    "and every one belongs to a named school",
+    "a probe with a school nothing counts is a probe no check covers");
   is(new Set(PROBES.map((p) => p.id)).size, PROBES.length, "every id distinct",
     "a duplicate id makes the three-turn block silently block two questions");
-  for (const school of ["mi", "yalom", "rogers"]) {
+  for (const school of ["mi", "yalom", "rogers", "wells"]) {
     const n = PROBES.filter((p) => p.school === school).length;
-    ok(n >= 15, `${school} carries its share (${n})`,
+    ok(n >= (school === "wells" ? 6 : 15), `${school} carries its share (${n})`,
       "one school at fifteen and another at three is one school with decoration");
   }
   for (const p of PROBES) {
@@ -9970,6 +9982,135 @@ check("91 No source file carries a character nobody can see", () => {
   is(bad.length, 0,
     `nothing invisible in any of them${bad.length ? ` — ${bad.join(", ")}` : ""}`,
     "a backspace inside a regex is a valid regex that matches nothing, and it is zero pixels wide in every diff");
+});
+
+check("92 When the thinking is the problem, the question is not about the thing", () => {
+  /*
+    Wells & Matthews, and a hole this suite opened for itself yesterday.
+
+    METACOGNITIVE THERAPY'S ONE COUNTERINTUITIVE CLAIM
+
+    Distress is maintained by the *Cognitive Attentional Syndrome* — worry,
+    rumination, threat-monitoring — and by beliefs about thinking ("I can't
+    stop", "going over it keeps me ready"). Not by what the thoughts are about.
+    From which follows the thing no other school here says: for somebody in the
+    loop, a good question about the content **feeds the loop**. "Which exact
+    moment do you keep going back to?" is a fine question and it is one more
+    lap, requested by the room they came to for help.
+
+    `tactics.ts` already had the instinct with none of the theory.
+    `FEEDS_THE_LOOP` has vetoed `socratic`, `thought_record` and
+    `double_standard` since long before the probe library existed, under a
+    comment reading "every one of them is a request to think about the thought
+    — which is the activity the person cannot stop". That is Wells, arrived at
+    from a bug report.
+
+    Fifty questions shipped the next day and inherited none of it.
+
+    AND THE DETECTOR MISSED THE COMMON PRESENTATION
+
+    `caughtWatchingSelf` was tuned for the articulate version — "I know why I
+    do this and I still do it". It returned **false** for "I cannot stop
+    thinking about it" and "I keep replaying the conversation over and over",
+    which is how most people say this. So the veto never fired for them either,
+    and `socratic` — one more question to take away and turn over — was
+    reachable for exactly the people it damages.
+  */
+  const LOOP = [
+    "i cannot stop thinking about it",
+    "i keep replaying the conversation over and over",
+    "i have been going over this all day",
+    "i overthink everything and it never helps",
+    "my mind no dey rest since morning",
+    "it just goes round and round in my head",
+    "i know exactly why i do this and i still do it",
+  ];
+  for (const m of LOOP) {
+    ok(inTheLoop(m), `the loop is heard: "${m.slice(0, 38)}…"`);
+    ok(caughtWatchingSelf(m), `  and the tactic veto fires too`,
+      "socratic asks them to think about the thought — the activity they cannot stop");
+    const p = selectProbe(m);
+    ok(p && p.process === true, `  and the question is about the process, not the thing`,
+      "a content question here is rumination fuel with the room's blessing on it");
+  }
+
+  /*
+    THE OTHER HALF, WHICH WOULD BE WORSE TO GET WRONG
+
+    A bare /think/ here classifies the entire userbase as ruminating. Everybody
+    who opens this product is thinking about something; the markers have to be
+    perseveration — "cannot stop", "over and over", "all day" — or the room
+    stops doing content work for everyone and becomes a single technique.
+  */
+  const NOT_LOOP = [
+    "i am thinking about leaving my job",
+    "i think you are right about that",
+    "rent don pass me and i no fit breathe",
+    "my dad's test results came back",
+    "she said i should do better",
+    "i keep my head down at work",
+    "i went over the budget with my wife",
+  ];
+  for (const m of NOT_LOOP) {
+    ok(!inTheLoop(m), `left alone: "${m.slice(0, 38)}…"`,
+      "classifying an ordinary vent as rumination routes it away from content work entirely");
+    const p = selectProbe(m);
+    ok(p && !p.process, `  and it still gets a question about what they said`);
+  }
+
+  /*
+    A veto, not a weight — the same argument `nothingCanMove` makes one
+    function over. A weight wins one contest, once; on turn two the three-turn
+    block takes it out and the runner-up speaks, and the runner-up here is
+    another content question. These are not moves that rank lower. They are
+    moves that make it worse.
+  */
+  const src = fs
+    .readFileSync(path.join(ROOT, "src/lib/vent/probes.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  ok(/inTheLoop\(message\) \? PROBES\.filter\(\(p\) => p\.process\)/.test(src),
+    "the content questions are removed from the pool, not outranked",
+    "on turn two a weight has already been beaten by the rotation");
+  ok(/from "\.\/tactics"/.test(src),
+    "and the reading is imported rather than restated",
+    "two copies of 'is this person in the loop' is how a suite passes while the product regresses");
+
+  /*
+    Every MCT question is process-level, by definition of the school.
+
+    Asserted because dropping the flag from one of them is invisible: the pool
+    filter simply skips it and the next-highest Wells question answers instead,
+    so every behavioural assertion above still passes while the library quietly
+    loses an entry. Found by exactly that mutation.
+  */
+  const wells = PROBES.filter((p) => p.school === "wells");
+  is(wells.filter((p) => !p.process).map((p) => p.id).join(","), "",
+    `every MCT question is marked process-level (${wells.length})`,
+    "an unflagged one is skipped silently — the veto keeps working and the library shrinks");
+
+  // Enough of them that the rotation has somewhere to go for a whole session.
+  const process = PROBES.filter((p) => p.process);
+  ok(process.length >= 6, `there are process questions to choose from (${process.length})`,
+    "with three, a four-turn rumination repeats one inside the block");
+  const seen = [];
+  for (let i = 0; i < 4; i++) seen.push(selectProbe(LOOP[0], seen).id);
+  is(new Set(seen).size, 4, `four turns in the loop, four questions (${seen.join(" → ")})`,
+    "asking the same metacognitive question every turn is a technique, not a conversation");
+
+  /*
+    And they are questions about thinking, not instructions to stop thinking.
+    "Stop overthinking" is the single most useless sentence available here, and
+    it is what this whole school gets flattened into when done badly — which is
+    also exactly what `GENERIC_TASKS` fails the build over.
+  */
+  for (const p of process) {
+    is(genericTask(p.ask), null, `${p.id} hands over nothing to do`);
+    is(bannedPhrase(p.ask), null, `${p.id} is in the office voice`);
+    ok(!/\bstop (thinking|worrying|overthinking)\b/i.test(p.ask),
+      `${p.id} does not tell them to stop`,
+      "thought suppression is the one instruction MCT is built to replace");
+  }
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

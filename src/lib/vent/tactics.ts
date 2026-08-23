@@ -134,6 +134,35 @@ const INSIGHT_GAP =
   /\b(i know|i sabi|i dey aware|i understand|i get it|i reali[sz]e|i'm aware|i am aware|even though i know|knowing this)\b[^.!?]{0,90}\b(but|still|and yet|yet i|anyway|regardless|e no dey change|e never change|nothing chang|i dey do am)/;
 
 /**
+ * The loop said plainly, which the pattern above cannot see.
+ *
+ * `INSIGHT_GAP` catches the articulate version — "I know why I do this and I
+ * still do it" — and that is one presentation of Wells & Matthews' Cognitive
+ * Attentional Syndrome, not the common one. The common one is somebody saying
+ * flatly that they cannot stop thinking about it, and this file missed every
+ * such sentence: "I have been going over this all day" and "I keep replaying
+ * the conversation in my head" both returned false, so `FEEDS_THE_LOOP` never
+ * fired and `socratic` — one more question to take away and turn over — was
+ * reachable for exactly the people it damages.
+ *
+ * The markers are perseveration, never mere thinking. "Thinking about it" is
+ * what everybody who opens this product is doing; "cannot stop", "over and
+ * over", "round and round", "all day" are the process complaint, and the
+ * process is the thing MCT treats. A bare `/think/` here would classify the
+ * entire userbase as ruminating and route all of them away from content, which
+ * would be a worse product than the bug.
+ */
+const PERSEVERATION = [
+  /\b(can'?t|cannot|couldn'?t) (stop|switch off|shut off|turn off|quiet|get it out of my head)/,
+  /\b(over and over|round and round|on a loop|on repeat|again and again)\b/,
+  /\b(keep|keeps|kept|dey) (replaying|going over|going round|coming back|running)\b/,
+  /\b(overthink|over-think|overanalys|over-analys|ruminat|spiral)/,
+  /\b(going over|gone over|been over) (it|this|that|everything)\b/,
+  /\b(all day|all night|every night|at 3 ?am|since morning)\b[^.!?]{0,40}\b(think|head|mind|it)\b/,
+  /\b(stuck in my head|in my head all|my mind no dey rest|my head no dey quiet|e dey worry me)\b/,
+];
+
+/**
  * Is this person watching themselves rather than being here?
  *
  * Exported for the same reason `nothingCanMove` is: the selector and the
@@ -145,14 +174,48 @@ export function watchingConfidence(message: string): 0 | 1 | 2 {
   // They reported the failure of their own method while using it. Nothing
   // else in the message is as informative as that.
   if (INSIGHT_GAP.test(m)) return 2;
+  // Naming the loop is as confident as reporting the insight gap, and rather
+  // more common. Somebody who says they cannot stop is not guessing.
+  if (PERSEVERATION.some((re) => re.test(m))) return 2;
   const markers = m.match(new RegExp(SELF_NARRATION, "g"))?.length ?? 0;
   if (markers >= 2) return 2;
   return markers >= 1 && (ANALYTICAL.test(m) || words(m) > 25) ? 1 : 0;
 }
 
+/**
+ * The loop itself, separate from watching oneself think.
+ *
+ * Related and not the same, which is why it is its own predicate. Watching
+ * yourself is a *stance* — narrating your own patterns to a listener. The CAS
+ * is a *process* — the thinking that will not stop — and MCT's whole finding
+ * is that the process is what maintains distress regardless of what the
+ * content happens to be. Somebody can be in one without the other.
+ *
+ * The probe library reads this one; `FEEDS_THE_LOOP` reads the broader stance.
+ */
+export function inTheLoop(message: string): boolean {
+  const m = message.toLowerCase();
+  return PERSEVERATION.some((re) => re.test(m)) || INSIGHT_GAP.test(m);
+}
+
 export function caughtWatchingSelf(message: string): boolean {
   const m = message.toLowerCase();
   if (INSIGHT_GAP.test(m)) return true;
+
+  /*
+    And the loop said plainly, which this used to miss entirely.
+
+    `FEEDS_THE_LOOP` vetoes `socratic`, `thought_record` and `double_standard`
+    for exactly one reason, written above it: "every one of them is a request
+    to think about the thought — which is the activity the person cannot stop".
+    Somebody typing "I cannot stop thinking about it" *is* that person, in the
+    plainest words available, and this returned false for them — so the veto
+    never fired and `socratic` reached the people it damages most.
+
+    The articulate version was covered and the common version was not, which is
+    the shape of most of the misses in this file.
+  */
+  if (PERSEVERATION.some((re) => re.test(m))) return true;
 
   /*
     Analysis alone is not the condition — plenty of people reason their way
