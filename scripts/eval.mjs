@@ -10360,6 +10360,86 @@ check("94 The nightly audit can see the worst thing it grades for", () => {
     "handing it the slice makes an invention on turn 51 invisible and one on turn 3 forgivable");
 });
 
+check("95 Every door onto a circle asks whether it is over", () => {
+  /*
+    `sweepIfOver` is the only implementation of "is this circle over", and the
+    rule around it is that every route touching a circle calls it. The rule
+    held at file granularity and had already decayed at handler granularity:
+    all five route files import it, and one of the eight handlers under `[id]`
+    never called it.
+
+    That handler was DELETE — the Keeper ending a circle early. So the one
+    surface where somebody deliberately closes a room was the one surface that
+    could not tell them the room was already closed: a Keeper tapping "end
+    early" twenty minutes after the clock ran out got `200 {closed: true}` and
+    was told they had done it.
+
+    The class, not the instance. Every handler under `api/circles/[id]`
+    operates on a circle that already exists, by construction — that is what
+    the `[id]` is — so every one of them must ask. Enumerated from the
+    filesystem rather than listed here, because a hand-written list of routes
+    is exactly what `/api/notes` proved does not survive the next commit.
+  */
+  // Comments stripped before any of this is read: three checks in a row have
+  // now asserted about a note explaining the code instead of the code.
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const dir = path.join(ROOT, "src/app/api/circles");
+  const files = [];
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.name === "route.ts") files.push(full);
+    }
+  };
+  walk(dir);
+  ok(files.length >= 5, `there are circle routes to check (${files.length})`,
+    "a sweep that walks nothing passes loudest");
+
+  const missing = [];
+  let handlers = 0;
+  for (const f of files) {
+    const rel = path.relative(ROOT, f);
+    // Only the ones addressed by id. `POST /api/circles` creates one, and
+    // `GET /api/circles` sweeps the stale set rather than a single row.
+    if (!rel.includes("[id]")) continue;
+    const src = strip(fs.readFileSync(f, "utf8"));
+    const found = [...src.matchAll(/async function (handle[A-Z]+)\b/g)];
+    for (let i = 0; i < found.length; i++) {
+      handlers++;
+      const start = found[i].index;
+      const end = i + 1 < found.length ? found[i + 1].index : src.length;
+      if (!/sweepIfOver\(/.test(src.slice(start, end))) {
+        missing.push(`${path.basename(path.dirname(f))}/${found[i][1]}`);
+      }
+    }
+  }
+  ok(handlers >= 7, `and handlers inside them (${handlers})`);
+  is(missing.join(", "), "",
+    `every one asks whether the circle is over${missing.length ? ` — ${missing.join(", ")}` : ""}`,
+    "a route that skips the sweep is a room that answers as though it were alive");
+
+  /*
+    And the Keeper's early close now answers the way every other non-room
+    surface does. Asserted on the shape rather than only on the presence of
+    the call, because a sweep whose result is ignored is the same bug wearing
+    the fix.
+  */
+  const del = strip(fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/route.ts"), "utf8"));
+  const body = del.slice(del.indexOf("async function handleDELETE"));
+  ok(/if \(await sweepIfOver\(store, circle\)\)/.test(body),
+    "the Keeper's early close reads the answer");
+  ok(/status: 410/.test(body),
+    "and a circle already over answers 410, not 200",
+    "410 from every surface but the room itself — an empty success says the room is still there");
+  ok(body.indexOf("sweepIfOver") < body.indexOf("not_keeper"),
+    "asked before the seat is checked",
+    "'you are not the Keeper' about a room that no longer exists is the wrong refusal");
+  ok(/status: 404/.test(body) && body.indexOf("not_found") < body.indexOf("not_keeper"),
+    "and a circle that never existed answers 404, not 403",
+    "listMembers on a bad id returns nothing, so the Keeper check fired first and told them the wrong thing");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

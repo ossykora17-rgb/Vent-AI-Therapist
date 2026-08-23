@@ -74,8 +74,11 @@ about something, and a room that treats all of them as ruminating stops doing
 content work at all.
 
 **Close means close.** `sweepIfOver()` in `src/lib/circles/sweep.ts` is the
-only implementation of "is this circle over". Call it from every route that
-touches a circle. It deletes the transcript and ends the voice room once, on
+only implementation of "is this circle over". Call it from every *handler*
+under `api/circles/[id]`, not merely from every route file — the rule held at
+file granularity for months while DELETE, the Keeper's early close, never
+called it, so the one surface for deliberately ending a room could not say the
+room had already ended. Check 95 enumerates the handlers off the filesystem. It deletes the transcript and ends the voice room once, on
 the transition, whichever request notices first. A closed circle answers 404
 from the room and 410 from every other surface — never an empty list, because
 `{messages: []}` still tells a caller the room is there.
