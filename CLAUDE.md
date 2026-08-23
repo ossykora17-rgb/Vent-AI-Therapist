@@ -45,6 +45,14 @@ shipped was a refusal that read *"Your turn comes"* to people whose turn
 could never come, because roles were fixed at join. Read a refusal message
 and ask whether it is true.
 
+**Specificity outranks weight, in every selector.** A high-weighted entry that
+fits everybody becomes the only entry that ever fires. It has happened twice —
+`exact_mirror` at weight 90 made the product's first reply a template, and
+`rogers_never_said` at 90 answered four of five messages the day `probes.ts`
+was written. Anything matching their actual words beats anything that would
+match anybody, and weight only breaks ties inside a tier. A library of fifty
+with flat ranking ships as a library of one, and it looks fine in review.
+
 **Understanding is the job; fixing is not.** A coping task nobody asked for is
 rejected and regenerated before anybody reads it, and the ban lifts only on
 their own words asking for one — `askedForSkill` in `voice.ts`. The test is not
@@ -84,6 +92,7 @@ own copy passes while the product regresses.
 | Concern | File |
 | --- | --- |
 | The office: banned phrases, unasked-for tasks, reply contract | `src/lib/vent/voice.ts` |
+| 50 extraction questions — MI, Yalom, Rogers | `src/lib/vent/probes.ts` |
 | Reject and regenerate, before anybody reads it | `src/lib/vent/failsafe.ts` |
 | One move from outside, per pressure, cached | `src/lib/vent/research.ts` |
 | What the audit proposed and the gate kept | `src/lib/vent/learned.ts` |

@@ -6,6 +6,7 @@ import { answerFactual, groundNow } from "@/lib/vent/grounding";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
 import { CARRY_WORDS, OBJECT_IDS } from "@/lib/vent/chairs";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
+import { selectProbe } from "@/lib/vent/probes";
 import { blendEfficacy, getEfficacy, measurePersonalEfficacy } from "@/lib/vent/efficacy";
 import { findPattern, type Pattern } from "@/lib/vent/pattern";
 import { coverage, COVERAGE_FLOOR } from "@/lib/vent/scan";
@@ -178,7 +179,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
         });
         if (userId) {
           saved = await tryPersist(
-            store, userId, input, classification, CRISIS_RESPONSE, null, grounding.iso, true,
+            store, userId, input, classification, CRISIS_RESPONSE, null, null, grounding.iso, true,
           );
         }
       } catch (error) {
@@ -203,6 +204,16 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
   let userId: string | null = null;
   let history: MemoryRow[] = [];
   let recentTactics: string[] = [];
+  /*
+    The same rotation, for the question rather than the move.
+
+    Read from `probe_used`, which 0018 added beside `tactic_used` for exactly
+    this. Without it the three-turn block in `selectProbe` has nothing to block
+    against, and the highest-ranked question for a given message is asked every
+    single time that message shape recurs — which is how a library of fifty
+    ships as a library of one.
+  */
+  let recentProbes: string[] = [];
   // Where in the arc. Null unless the store actually answers — a session that
   // cannot be counted gets no claim about how long it has been going.
   let turnsToday: number | null = null;
@@ -298,12 +309,16 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
         recentTactics = rows
           .map((r) => r.tactic_used)
           .filter((t): t is string => Boolean(t));
+        recentProbes = rows
+          .map((r) => r.probe_used)
+          .filter((t): t is string => Boolean(t));
       }
     } catch (error) {
       console.error("[vent] store unreachable — continuing without it", error);
       userId = null;
       history = [];
       recentTactics = [];
+      recentProbes = [];
       pattern = null;
     }
   }
@@ -324,6 +339,20 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
     ventCount: history.length,
     recentTactics,
   };
+
+  /*
+    The other half of the office contract: the one question to go after.
+
+    "Answer what they actually said. Then ask one thing you do not know the
+    answer to." The tactic serves the first sentence and always has. Nothing
+    served the second, so the model invented a question every turn — and an
+    invented question drifts toward the four or five that fit any conversation
+    on earth, which is the fail state the whole anti-generic rule is about.
+
+    Free. Fifty regexes over one string, no store and no model call, so it
+    behaves identically in the shape with nothing configured.
+  */
+  const probe = selectProbe(input.message, recentProbes);
 
   /*
     Read once, used twice: the greeting names one of these, and the prompt
@@ -360,7 +389,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
   if (local) {
     const saved =
       store && userId
-        ? await tryPersist(store, userId, input, classification, local, null, grounding.iso)
+        ? await tryPersist(store, userId, input, classification, local, null, null, grounding.iso)
         : false;
     return NextResponse.json(
       {
@@ -433,6 +462,10 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
       less rather than not opening at all.
     */
     notes: greetNotes,
+    // One of fifty, chosen against their own words and blocked for three
+    // turns. Null means the message offered no handle at all, and the prompt
+    // then carries no question line rather than a blank one.
+    probe,
     opening: {
       object: input.openingObject,
       carrying: input.openingCarrying,
@@ -520,7 +553,18 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
         language: classification.language === "pidgin" ? ("pidgin" as const) : ("en" as const),
         probes: "live failsafe",
       };
-      const verdictOnReply = inspectReply(asCase, reply);
+      /*
+        Everything they have actually written, so the invention check has
+        evidence rather than a guess.
+
+        Their whole side of the conversation, not just this turn — because
+        "last time you said your brother still hasn't called" is the most
+        valuable sentence a therapist has, and graded against one message it
+        looks exactly like a fabricated brother. The grader skips itself
+        entirely when this is absent; here it never is.
+      */
+      const said = [...history.map((h) => h.user_message), input.message].join("\n");
+      const verdictOnReply = inspectReply(asCase, reply, said);
       const leftOnTheClock = maxDuration * 1000 - (Date.now() - startedAt);
       if (verdictOnReply.reject && leftOnTheClock > RETRY_DEADLINE_MS) {
         console.warn("[vent] rejected own reply:", verdictOnReply.reject);
@@ -541,7 +585,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
             */
             messages: modelMessages,
           });
-          reply = inspectReply(asCase, again.text).reject
+          reply = inspectReply(asCase, again.text, said).reject
             ? tactic.hold ?? reply
             : again.text;
           answeredBy = again.provider;
@@ -569,7 +613,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
       // the model was, and the two symptoms had one cause.
       const held =
         store && userId
-          ? await tryPersist(store, userId, input, classification, failure, tactic.id, grounding.iso)
+          ? await tryPersist(store, userId, input, classification, failure, tactic.id, probe?.id ?? null, grounding.iso)
           : false;
 
       return NextResponse.json(
@@ -587,7 +631,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
 
   const saved =
     store && userId
-      ? await tryPersist(store, userId, input, classification, reply, tactic.id, grounding.iso)
+      ? await tryPersist(store, userId, input, classification, reply, tactic.id, probe?.id ?? null, grounding.iso)
       : false;
 
   /*
@@ -941,6 +985,7 @@ async function persist(
   classification: ReturnType<typeof classify>,
   reply: string,
   tacticId: string | null,
+  probeId: string | null,
   isoDate: string,
   safetyFlagged = false,
 ) {
@@ -957,6 +1002,7 @@ async function persist(
     chair_picked: input.chairPicked ?? null,
     pressure_value: input.pressure ?? null,
     tactic_used: tacticId,
+    probe_used: probeId,
     intent_type: classification.intent,
     real_world_tag: classification.realWorldTag,
     real_date_used: isoDate,

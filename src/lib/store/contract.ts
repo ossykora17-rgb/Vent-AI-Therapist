@@ -60,6 +60,7 @@ export const TABLE_CONTRACT: Readonly<Record<string, string>> = {
   vents:
     "id,user_id,user_message,ai_reply,mood_score,tension_before,tension_after," +
     "language,duality_value,body_tapped,chair_picked,pressure_value,tactic_used," +
+    "probe_used," +
     "intent_type,real_world_tag,real_date_used,safety_flagged,created_at",
   // Not `vent_id`. There has never been such a column: 0002 creates this with
   // user_id and anon_id, and `insertFeedback` writes exactly those. It was
