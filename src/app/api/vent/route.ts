@@ -384,7 +384,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
     factual ??
     (classification.intent === "greeting"
       ? openingLine(grounding, classification.language === "pidgin" ? "pidgin" : "en", greetCarve, greetNotes)
-      : localReply(classification.intent, grounding, classification.language));
+      : localReply(classification.intent, grounding, classification.language, input.message));
 
   if (local) {
     const saved =
