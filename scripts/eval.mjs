@@ -10268,6 +10268,98 @@ check("93 What it worked out about you is on the page, with a button", () => {
     "reading what is kept about you must not cost anything or it will be rationed");
 });
 
+check("94 The nightly audit can see the worst thing it grades for", () => {
+  /*
+    The audit printed "broke a rule: 0" while being structurally unable to
+    detect the one fatal grader in `quality.ts`.
+
+    `invented` — a person or a sum of money in a reply that appears nowhere in
+    what the person actually wrote — runs only when handed the evidence, which
+    is deliberate and correct: graded against a single message, every
+    legitimate recall of somebody named in an earlier session looks like a
+    fabrication, and this repo has already banned that sentence once by
+    accident.
+
+    The audit had the evidence and did not pass it. It reads every stored row,
+    grades the most recent fifty, and called `gradeReply` with `tokensSpent`
+    alone — so the nightly job that exists to find what the live path missed
+    was blind to exactly the failure the live path added a fatal grader for.
+
+    A green light over a road the probe does not take. Third time in this
+    repository, and the first where the probe was one argument short.
+  */
+  const rows = [
+    { id: "a", user_id: "u1", created_at: "2026-01-01T10:00:00Z", intent_type: "vent",
+      language: "en", user_message: "my rent is late and my landlord keeps calling",
+      ai_reply: "What did your brother say about it?" },
+    { id: "b", user_id: "u1", created_at: "2026-01-02T10:00:00Z", intent_type: "vent",
+      language: "en", user_message: "my brother borrowed money again",
+      ai_reply: "What did your brother say about it?" },
+  ];
+  const found = knownProblems(rows, undefined, rows);
+  const flagged = new Set(found.map((f) => f.id));
+
+  ok(flagged.has("a"),
+    "an invented person is caught by the nightly job",
+    "the audit exists to find what the live path missed — it was blind to the fatal one");
+  ok(!flagged.has("b"),
+    "and a person they actually named is not",
+    "MEMORY FIRST asks for exactly this; flagging it teaches the room to forget");
+
+  /*
+    SCOPED TO THE PERSON, WHICH IS NOT A DETAIL
+
+    A brother mentioned by somebody else must not excuse an invention here, or
+    the grader launders every hallucination through the busiest user in the
+    corpus. Same reply, same day, different id.
+  */
+  const crossUser = [
+    { id: "c", user_id: "u2", created_at: "2026-01-02T11:00:00Z", intent_type: "vent",
+      language: "en", user_message: "work is heavy this week",
+      ai_reply: "What did your brother say about it?" },
+  ];
+  ok(knownProblems(crossUser, undefined, [...rows, ...crossUser]).some((f) => f.id === "c"),
+    "somebody else's brother does not excuse this one",
+    "evidence pooled across users forgives every invention in the corpus");
+
+  /*
+    AND SCOPED TO THAT MOMENT
+
+    A reply can only legitimately name what had already been said. The room
+    saying "your brother" on Monday is an invention on Monday, even though they
+    mention a brother on Tuesday — and a corpus read whole would forgive it,
+    which is the subtler half of the same bug.
+  */
+  const later = [
+    { id: "d", user_id: "u3", created_at: "2026-01-01T09:00:00Z", intent_type: "vent",
+      language: "en", user_message: "everything is too much right now",
+      ai_reply: "What did your brother say about it?" },
+    { id: "e", user_id: "u3", created_at: "2026-01-05T09:00:00Z", intent_type: "vent",
+      language: "en", user_message: "my brother finally called", ai_reply: "Finally." },
+  ];
+  ok(knownProblems([later[0]], undefined, later).some((f) => f.id === "d"),
+    "and a brother first mentioned days later does not excuse Monday",
+    "the evidence is what had been said by then, not what was ever said");
+
+  /*
+    Fails open with no user_id. A fixture handed to VENT_AUDIT_ROWS may not
+    carry one, and the audit must still run rather than reporting every recall
+    in it as a fabrication.
+  */
+  const noUser = [{ ...rows[0], user_id: undefined }];
+  is(knownProblems(noUser, undefined, noUser).length, 0,
+    "a row with no owner is not guessed at",
+    "fail open on the second opinion — the whole reason the grader is gated");
+
+  // And the shell hands over the whole store rather than the graded slice.
+  const shell = fs
+    .readFileSync(path.join(ROOT, "scripts/audit.mjs"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ");
+  ok(/knownProblems\(rows, undefined, all\)/.test(shell),
+    "the audit grades the slice against every row it has",
+    "handing it the slice makes an invention on turn 51 invisible and one on turn 3 forgivable");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
