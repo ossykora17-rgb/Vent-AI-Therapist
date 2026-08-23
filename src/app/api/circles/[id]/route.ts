@@ -317,6 +317,30 @@ async function handleDELETE(request: Request, { params }: Params) {
   const store = getStore();
   if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
 
+  /*
+    The circle first, and the sweep before anything else touches it.
+
+    This was the one handler of eight under `[id]` that never called
+    `sweepIfOver`, which made it the only surface where a circle that had
+    already ended answered `200 {closed: true}` — a Keeper tapping "end early"
+    on a room the clock had closed twenty minutes ago is told they closed it.
+    The contract everywhere else in this product is that a closed circle
+    answers 404 from the room and 410 from every other surface, and this is
+    every other surface.
+
+    It also answered 403 for a circle that does not exist, because
+    `listMembers` on a bad id returns an empty list and the Keeper check fires
+    first — "you are not the Keeper" about a room nobody is the Keeper of.
+  */
+  const circle = await store.getCircle(id);
+  if (!circle) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (await sweepIfOver(store, circle)) {
+    return NextResponse.json(
+      { error: "closed" },
+      { status: 410, headers: { "cache-control": "no-store" } },
+    );
+  }
+
   const members = await store.listMembers(id);
   const me = members.find((m) => m.anon_id === anonId);
   if (!me || me.role !== "keeper") {
