@@ -7,7 +7,7 @@ import { probeBlock, type Probe } from "./probes";
 import { objectLabel, objectReads } from "./chairs";
 import type { Pattern } from "./pattern";
 import { scan, scanBlock } from "./scan";
-import type { Classification } from "./intent";
+import { aimedAtTheMachine, type Classification } from "./intent";
 import type { Tactic, TacticContext } from "./tactics";
 import { OCCUPATION_PRESSURE } from "@/lib/flavour/profile";
 import type { FlavourProfile } from "@/lib/flavour/types";
@@ -758,6 +758,7 @@ export function localReply(
   intent: Classification["intent"],
   g: Grounding,
   language: Classification["language"],
+  message = "",
 ): string | null {
   if (intent === "greeting") {
     const pidgin = language === "pidgin";
@@ -766,6 +767,28 @@ export function localReply(
       : `Hey. ${g.block === "night" ? "Late one." : `Good ${g.block}.`} What needs clearing today?`;
   }
   if (intent === "meta") {
+    /*
+      Two kinds of meta, and answering one with the other is worse than saying
+      nothing.
+
+      The apology below is for "you keep repeating yourself", which is a fair
+      complaint and the only meta this router knew about. An instruction to
+      forget its rules is also a person addressing the machine — same category
+      — and answering *that* with "you're right, I repeated myself" is the room
+      apologising for something nobody said, which reads as not having been
+      read at all.
+
+      In character, and short. It declines the request, not the person, and it
+      does not lecture: a paragraph about safety policy at somebody who just
+      tested a boundary is the room making itself the subject, which is the
+      thing the office rules forbid on every other turn too. One line, then
+      back to the actual job.
+    */
+    if (aimedAtTheMachine(message)) {
+      return language === "pidgin"
+        ? "I no go do that one. Nothing dey behind here wey pass wetin you carry come. Wetin dey happen?"
+        : "Not doing that. There's nothing behind here more interesting than what you walked in with. What's actually going on?";
+    }
     return "You're right — I repeated myself, and that's on me. Fixing it now. Say the thing again and I'll come at it differently.";
   }
   return null;

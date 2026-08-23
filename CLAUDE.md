@@ -96,7 +96,7 @@ own copy passes while the product regresses.
 | Reject and regenerate, before anybody reads it | `src/lib/vent/failsafe.ts` |
 | One move from outside, per pressure, cached | `src/lib/vent/research.ts` |
 | What the audit proposed and the gate kept | `src/lib/vent/learned.ts` |
-| Intent routing, crisis, meta-vs-vent | `src/lib/vent/intent.ts` |
+| Intent routing, crisis, meta-vs-vent, injection | `src/lib/vent/intent.ts` |
 | 32 tactics, 3-turn block, somatic gate | `src/lib/vent/tactics.ts` |
 | Memory: vents only, six-turn cap | `src/lib/vent/memory.ts` |
 | The office across sessions, and no diagnosis | `src/lib/vent/notes.ts` |
@@ -117,6 +117,14 @@ their areas: `.claude/skills/data-quality/` and `.claude/skills/circles-quality/
 
 ## Traps that cost a debugging session
 
+- **A `\\b` can arrive as a backspace.** A tool wrote seven regexes into
+  `intent.ts` with U+0008 where the escape should have been. Valid regexes,
+  matching nothing, type-checked, linted, and zero pixels wide in every diff.
+  The router silently stopped catching things — the quietest failure available
+  here. Caught only because check 90 asserted the *behaviour*; check 91 now
+  fails the build on any control character in any source file. If you write a
+  regex through a script, assert what it matches, never that the file contains
+  it.
 - **The two Keeper guards must stay separate.** `keeper:open` and
   `keeper:reflect` are checked by author. Guard both on
   `kind === "keeper_prompt"` and the opening silently kills the 38-minute
