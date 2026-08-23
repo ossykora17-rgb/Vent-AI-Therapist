@@ -472,6 +472,39 @@ async function main() {
   }
 
   /*
+    17 — what the room worked out about somebody, and taking one back.
+
+    Check 93 reads the wiring. This asks the deployment, and it exists because
+    `/api/notes` shipped into neither live pass — a route whose entire job is
+    to show a person what a machine holds about them and let them delete it,
+    covered by nothing in either shape, written by the same hand that wrote
+    CLAUDE.md's section about exactly that.
+
+    Three claims. The list answers rather than 404s. A delete with no `id` is
+    refused rather than guessed at — a DELETE that treats a missing target as
+    "everything" is the worst possible reading of an ambiguous request. And
+    deleting a note that is not there reports as having held, because the
+    question is "is it gone" and for a row nobody has the answer is yes.
+  */
+  {
+    const list = await fetch(`${BASE}/api/notes?anonId=${ANON}`);
+    const body = await list.json().catch(() => ({}));
+    const noId = await fetch(`${BASE}/api/notes?anonId=${ANON}`, { method: "DELETE" });
+    const gone = await fetch(
+      `${BASE}/api/notes?anonId=${ANON}&id=00000000-0000-4000-8000-000000000000`,
+      { method: "DELETE" },
+    );
+    const goneBody = await gone.json().catch(() => ({}));
+
+    record(17, "What it worked out is listable, and forgetting one holds",
+      list.status === 200 && Array.isArray(body.notes) &&
+        noId.status === 422 &&
+        gone.status === 200 && goneBody.deleted === true,
+      `list=${list.status}/${body.notes?.length} · no-id=${noId.status} · ` +
+      `gone=${gone.status} deleted=${JSON.stringify(goneBody.deleted)}`);
+  }
+
+  /*
     16 — the door that holds everybody's history is shut.
 
     Check 65 reads the route. This asks the deployment, because the whole

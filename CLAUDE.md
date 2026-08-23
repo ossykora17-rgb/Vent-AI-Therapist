@@ -21,7 +21,7 @@ constraint. It outranks elegance, cleverness, and feature count.
 npm run local      # the whole product, no accounts, no cloud  → :3001
 npm run gate       # selector + eval + pipelines + live-verify → merge or don't
 npm run live-checks # boots its own build twice — with a store and without
-npm run eval       # 95 checks, no server; add a URL for the live room
+npm run eval       # the whole suite, no server; add a URL for the live room
 npm run audit      # grade last 50 turns; --dry is free, --apply writes a diff
 npm run heartbeat  # what changed, what is dirty, who should fix it
 npm run data       # store → data/sft.jsonl + data/eval.jsonl
@@ -156,6 +156,14 @@ their areas: `.claude/skills/data-quality/` and `.claude/skills/circles-quality/
   SDK's enums.
 - **`FileStore` caches the whole database in memory.** Editing
   `.data/vent.json` under a running server does nothing until restart.
+- **A new route ships into neither live pass unless you put it there.** The
+  two verification passes name their routes by hand — `no-store-verify`'s wire
+  sweep and `live-verify`'s checks — so a route added on Tuesday is covered by
+  nothing on Wednesday and nobody notices, because both passes still report
+  green. `/api/notes` went out that way: the surface whose entire job is
+  showing somebody what a machine holds about them and letting them delete it,
+  verified in zero of twenty-seven checks, by the person who wrote the section
+  of this file about exactly that.
 - **A leftover server will answer your checks.** `npx next start` spawns
   `next-server` as a grandchild; killing the `npx` pid orphans it and it keeps
   port 3001. The next run then reports on the wrong build, or the wrong
@@ -213,7 +221,7 @@ was also the one real people were using.
 
 **That is no longer true, and the list below is why it had to stop being
 true.** `live-checks.sh` now runs a second pass with `env -u VENT_LOCAL_STORE
-NODE_ENV=production` and `scripts/no-store-verify.mjs` against it: twelve
+NODE_ENV=production` and `scripts/no-store-verify.mjs` against it: a set of
 assertions that only mean anything when nothing is configured — no page 5xxs,
 no refusal is written for whoever deployed this, no write path claims to have
 kept anything. It found two live bugs on its first run, and one of them was a

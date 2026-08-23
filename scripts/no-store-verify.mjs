@@ -201,6 +201,7 @@ async function main() {
   const wire = [
     ["/api/carve", await fetch(`${BASE}/api/carve?anonId=${ANON}`)],
     ["/api/held", await fetch(`${BASE}/api/held?anonId=${ANON}`)],
+    ["/api/notes", await fetch(`${BASE}/api/notes?anonId=${ANON}`)],
     ["/api/history", await fetch(`${BASE}/api/history?anonId=${ANON}`)],
     ["/api/pattern", await fetch(`${BASE}/api/pattern?anonId=${ANON}`)],
     ["/api/community", await fetch(`${BASE}/api/community`)],
@@ -243,6 +244,36 @@ async function main() {
   record(12, "A wipe with nothing stored reports nothing stored",
     dres.status === 200 && del.persisted === false,
     `${dres.status} · deleted=${JSON.stringify(del.deleted)} · persisted=${del.persisted}`);
+
+  /*
+    13 — the surface that answers "what do you know about me", with nothing
+    configured.
+
+    Added the day after `/api/notes` shipped, because it shipped into neither
+    verification pass. A route that lists what a machine holds about somebody
+    and lets them delete it is exactly the surface this file exists for, and it
+    went out covered by nothing in either shape — which is the gap CLAUDE.md's
+    last section is entirely about, repeated by the person who wrote that
+    section down.
+
+    Two claims, and the second is the one worth the request. An empty list is
+    ordinary. But the *deletion* must report as having held: nothing is kept
+    here, so nothing is being held, and the honest answer to "is it gone" is
+    yes. `deleted: false` would be true about the row and wrong about the
+    question — the `?carve=1` bug said forwards.
+  */
+  const nres = await fetch(`${BASE}/api/notes?anonId=${ANON}`);
+  const notes = await nres.json();
+  const ndel = await fetch(`${BASE}/api/notes?anonId=${ANON}&id=00000000-0000-4000-8000-000000000000`, {
+    method: "DELETE",
+  });
+  const ndelBody = await ndel.json();
+  record(13, "Nothing is known, and forgetting it still holds",
+    nres.status === 200 && Array.isArray(notes.notes) && notes.notes.length === 0 &&
+      notes.persisted === false &&
+      ndel.status === 200 && ndelBody.deleted === true && ndelBody.persisted === false,
+    `list=${nres.status}/${notes.notes?.length} persisted=${notes.persisted} · ` +
+      `del=${ndel.status} deleted=${JSON.stringify(ndelBody.deleted)}`);
 
   const mark = (p) => (p === true ? "PASS" : "FAIL");
   console.log("\n| # | Check | Result | Detail |");
