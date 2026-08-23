@@ -50,7 +50,7 @@ import { wasAuthored } from "./tactics";
   exemption lives in `askedForSkill`: if they asked, it is not an offence, and
   the grader never fires.
 */
-const REJECT = new Set(["advice", "promise", "generic", "generic_task", "recites", "empty"]);
+const REJECT = new Set(["advice", "promise", "generic", "generic_task", "invented", "recites", "empty"]);
 
 export interface Verdict {
   /** Null when the reply may be sent. */
@@ -59,7 +59,7 @@ export interface Verdict {
   correction: string | null;
 }
 
-export function inspectReply(c: GoldenCase, reply: string): Verdict {
+export function inspectReply(c: GoldenCase, reply: string, said?: string): Verdict {
   /*
     An authored line is not model output, and cannot be regenerated anyway.
 
@@ -78,7 +78,7 @@ export function inspectReply(c: GoldenCase, reply: string): Verdict {
   */
   if (wasAuthored(reply)) return { reject: null, correction: null };
 
-  const findings = gradeReply(c, reply, { tokensSpent: true });
+  const findings = gradeReply(c, reply, { tokensSpent: true, said });
   const bad = findings.filter((f) => REJECT.has(f.grader));
   if (bad.length === 0) return { reject: null, correction: null };
 
@@ -125,6 +125,16 @@ function correctionFor(graders: string[]): string {
   }
   if (seen.has("empty")) {
     lines.push("- Say something.");
+  }
+  if (seen.has("invented")) {
+    /*
+      Names the rule and not the invention, like every other line here — and
+      for a sharper reason in this one case. Repeating "you said 'your
+      brother'" puts the fabricated person into the retry's own context, where
+      the next attempt can pick it up as established fact. A correction that
+      quotes a hallucination launders it.
+    */
+    lines.push("- You referred to a person or a figure they never gave you. Only what they actually wrote exists. If you do not know, ask.");
   }
   lines.push(`${REPLY_SENTENCE_CAP} sentences, one question, their words.`);
   return lines.join("\n");

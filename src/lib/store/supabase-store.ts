@@ -19,7 +19,7 @@ import { BREAKING_CAP, HELD_CAP } from "./types";
 const FULL_SELECT = [
   "id", "user_id", "user_message", "ai_reply", "mood_score",
   "tension_before", "tension_after", "language", "duality_value",
-  "pressure_value", "chair_picked", "tactic_used", "intent_type",
+  "pressure_value", "chair_picked", "tactic_used", "probe_used", "intent_type",
   "real_world_tag", "real_date_used", "body_tapped", "safety_flagged",
   "created_at",
 ].join(",");

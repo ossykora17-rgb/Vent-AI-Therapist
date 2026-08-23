@@ -47,9 +47,11 @@ const { knownProblems, flatReplies, parseProposals, auditPrompt } =
 const { echoesThem } = await app("src/lib/vent/echo.ts");
 const { wasAuthored } = await app("src/lib/vent/tactics.ts");
 const { inspectReply } = await app("src/lib/vent/failsafe.ts");
+const { gradeReply } = await app("src/lib/vent/quality.ts");
 const { openingLine, allianceLine, shouldSayAlliance, ALLIANCE_AT } =
   await app("src/lib/vent/intake.ts");
 const { withoutExample, recentOpenings } = await app("src/lib/vent/prompt.ts");
+const { PROBES, selectProbe, probeBlock, isBroad } = await app("src/lib/vent/probes.ts");
 const { parseNotes, keepable, notesBlock, NOTE_KINDS, MAX_IN_PROMPT, MAX_SUBJECT, MAX_DETAIL } =
   await app("src/lib/vent/notes.ts");
 const { acceptable, prune, learnedBlock, MAX_LEARNED, MAX_RULE_CHARS, LEARNED_RULES } =
@@ -2324,7 +2326,16 @@ check("24 The system prompt has a budget, and every block earns its place", () =
   const tactic = selectTactic(ctx);
 
   // Everything switched on at once: the most expensive turn this can produce.
+  /*
+    The question counts against the ceiling, or the ceiling is not the ceiling.
+
+    Same rule as the lookup below it, and the same reason: a block that renders
+    on every real vent and not in this measurement is a block outside the
+    budget. `probeBlock` is ~30 tokens and was added after this check existed,
+    which is exactly how the last unmeasured block got in.
+  */
   const heaviest = buildSystemPrompt({
+    probe: selectProbe(message),
     grounding, classification, tactic, ctx,
     memory: Array.from({ length: 6 }, (_, i) => ({
       user_message: "work don finish me and i never rest since monday, my chest dey tight",
@@ -8790,10 +8801,20 @@ check("82 The room reads its own reply before anybody else does", () => {
     hand it a verdict that is always null — which passed every other assertion
     in this check.
   */
-  ok(/inspectReply\(asCase, reply\)/.test(route),
+  /*
+    Widened for the third argument, not loosened. `said` — everything this
+    person has actually written — arrived with the invention grader, and a
+    regex pinned to the two-argument call fails on a signature change while
+    still proving nothing about what is inspected. What has to hold is that the
+    thing graded is the model's reply and not a constant.
+  */
+  ok(/inspectReply\(asCase, reply[,)]/.test(route),
     "the model's reply is the thing inspected",
     "a verdict that is always null keeps the shape and removes the guard");
-  ok(route.indexOf("inspectReply(asCase, reply)") < route.indexOf("provider: answeredBy"),
+  ok(/inspectReply\(asCase, reply, said\)/.test(route),
+    "and it is given what they actually wrote to check inventions against",
+    "with no evidence the grader skips itself — silently, and by design");
+  ok(route.indexOf("inspectReply(asCase, reply,") < route.indexOf("provider: answeredBy"),
     "and it is inspected before the turn is answered");
 
   const block = slice(route, "verdictOnReply", 1400);
@@ -9502,6 +9523,289 @@ check("87 A deletion is reported by what the store answered", () => {
   is(dropped.join(" | "), "",
     `no call to a boolean-returning store method throws its answer away (${BOOLEAN_METHODS.length} methods swept)`,
     "these are the methods that cannot throw — dropping the return is the only way to not know");
+});
+
+check("88 Fifty questions, and the room asks one of them", () => {
+  /*
+    "Give me 50 specific questions VENT should ask instead of giving tasks."
+
+    The office contract has said the shape for a long time — *answer what they
+    actually said, then ask one thing you do not know the answer to* — and only
+    the first half had a source. `tactics.ts` supplies the move. Nothing
+    supplied the question, so the model invented one every turn, and an invented
+    question drifts toward the four or five that fit any conversation on earth.
+
+    WHY THE FIFTY ARE NOT IN THE PROMPT
+
+    Because a list of fifty questions in front of a model is a list of fifty
+    sentences it has just read. Check 85 exists because eleven tactic
+    instructions ended in worked examples and the replies came back as the
+    example with two words changed. Handing over a question list is that bug
+    with a bigger list.
+
+    So: a table, one selected per turn against their own words, three-turn
+    block, and only the selected one is sent.
+  */
+  is(PROBES.length, 50, `fifty questions (${PROBES.length})`);
+  is(new Set(PROBES.map((p) => p.id)).size, PROBES.length, "every id distinct",
+    "a duplicate id makes the three-turn block silently block two questions");
+  for (const school of ["mi", "yalom", "rogers"]) {
+    const n = PROBES.filter((p) => p.school === school).length;
+    ok(n >= 15, `${school} carries its share (${n})`,
+      "one school at fifteen and another at three is one school with decoration");
+  }
+  for (const p of PROBES) {
+    ok(/\?/.test(p.ask), `${p.id} is a question`,
+      "the deliverable is questions — an imperative here is a task with better manners");
+    ok(p.opens.length > 8, `${p.id} says what it opens`);
+  }
+
+  /*
+    Nothing in the library is the thing the library exists to replace. Both
+    tables are imported rather than restated, so a row added to either one is
+    checked here the day it lands.
+  */
+  const offending = PROBES.filter((p) => bannedPhrase(p.ask) || genericTask(p.ask));
+  is(offending.map((p) => p.id).join(","), "",
+    "no question is a banned phrase or a task wearing a question mark",
+    "a workbook exercise phrased as a question is still a workbook exercise");
+
+  /*
+    THE ASSERTION THIS CHECK EXISTS FOR
+
+    Specificity outranks weight. The first version of `selectProbe` sorted on
+    weight alone, and `rogers_never_said` — weight 90, eligible on everything —
+    answered four of five test messages. That is `exact_mirror` exactly: the
+    highest-weighted broad entry becomes the default, and a library of fifty
+    ships as a library of one. It took five printed lines to catch and would
+    have taken a month in production.
+  */
+  const broad = PROBES.filter(isBroad);
+  ok(broad.length >= 5 && broad.length <= 12,
+    `some questions fit anybody (${broad.length} of ${PROBES.length})`,
+    "with none, a message offering no handle gets no question at all");
+  const POINTED = [
+    ["my dad's test results came back and i don't know", "yalom"],
+    ["part of me wants to leave but i can't", "mi"],
+    ["she said i should do better", "rogers"],
+    ["what should i do", "mi"],
+  ];
+  for (const [message, school] of POINTED) {
+    const picked = selectProbe(message);
+    ok(picked && !isBroad(picked),
+      `"${message.slice(0, 34)}…" gets a question about it, not a general one`,
+      "anything matching their actual words beats anything that would match anybody");
+    is(picked.school, school, `  and it comes from ${school}`);
+  }
+  // The floor still exists, and is reached only when nothing else fits.
+  const bare = selectProbe("mmm");
+  ok(bare && isBroad(bare), "a message with no handle still gets a question",
+    "null here is a turn with no question in it at all");
+
+  /*
+    And it rotates. A weight cannot prevent repetition — it wins every contest
+    it enters, forever — so the same message four turns running must produce
+    four different questions.
+  */
+  const seen = [];
+  for (let i = 0; i < 4; i++) {
+    const p = selectProbe("i keep doing the same thing every week", seen);
+    seen.push(p.id);
+  }
+  is(new Set(seen).size, 4, `four turns, four questions (${seen.join(" → ")})`,
+    "asking the same good question every Tuesday is a script with fifty entries");
+
+  // ── what actually reaches the model ──────────────────────────────────────
+  const block = probeBlock(PROBES[0]);
+  ok(block.includes(PROBES[0].ask), "the selected question reaches the prompt");
+  ok(/your words, not these/i.test(block),
+    "framed as a direction rather than a script",
+    "a question handed over as an instruction is a template with a question mark");
+  is(probeBlock(null), null, "and no question means no line, never a blank one");
+
+  const promptSrc = fs
+    .readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  ok(/probeBlock\(probe\)/.test(promptSrc), "the prompt renders it");
+  ok(promptSrc.indexOf("probeBlock(probe)") > promptSrc.indexOf("THIS TURN"),
+    "immediately after the move",
+    "they are one instruction in two parts — a block between them makes the question optional");
+
+  /*
+    Only one of the fifty is ever sent. Asserted against the assembled prompt,
+    because the source is where the list would be absent and the prompt is
+    where it would arrive.
+  */
+  const built = buildSystemPrompt({
+    grounding: groundNow(),
+    classification: classify("part of me wants to leave but i can't"),
+    tactic: ALL_TACTICS[0],
+    ctx: { message: "part of me wants to leave but i can't", pressure: 50, ventCount: 2, recentTactics: [] },
+    memory: [],
+    message: "part of me wants to leave but i can't",
+    probe: selectProbe("part of me wants to leave but i can't"),
+  });
+  const present = PROBES.filter((p) => built.includes(p.ask));
+  is(present.length, 1,
+    `the prompt carries exactly one of the fifty (${present.length})`,
+    "fifty questions in front of a model is fifty sentences it has just read");
+
+  // ── the rotation has somewhere to be read from ───────────────────────────
+  /*
+    `probe_used` is 0018, and it mirrors `tactic_used`. Without the column the
+    block has nothing to block against and every recurrence of a message shape
+    gets the same question — the failure above, in production, invisibly.
+  */
+  const route = fs
+    .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  ok(/selectProbe\(input\.message, recentProbes\)/.test(route),
+    "the route selects against what was already asked");
+  ok(/probe_used:\s*probeId/.test(route), "and records which one it asked");
+  ok(/r\.probe_used/.test(route), "reading the rotation back from the store");
+  const ddl = fs.readFileSync(path.join(ROOT, "supabase/APPLY.sql"), "utf8");
+  ok(/add column if not exists probe_used/.test(ddl),
+    "and the column exists in the schema of record",
+    "a column applied to production and not committed is the database and the repo disagreeing");
+});
+
+check("89 The room never invents a person or a figure", () => {
+  /*
+    The alignment problem in the only form it takes in this product.
+
+    A model with a warm brief, a gap in its context and a standing instruction
+    to name a concrete detail will fill the gap — confidently, fluently, in the
+    register of somebody who remembers. "What did your brother say?" to
+    somebody with no brother is not a wrong answer. It is the room proving it
+    was never listening, in the exact sentence it most needed to prove
+    otherwise, and it is unrecoverable: nothing said afterwards is believed.
+
+    Every rule this repo has against invention was a *prompt line* — "never
+    invent a fact to fill a silence" — which is a request. This is the check.
+
+    TWO CATEGORIES, BECAUSE THEY ARE THE TWO IT ACTUALLY INVENTS
+
+    People, because MEMORY FIRST asks for a named specific every single turn
+    and a named specific is precisely what gets confabulated. Money, because
+    CLAUDE.md's first rule is that an exchange rate which did not fetch is an
+    absent sentence rather than an estimate — and a naira figure nobody typed
+    is that rule broken inside a reply instead of inside a lookup.
+  */
+  const said = "rent don pass me and i no fit breathe. my landlord dey call";
+  const c = { id: "t", message: said, intent: "vent", language: "en", probes: "" };
+  const graded = (reply, evidence) =>
+    gradeReply(c, reply, { tokensSpent: true, said: evidence }).filter((f) => f.grader === "invented");
+
+  ok(graded("What did your brother say about it?", said).length,
+    "a person they never mentioned is caught");
+  ok(graded("That's ₦200,000 you will not see again.", said).length,
+    "so is a figure nobody gave you");
+
+  /*
+    And the other half, which is the expensive one to get wrong.
+
+    "Last time you said your brother still hasn't called" is the single most
+    valuable sentence a therapist has, and this repo has already banned it once
+    by accident — `FILE_LANGUAGE` exists because of what that cost. A grader
+    that cannot tell recall from invention would teach the model to never name
+    anybody, which is worse than the bug.
+  */
+  is(graded("Your landlord is calling and you can't breathe.", said).length, 0,
+    "somebody they did name is recall, not invention",
+    "MEMORY FIRST asks for exactly this — a grader that flags it teaches the room to forget");
+  const withHistory = `my brother borrowed money again\n${said}`;
+  is(graded("What did your brother say?", withHistory).length, 0,
+    "and a person from an earlier turn still counts as said",
+    "the evidence is their whole side of the conversation, not this one message");
+  is(graded("You said 200,000 and it is still 200,000.", "the rent is 200,000 naira").length, 0,
+    "a figure they typed, said back, is not an invention",
+    "commas and spaces are formatting — 200,000 and 200000 are one number");
+
+  /*
+    FAIL OPEN WHEN THERE IS NO EVIDENCE, AND THAT IS THE WHOLE DESIGN
+
+    With no `said` the check does not run. It does not fall back to the current
+    message: graded against one turn, every legitimate recall of a person from
+    a previous session is an invention. "Fail open on the second opinion,
+    closed on the first" is the house rule, and this is a second opinion.
+  */
+  is(gradeReply(c, "What did your brother say?", { tokensSpent: true })
+    .filter((f) => f.grader === "invented").length, 0,
+    "with no evidence it does not run",
+    "guessing from one message flags the recall that makes this product worth using");
+
+  // The audit and the pipelines pass no evidence, so none of them can produce
+  // a false invention finding on a reply they cannot check.
+  const quality = fs.readFileSync(path.join(ROOT, "src/lib/vent/quality.ts"), "utf8");
+  ok(/if \(meta\.said\)/.test(quality.replace(/\/\*[\s\S]*?\*\//g, " ")),
+    "the grader is gated on the evidence being present");
+
+  // ── and it is acted on, not merely recorded ──────────────────────────────
+  const failsafe = fs.readFileSync(path.join(ROOT, "src/lib/vent/failsafe.ts"), "utf8");
+  ok(/"invented"/.test(slice(failsafe, "const REJECT", 220)),
+    "the failsafe rejects and regenerates on it",
+    "a grader nobody acts on runs in a paid command nobody runs");
+  const note = inspectReply(c, "What did your brother say?", said).correction;
+  ok(note && /never gave you/i.test(note), "the retry is told what it did");
+  /*
+    And the note quotes nothing. Sharper here than anywhere else in that file:
+    repeating "you said 'your brother'" puts the fabricated person into the
+    retry's own context, where the next attempt can pick it up as established
+    fact. A correction that quotes a hallucination launders it.
+  */
+  ok(!/brother/i.test(note),
+    "and never repeats the invention",
+    "a correction that quotes a hallucination hands it to the next attempt as context");
+  ok(inspectReply(c, "What did your brother say?", said).reject,
+    "so the reply does not go out");
+  is(inspectReply(c, "Your landlord is calling. Which came first?", said).reject, null,
+    "while the same sentence about a real person does");
+
+  /*
+    The route hands over their whole side of the conversation, not one turn.
+    Asserted on the source because there is no other way to see it, and it is
+    the single line the entire check depends on being right.
+  */
+  const route = fs
+    .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  ok(/history\.map\(\(h\) => h\.user_message\)/.test(route),
+    "every earlier message is part of the evidence",
+    "this turn alone makes every cross-session recall look invented");
+  ok(/input\.message\]\.join/.test(route), "and so is the one they just sent");
+
+  /*
+    Nothing we wrote trips it either, checked against the authored corpus the
+    way every grader in this repo is validated before it ships. If these flag,
+    the grader is wrong — that rule is written down in `quality.ts` and has
+    already retired two graders.
+  */
+  const authored = [
+    ...ALL_TACTICS.filter((t) => t.hold).map((t) => t.hold),
+    ...PROBES.map((p) => p.ask),
+  ];
+  /*
+    Evidence that is present and mentions nobody — not `""`.
+
+    The first version passed the empty string, which is falsy, so the grader
+    skipped itself and this swept nothing while reporting a count. A failure
+    bucket with nothing in it, inside the check written to abolish exactly
+    that. The corpus has to be graded against evidence that exists and happens
+    to contain none of these people, or it is not being graded at all.
+  */
+  const NOBODY = "the rent";
+  ok(gradeReply(c, "What did your brother say?", { tokensSpent: true, said: NOBODY })
+    .some((f) => f.grader === "invented"),
+    "the corpus sweep below runs against evidence the grader actually reads",
+    "`said: \"\"` is falsy — it skips the grader and sweeps nothing");
+  const flagged = authored.filter((text) =>
+    gradeReply(c, text, { tokensSpent: true, said: NOBODY }).some((f) => f.grader === "invented"));
+  is(flagged.length, 0,
+    `no authored line invents anybody (${authored.length} checked)`,
+    "the graders are validated against what we wrote — if they flag those, the graders are wrong");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

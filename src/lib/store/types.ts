@@ -20,6 +20,8 @@ export interface VentRow {
   chair_picked: string | null;
   pressure_value: number | null;
   tactic_used: string | null;
+  /** Which extraction question was asked. Mirrors tactic_used — see probes.ts. */
+  probe_used: string | null;
   intent_type: string | null;
   real_world_tag: string | null;
   real_date_used: string | null;

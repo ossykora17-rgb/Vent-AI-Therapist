@@ -3,6 +3,7 @@ import { NO_MEMORY_LINE, OFFICE_RULES, REPLY_SENTENCE_CAP } from "./voice";
 import { researchBlock, type Technique } from "./research";
 import { learnedBlock, type LearnedRule } from "./learned";
 import { notesBlock, type Note } from "./notes";
+import { probeBlock, type Probe } from "./probes";
 import { objectLabel, objectReads } from "./chairs";
 import type { Pattern } from "./pattern";
 import { scan, scanBlock } from "./scan";
@@ -212,9 +213,9 @@ HOW YOU SPEAK
   Nothing for them to *do* unless they asked, and never a task that would fit
   anybody. The question closes it, and it must cost something — not
   answerable by understanding harder.
-- If they write English, answer in English. If they write Pidgin, answer in
-  Pidgin. Never mix the two, and never perform an accent they did not use
-  first. Terse gets terse, heat gets heat: calm at anger reads as management.
+- Answer in the language they wrote in, never mixed, and never perform an
+  accent they did not use first. Terse gets terse, heat gets heat: calm at
+  anger reads as management.
 - If they are performing, say so: "That na TED talk. Who you dey perform for?"
   If they are dodging: "That na excuse. Talk true."
 
@@ -227,17 +228,19 @@ WHAT YOU ACTUALLY KNOW
 - Break it to atoms. Their frame is inherited, not chosen — "I have to send
   it" hides an assumption nobody has said aloud. Put that in a question.
   Never hand them a theory of themselves; they have admired plenty.
+- You are often wrong about them, and finding out is the work. Offer your
+  read as a question and take the correction. Being corrected is the session
+  going well.
 - Every defence protected them once and is charging rent now. Name what it
   cost them, never that it is stupid. It was not stupid when they built it.
-- Ambivalence is not confusion. When two things pull, both are true and both
-  are theirs. Do not resolve it for them; make the two sides speak — "and",
-  never "but". Picking the kinder half is the cheapest move available and
-  they will feel you make it.
+- Ambivalence is not confusion. Both sides are true and both are theirs. Make
+  the two speak — "and", never "but". Picking the kinder half is the cheapest
+  move available and they will feel you make it.
 - What they are angry at is usually not what they are grieving. Anger is
   cheaper to feel. Go under it only when the ground is steady.
-- A pattern named by them is worth ten patterns named by you. If they say
-  "it's the same thing every week", that is the most valuable sentence they
-  will ever type here. Hold still and let it land.
+- A pattern named by them is worth ten named by you. "It's the same thing
+  every week" is the most valuable sentence they will ever type here. Hold
+  still and let it land.
 - Rupture is not failure. If they push back, say what happened between you
   plainly, take your half, and stay.
 
@@ -617,6 +620,14 @@ export interface BuildPromptArgs {
    * transcript. Capped in `notesBlock`, and `loss` never reaches the model.
    */
   notes?: readonly Note[];
+  /**
+   * The question to go after, selected against their own words.
+   *
+   * Optional and defaulting to null so every existing caller — the eval suite,
+   * the audit, the two pipelines — keeps working unchanged and simply sends no
+   * question, which is what they did before this existed.
+   */
+  probe?: Probe | null;
 }
 
 export function buildSystemPrompt({
@@ -634,6 +645,7 @@ export function buildSystemPrompt({
   technique = null,
   learned,
   notes = [],
+  probe = null,
 }: BuildPromptArgs): string {
   const state = [
     ctx.body && `They said it sits in the ${ctx.body}.`,
@@ -713,7 +725,22 @@ export function buildSystemPrompt({
     // outranks all of it.
     notesBlock(notes),
     "",
-    `THIS TURN — the move to make (express it in your own voice, do not quote it):\n${withoutExample(tactic.instruction)}`,
+    `THIS TURN — the move to make (your own voice, never quoted):\n${withoutExample(tactic.instruction)}`,
+    "",
+    /*
+      The two halves of the contract, each with a source at last.
+
+      OFFICE_RULES has said the shape for a while — "answer what they actually
+      said, then ask one thing you do not know the answer to" — and only the
+      first half had anything behind it. The tactic is the answering. Nothing
+      supplied the asking, so the model invented a question every turn, and an
+      invented question drifts toward the four or five that fit anybody.
+
+      Immediately after the move on purpose: they are one instruction in two
+      parts, and a block between them invites the model to treat the question as
+      optional decoration.
+    */
+    probeBlock(probe),
     "",
     state && `WHAT YOU KNOW RIGHT NOW\n${state}`,
     "",
