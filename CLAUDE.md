@@ -331,7 +331,14 @@ trusting a word of it:
 actually carry the failure?*
 
 A green light over a broken road is the oldest bug in this file. It has now
-arrived three times — `models.retrieve`, the anonymous probe, and the HEAD
+arrived four times — the fourth being a probe one argument short: the nightly
+audit called `gradeReply` without `said`, so the only **fatal** grader in
+`quality.ts` never ran in the job that exists to find what the live path
+missed, and the report printed "broke a rule: 0" over it. Ask of any grader
+run in a second place: *is it being given everything the first place gives
+it?*
+
+The first three arrived — `models.retrieve`, the anonymous probe, and the HEAD
 request — and every time the light was the part that was wrong.
 
 And the second mechanism, which is newer and simpler than the first:

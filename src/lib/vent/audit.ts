@@ -29,6 +29,15 @@ export interface AuditRow {
   /** The column, when the row has one. The audit never re-detects it. */
   language?: string | null;
   tactic_used?: string | null;
+  /**
+   * Whose turn this was.
+   *
+   * Optional because a fixture handed to `VENT_AUDIT_ROWS` may not carry it,
+   * and the audit must still run on one. Where it exists the invention grader
+   * gets evidence; where it does not, that grader skips itself rather than
+   * guessing — see `evidenceFor`.
+   */
+  user_id?: string | null;
   mood_score?: number | null;
   tension_before?: number | null;
   tension_after?: number | null;
@@ -49,7 +58,50 @@ export interface Finding {
  * it — the grader that fired already names the rule, and the fix is a code
  * change rather than a new instruction.
  */
-export function knownProblems(rows: AuditRow[], grade = gradeReply): Finding[] {
+/**
+ * Everything this person had written by the time that reply was sent.
+ *
+ * The evidence the `invented` grader checks a reply against, and the audit was
+ * running without it — so the one **fatal** grader in `quality.ts` never fired
+ * in the nightly job, and the report printed "broke a rule: 0" while being
+ * structurally unable to see a fabricated brother. A green light over a road
+ * the probe does not take, which is the oldest entry in CLAUDE.md's list and
+ * the third time it has been this file's turn.
+ *
+ * Two scopes, and both are load-bearing.
+ *
+ * **Same person.** A brother mentioned by somebody else must not excuse an
+ * invention here, or the grader launders every hallucination through the
+ * busiest user in the corpus.
+ *
+ * **Up to that moment.** A reply can only legitimately name what had already
+ * been said. "The room said 'your brother' on Monday and they first mentioned
+ * a brother on Friday" is still an invention on Monday, and a corpus read
+ * whole would forgive it.
+ *
+ * Returns undefined rather than an empty string when the row carries no
+ * `user_id`: empty is falsy and would read as "no evidence", which is the same
+ * outcome by accident rather than on purpose, and the check that swept the
+ * authored corpus already made that mistake once.
+ */
+function evidenceFor(r: AuditRow, corpus: readonly AuditRow[]): string | undefined {
+  if (!r.user_id) return undefined;
+  const said = corpus
+    .filter((x) => x.user_id === r.user_id && x.created_at <= r.created_at)
+    .map((x) => x.user_message);
+  return said.length > 0 ? said.join("\n") : undefined;
+}
+
+/**
+ * @param corpus every stored row, not only the graded slice — the evidence for
+ * a reply is the whole conversation behind it, and the audit grades the last
+ * fifty turns out of however many exist.
+ */
+export function knownProblems(
+  rows: AuditRow[],
+  grade = gradeReply,
+  corpus: readonly AuditRow[] = rows,
+): Finding[] {
   const out: Finding[] = [];
   for (const r of rows) {
     if (!r.ai_reply || r.intent_type !== "vent") continue;
@@ -70,7 +122,10 @@ export function knownProblems(rows: AuditRow[], grade = gradeReply): Finding[] {
       intent: "vent",
       probes: "nightly audit",
     };
-    const notes: Note[] = grade(asCase, r.ai_reply, { tokensSpent: true });
+    const notes: Note[] = grade(asCase, r.ai_reply, {
+      tokensSpent: true,
+      said: evidenceFor(r, corpus),
+    });
     const worst = worstOf(notes);
     if (worst === "skipped" || worst === null) continue;
     out.push({

@@ -86,7 +86,15 @@ if (rows.length === 0) {
 }
 
 // ── free, and usually the whole answer ──────────────────────────────────────
-const known = knownProblems(rows);
+/*
+  Graded against every stored row, not only the fifty being read.
+
+  The invention grader needs what this person had already written, and the
+  slice above is the fifty most recent turns across everybody. Handing it
+  `rows` would make an invention on turn 51 invisible and one on turn 3
+  forgivable — the evidence for a reply is the conversation behind it.
+*/
+const known = knownProblems(rows, undefined, all);
 console.log(`broke a rule  ${known.length}`);
 for (const f of known.slice(0, 8)) {
   console.log(`  [${f.severity}] ${f.problems.slice(0, 2).join(" · ")}`);
