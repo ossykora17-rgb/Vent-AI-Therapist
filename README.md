@@ -173,7 +173,7 @@ the suite passes while the product regresses.
 
 ```bash
 npm run data     # store → data/sft.jsonl + data/eval.jsonl
-npm run eval     # 14 checks, no server; pass a URL for the live room
+npm run eval     # the whole suite, no server; pass a URL for the live room
 npm run rlhf     # ratings → data/dpo.jsonl, and what is losing
 ```
 
@@ -193,13 +193,13 @@ deletion — circles are counted, never quoted), and **a reply the circle rules
 would refuse is not a reply worth training on**, so `checkMessage` runs over
 every candidate completion as a quality filter.
 
-**`npm run eval`** is MMLU for this product: thirteen checks, every one of them a
-bug actually shipped here. The date answered as therapy. "It's the same thing
+**`npm run eval`** is MMLU for this product, and every check in it is a bug
+actually shipped here. The date answered as therapy. "It's the same thing
 every week" heard as an insult and answered with an apology. A worksheet where
-a sentence belonged. A witness who could never speak. 136 assertions, about a
-second, no tokens. Give it a base URL and it adds the live room checks — 14
-checks, and 157 or 160 assertions depending on whether the instance has voice
-keys, because a few of them assert the token's shape. CI runs it both ways.
+a sentence belonged. A witness who could never speak. About a second, no
+tokens, and it prints its own totals — which is why no number for them is
+written here. Give it a base URL and it adds the live room checks, a few of
+which vary with whether the instance has voice keys. CI runs it both ways.
 One of those live checks found a real bug: a Keeper's early close deleted the
 transcript while the room kept answering `200`.
 

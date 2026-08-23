@@ -9381,6 +9381,29 @@ check("86 Nobody is handed a task that would fit anybody", () => {
     against the two tables that actually fail a build — and a row added to
     either one now fails this until the claim catches up.
   */
+  /*
+    And no document hand-types the size of this suite.
+
+    README.md claimed "thirteen checks" and "136 assertions" against a suite
+    running a hundred and three and three and a half thousand; CLAUDE.md's
+    command table said 95. Nobody typed them wrong — checks were added and the
+    integers stayed, which is the same defect as the banned-phrase count one
+    paragraph up and the one CLAUDE.md records as "a number is a sentence".
+
+    A suite size is the worst possible thing to hand-type, because it changes
+    on almost every commit. Derive it, assert it, or do not write it — and for
+    this one the answer is do not write it: the command prints its own totals.
+    Asserted narrowly, on the line that names the command, so the bug stories
+    elsewhere in these files keep their numbers.
+  */
+  for (const doc of ["CLAUDE.md", "README.md"]) {
+    const lines = fs.readFileSync(path.join(ROOT, doc), "utf8").split("\n");
+    const typed = lines.filter((l) => /npm run eval/.test(l) && /\b\d+\b/.test(l));
+    is(typed.length, 0,
+      `${doc} does not hand-type how big this suite is${typed.length ? ` — ${typed[0].trim()}` : ""}`,
+      "a count of the checks goes stale on the next commit, in the file people read first");
+  }
+
   const positioning = fs.readFileSync(path.join(ROOT, "docs/POSITIONING.md"), "utf8");
   const claimed = Number(positioning.match(/(\d+) phrases and unasked-for tasks fail the \*\*build\*\*/)?.[1]);
   is(claimed, BANNED_PHRASES.length + GENERIC_TASKS.length,
