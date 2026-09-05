@@ -19,6 +19,7 @@ import { noModelKeyReply } from "@/lib/vent/fallback";
 import { MAX_TOKENS, classifyModelError, modelFailureReply } from "@/lib/vent/model";
 import { generateReply } from "@/lib/vent/providers";
 import { depthFor, depthBadge } from "@/lib/vent/depth";
+import { assessTurn } from "@/lib/vent/assess";
 import { circleInvite, soundsAlone } from "@/lib/community/invite";
 import { BREAKING_LINES, nextQuestion, type Question } from "@/lib/vent/breaking";
 import { buildFlavour } from "@/lib/flavour/profile";
@@ -774,6 +775,24 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
       */
       depth: verdict.depth,
       depthBadge: tokensSpent ? depthBadge(verdict) : null,
+      /*
+        The turn's verdict, computed rather than asked for.
+
+        A risk level, why, the move, the question, and whether this has
+        outgrown the room — every field derived from what the router and the
+        selectors already decided before the model was called. Asking the model
+        for it would spend output tokens on a budget that has already produced
+        this repo's sharpest bug, add a parse whose failure mode is XML on
+        screen at 2am, and let the message being assessed argue with its own
+        assessment. See assess.ts.
+      */
+      assessment: assessTurn({
+        classification,
+        depth: verdict,
+        tacticId: tactic.id,
+        probeId: probe?.id ?? null,
+        history: mine,
+      }),
       /** A real open room, or null. Never prose — the UI renders a link. */
       circleInvite: invite,
       /**

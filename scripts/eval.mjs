@@ -50,6 +50,7 @@ const { knownProblems, flatReplies, parseProposals, auditPrompt } =
 const { echoesThem } = await app("src/lib/vent/echo.ts");
 const { wasAuthored, inTheLoop } = await app("src/lib/vent/tactics.ts");
 const { inspectReply } = await app("src/lib/vent/failsafe.ts");
+const { assessTurn } = await app("src/lib/vent/assess.ts");
 const { gradeReply } = await app("src/lib/vent/quality.ts");
 const { openingLine, allianceLine, shouldSayAlliance, ALLIANCE_AT } =
   await app("src/lib/vent/intake.ts");
@@ -10973,6 +10974,160 @@ check("101 The room does not promise that somebody is coming", () => {
   // to, applied to the one string we wrote for this moment.
   is(bannedPhrase(ALONE_LINE), null, "and it is in the office voice");
   is(genericTask(ALONE_LINE), null, "handing over nothing to do");
+});
+
+check("102 The turn's verdict is computed, never asked for", () => {
+  /*
+    A clinical spec asked for a structured verdict on every reply — risk level,
+    reasoning, the skill selected, a handoff flag. Every field is right and
+    every one already existed here, scattered across four modules and visible
+    to nobody. `pastWhatThisHolds` in particular was wired only to
+    `/api/pattern`, so the turn itself never knew whether the person in front
+    of it had outgrown the room.
+
+    WHY THE MODEL IS NOT ASKED
+
+    The obvious build has the model emit tags alongside the reply. Three
+    problems, and the third disqualifies it.
+
+    Output tokens, on a budget that has already produced this repository's
+    sharpest bug — `max_tokens: 220`, 217 spent reasoning and three saying
+    "Tired. Na" to somebody who had just written that they were tired.
+
+    A parse that can fail, whose failure mode is XML on a screen at 2am.
+
+    And it asks the thing being assessed to assess itself. **A model can be
+    argued out of its own risk rating by the message it is rating**, which is
+    not hypothetical: two of the first hundred and thirty real turns were
+    injection attempts and both came back as something that was not this
+    product. The spec's own first principle is safety first, and a safety
+    field that depends on the thing it is watching is not one.
+  */
+  const vent = classify("work is heavy and i am tired of it");
+  const edge = classify("i feel hopeless and there is no way out");
+  const grave = classify("my dad's test results came back");
+
+  const at = (c, msg) =>
+    assessTurn({
+      classification: c,
+      depth: depthFor({ classification: c, message: msg, pressure: null }),
+      tacticId: "exact_mirror",
+      probeId: "rogers_check",
+      history: [],
+    });
+
+  is(at(edge, "i feel hopeless and there is no way out").risk, "high",
+    "hopelessness is high",
+    "EDGE is the language of somebody whose safety is genuinely a question");
+  is(at(grave, "my dad's test results came back").risk, "moderate",
+    "a grave circumstance is moderate, not high",
+    "severity is not ideation — calling grief a safety event inflates the field until nobody reads it");
+  is(at(vent, "work is heavy and i am tired of it").risk, "none",
+    "and an ordinary vent is none",
+    "a risk level that is never 'none' is a label, not a reading");
+  is(at(classify("i want to die"), "i want to die").risk, "crisis", "crisis is crisis");
+  /*
+    And crisis is read from the classifier rather than the depth tier — tested
+    by making the two disagree, which is the only way this guard is visible.
+
+    `depthFor` derives its crisis reason from `classify`, so on real input the
+    two can never differ and a mutation removing the classifier check passes
+    every ordinary case. That was a miss in the first version of this check:
+    the assertion named a distinction it was not exercising. Handing in a depth
+    verdict that has forgotten about crisis is synthetic on purpose — it is the
+    shape of a future edit to `depth.ts`, and the classifier is what has to
+    hold when that happens.
+  */
+  is(assessTurn({
+    classification: classify("i want to die"),
+    depth: { depth: "fast", reason: "ordinary" },
+    tacticId: null, probeId: null, history: [],
+  }).risk, "crisis",
+    "even when the depth router has forgotten about it",
+    "classify runs first and gates the model call — it is the authority, and this proves it is read");
+
+  /*
+    The fields the spec asked for, carrying what the product already decided
+    rather than a second opinion about it.
+  */
+  const a = at(vent, "work is heavy and i am tired of it");
+  is(a.skill, "exact_mirror", "the move is reported");
+  is(a.probe, "rogers_check", "so is the question");
+  is(a.handoff, false, "and a first-time person is not handed off");
+  ok(typeof a.because === "string" && a.because.length > 0,
+    `the reason is the router's own word (${a.because})`,
+    "prose here would be a second description of a decision that already has one");
+
+  /*
+    Never throws. A verdict is a description of the reply; the reply is the
+    product. Nothing downstream may lose a turn over a field.
+  */
+  const junk = assessTurn({
+    classification: vent,
+    depth: { depth: "fast", reason: "ordinary" },
+    tacticId: null,
+    probeId: null,
+    history: [{ nonsense: true }],
+  });
+  is(junk.risk, "none", "an unknown reason is not guessed upward");
+  /*
+    History that genuinely throws, not history that merely looks wrong.
+
+    The first version passed `[{ nonsense: true }]`, which `pastWhatThisHolds`
+    walks without complaint — so the assertion passed because nothing threw
+    rather than because the catch works, and a mutation removing the try/catch
+    sailed past it. Null is the input that actually raises.
+  */
+  const broken = assessTurn({
+    classification: vent,
+    depth: { depth: "fast", reason: "ordinary" },
+    tacticId: null,
+    probeId: null,
+    history: null,
+  });
+  is(broken.handoff, false, "history that throws degrades to no handoff",
+    "a turn must never be lost to the thing describing it");
+
+  // ── it is derived, and the model is never asked ─────────────────────────
+  const src = fs
+    .readFileSync(path.join(ROOT, "src/lib/vent/assess.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  ok(!/generateReply|providers|max_?[Tt]okens/.test(src),
+    "the assessment spends nothing",
+    "a second call to describe the first is the credit policy broken for a label");
+
+  const prompt = fs
+    .readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  ok(!/<risk_level>|<reasoning_summary>|<handoff_flag>|<next_skill>/.test(prompt),
+    "and the model is never asked to emit the schema",
+    "tags in the output are output tokens, a parse that can fail, and a rating the message can argue with");
+  ok(/Output only the words you would say to them/.test(prompt),
+    "the reply contract still says words only",
+    "the one instruction that keeps a parse failure off somebody's screen");
+
+  const route = fs
+    .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  ok(/assessment: assessTurn\(\{/.test(route), "the turn carries it");
+  ok(route.indexOf("assessTurn({") > route.indexOf("const classification"),
+    "computed from what the router already decided");
+
+  /*
+    AND THE NUMBER THE SPEC NAMES IS NOT OURS
+
+    The spec says to route people to 988. This product is Nigerian, its crisis
+    lines are 0806 210 6493 and 199, and check 17 fails the build if any
+    surface writes a crisis number out by hand. A US hotline handed to somebody
+    in Lagos is not a safety feature; it is a disconnected number at the worst
+    possible moment.
+  */
+  ok(!/\b988\b/.test(prompt) && !/\b988\b/.test(src) && !/\b988\b/.test(route),
+    "no foreign hotline reached the crisis path",
+    "the right number for this userbase is the one already in CRISIS_LINES");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
