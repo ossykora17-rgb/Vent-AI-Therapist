@@ -130,7 +130,27 @@ export function parseCarve(raw: string): Carve | null {
     losing it to a fourth array element that named a condition would be the
     batch failing over its worst member.
   */
-  return { carve: text, remembers: true, notes: parseNotes(notes).keep };
+  /*
+    And the rejects are said out loud, because "no notes" was unanswerable.
+
+    Production has two carves and zero notes — from the same model call, so
+    the carve half of the response parses and the notes half produces nothing.
+    Which of the two reasons that is (the model returned no array, or every
+    note was refused by `keepable`) decides whether the fix is a prompt or a
+    rule, and nothing recorded it either way. `parseNotes` builds `dropped`
+    for exactly this and the caller took `.keep` and binned it.
+
+    A failure bucket with nothing in it, one field from the answer.
+  */
+  const read = parseNotes(notes);
+  if (read.dropped.length > 0) {
+    console.warn(`[carve] notes refused (${read.dropped.length}):`, read.dropped.join(" | "));
+  } else if (read.keep.length === 0 && Array.isArray(notes) && notes.length > 0) {
+    console.warn("[carve] notes array arrived and nothing survived parsing");
+  } else if (!Array.isArray(notes)) {
+    console.warn("[carve] the model returned no notes array at all");
+  }
+  return { carve: text, remembers: true, notes: read.keep };
 }
 
 /** Whether this session is worth spending a call on at all. */

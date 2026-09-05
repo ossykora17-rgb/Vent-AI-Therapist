@@ -10839,6 +10839,47 @@ check("99 One masked voice per seat, never one key for everybody", () => {
     "setMicrophoneEnabled would publish the real one");
 });
 
+check("100 A note that was refused says so", () => {
+  /*
+    Production carries two carves and zero notes — from the same model call, so
+    the carve half of the response parses and the notes half produces nothing.
+    Which of the two reasons that is decides what the fix even is:
+
+      the model returned no `notes` array at all  → the prompt is the problem
+      every note was refused by `keepable`        → the rule is the problem
+
+    `parseNotes` returns `{ keep, dropped }` and builds `dropped` for exactly
+    that question. The caller took `.keep` and binned the rest, so a whole
+    subsystem produced nothing for a month with no way to ask why — a failure
+    bucket with nothing in it, one field away from the answer.
+  */
+  const refused = parseNotes([
+    { kind: "hard", subject: "insomnia", detail: "cannot sleep for weeks now" },
+    { kind: "fact", subject: "sister", detail: "she calls every sunday evening" },
+  ]);
+  ok(refused.dropped.length > 0,
+    "a refused note is reported, not merely absent",
+    "keepable refusing a diagnosis is right; refusing it silently is what made this unanswerable");
+  ok(refused.dropped[0].includes("/"),
+    "and it names the kind and subject it refused",
+    "a count with no subject cannot say whether to change the prompt or the rule");
+  ok(refused.keep.length > 0,
+    "while the ordinary note survives beside it",
+    "one bad note must not take the batch — that is why they are parsed apart");
+
+  const src = fs
+    .readFileSync(path.join(ROOT, "src/lib/vent/carve.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  ok(/read\.dropped/.test(src), "the carve path reads what was refused");
+  ok(!/parseNotes\(notes\)\.keep/.test(src),
+    "and no longer takes only the survivors",
+    "`.keep` alone is the shape that made a month of empty notes undiagnosable");
+  ok(/no notes array at all/.test(src),
+    "the other branch is named too",
+    "no array and an emptied array are different bugs with different fixes");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
