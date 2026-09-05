@@ -269,11 +269,31 @@ console.log(`\nMIND WEAVE — heartbeat  ${nowIso()}\n${bar}`);
 console.log(`since         ${since}`);
 console.log(`new           ${newVents.length} vents · ${newCircles.length} circles · ${newSignals.length} signals`);
 
+/*
+  Nothing to *report* is not nothing to *check*, and this exit did both.
+
+  `npm run gate` is the only opinion that counts about whether a change is
+  safe — CLAUDE.md says so in its first section. It runs this file with
+  `--gate`, and this branch exited **0** before reaching the gate whenever the
+  local store had no new rows since the last heartbeat.
+
+  On a fresh checkout there is no local store at all: `.data/` is gitignored,
+  so `vent.json` does not exist and `newVents.length` is zero by construction.
+  The command printed "Nothing to do. Sleeping", returned success, and never
+  ran the eval suite, the selector, the pipelines or live-verify. A green
+  light, over the entire gate, in the one command this project tells people to
+  trust — found by running it on a container that had been recycled.
+
+  So the early exit is now the *heartbeat's* alone. With `--gate` the walk
+  still short-circuits — there is genuinely nothing to hand an agent — and
+  execution falls through to the gate, which is the whole reason the flag
+  exists.
+*/
 if (findings.length === 0 && newVents.length === 0 && newSignals.length === 0) {
-  console.log(`\nNothing to do. Sleeping — this cost one file read and no tokens.`);
+  console.log(`\nNothing to hand anybody. ${GATE ? "Running the gate anyway." : "Sleeping — this cost one file read and no tokens."}`);
   console.log(`${bar}\n`);
   writeState({ ...state, last_checked: nowIso() });
-  process.exit(0);
+  if (!GATE) process.exit(0);
 }
 
 const actionable = findings.filter((f) => {

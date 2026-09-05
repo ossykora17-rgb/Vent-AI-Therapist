@@ -10565,6 +10565,175 @@ grant execute on function public.match_memories_probe(uuid, extensions.vector, i
     "a guarantee that depends on another file staying correct is not a guarantee");
 });
 
+check("97 It answers in the language they wrote in", () => {
+  /*
+    "AI too dey zuga with some of those weird speakings."
+
+    A real person, about this product, in a WhatsApp thread the founder
+    forwarded. They said it twice — the second time as "I think we should set
+    the pidgin setting different" — and they were describing a bug, not a
+    preference.
+
+    One marker flipped the whole reply to Pidgin, and the marker list contained
+    bare `\bfit\b`. So *"I don't fit in anywhere at work"* — plain English, and
+    one of the more painful sentences anybody types here — came back in Pidgin.
+    Seven of seven English test sentences did. One message in the live corpus
+    had already been routed that way before anybody noticed.
+
+    It breaks the product's own rule, one file over in `HOW YOU SPEAK`: never
+    perform an accent they did not use first. Performing one at somebody who
+    wrote plain English is the fastest way to read as a machine doing an
+    impression — which is precisely what was reported.
+  */
+  const ENGLISH = [
+    "i dont fit in anywhere at work",
+    "my clothes dont fit me anymore",
+    "i am trying to keep fit",
+    "i had a fit of rage yesterday",
+    "this job is not a good fit for me",
+    "i cannot fit this into my schedule",
+    "she is the belle of the ball",
+    "the shoes fit perfectly",
+  ];
+  for (const m of ENGLISH) {
+    is(classify(m).language, "en", `English stays English: "${m.slice(0, 38)}…"`,
+      "answering plain English in Pidgin is the room doing an impression at somebody");
+  }
+
+  /*
+    And the other direction, which is the half that would be easy to break
+    while fixing the first. A detector tuned until it never says Pidgin is not
+    a fix — this product is Nigerian in root and most of the people it is for
+    write like this.
+  */
+  const PIDGIN = [
+    "na so e be",
+    "wetin dey happen",
+    "rent don pass me abeg",
+    "i no fit breathe",
+    "my belle dey pain me",
+    "how far, wahala dey",
+    "oga no sabi wetin e dey do",
+    "i no fit talk am",
+  ];
+  for (const m of PIDGIN) {
+    is(classify(m).language, "pidgin", `Pidgin is heard: "${m.slice(0, 38)}…"`,
+      "a detector tuned until it never fires is not a fix, it is a different bug");
+  }
+
+  /*
+    THE DISTINCTION, ASSERTED DIRECTLY
+
+    "I no fit breathe" is Pidgin and "I don't fit in" is not, and the whole
+    difference is the word in front. That is why the constructions are in the
+    strong list and the bare words are in neither.
+  */
+  is(classify("i no fit breathe").language, "pidgin", "the construction decides it");
+  is(classify("i dont fit in").language, "en", "and the bare word decides nothing");
+
+  const src = fs
+    .readFileSync(path.join(ROOT, "src/lib/vent/intent.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  ok(/any\(PIDGIN_STRONG, m\)/.test(src),
+    "only the unambiguous markers decide the language");
+  ok(!/any\(PIDGIN_AMBIGUOUS/.test(src),
+    "and the English homographs decide nothing on their own",
+    "`fit` is an English word before it is a Pidgin one, and it was carrying the whole decision");
+  /*
+    Cut at the array's own terminator, not at a character count.
+
+    A fixed-width slice runs straight into `PIDGIN_AMBIGUOUS`, which is defined
+    immediately below and contains exactly the two patterns this asserts are
+    absent — so the check failed on correct code, for the fourth time in this
+    suite that a probe has read past the thing it was asserting about. The
+    declaration ends at `];`; read to there.
+  */
+  const from = src.indexOf("const PIDGIN_STRONG");
+  const strong = src.slice(from, src.indexOf("];", from));
+  ok(strong.length > 100 && !strong.includes("PIDGIN_AMBIGUOUS"),
+    `the strong list is what was read (${strong.length} chars)`,
+    "a slice that reaches the next declaration asserts about the next declaration");
+  ok(!/\/\\bfit\\b\/|\/\\bbelle\\b\//.test(strong),
+    "neither bare word is in the deciding list",
+    "putting it back is the bug, and it is one character of diff");
+});
+
+check("98 The gate cannot pass by not running", () => {
+  /*
+    `npm run gate` exited 0 without running the gate.
+
+    CLAUDE.md's first section calls it "the only opinion that counts about
+    whether a change is safe". It runs `heartbeat-data.mjs --gate`, and that
+    file short-circuits when the local store has no new rows since the last
+    heartbeat — printing "Nothing to do. Sleeping", returning success, and
+    never reaching the eval suite, the selector, the pipelines or live-verify.
+
+    On a fresh checkout there is no local store at all. `.data/` is gitignored,
+    so `vent.json` does not exist and the new-row count is zero by
+    construction. Somebody clones this repository, runs the one command it
+    tells them to trust, sees a green exit, and merges.
+
+    A green light over a broken road — the oldest bug in this file — except
+    over the whole gate rather than one probe. Found by running it on a
+    container that had been recycled mid-session, which is the same accident
+    as a fresh clone.
+
+    The early exit is the heartbeat's alone now: with `--gate` the walk still
+    short-circuits, because there is genuinely nothing to hand an agent, and
+    execution falls through to the gate.
+  */
+  const src = fs.readFileSync(path.join(ROOT, "scripts/heartbeat-data.mjs"), "utf8");
+  const bare = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+  const exits = [...bare.matchAll(/process\.exit\(0\)/g)];
+  ok(exits.length > 0, `there are success exits to check (${exits.length})`);
+  for (const e of exits) {
+    /*
+      Every early success must be guarded on not being a gate run. Read on the
+      line itself rather than nearby, because "there is a GATE mention in this
+      function" is not the same claim as "this exit cannot fire under --gate".
+    */
+    /*
+      The enclosing guard, not the exit's own line.
+
+      One of the two exits is written `if (!store && !GATE) { … exit(0) }` —
+      correctly guarded, with the condition a line above. A probe reading only
+      the line the exit sits on reports it as unguarded, which is this suite's
+      recurring mistake in its cheapest form: asserting about a window that
+      does not contain the thing being asserted.
+    */
+    const guard = bare.slice(Math.max(0, e.index - 160), e.index + 20);
+    ok(/!GATE/.test(guard),
+      `a success exit is gated on not being the gate (…${guard.trim().slice(-44)})`,
+      "an exit that fires under --gate is the gate reporting a pass it never ran");
+  }
+
+  /*
+    And the gate section is actually downstream of the walk, rather than being
+    a branch the short-circuit jumps over. Order, not presence.
+  */
+  ok(bare.indexOf("if (GATE)") > bare.lastIndexOf("process.exit(0)"),
+    "the gate runs after every early exit",
+    "a gate above the short-circuit is a gate the short-circuit skips");
+
+  /*
+    The gate still fails loudly when something is wrong — asserted because the
+    obvious over-correction is to make it always exit 0, which is the same bug
+    with better manners.
+  */
+  ok(/process\.exit\(gate/.test(bare) || /exit\(\s*gate[^)]*\?\s*0\s*:\s*1/.test(bare) ||
+     /gate[\s\S]{0,200}process\.exit\(1\)/.test(bare),
+    "and a failing gate still exits non-zero",
+    "always exiting 0 is the same defect wearing the fix");
+
+  // The command CLAUDE.md points at is the one that carries the flag.
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  ok(/--gate/.test(pkg.scripts.gate ?? ""),
+    "`npm run gate` is the gate",
+    "the documented command and the checked command have to be the same command");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
