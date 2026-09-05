@@ -192,6 +192,24 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
         intent: "crisis",
         reply: CRISIS_RESPONSE,
         crisis: { ...CRISIS_LINES, gated: true },
+        /*
+          The turn that most needs a risk level was the one without one.
+
+          `assessment` was added to the vent response and to nothing else —
+          a field shipped into the shape its author was standing in, one
+          commit after a check was written arguing against exactly that. This
+          path returns before a tactic or a probe is chosen and before the
+          store is read, so those are honestly null and the history is empty;
+          the risk and the handoff are the two fields that matter here and
+          both are real.
+        */
+        assessment: assessTurn({
+          classification,
+          depth: verdict,
+          tacticId: null,
+          probeId: null,
+          history: [],
+        }),
         // What happened, not what was configured. A store that exists and
         // then throws had reported `true` here.
         persisted: saved,
