@@ -10891,9 +10891,21 @@ check("100 A note that was refused says so", () => {
   ok(refused.dropped.length > 0,
     "a refused note is reported, not merely absent",
     "keepable refusing a diagnosis is right; refusing it silently is what made this unanswerable");
-  ok(refused.dropped[0].includes("/"),
-    "and it names the kind and subject it refused",
-    "a count with no subject cannot say whether to change the prompt or the rule");
+  ok(/^[a-z]+: /.test(refused.dropped[0]),
+    `it names the kind and the reason (${refused.dropped[0]})`,
+    "which is what decides whether the prompt or the rule is wrong");
+  /*
+    And never the subject, which is their own words.
+
+    The caller logs this list, and a hosted runtime keeps stdout indefinitely —
+    so a subject here is a durable copy of somebody's sentence in a place with
+    no delete button, under a rule saying anything the room holds about
+    somebody is on a page with one. The note was refused; its content must not
+    outlive the refusal.
+  */
+  ok(!refused.dropped.some((d) => /insomnia|sister|sunday/i.test(d)),
+    "and never the words they wrote",
+    "a refused note whose content survives in a log is the note kept after all");
   ok(refused.keep.length > 0,
     "while the ordinary note survives beside it",
     "one bad note must not take the batch — that is why they are parsed apart");
@@ -11215,6 +11227,101 @@ check("102 The turn's verdict is computed, never asked for", () => {
   ok(!/\b988\b/.test(prompt) && !/\b988\b/.test(src) && !/\b988\b/.test(route),
     "no foreign hotline reached the crisis path",
     "the right number for this userbase is the one already in CRISIS_LINES");
+});
+
+check("103 Nothing a person wrote reaches a log line", () => {
+  /*
+    This product's promise is that nobody knows it is you. There is no account,
+    the id is made on the device, the transcript is deleted at close, and every
+    note it holds is on a page with a button.
+
+    A hosted runtime keeps stdout. So a `console.warn` carrying somebody's
+    words is a durable copy in the one place that has no button — and it
+    survives the deletion the interface offers, which makes the button a
+    half-truth rather than a lie, and half-truths are what this file is full of.
+
+    Found by sweeping the logs after writing one. `parseNotes` builds its
+    reject list as `kind/subject: why`, and `subject` is two to four words the
+    person wrote about themselves — "my dad", "insomnia", "sister". The carve
+    path logged that list, one commit after it was added, to make an empty
+    subsystem diagnosable. The diagnosis needed the kind and the reason; the
+    subject was along for the ride.
+
+    THE RULE, AND WHY IT IS SHAPED THIS WAY
+
+    Not "no logging" — a product with no logs cannot be fixed, and `[carve]
+    notes refused (3): hard: names a condition` is exactly the line that tells
+    somebody whether to change the prompt or the rule. What is banned is the
+    *values*: their message, a note's subject or detail, an anon id, a user id.
+    Codes, counts, kinds, statuses and durations are all fair, and all of them
+    are about the machine rather than about a person.
+  */
+  const FORBIDDEN = [
+    // Their words, in the variables this codebase names them by.
+    /\buser_message\b/,
+    /\binput\.message\b/,
+    /\bn\.subject\b/, /\bn\.detail\b/,
+    /\bnote\.subject\b/, /\bnote\.detail\b/,
+    // Who they are.
+    /\banonId\b/, /\banon_id\b/, /\buserId\b/, /\buser_id\b/,
+  ];
+
+  const offenders = [];
+  let scanned = 0;
+  const walkLogs = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walkLogs(full);
+      else if (/\.tsx?$/.test(e.name)) {
+        const src = fs
+          .readFileSync(full, "utf8")
+          .replace(/\/\*[\s\S]*?\*\//g, " ")
+          .replace(/\/\/[^\n]*/g, " ");
+        /*
+          The call's own arguments, by balancing parentheses — the same reader
+          check 102 needed. A line-based match reads whatever happens to sit
+          beside the call, and a next-call slice swallows everything between
+          two of them. Read the call.
+        */
+        for (const m of src.matchAll(/console\.(?:log|info|warn|error)\(/g)) {
+          scanned++;
+          let depth = 0;
+          let end = m.index;
+          for (let i = m.index + m[0].length - 1; i < src.length; i++) {
+            if (src[i] === "(") depth++;
+            else if (src[i] === ")") {
+              depth--;
+              if (depth === 0) { end = i; break; }
+            }
+          }
+          const call = src.slice(m.index, end);
+          const hit = FORBIDDEN.find((re) => re.test(call));
+          if (hit) {
+            offenders.push(`${path.relative(ROOT, full)}: ${hit.source}`);
+          }
+        }
+      }
+    }
+  };
+  walkLogs(path.join(ROOT, "src"));
+
+  ok(scanned > 20, `there are log calls to check (${scanned})`,
+    "a sweep that finds no calls passes loudest");
+  is(offenders.join(" | "), "",
+    `no log line carries a person's words or their id${offenders.length ? ` — ${offenders.join(" | ")}` : ""}`,
+    "stdout has no delete button, so a value here outlives the deletion the interface offers");
+
+  /*
+    And the diagnostic that started this still works. The point was never to
+    log less — it was to log the machine rather than the person.
+  */
+  const carve = fs
+    .readFileSync(path.join(ROOT, "src/lib/vent/carve.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  ok(/console\.warn\(`\[carve\] notes refused/.test(carve),
+    "the empty-notes question is still answerable",
+    "a rule that silences the diagnostic trades one blind subsystem for another");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

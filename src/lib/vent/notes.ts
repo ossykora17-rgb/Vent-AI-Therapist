@@ -151,7 +151,23 @@ export function parseNotes(raw: unknown): { keep: Note[]; dropped: string[] } {
     };
     const why = keepable(n);
     if (why) {
-      dropped.push(`${n.kind}/${n.subject}: ${why}`);
+      /*
+        The kind and the reason, never the subject.
+
+        `subject` is two to four words *the person wrote about themselves* —
+        "my dad", "insomnia", "sister". This list is a diagnostic, and the only
+        question it exists to answer is whether the prompt or the rule needs
+        changing; the kind and the reason answer that completely and the
+        subject adds nothing to it.
+
+        It matters because the caller logs this. A hosted runtime keeps stdout
+        for as long as it keeps stdout, so a subject here is a durable copy of
+        somebody's words in a place with no delete button — under a rule in
+        CLAUDE.md saying anything the room holds about somebody is on a page
+        with one. The note itself was refused; its content must not survive the
+        refusal in a log line.
+      */
+      dropped.push(`${n.kind}: ${why}`);
       continue;
     }
     // Same subject twice in one batch is one note; the later wins.
