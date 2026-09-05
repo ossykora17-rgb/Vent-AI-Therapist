@@ -32,6 +32,13 @@ npm run rlhf       # ratings → data/dpo.jsonl, and what is losing
 safe. It has **zero dependencies**, so a fresh `git worktree` runs the whole
 suite with no `npm install`. Keep it that way.
 
+And keep it unable to pass by not running. It used to exit **0** without
+running anything when the local store had no new rows — which on a fresh
+checkout is always, because `.data/` is gitignored. Clone, run the one command
+this file says to trust, get a green exit, merge. Every early `process.exit(0)`
+in `heartbeat-data.mjs` must be guarded on `!GATE`, and check 98 asserts it for
+each one it finds rather than for a list.
+
 ## Rules that are not preferences
 
 **Silence beats a guess.** Flavour below its confidence floor says nothing

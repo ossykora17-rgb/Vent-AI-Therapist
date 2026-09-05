@@ -209,11 +209,48 @@ const REAL_WORLD: Array<[Exclude<RealWorldTag, null>, RegExp]> = [
   ["health", /\b(sick|hospital|health|body dey pain|test result)\b|\b(diagnos)/],
 ];
 
-const PIDGIN = [
+/**
+ * Pidgin, and the two words that are also ordinary English.
+ *
+ * "AI too dey zuga with some of those weird speakings." A real person, about
+ * this product, and they were describing a bug rather than a preference.
+ *
+ * One marker used to flip the entire reply to Pidgin, and the list contained
+ * bare `\bfit\b`. So *"I don't fit in anywhere at work"* — plain English, and
+ * one of the more painful things anybody types here — came back in Pidgin. So
+ * did "my clothes don't fit me", "I'm trying to keep fit", "this job is not a
+ * good fit", "I had a fit of rage". Seven of seven English test sentences,
+ * and one message in the live corpus had already been routed that way.
+ *
+ * It breaks this product's own rule, written one file over in `HOW YOU SPEAK`:
+ * *never perform an accent they did not use first*. Performing one at somebody
+ * who wrote plain English is the single fastest way to read as a machine doing
+ * an impression, which is exactly what was reported.
+ *
+ * So the list is split. `STRONG` is unambiguous — no English sentence contains
+ * "wetin" or "abeg" by accident — and any one of them decides it. `fit` and
+ * `belle` are English homographs and no longer decide anything on their own;
+ * the Pidgin *constructions* they appear in are in STRONG instead, because "I
+ * no fit breathe" is Pidgin and "I don't fit in" is not, and the difference is
+ * the word in front.
+ */
+const PIDGIN_STRONG = [
   /\bdey\b/, /\bwetin\b/, /\babeg\b/, /\bna\b/, /\boga\b/, /\bpikin\b/,
   /\bwahala\b/, /\bshege\b/, /\bhow far\b/, /\bmake e\b/, /\bno be\b/,
-  /\bgo dey\b/, /\bsabi\b/, /\bfit\b/, /\bbelle\b/,
+  /\bgo dey\b/, /\bsabi\b/,
+  // The constructions, not the bare words. "I no fit" and "belle dey pain me"
+  // are Pidgin; "a good fit" and "the belle of the ball" are not.
+  /\b(no|go|fit) fit\b/, /\bfit (do|talk|carry|hold)\b/, /\bbelle (dey|de)\b/,
 ];
+
+/**
+ * Also English, and therefore never enough on their own.
+ *
+ * Kept as a named list rather than deleted, so the next person can see what
+ * was removed from the decision and why — and so check 97 can assert that a
+ * message carrying only these is answered in the language it was written in.
+ */
+const PIDGIN_AMBIGUOUS = [/\bfit\b/, /\bbelle\b/];
 
 const BODY: Array<["head" | "throat" | "chest", RegExp]> = [
   ["head", /\b(head|skull|brain|forehead|temple)\b/],
@@ -270,7 +307,11 @@ export interface Classification {
 export function classify(message: string): Classification {
   const m = message.toLowerCase().trim();
 
-  const language: Language = any(PIDGIN, m) ? "pidgin" : "en";
+  /*
+    A strong marker decides it. An ambiguous one never does — see PIDGIN_STRONG
+    for what that cost a real person.
+  */
+  const language: Language = any(PIDGIN_STRONG, m) ? "pidgin" : "en";
   const body = bodyIn(m);
   const realWorldTag = REAL_WORLD.find(([, re]) => re.test(m))?.[0] ?? null;
 
