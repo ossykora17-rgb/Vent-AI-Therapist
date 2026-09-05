@@ -115,6 +115,15 @@ never function bodies or grants. Run Supabase's own advisors against the
 project when you touch the schema — they had been reporting this the whole
 time, to nobody.
 
+**A mask with one ratio is a mask with one key.** `mask.ts` is varispeed, so
+it is a uniform scaling, and anything linear is invertible by whoever knows the
+ratio. Every seat used to get the same hardcoded shift — one recovered ratio
+would have unmasked every speaker in every circle ever held. `personaFor` reads
+the seat the *server* assigned, so an attack that works recovers one seat and
+does not generalise, and six people in a room are audibly six people. Stay in
+the ±3–6 band and weighted downward: past that it is a cartoon, and a cartoon
+empties the room, which is a different way to lose.
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.
@@ -155,6 +164,7 @@ own copy passes while the product regresses.
 | Guardian thresholds | `src/lib/external/guardian.ts` |
 | Outside world, all four windows | `src/lib/external/sources.ts` |
 | Voice tokens, room naming | `src/lib/voice/livekit.ts` |
+| On-device voice mask, one persona per seat | `src/lib/voice/mask.ts` |
 | Two storage backends behind one interface | `src/lib/store/` |
 | The provider chain, and model discovery | `src/lib/vent/providers.ts` |
 | Failure vocabulary, the health probe | `src/lib/vent/model.ts` |

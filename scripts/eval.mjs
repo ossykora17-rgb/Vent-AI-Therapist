@@ -968,7 +968,7 @@ check("15d The model is forbidden from promising what the product cannot keep", 
 // of thing nobody can hear is wrong — a ratio inverted or a sweep rate off by
 // a factor produces a voice that still sounds altered and is trivially
 // recognisable, and you find out when somebody is recognised.
-const { shiftRatio, sweepHz, WINDOW_S, maskMicrophone } =
+const { shiftRatio, sweepHz, WINDOW_S, maskMicrophone, personaFor } =
   await app("src/lib/voice/mask.ts");
 
 check("15e The voice mask shifts far enough to break recognition", () => {
@@ -10732,6 +10732,111 @@ check("98 The gate cannot pass by not running", () => {
   ok(/--gate/.test(pkg.scripts.gate ?? ""),
     "`npm run gate` is the gate",
     "the documented command and the checked command have to be the same command");
+});
+
+check("99 One masked voice per seat, never one key for everybody", () => {
+  /*
+    `mask.ts` argues, in its own docstring, that a circle needs "six people
+    being distinguishable from each other" — and every seat was then masked
+    with the same hardcoded `deeper`. The rationale written directly over a
+    call site that ignored it, which is this repository's signature failure.
+
+    THE RE-IDENTIFICATION FINDING, WHICH IS THE REAL ONE
+
+    The shifter is varispeed — a uniform scaling — and the file states plainly
+    that anything linear is invertible by somebody who knows the ratio. With
+    one constant, that ratio was the same for *every speaker in every circle
+    ever held*. One recording of one voice somebody can identify recovers it,
+    and the same number then unmasks everybody else in every other room.
+
+    Per seat, the attack recovers one seat and does not generalise. That is the
+    whole difference between a leak and a breach, and it costs one argument.
+  */
+  const seats = [0, 1, 2, 3, 4, 5];
+  const personas = seats.map((n) => personaFor(`seat-${n}`));
+  is(new Set(personas).size, seats.length,
+    `six seats get six different voices (${personas.join(", ")} st)`,
+    "one ratio for everybody is one key for everybody");
+
+  /*
+    All inside the band the file argues for. Far enough that a familiar voice
+    stops being placeable, near enough that it still sounds like a person —
+    a cartoon empties the room, which is a different way to lose.
+  */
+  for (const st of personas) {
+    ok(Math.abs(st) >= 3 && Math.abs(st) <= 6,
+      `${st} semitones stays in the band that still sounds like a person`,
+      "under three and somebody who knows you knows you; past six it is a gimmick");
+  }
+  const down = personas.filter((s) => s < 0).length;
+  ok(down > personas.length / 2,
+    `weighted downward (${down} of ${personas.length})`,
+    "an upward shift thins the voice, and a gimmick is fatal where somebody is about to cry");
+
+  /*
+    Stable within a session, because a voice that changes mid-sentence is worse
+    than no mask at all — and derived from the seat, which is the one thing
+    about a participant the server decides and the client cannot name.
+  */
+  is(personaFor("seat-2"), personaFor("seat-2"), "the same seat is the same voice");
+  is(personaFor("seat-0"), -4,
+    "and seat zero is the depth that was actually measured",
+    "the one ratio with numbers behind it belongs where the fallback lands");
+  is(personaFor(null), personaFor("seat-0"), "an unreadable seat still gets a voice");
+  is(personaFor("garbage"), personaFor("seat-0"), "so does an unparseable one",
+    "a seat this cannot read is still a seat that must not be published unmasked");
+
+  // The ratio is the exponential, at any semitone — the same one function, so
+  // the named depths and the per-seat numbers cannot drift apart.
+  ok(Math.abs(shiftRatio(-4) - Math.pow(2, -4 / 12)) < 1e-9, "the ratio is 2^(n/12)");
+  is(shiftRatio("deeper"), shiftRatio(-4), "and a named depth is one of the numbers");
+
+  // ── the call site actually uses it ───────────────────────────────────────
+  const src = fs
+    .readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  ok(/maskMicrophone\(mic, personaFor\(grant\.identity\)/.test(src),
+    "the room masks by the seat the server assigned",
+    "a constant here is the global key again, and it is one word of diff");
+  ok(!/maskMicrophone\(mic, "(deeper|higher)"/.test(src),
+    "and never by a hardcoded depth");
+
+  /*
+    And the promise stays fail-closed. Everything above is worthless if a
+    browser that cannot build the graph publishes the raw microphone instead —
+    somebody who was told their voice is disguised, speaking in their own.
+  */
+  ok(/if \(!masked\) \{/.test(src), "a mask that could not be built is handled");
+  /*
+    The failure branch itself, and presence asserted before order.
+
+    The first version of this read `failed.indexOf("getTracks") <
+    failed.indexOf("publishTrack")` over the rest of the file — and `indexOf`
+    returns −1 when the thing is absent, so **deleting the line that stops the
+    raw microphone made the assertion pass**. Minus one is less than
+    everything. An ordering check with no presence check is satisfied by
+    absence, which is the failure bucket with nothing in it, on the one line in
+    this product where failing open means somebody speaks in their own voice
+    believing they are disguised.
+
+    So: the branch is cut at its own `} else {`, and the stop is asserted to be
+    in it before anything is asserted about where.
+  */
+  const from = src.indexOf("if (!masked) {");
+  const branch = src.slice(from, src.indexOf("} else {", from));
+  ok(branch.length > 60 && !branch.includes("publishTrack"),
+    `the failure branch is what was read (${branch.length} chars)`,
+    "a slice that runs into the else branch asserts about the else branch");
+  ok(/getTracks\(\)\.forEach\(\(t\) => t\.stop\(\)\)/.test(branch),
+    "the raw microphone is stopped when the mask could not be built",
+    "failing open here is the one bug this whole file exists to prevent");
+  ok(/micRef\.current = null/.test(branch),
+    "and the reference is dropped with it",
+    "a stopped track still held is a track something later can restart");
+  ok(src.indexOf("publishTrack(masked.track") > 0,
+    "and only the masked track is ever published",
+    "setMicrophoneEnabled would publish the real one");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

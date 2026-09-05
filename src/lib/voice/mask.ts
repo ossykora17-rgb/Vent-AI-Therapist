@@ -87,9 +87,77 @@ const SEMITONES: Record<MaskDepth, number> = {
   higher: 4,
 };
 
-/** Ratio of output frequency to input. 2^(n/12). */
-export function shiftRatio(depth: MaskDepth): number {
-  return Math.pow(2, SEMITONES[depth] / 12);
+/**
+ * One voice per seat, and the reason is not variety.
+ *
+ * The paragraph above says a circle needs "six people being distinguishable
+ * from each other", and then every seat was masked with the same `deeper` —
+ * the rationale written directly over a call site that ignored it. Two things
+ * follow, and the second is the one that matters.
+ *
+ * The obvious one: six voices shifted identically are six voices that still
+ * differ only by however much they differed to begin with. Two people with
+ * similar registers arrive indistinguishable, in a room whose whole shape is
+ * taking turns.
+ *
+ * THE ONE THAT MATTERS: A SINGLE GLOBAL RATIO IS A SINGLE GLOBAL KEY
+ *
+ * This shifter is varispeed, so it is a uniform scaling, and the file already
+ * says plainly that anything linear is invertible by somebody who knows the
+ * ratio. With one hardcoded depth the ratio was the *same constant for every
+ * speaker in every circle ever held*. One recording of one voice somebody can
+ * identify recovers it — and that ratio then unmasks every other person in
+ * every other room, because it was never per-person in the first place.
+ *
+ * Per seat, that attack recovers one seat. It does not generalise, which is
+ * the entire difference between a leak and a breach.
+ *
+ * WHY THESE NUMBERS
+ *
+ * All within the band the file already argues for: far enough that a familiar
+ * voice stops being placeable, near enough that it still sounds like a person
+ * rather than a cartoon. Weighted downward because the note above is right —
+ * an upward shift thins the voice and reads as a gimmick, and a gimmick is
+ * fatal in a room where somebody is about to cry.
+ *
+ * Only −4 has been measured through the real graph (−391/−406/−405 cents on a
+ * synthetic vowel). The others are the same transform at a neighbouring ratio,
+ * and a varispeed shifter scales uniformly at any ratio, so the measurement
+ * generalises in kind. It does not generalise *by ear* — whether −6 still
+ * sounds like a person at forty minutes is a question for a person in a real
+ * room, which is where every product-quality finding here has come from.
+ */
+const SEAT_SEMITONES = [-4, -6, -3, 4, -5, 3] as const;
+
+/**
+ * The persona for a seat, from the seat the server assigned.
+ *
+ * Derived rather than chosen, and derived from `seat-N` specifically, because
+ * that index is already the one thing about a participant the server decides
+ * and the client cannot name for itself. It is stable inside a session — your
+ * voice must not change mid-sentence — and it carries nothing across rooms,
+ * because seats are handed out in join order and the same person is seat 2 on
+ * Tuesday and seat 5 on Thursday.
+ *
+ * Anything unparseable gets index 0, which is the measured `deeper`. A seat
+ * this cannot read is still a seat that must not be published unmasked.
+ */
+export function personaFor(identity: string | null | undefined): number {
+  const n = Number.parseInt(String(identity ?? "").replace(/^seat-/, ""), 10);
+  const seat = Number.isFinite(n) && n >= 0 ? n : 0;
+  return SEAT_SEMITONES[seat % SEAT_SEMITONES.length];
+}
+
+/**
+ * Ratio of output frequency to input, from a named depth or a semitone count.
+ *
+ * The number form is what `personaFor` returns. Both go through one function
+ * so there is one place the exponent lives — the named depths are now just two
+ * of the values the per-seat table already contains.
+ */
+export function shiftRatio(depth: MaskDepth | number): number {
+  const semis = typeof depth === "number" ? depth : SEMITONES[depth];
+  return Math.pow(2, semis / 12);
 }
 
 /**
@@ -201,7 +269,7 @@ export type MaskFailure =
 
 export function maskMicrophone(
   input: MediaStream,
-  depth: MaskDepth = "deeper",
+  depth: MaskDepth | number = "deeper",
   onFail?: (why: MaskFailure) => void,
 ): Mask | null {
   const fail = (why: MaskFailure) => {
