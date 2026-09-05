@@ -133,6 +133,16 @@ a screen at 2am, and let the message being assessed argue with its own
 assessment. Two of the first 130 real turns were injection attempts. A
 classifier that ran first cannot be talked out of anything.
 
+**stdout has no delete button.** Log codes, counts, kinds, statuses and
+durations — never their message, never a note's subject or detail, never an
+anon id. A hosted runtime keeps stdout for as long as it keeps stdout, so a
+value in a log line outlives the deletion the interface offers and turns the
+button into a half-truth. Check 103 reads each `console.*` call by balancing
+its own parentheses, because a line-based match reads whatever sits beside the
+call. The rule is not "log less": `[carve] notes refused (3): hard: names a
+condition` is exactly the line that says whether the prompt or the rule is
+wrong, and it carries nothing about a person.
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.
