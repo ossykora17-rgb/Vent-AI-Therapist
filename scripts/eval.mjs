@@ -28,7 +28,8 @@ const { flavourBlock, openingBlock, carveBlock, memoryBlock } = await app("src/l
 const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/vent/chairs.ts");
 const { selectMemory } = await app("src/lib/vent/memory.ts");
-const { checkMessage, economyFact, weatherFact, keeperIntention, keeperReflection, roleForSeat } =
+const { checkMessage, economyFact, weatherFact, keeperIntention, keeperReflection, roleForSeat,
+        ALONE_LINE, ALONE_DOOR } =
   await app("src/lib/circles/rules.ts");
 const { PRESENCE_WINDOW_MS, TYPING_WINDOW_MS, isPresent, isTyping, presenceOf, shouldTouch } =
   await app("src/lib/circles/presence.ts");
@@ -7404,8 +7405,37 @@ check("68 A room does not tell you the same thing twice", () => {
     And the alone case says it once. Two sentences about an empty room, one
     of them on a plate, is the shape that was screenshotted.
   */
-  is((code.match(/first one here/g) ?? []).length, 1,
-    "being first is stated in exactly one place");
+  /*
+    Counted across the source rather than inside this one component.
+
+    The sentence moved to `ALONE_LINE` in `rules.ts` when it stopped promising
+    an opening, so counting the literal here found zero and failed on a change
+    that made the property *stronger*: one constant, imported, is a better
+    "exactly one place" than one string literal in one file. What has to hold
+    is that a person reads it once and that this component does not retype it.
+  */
+  const spoken = [];
+  const walkSrc = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walkSrc(full);
+      else if (/\.tsx?$/.test(e.name)) {
+        // Comments stripped: this component quotes the old sentence in a note
+        // explaining why it changed, and prose about a string is not a string
+        // anybody reads. Fifth probe in this suite to need saying.
+        const text = fs
+          .readFileSync(full, "utf8")
+          .replace(/\/\*[\s\S]*?\*\//g, " ")
+          .replace(/\/\/[^\n]*/g, " ");
+        spoken.push(...(text.match(/first one here/g) ?? []));
+      }
+    }
+  };
+  walkSrc(path.join(ROOT, "src"));
+  is(spoken.length, 1, "being first is stated in exactly one place, repo-wide");
+  ok(/\{ALONE_LINE\}/.test(code) && !/first one here/.test(code),
+    "and the room renders the constant rather than a second copy",
+    "check 81's rule: a sentence a person reads lives in one file");
 
   // The voice offer makes one claim before it is taken up. The pitch shift is
   // the surprising one and the one about them; "audio only" carries the rest.
@@ -10878,6 +10908,71 @@ check("100 A note that was refused says so", () => {
   ok(/no notes array at all/.test(src),
     "the other branch is named too",
     "no array and an emptied array are different bugs with different fixes");
+});
+
+check("101 The room does not promise that somebody is coming", () => {
+  /*
+    The alone state read: "You are the first one here. The circle opens when
+    somebody else sits down."
+
+    That is the shape of the worst refusal this product ever shipped — *"Your
+    turn comes"*, said to people whose turn could never come because roles were
+    fixed at join. CLAUDE.md's rule is to read a refusal and ask whether it is
+    true.
+
+    It was not. Of the first sixteen circles in production, **fourteen had
+    exactly one person in them** and two had two; nobody has ever spoken in
+    one. The sentence promised an opening the product had delivered twice out
+    of sixteen, to somebody sitting alone for forty-five minutes on the
+    strength of it.
+
+    And the room never offers a door onto a 501. Read the other way, that means
+    when the door in front of somebody is shut you point at the one that is
+    open: `/chat` needs nobody else and works tonight.
+  */
+  const PROMISES = [
+    /\bwill\b/i,
+    /\bopens when\b/i,
+    /\bcomes\b/i,
+    /\bsoon\b/i,
+    /\bwhen (?:somebody|someone) (?:else )?(?:joins|sits|arrives)/i,
+  ];
+  for (const re of PROMISES) {
+    ok(!re.test(ALONE_LINE), `no promise in the line (${re.source.slice(0, 26)})`,
+      "an opening kept twice in sixteen tries is not a thing to state as a future fact");
+  }
+  ok(/nobody might|nobody does|may not|might not/i.test(ALONE_LINE),
+    "and it says out loud that nobody may come",
+    "the honest half — some nights the room stays one person, and that is the common case");
+  ok(ALONE_LINE.length > 60 && ALONE_LINE.length < 200,
+    `it is one sentence long (${ALONE_LINE.length} chars)`,
+    "a paragraph at somebody alone in a room at 2am is the machine talking about itself");
+
+  /*
+    Not bleak either. The door is the other half, and without it this is just
+    a colder version of the same dead end.
+  */
+  ok(/private session/i.test(ALONE_DOOR),
+    "the door that is actually open is named");
+  ok(!/circle|room|wait/i.test(ALONE_DOOR),
+    "and it points away from the one that is shut",
+    "offering the same closed door in warmer words is the bug with better manners");
+
+  const room = fs
+    .readFileSync(path.join(ROOT, "src/components/circle-room.tsx"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  ok(/\{ALONE_LINE\}/.test(room) && /\{ALONE_DOOR\}/.test(room),
+    "the room renders both, imported rather than retyped");
+  const alone = room.slice(room.indexOf("state.seats < 2"));
+  ok(/href="\/chat"/.test(alone.slice(0, 900)),
+    "and the door is a link somebody can actually press",
+    "naming a way out without linking it is a sentence about a door");
+
+  // The graders agree it is not a promise — the same table the model is held
+  // to, applied to the one string we wrote for this moment.
+  is(bannedPhrase(ALONE_LINE), null, "and it is in the office voice");
+  is(genericTask(ALONE_LINE), null, "handing over nothing to do");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
