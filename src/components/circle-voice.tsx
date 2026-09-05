@@ -230,7 +230,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
       });
       micRef.current = mic;
 
-      const { maskMicrophone } = await import("@/lib/voice/mask");
+      const { maskMicrophone, personaFor } = await import("@/lib/voice/mask");
       /*
         Four causes, one message, and the person who hit it could not tell us
         which — "my browser doesn't support voice activation" was the report,
@@ -243,7 +243,22 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
         came here to say a hard thing does not need `context_suspended`.
       */
       let why: string | null = null;
-      const masked = maskMicrophone(mic, "deeper", (reason) => {
+      /*
+        The persona comes from the seat, not from a constant.
+
+        Every speaker used to be shifted by the same four semitones, which the
+        mask's own docstring argues against two ways: six identically-shifted
+        voices are no easier to tell apart than six unshifted ones, and — the
+        part that matters — a single global ratio is a single global key. This
+        shifter is a uniform scaling, and the file says plainly that anything
+        linear is invertible by whoever knows the ratio. One constant meant one
+        recovered ratio unmasked every speaker in every circle ever held. Per
+        seat, it recovers one seat.
+
+        `grant.identity` is `seat-N`, assigned server-side from join order, so
+        this is stable for the session and carries nothing to the next room.
+      */
+      const masked = maskMicrophone(mic, personaFor(grant.identity), (reason) => {
         why = reason;
         console.warn("[voice] mask unavailable:", reason);
       });
