@@ -124,6 +124,15 @@ does not generalise, and six people in a room are audibly six people. Stay in
 the ±3–6 band and weighted downward: past that it is a cartoon, and a cartoon
 empties the room, which is a different way to lose.
 
+**Never ask the model to grade its own turn.** Risk level, reasoning, the move
+selected, whether somebody needs a human — every one of those is computed in
+`assess.ts` from what the router and selectors already decided, before the
+model is called. Tags in the output cost tokens on a budget that has already
+produced the 217-reasoning-tokens bug, add a parse whose failure mode is XML on
+a screen at 2am, and let the message being assessed argue with its own
+assessment. Two of the first 130 real turns were injection attempts. A
+classifier that ran first cannot be talked out of anything.
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.
@@ -152,6 +161,7 @@ own copy passes while the product regresses.
 | One move from outside, per pressure, cached | `src/lib/vent/research.ts` |
 | What the audit proposed and the gate kept | `src/lib/vent/learned.ts` |
 | Intent routing, crisis, meta-vs-vent, injection | `src/lib/vent/intent.ts` |
+| The turn's verdict, computed not asked for | `src/lib/vent/assess.ts` |
 | 32 tactics, 3-turn block, somatic gate | `src/lib/vent/tactics.ts` |
 | Memory: vents only, six-turn cap | `src/lib/vent/memory.ts` |
 | The office across sessions, and no diagnosis | `src/lib/vent/notes.ts` |
