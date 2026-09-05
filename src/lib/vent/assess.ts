@@ -134,6 +134,20 @@ export function assessTurn(args: {
     because: classification.intent === "crisis" ? "crisis" : depth.reason,
     skill: tacticId,
     probe: probeId,
-    handoff: handoff !== null,
+    /*
+      Crisis is a handoff, whatever the pattern says.
+
+      `pastWhatThisHolds` answers a slower question — has this person sat here
+      five times without moving — and on a crisis turn it answers `false`,
+      because there is no history to read yet and because that is not what it
+      measures. Reporting `handoff: false` on the one turn that is definitively
+      "this needs a human now" would be the field contradicting the reply
+      beside it: the crisis path already stops, hands over the lines, and
+      refuses to continue.
+
+      The spec's own definition is "true only when clinical judgment or a human
+      therapist is clearly needed". Nothing clears that bar more plainly.
+    */
+    handoff: risk === "crisis" || handoff !== null,
   };
 }

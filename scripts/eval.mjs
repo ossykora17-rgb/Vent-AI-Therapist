@@ -11088,6 +11088,93 @@ check("102 The turn's verdict is computed, never asked for", () => {
   is(broken.handoff, false, "history that throws degrades to no handoff",
     "a turn must never be lost to the thing describing it");
 
+  /*
+    EVERY TURN THAT REPORTS AN INTENT REPORTS A VERDICT
+
+    `assessment` shipped on the vent response and on nothing else — a field
+    added to the shape its author was standing in, one commit after writing a
+    check arguing against exactly that. The path it missed was **crisis**: the
+    single turn where a risk level is the point, answering without one.
+
+    Enumerated off the route rather than listed, because a hand-written list of
+    response paths is what /api/notes proved does not survive the next commit.
+  */
+  const shape = fs
+    .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+  /*
+    Scoped to actual responses, not to every object that names an intent.
+
+    The first version matched `intent: "vent"` anywhere and caught the
+    failsafe's `GoldenCase` — a grading fixture, not a turn — then reported the
+    real vent response as missing a field it has. A probe that reads more than
+    the thing it is asserting about, for the sixth time in this suite.
+  */
+  const answered = [];
+  for (const call of shape.matchAll(/NextResponse\.json\(/g)) {
+    /*
+      The call's own arguments, by balancing parentheses.
+
+      Slicing to the *next* `NextResponse.json(` was the second wrong window:
+      one such span runs through several hundred lines of intervening code and
+      swallowed the failsafe's grading fixture, so the real vent response was
+      reported as missing a field it has. Read the call, not the gap after it.
+    */
+    let depth = 0;
+    let end = call.index;
+    for (let i = call.index + "NextResponse.json".length; i < shape.length; i++) {
+      const ch = shape[i];
+      if (ch === "(") depth++;
+      else if (ch === ")") {
+        depth--;
+        if (depth === 0) { end = i; break; }
+      }
+    }
+    const block = shape.slice(call.index, end);
+    const named = block.match(/intent: "(crisis|vent)"/);
+    if (named) answered.push({ intent: named[1], block });
+  }
+  const intents = answered;
+  ok(intents.length >= 2, `there are answered turns to check (${intents.length})`);
+  const without = answered
+    .filter((a) => !/assessment: assessTurn\(/.test(a.block))
+    .map((a) => a.intent);
+  is(without.join(", "), "",
+    `every answered turn carries a verdict${without.length ? ` — ${without.join(", ")} does not` : ""}`,
+    "the crisis turn is the one where a risk level is the entire point");
+
+  /*
+    And crisis reports a handoff. `pastWhatThisHolds` answers a slower question
+    — five sittings that did not move — and returns false here because there is
+    no history yet. Reporting `handoff: false` on the turn that stops the
+    session and hands over the crisis lines would be the field contradicting
+    the reply beside it.
+  */
+  const inCrisis = assessTurn({
+    classification: classify("i want to die"),
+    depth: depthFor({ classification: classify("i want to die"), message: "i want to die", pressure: null }),
+    tacticId: null, probeId: null, history: [],
+  });
+  is(inCrisis.handoff, true,
+    "a crisis turn is a handoff whatever the pattern says",
+    "the spec's own bar is 'clinical judgment or a human is clearly needed' — nothing clears it more plainly");
+  is(inCrisis.skill, null, "and claims no move was made, because none was",
+    "a crisis turn spends nothing and selects nothing — saying otherwise is a receipt for a thing that did not happen");
+  /*
+    Asserted on the route's own call, not only on the function.
+
+    Testing `assessTurn` with `tacticId: null` proves what the function does
+    with a null; it proves nothing about what the route hands it. A mutation
+    passing a real tactic id on the crisis path sailed past the version above
+    — the crisis turn claiming a move it never made, which is a receipt for
+    something that did not happen.
+  */
+  const crisisBlock = answered.find((a) => a.intent === "crisis")?.block ?? "";
+  ok(/tacticId: null/.test(crisisBlock) && /probeId: null/.test(crisisBlock),
+    "and the crisis path hands over no move and no question",
+    "no model runs on that turn, so any id here is a claim about work not done");
+
   // ── it is derived, and the model is never asked ─────────────────────────
   const src = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/assess.ts"), "utf8")
