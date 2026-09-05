@@ -10440,6 +10440,131 @@ check("95 Every door onto a circle asks whether it is over", () => {
     "listMembers on a bad id returns nothing, so the Keeper check fired first and told them the wrong thing");
 });
 
+check("96 A definer function never takes the caller's word for who they are", () => {
+  /*
+    Found by Supabase's own linter against the live database, months after the
+    repository had already fixed it.
+
+    `match_memories` is `security definer` — so it runs as the owner and RLS on
+    `public.memories` does not apply — and it filtered rows on a uuid the
+    *caller supplied*:
+
+        where m.user_id = p_user_id
+
+    with `execute` granted to `authenticated` and the function exposed at
+    /rest/v1/rpc/match_memories. Any signed-in person could post somebody
+    else's id and read their memories straight back. In a product whose whole
+    promise is that nobody knows it is you, that is the worst available shape.
+
+    0014 fixed it properly: security invoker, `auth.uid()` as the filter, the
+    parameter kept for signature compatibility and ignored. And production was
+    still running the 0006 definition, because a migration that is written is
+    not a migration that has been applied.
+
+    THE RULE, WHICH IS NOT "NO DEFINER FUNCTIONS"
+
+    Definer is legitimate and this schema needs it — `vent_rate_count` is
+    definer, takes `p_user_id`, and is correct, because it is granted to
+    `service_role` alone and a server that already knows whose row it is
+    reading is not taking anybody's word for anything.
+
+    What is never legitimate is the combination: definer, filtering on a
+    caller-supplied parameter, and reachable by `anon` or `authenticated`. Any
+    two of those three are fine. All three is an IDOR, every time.
+  */
+  const sql = fs.readFileSync(path.join(ROOT, "supabase/APPLY.sql"), "utf8");
+
+  /*
+    The final state, not every historical definition.
+
+    APPLY.sql is the migrations concatenated in order, so an early vulnerable
+    definition followed by a later hardened one is a *fixed* schema — reading
+    every block would fail the build over the very migration that documents the
+    fix. The last definition of a name is what a fresh database ends up with.
+  */
+  const defs = new Map();
+  for (const m of sql.matchAll(
+    /create or replace function public\.(\w+)\s*\(([\s\S]*?)\$\$;/gi,
+  )) {
+    defs.set(m[1], { body: m[0], at: m.index });
+  }
+  ok(defs.size >= 4, `there are functions to check (${defs.size})`,
+    "a sweep that parses nothing passes loudest");
+  ok(defs.has("match_memories"), "including the one this check exists for");
+
+  const offenders = [];
+  for (const [name, { body, at }] of defs) {
+    const definer = /security\s+definer/i.test(body);
+    // A row filter whose right-hand side is one of the function's own
+    // parameters — the caller's word for who they are.
+    const callerScoped = /=\s*p_\w+/i.test(body);
+    const checksIdentity = /auth\.uid\(\)/i.test(body);
+    if (!definer || !callerScoped || checksIdentity) continue;
+
+    /*
+      Reachability, read after the definition and in order, because a grant is
+      only the current answer if nothing revoked it afterwards.
+    */
+    const after = sql.slice(at);
+    const re = new RegExp(
+      `(grant|revoke)[^;]*function public\\.${name}\\s*\\([^)]*\\)[^;]*?(anon|authenticated)[^;]*;`,
+      "gi",
+    );
+    let exposed = false;
+    for (const g of after.matchAll(re)) exposed = /^grant/i.test(g[0]);
+    if (exposed) offenders.push(name);
+  }
+  is(offenders.join(", "), "",
+    `no definer function trusts a caller-supplied id${offenders.length ? ` — ${offenders.join(", ")}` : ""}`,
+    "definer + a caller-supplied filter + reachable by a signed-in role is an IDOR, every time");
+
+  /*
+    And the detector actually detects. Asserted because a sweep that finds
+    nothing is indistinguishable from a sweep that cannot find anything, and
+    this repository has shipped that exact vacuum twice — a failure bucket with
+    nothing in it, inside the check written to abolish failure buckets with
+    nothing in them.
+
+    This is the real 0006 text, which was live in production until today.
+  */
+  const vulnerable = `create or replace function public.match_memories_probe(
+  p_user_id uuid, p_embedding extensions.vector, p_limit int default 5
+) returns table (id uuid) language sql stable security definer
+set search_path to 'public', 'extensions'
+as $$
+  select m.id from public.memories m where m.user_id = p_user_id;
+$$;
+grant execute on function public.match_memories_probe(uuid, extensions.vector, int) to authenticated;`;
+  const definer = /security\s+definer/i.test(vulnerable);
+  const callerScoped = /=\s*p_\w+/i.test(vulnerable);
+  const checksIdentity = /auth\.uid\(\)/i.test(vulnerable);
+  ok(definer && callerScoped && !checksIdentity,
+    "the shape it looks for is the shape that shipped",
+    "if this cannot recognise the original bug the sweep above proves nothing");
+
+  /*
+    The legitimate definer stays legitimate. `vent_rate_count` is definer and
+    takes `p_user_id`, and it is correct — a server that already knows whose
+    row it is reading takes nobody's word for anything. A rule that failed it
+    would be a rule the next person turns off.
+  */
+  ok(defs.has("vent_rate_count"), "the service-role counter is in the corpus");
+  ok(!offenders.includes("vent_rate_count"),
+    "and a definer function reachable only by the server is not an offence",
+    "banning definer outright is a rule that gets disabled rather than followed");
+
+  /*
+    The hardened definition is the one a fresh database ends up with — asserted
+    on the final block, since that is the whole point of reading only the last.
+  */
+  const final = defs.get("match_memories").body;
+  ok(/security\s+invoker/i.test(final),
+    "match_memories ends up invoker, so the table's own RLS applies");
+  ok(/where m\.user_id = auth\.uid\(\)/i.test(final),
+    "and scoped by the identity the database issues, not the one it is handed",
+    "a guarantee that depends on another file staying correct is not a guarantee");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

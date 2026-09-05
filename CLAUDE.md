@@ -97,6 +97,17 @@ Show the sentence the prompt actually reads, never a tidied version of it: a
 summary is a second copy, and the one they could not check is the one still in
 the prompt.
 
+**A migration that is written is not a migration that has been applied.**
+0014 hardened `match_memories` — the vulnerable version was `security definer`,
+filtered on a uuid the *caller* supplied, and was granted to `authenticated`,
+so any signed-in person could read anybody's memories over
+`/rest/v1/rpc/match_memories`. The repo fixed it, documented it at length, and
+production ran the broken 0006 definition for months afterwards. Nothing here
+compares the live schema to this one: `/api/health` checks tables and columns,
+never function bodies or grants. Run Supabase's own advisors against the
+project when you touch the schema — they had been reporting this the whole
+time, to nobody.
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.
