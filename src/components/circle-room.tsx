@@ -7,6 +7,7 @@ import { anonId } from "@/lib/anon";
 import { CHAIRS, tensionDrop, tensionForChair, tensionNow, CHAIR_QUESTION } from "@/lib/vent/chairs";
 import { CircleVoice } from "@/components/circle-voice";
 import { CircleSeats } from "@/components/circle-seats";
+import { ALONE_LINE, ALONE_DOOR } from "@/lib/circles/rules";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -387,10 +388,31 @@ export function CircleRoom({ id }: { id: string }) {
               speaking, and both keep it.
             */}
             {state.seats < 2 ? (
-              <p className="max-w-[36ch] text-center text-body leading-[1.7] text-ash">
-                You are the first one here. The circle opens when somebody else
-                sits down.
-              </p>
+              /*
+                The sentence, and the door.
+
+                This read "the circle opens when somebody else sits down" — a
+                promise, in a product whose worst shipped bug was a refusal
+                that promised a turn to people whose turn could never come.
+                Fourteen of the first sixteen circles had one person in them.
+                It was not true fourteen times.
+
+                ALONE_LINE says the fact without the promise. The link is the
+                other half: the room never offers a door onto a 501, and read
+                the other way that means when this door is shut you point at
+                the one that is open — /chat needs nobody else and works now.
+              */
+              <div className="flex flex-col items-center gap-3">
+                <p className="max-w-[38ch] text-center text-body leading-[1.7] text-ash">
+                  {ALONE_LINE}
+                </p>
+                <Link
+                  href="/chat"
+                  className="focusable min-h-[44px] text-body text-ink underline underline-offset-4"
+                >
+                  {ALONE_DOOR}
+                </Link>
+              </div>
             ) : (
               <p className="glass p-4 text-body leading-[1.6]">
                 <span className="label-mono">

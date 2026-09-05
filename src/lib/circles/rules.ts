@@ -36,6 +36,35 @@ export const WITNESS_MAX_CHARS = 140;
 export const TRANSCRIPT_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * What the room says to the person who got there first.
+ *
+ * It used to say "the circle opens when somebody else sits down", which is the
+ * shape of the worst refusal this product ever shipped — *"Your turn comes"*,
+ * said to people whose turn could never come because roles were fixed at join.
+ * CLAUDE.md's rule is to read a refusal and ask whether it is true.
+ *
+ * It was not. Of the first sixteen circles, **fourteen had exactly one person
+ * in them** and two had two. Nobody has ever spoken in one. So the sentence
+ * promised an opening the product had delivered twice out of sixteen, to
+ * somebody sitting alone for forty-five minutes on the strength of it.
+ *
+ * The honest version says the same fact without the promise attached, and then
+ * does the thing the old one did not: names the door that is actually open.
+ * The room never offers a door onto a 501 — the same rule read the other way
+ * means that when the door in front of somebody is shut, you point at the one
+ * that is not. `/chat` works tonight, for one person, with nobody else needed.
+ *
+ * Not bleak, and not cheerful. Somebody who opened a circle at 2am is owed
+ * neither a verdict nor a reassurance — they are owed the truth and a way
+ * forward, which is the whole of this product's posture in one sentence.
+ */
+export const ALONE_LINE =
+  "You are the first one here. Nothing starts until somebody else sits down, and on a quiet night nobody might.";
+
+/** The door that is open while this one is not. */
+export const ALONE_DOOR = "The private session is open now.";
+
+/**
  * Advice and cross-talk. The single most corrosive thing in a peer circle is
  * someone fixing someone else, so this is checked before anything is stored.
  */
