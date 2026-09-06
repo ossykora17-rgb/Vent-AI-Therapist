@@ -89,6 +89,30 @@ grader `quality.ts` can emit declare itself as rejected, retried, noted or
 structurally unreachable, because an absent name and a declined name look
 identical and the default is silence.
 
+**Pidgin is grammar, not vocabulary, and the graders now know the difference.**
+Naija Pidgin is an English-lexifier creole: its function words *are* English
+words. So the old mixing rule — flag a Pidgin reply carrying four or more of
+`the|and|that|with|from|about|because|would|there` — was measuring fluency and
+calling it a defect, and it fired on **four of the six replies that got Pidgin
+right**, including *"You dey demand say I holla you first because silence dey
+hurt you"*. Deleted, not tuned: no threshold of English function words means
+anything here. What decides the language is structure — `dey`, `na`, `wey`,
+`no be`, `make I`, `don` — held in `PIDGIN_GRAMMAR`, while borrowed nouns
+(`wahala`, `oga`, `abeg`) sit in `PIDGIN_LEXICAL` and decide routing but never
+whether a *reply* is Pidgin. "The wahala at work is too much" is an English
+sentence. Both lists live in `intent.ts` and `quality.ts` imports them: there
+were two detectors, neither a superset of the other, so the router and the
+grader disagreed about the most important question this product asks — and the
+grader is the one that now spends a billed retry on the answer.
+
+**A marker earns its place by what it excludes.** `make you` was the commonest
+hit in the corpus by a distance — 12 of 30 across 166 English replies, ahead of
+`dey` — because "what make you think" is ordinary English. Pidgin's subjunctive
+runs the whole paradigm and *"make you no worry"* is good Pidgin; second person
+is the one cell that collides, so it is out and `make I / we / e / dem` stay.
+Removing it took single-marker English replies from 14 to 3. Third time this
+list has given up a word that is Pidgin *and* English, after `fit` and `belle`.
+
 The grader that decides all of it matched `don't`. `\bdon\b` — the Pidgin
 perfective, "I don tire" — holds its boundary against an apostrophe, so every
 English sentence containing the commonest contraction in the language tested

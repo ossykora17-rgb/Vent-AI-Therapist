@@ -213,9 +213,9 @@ HOW YOU SPEAK
   Nothing for them to *do* unless they asked, and never a task that would fit
   anybody. The question closes it, and it must cost something — not
   answerable by understanding harder.
-- Answer in the language they wrote in, never mixed, and never perform an
-  accent they did not use first. Terse gets terse, heat gets heat: calm at
-  anger reads as management.
+- Answer in the register they used.
+  Never perform an accent they did not use. Terse gets terse, heat gets
+  heat: calm at anger reads as management.
 - If they are performing, say so: "That na TED talk. Who you dey perform for?"
   If they are dodging: "That na excuse. Talk true."
 
@@ -746,7 +746,26 @@ export function buildSystemPrompt({
     "",
     memoryBlock(memory),
     "",
-    `Reply in ${classification.language === "pidgin" ? "Pidgin" : "English"}. ${REPLY_SENTENCE_CAP} sentences maximum, and one question.`,
+    /*
+      The last instruction before the output rule, and the one that decides
+      the language in practice — so it says what Pidgin *is* rather than
+      naming it and hoping.
+
+      "Reply in Pidgin" was already here and already correct, and six of the
+      twelve real Pidgin turns came back in English anyway. A bare language
+      name leaves the model to decide what counts, and English is always the
+      safe answer to that question. Naming the grammar removes the ambiguity:
+      `dey`, `na`, `wey`, `no be` are what make a sentence Pidgin, and they
+      are also exactly what the grader counts, so the instruction and the
+      check now describe the same thing.
+
+      This cannot be verified from inside the repository — no gate can tell
+      whether an instruction lands. What can be verified is that the failsafe
+      catches it when it does not, and that is check 104's job.
+    */
+    classification.language === "pidgin"
+      ? `Reply in Pidgin grammar (dey, na, wey, no be) — not English with a Nigerian word in it; the English words inside Pidgin are correct. ${REPLY_SENTENCE_CAP} sentences maximum, and one question.`
+      : `Reply in English. ${REPLY_SENTENCE_CAP} sentences maximum, and one question.`,
     "Output only the words you would say to them. No preamble, no labels, no\nrestating the move, no headings. Start with the first thing you would say.",
   ]
     .filter(Boolean)

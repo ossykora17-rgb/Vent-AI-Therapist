@@ -2,6 +2,7 @@ import { containsAdvice } from "@/lib/circles/rules";
 import { askedForSkill, BANNED_PHRASES, FILE_LANGUAGE, genericTask, REPLY_SENTENCE_CAP } from "./voice";
 import { coverage, COVERAGE_FLOOR } from "./scan";
 import { CONDITIONS } from "./notes";
+import { PIDGIN_GRAMMAR, PIDGIN_LEXICAL } from "./intent";
 
 /**
  * What a reply has to be, checked without asking a second model.
@@ -121,36 +122,6 @@ const INVENTED_SUM =
   /(?:₦|\bNGN\s*)\s?\d[\d,.]*\s*(?:k|m|million|thousand)?\b|\b\d[\d,.]*\s*(?:naira|dollars?|usd|pounds)\b/i;
 
 /**
- * Pidgin markers, for the mixing check. Not a language detector.
- *
- * `don` carries a negative lookahead, and it is not a nicety.
- *
- * The perfective marker — "I don tire" — is spelled exactly like the first
- * three letters of the most common contraction in English, and `\bdon\b`
- * matches inside "don't": the boundary holds because an apostrophe is not a
- * word character. So *any* English sentence containing "don't" tested as
- * Pidgin, and this regex is the whole of the test that asks whether a Pidgin
- * message was answered in English. Seven of fourteen production hits were
- * "don't" — including "I don't have a credit usage policy", which is neither
- * Pidgin nor, for that matter, this product.
- *
- * The failure mode is the one this repository writes down most often: not a
- * regex that matches nothing, but a regex that matches too much in the one
- * place where matching too much means the check never fires. A Pidgin speaker
- * answered in English by a reply containing "don't" escaped the grader
- * entirely, and the grader is now a retry tier, so it escaped the retry too.
- */
-const PIDGIN = /\b(?:dey|na|abeg|wetin|no be|sabi|wahala|oga|make i|e go|kuku|sha)\b|\bdon\b(?!['‘’])/i;
-
-/**
- * How many *distinct* markers a reply leans on.
- *
- * Distinct rather than total, because the two questions are different. One
- * marker used five times is one borrowed word — Nigerian English does that
- * constantly, and "wahala" in an English sentence is register, not a language
- * switch. Two different markers is a sentence built in the other language.
- */
-/**
  * One anchored pattern per condition family, built once.
  *
  * Compiled at module load rather than inside the grader: this runs on every
@@ -159,12 +130,42 @@ const PIDGIN = /\b(?:dey|na|abeg|wetin|no be|sabi|wahala|oga|make i|e go|kuku|sh
  */
 const CONDITION_PATTERNS = CONDITIONS.map((f) => new RegExp(`\\b(?:${f})\\b`, "i"));
 
-function pidginMarkers(text: string): number {
-  const found = text.match(new RegExp(PIDGIN, "gi")) ?? [];
-  return new Set(found.map((m) => m.toLowerCase().replace(/\s+/g, " "))).size;
+/**
+ * How many *distinct* pieces of Pidgin grammar a reply is built on.
+ *
+ * Grammar, not vocabulary, and the distinction is the whole rule.
+ *
+ * Naija Pidgin is an English-lexifier creole. Its function words *are*
+ * English words — "the", "and", "that", "because" appear in fluent Pidgin
+ * constantly — so counting them tells you nothing about what language a
+ * sentence is in. What tells you is the structure: `dey` for the progressive
+ * and the copula, `na` for focus, `wey` for the relative clause, `no be` for
+ * the negative copula, `make I` for the subjunctive, `don` for the
+ * perfective.
+ *
+ * Borrowed nouns sit on the other side of that line and are counted
+ * separately. "The wahala at work is too much" is an English sentence with a
+ * Nigerian word in it, and treating it as Pidgin would be the room deciding
+ * somebody's register from a single borrowing.
+ *
+ * The lists live in `intent.ts` and are imported, never copied. There used to
+ * be two — the router's, hardened once already, and a cruder one here — and
+ * neither was a superset of the other, so the classifier and the grader
+ * disagreed about the most important question this product asks. The grader
+ * is the one that now spends a billed retry on the answer.
+ */
+function pidginGrammar(text: string): number {
+  return new Set(
+    PIDGIN_GRAMMAR.map((re) => text.match(new RegExp(re.source, "gi")))
+      .filter(Boolean)
+      .flatMap((m) => m!.map((x) => x.toLowerCase().replace(/\s+/g, " "))),
+  ).size;
 }
-/** Unambiguously-English function words that a Pidgin reply should not lean on. */
-const ENGLISH = /\b(the|and|that|with|from|about|because|would|there)\b/i;
+
+/** Whether the reply borrows a Nigerian word without being built in Pidgin. */
+function pidginVocabulary(text: string): boolean {
+  return PIDGIN_LEXICAL.some((re) => new RegExp(re.source, "i").test(text));
+}
 
 const sentences = (s: string) =>
   s.split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean).length;
@@ -455,23 +456,48 @@ export function gradeReply(
     close up. Answering it in Pidgin is the same refusal, aimed at somebody
     less able to absorb it.
 
-    Two *distinct* markers, not one, and not two uses of one. Nigerian English
-    borrows constantly — "wahala" in an English sentence is register, not a
-    language switch, and a threshold that fired on it would bill the product
-    for sounding Nigerian. Two different markers is a sentence built in the
-    other language. On the production corpus the line falls exactly where the
-    judgement does: of 159 English turns, four replies carry a single marker
-    and three carry two or more — and the three are the ones a person would
-    call Pidgin.
+    Two *distinct* pieces of grammar, not one, and not two uses of one. One
+    marker is a borrowing or a coincidence; two is a sentence built in the
+    other language. Measured: of 166 English turns, three replies carry a
+    single marker and four carry two or more, and the four are the ones a
+    person would call Pidgin.
+
+    THE MIXING MINOR IS GONE, AND IT WAS MEASURING FLUENCY
+
+    There used to be a third branch here: a Pidgin reply carrying four or more
+    of `the|and|that|with|from|about|because|would|there` was flagged as
+    "carrying a lot of English scaffolding".
+
+    Every one of those words is ordinary Naija Pidgin. It is an
+    English-lexifier creole; its function words *are* English words. So the
+    rule fired on exactly the replies that got Pidgin right — four of the six
+    successful Pidgin turns in production, including "You dey demand say I
+    'holla you first' because silence dey hurt you", which is fluent and
+    correct and was being recorded as a defect.
+
+    A rule that flags two thirds of the good work is not a strict rule, it is
+    a broken one, and it was quietly poisoning the only tally that says
+    whether the room speaks Pidgin properly. Deleted rather than tuned: there
+    is no threshold of English function words that means anything here.
+
+    What it was reaching for — a reply that is English wearing one borrowed
+    word — is caught by the branch above, because a borrowed noun contributes
+    no grammar. That case is named separately in the detail, since "answered
+    in English" and "answered in English with a Nigerian word in it" are the
+    same offence and different things to go and read.
   */
-  const markers = pidginMarkers(reply);
+  const grammar = pidginGrammar(reply);
   if (c.language === "pidgin") {
-    if (markers === 0) {
-      add("language", "major", "answered a Pidgin message in English");
-    } else if ((reply.match(new RegExp(ENGLISH, "gi")) ?? []).length >= 4) {
-      add("language", "minor", "Pidgin reply carrying a lot of English scaffolding");
+    if (grammar === 0) {
+      add(
+        "language",
+        "major",
+        pidginVocabulary(reply)
+          ? "answered a Pidgin message in English with a borrowed word in it"
+          : "answered a Pidgin message in English",
+      );
     }
-  } else if (markers >= 2) {
+  } else if (grammar >= 2) {
     add("language", "major", "answered an English message in Pidgin");
   }
 

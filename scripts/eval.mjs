@@ -41,7 +41,7 @@ const { BANNED_PHRASES, FILE_LANGUAGE, bannedPhrase, REPLY_SENTENCE_CAP, NO_MEMO
         GENERIC_TASKS, genericTask, askedForSkill } =
   await app("src/lib/vent/voice.ts");
 const { openThread, threadBlock } = await app("src/lib/vent/prompt.ts");
-const { aimedAtTheMachine } = await app("src/lib/vent/intent.ts");
+const { aimedAtTheMachine, PIDGIN_GRAMMAR, PIDGIN_LEXICAL } = await app("src/lib/vent/intent.ts");
 const { localReply } = await app("src/lib/vent/prompt.ts");
 const { parseTechnique, researchBlock, QUERIES, ALLOWED } =
   await app("src/lib/vent/research.ts");
@@ -10763,14 +10763,58 @@ check("97 It answers in the language they wrote in", () => {
     suite that a probe has read past the thing it was asserting about. The
     declaration ends at `];`; read to there.
   */
-  const from = src.indexOf("const PIDGIN_STRONG");
-  const strong = src.slice(from, src.indexOf("];", from));
-  ok(strong.length > 100 && !strong.includes("PIDGIN_AMBIGUOUS"),
-    `the strong list is what was read (${strong.length} chars)`,
-    "a slice that reaches the next declaration asserts about the next declaration");
-  ok(!/\/\\bfit\\b\/|\/\\bbelle\\b\//.test(strong),
+  /*
+    Read off the exported arrays, not out of the file.
+
+    This used to slice the source between `const PIDGIN_STRONG` and its `];`,
+    which was the careful version of a fixed-width slice and still a claim
+    about how the declaration is *written*. The moment the list became a
+    composition of two exported halves — grammar and vocabulary, so the reply
+    graders can tell a Pidgin sentence from an English one wearing a borrowed
+    word — the slice read 59 characters and the check failed on correct code.
+    Fifth time in this suite that a probe has read past its subject.
+
+    The patterns themselves are the thing being asserted, so assert those.
+  */
+  const strong = [...PIDGIN_GRAMMAR, ...PIDGIN_LEXICAL].map(String);
+  ok(strong.length > 15, `the deciding markers are readable (${strong.length})`,
+    "a sweep that finds nothing passes loudest");
+  ok(!strong.includes("/\\bfit\\b/") && !strong.includes("/\\bbelle\\b/"),
     "neither bare word is in the deciding list",
     "putting it back is the bug, and it is one character of diff");
+  ok(strong.some((p) => p.includes("fit ")) && strong.some((p) => p.includes("belle (")),
+    "and both survive as constructions",
+    "`I no fit` is Pidgin; `a good fit` is not, and the difference is the next word");
+
+  /*
+    The two halves are disjoint, because the whole point is telling them
+    apart. A marker in both lists makes the grader's question meaningless.
+  */
+  const grammar = new Set(PIDGIN_GRAMMAR.map(String));
+  const overlap = PIDGIN_LEXICAL.map(String).filter((p) => grammar.has(p));
+  is(overlap.join(", "), "",
+    `no marker is both grammar and vocabulary${overlap.length ? ` — ${overlap.join(", ")}` : ""}`,
+    "the split is the rule; an entry on both sides is a rule that decides nothing");
+
+  /*
+    `make you` is not in the subjunctive, and the corpus is why.
+
+    Pidgin's subjunctive runs the whole paradigm and "make you no worry" is
+    good Pidgin. But "make you" is also ordinary English — "what make you
+    think", "to make you feel" — and it was the commonest marker in the
+    corpus by a distance: 12 of 30 hits across 166 English replies, ahead of
+    `dey`. Second person is the one cell that collides, and including it
+    turned a grammar test into a coin flip.
+
+    Third time this list has given up a word that is Pidgin *and* English,
+    after `fit` and `belle`. A marker earns its place by what it excludes.
+  */
+  is(classify("what make you think that is the problem").language, "en",
+    "'make you' does not make a sentence Pidgin",
+    "removing it took the single-marker English replies from 14 to 3");
+  is(classify("make i tell you wetin happen").language, "pidgin",
+    "and the rest of the paradigm still does",
+    "make I, make we, make e, make dem — every cell but the one that collides");
 });
 
 check("98 The gate cannot pass by not running", () => {
@@ -11485,11 +11529,41 @@ check("104 A grader the live path can see is a decision somebody made", () => {
     the product for speaking Pidgin correctly would be a worse bug than the one
     above.
   */
-  const scaffolded = inspectReply(pidginCase,
-    "The wahala dey there and that thing with the money from work, na that part dey worry you about am?");
-  is(scaffolded.reject, null,
-    "a Pidgin reply carrying English scaffolding does not buy a retry",
-    "minor is drift, and drift does not spend a billed call");
+  /*
+    FLUENT PIDGIN USES ENGLISH WORDS, AND THAT IS NOT A DEFECT
+
+    There used to be a minor here: a Pidgin reply carrying four or more of
+    `the|and|that|with|from|about|because|would|there` was flagged as "English
+    scaffolding". Every one of those is ordinary Naija Pidgin — it is an
+    English-lexifier creole, its function words *are* English words — so the
+    rule fired on four of the six replies that got Pidgin right in production.
+
+    This is one of them, near enough verbatim. It is fluent, correct, and was
+    being recorded as a defect by the only tally that says whether the room
+    speaks Pidgin properly.
+  */
+  const fluent = inspectReply(pidginCase,
+    "You dey demand say I holla you first because silence dey hurt you and you want me to carry the weight. Wetin dey under am?");
+  is(fluent.reject, null,
+    "fluent Pidgin that uses English function words is just Pidgin",
+    "a rule that flags two thirds of the good work is broken, not strict");
+
+  /*
+    And the case the deleted minor was actually reaching for: English wearing
+    a borrowed word. `wahala` is vocabulary, not grammar, so it contributes
+    nothing to whether the sentence is Pidgin — which is the whole reason the
+    two lists are separate.
+  */
+  const borrowed = inspectReply(pidginCase,
+    "That wahala is real, and it has been sitting on you a while. What part of it is heaviest?");
+  ok(/language/.test(borrowed.reject ?? ""),
+    "English with one Nigerian word in it is still English",
+    "a borrowed noun is register; grammar is the language");
+  ok(/borrowed word/.test(gradeReply(pidginCase,
+    "That wahala is real, and it has been sitting on you a while.",
+    { tokensSpent: true }).find((f) => f.grader === "language")?.detail ?? ""),
+    "and the detail says which of the two it was",
+    "'answered in English' and 'answered in English with a Nigerian word in it' are different things to go and read");
 
   /*
     The marker regex used to match the most common contraction in English.
@@ -11538,6 +11612,20 @@ check("104 A grader the live path can see is a decision somebody made", () => {
   is(inspectReply(englishCase, "That wahala is real, and it has been sitting on you a while. What part is heaviest?").reject, null,
     "one borrowed word in an English reply is register, not a language switch",
     "a rule that punishes 'wahala' is a rule against this product's own voice");
+
+  /*
+    And one piece of grammar is not a switch either — usually because it is
+    their own word, handed back.
+
+    "You said it dey heavy" is an English sentence quoting a Pidgin one, which
+    is the single most useful move this room has. Three of 166 real English
+    replies carry exactly one marker and all three read as English; four carry
+    two or more and all four read as Pidgin. The threshold is where the
+    judgement is, not where it is convenient.
+  */
+  is(inspectReply(englishCase, "You said it dey heavy, and it has been for weeks now. What part is heaviest?").reject, null,
+    "one piece of grammar is a quotation, not a language switch",
+    "their word handed back is the move; punishing it would ban the product's best sentence");
   is(inspectReply(englishCase, "Wahala. Wahala on top wahala, and it is not stopping. What part is heaviest?").reject, null,
     "and the same word four times is still one borrowed word",
     "distinct markers, because repetition is emphasis and a second marker is a second language");

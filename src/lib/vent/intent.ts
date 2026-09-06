@@ -234,14 +234,60 @@ const REAL_WORLD: Array<[Exclude<RealWorldTag, null>, RegExp]> = [
  * no fit breathe" is Pidgin and "I don't fit in" is not, and the difference is
  * the word in front.
  */
-const PIDGIN_STRONG = [
-  /\bdey\b/, /\bwetin\b/, /\babeg\b/, /\bna\b/, /\boga\b/, /\bpikin\b/,
-  /\bwahala\b/, /\bshege\b/, /\bhow far\b/, /\bmake e\b/, /\bno be\b/,
-  /\bgo dey\b/, /\bsabi\b/,
+/**
+ * Grammar: what makes a sentence Pidgin rather than decorated with it.
+ *
+ * `dey` as progressive and copula, `na` as focus, `wey` as relativiser, `no
+ * be` as negative copula, `make i` as subjunctive, `don` as perfective, `e
+ * go` as future. A sentence carrying these is built in Pidgin. A sentence
+ * carrying none of them is not, whatever vocabulary it borrows.
+ *
+ * `don` has a negative lookahead because it is spelled like the first three
+ * letters of the commonest contraction in English, and `\bdon\b` matches
+ * inside "don't" — the boundary holds against an apostrophe. That cost seven
+ * of fourteen false hits before it was found.
+ */
+export const PIDGIN_GRAMMAR = [
+  /\bdey\b/, /\bna\b/, /\bwey\b/, /\bno be\b/, /\bbe say\b/, /\bgo dey\b/,
+  /*
+    `make I`, `make we`, `make e`, `make dem` — and deliberately not
+    `make you`.
+
+    Pidgin's subjunctive covers the whole paradigm, and "make you no worry" is
+    perfectly good Pidgin. But "make you" is also ordinary English — "what
+    make you think", "to make you feel" — and it was the single commonest hit
+    in the corpus: 12 of 30 matches across 166 English replies, more than
+    `dey`. Second person is the one cell of the paradigm that collides, and
+    including it turned a grammar test into a coin flip.
+
+    Same shape as `\bfit\b`, which decided the router's language until it was
+    cut down to constructions. Third time this list has had to give up a word
+    that is Pidgin *and* English, and the rule each time is the same: a marker
+    earns its place by what it excludes.
+  */
+  /\bmake (i|we|e|dem)\b/, /\be go\b/, /\bdon\b(?!['‘’])/, /\bwetin\b/,
   // The constructions, not the bare words. "I no fit" and "belle dey pain me"
   // are Pidgin; "a good fit" and "the belle of the ball" are not.
   /\b(no|go|fit) fit\b/, /\bfit (do|talk|carry|hold)\b/, /\bbelle (dey|de)\b/,
 ];
+
+/**
+ * Vocabulary: words Nigerian English borrows freely.
+ *
+ * "The wahala at work is too much" is an English sentence. So is "abeg, not
+ * today." These are register, not a language switch — which is exactly why
+ * they are separated from the grammar above rather than listed beside it.
+ *
+ * They still decide *routing*, because somebody who writes "wahala" to this
+ * room is telling you something about how they want to be met. They do not,
+ * on their own, make a *reply* Pidgin — see `quality.ts`.
+ */
+export const PIDGIN_LEXICAL = [
+  /\babeg\b/, /\boga\b/, /\bpikin\b/, /\bwahala\b/, /\bshege\b/,
+  /\bhow far\b/, /\bsabi\b/, /\bkuku\b/, /\bsha\b/,
+];
+
+const PIDGIN_STRONG = [...PIDGIN_GRAMMAR, ...PIDGIN_LEXICAL];
 
 /**
  * Also English, and therefore never enough on their own.
