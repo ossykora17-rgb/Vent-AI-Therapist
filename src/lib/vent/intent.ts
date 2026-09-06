@@ -210,6 +210,21 @@ const REAL_WORLD: Array<[Exclude<RealWorldTag, null>, RegExp]> = [
 ];
 
 /**
+ * The tags, as a value, so the database's CHECK can be held to them.
+ *
+ * `vents.real_world_tag` carries `check (real_world_tag = any (array[...]))` —
+ * nine strings hand-written into SQL from the table above. They agree today.
+ * The same arrangement on `vent_feedback` did not: production grew a `UNIQUE
+ * (user_id)` that no migration declares, and a person's second rating became a
+ * 500. An enum wider than its constraint is a write that fails in a shape
+ * nothing tests.
+ *
+ * Read off the table rather than typed again beside it — a second list here
+ * would be the drift this exists to catch.
+ */
+export const REAL_WORLD_TAGS = REAL_WORLD.map(([tag]) => tag);
+
+/**
  * Pidgin, and the two words that are also ordinary English.
  *
  * "AI too dey zuga with some of those weird speakings." A real person, about

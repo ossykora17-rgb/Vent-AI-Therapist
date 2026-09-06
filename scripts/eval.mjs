@@ -41,7 +41,7 @@ const { BANNED_PHRASES, FILE_LANGUAGE, bannedPhrase, REPLY_SENTENCE_CAP, NO_MEMO
         GENERIC_TASKS, genericTask, askedForSkill } =
   await app("src/lib/vent/voice.ts");
 const { openThread, threadBlock } = await app("src/lib/vent/prompt.ts");
-const { aimedAtTheMachine, PIDGIN_GRAMMAR, PIDGIN_LEXICAL } = await app("src/lib/vent/intent.ts");
+const { aimedAtTheMachine, PIDGIN_GRAMMAR, PIDGIN_LEXICAL, REAL_WORLD_TAGS } = await app("src/lib/vent/intent.ts");
 
 /**
  * The operator's vocabulary, in one place, because two files enforce it.
@@ -12644,6 +12644,106 @@ check("112 What a closing circle destroys, a backup never keeps", () => {
   ok(/Object\.keys\(FULL_CONTRACT\)\.filter\(\(t\) => !NEVER_EXPORT\.has\(t\)\)/.test(exportSrc),
     "and the exclusion is applied where the table list is built",
     "a filter applied after the read has already read it");
+});
+
+check("113 The database's limits and the code's are the same limits", () => {
+  /*
+    Every CHECK in the schema is a hand-written copy of something the code
+    already knows. `vent_notes.kind` restates `NOTE_KINDS`, the subject and
+    detail lengths restate `MAX_SUBJECT` and `MAX_DETAIL`,
+    `vents.real_world_tag` restates the router's own table. They agree today.
+
+    The same arrangement on `vent_feedback` did not agree. Production grew a
+    `UNIQUE (user_id)` that no migration in this repo declares, so a person's
+    second rating raised 23505 — against a rate limiter in the same handler
+    allowing five an hour — and because the write was unguarded it surfaced as
+    a 500 with no body for the client to read.
+
+    That one was found by looking. This is the class: an enum wider than its
+    constraint, or a length the code allows and the column refuses, is a write
+    that fails in a shape nothing here tests — no local run has a Postgres
+    behind it, so every one of these boundaries is unverified at runtime.
+
+    Read from the migrations, which are in the repo, so this needs no
+    credentials and runs in the same zero-dependency gate as everything else.
+  */
+  const dir = path.join(ROOT, "supabase/migrations");
+  const sql = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"))
+    .map((f) => fs.readFileSync(path.join(dir, f), "utf8"))
+    .join("\n")
+    .replace(/^\s*--[^\n]*$/gm, " ");
+
+  /*
+    Scoped to the table, by balancing the CREATE TABLE's own parentheses.
+
+    The first version searched the whole file for `check (kind in (…))` and
+    found `circle_messages.kind` — guardian, keeper_prompt, share, witness —
+    which is a different column with the same name. Sixth time in this suite a
+    probe has read the wrong window; the answer is the same every time, and it
+    is to stop matching text and start scoping structure.
+  */
+  const tableBlock = (name) => {
+    const at = sql.search(new RegExp(`create table[^;]*?public\\.${name}\\s*\\(`, "i"));
+    if (at === -1) return "";
+    const open = sql.indexOf("(", at);
+    let depth = 0;
+    for (let i = open; i < sql.length; i++) {
+      if (sql[i] === "(") depth++;
+      else if (sql[i] === ")" && --depth === 0) return sql.slice(open, i + 1);
+    }
+    return "";
+  };
+
+  /** The string list inside `check (<col> in (…))`, within one table. */
+  const allowed = (table, col) => {
+    const m = tableBlock(table).match(new RegExp(`check\\s*\\(\\s*${col}\\s+in\\s*\\(([^)]*)\\)`, "is"));
+    return m ? [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).sort() : null;
+  };
+
+  const kinds = allowed("vent_notes", "kind");
+  ok(kinds && kinds.length > 4, `the note kinds are declared in SQL (${kinds?.length ?? 0})`,
+    "a sweep that finds nothing passes loudest");
+  is((kinds ?? []).join(","), [...NOTE_KINDS].sort().join(","),
+    "the column accepts exactly the kinds the code can produce",
+    "a kind the code emits and the column refuses is a note silently lost on insert");
+
+  const tags = allowed("vents", "real_world_tag");
+  ok(tags && tags.length > 5, `the domain tags are declared in SQL (${tags?.length ?? 0})`,
+    "a sweep that finds nothing passes loudest");
+  is((tags ?? []).join(","), [...REAL_WORLD_TAGS].sort().join(","),
+    "and exactly the domain tags the router can attach",
+    "the router tags a vent, the insert carries it, and a tag outside the CHECK fails the whole write");
+
+  /*
+    The lengths, which are the other half of the same boundary. `keepable`
+    refuses a subject outside 2–24 and a detail outside 4–70; the column says
+    the same numbers in SQL, as `between`. If the code's ceiling ever rises
+    above the column's, the refusal moves from a named reason to a failed
+    insert.
+  */
+  const bound = (table, col) => {
+    const m = tableBlock(table).match(new RegExp(`length\\(${col}\\)\\s+between\\s+(\\d+)\\s+and\\s+(\\d+)`, "i"));
+    return m ? [Number(m[1]), Number(m[2])] : null;
+  };
+  const subject = bound("vent_notes", "subject");
+  const detail = bound("vent_notes", "detail");
+  ok(subject && detail, `both note lengths are declared in SQL (${JSON.stringify({ subject, detail })})`,
+    "a sweep that finds nothing passes loudest");
+  is(subject?.[1], MAX_SUBJECT, "the subject ceiling is one number, in two languages");
+  is(detail?.[1], MAX_DETAIL, "and so is the detail ceiling");
+
+  /*
+    And the one that is not enumerable from the repo, named rather than
+    omitted: `vent_feedback` has a UNIQUE on `user_id` in production that
+    appears in no migration. Nothing here can see it — this check reads the
+    repo, and the repo is the half that is right. What it can assert is that
+    the route no longer treats a rejected write as fatal, which is what turned
+    that drift into a 500.
+  */
+  const fb = fs.readFileSync(path.join(ROOT, "src/app/api/feedback/route.ts"), "utf8");
+  ok(/catch \(error\)/.test(fb),
+    "and a constraint the repo cannot see still cannot 500 the request",
+    "the schema will always be able to refuse a write the code thought was fine");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
