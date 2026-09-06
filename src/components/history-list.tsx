@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { anonId } from "@/lib/anon";
+import { anonId, clearQueue } from "@/lib/anon";
 import { useToast } from "@/components/ui/toast";
 import { RoomHeader } from "@/components/room-header";
 import { cn } from "@/lib/utils";
@@ -308,6 +308,25 @@ export function HistoryList() {
       // back is a new person by construction — the id is gone — so they are
       // owed the sentence again rather than a room acting familiar.
       localStorage.removeItem("mw-alliance");
+      /*
+        The offline queue, which is the only local store holding their words.
+
+        The three lines above drop an id and two flags. `mw-offline-queue`
+        holds up to fifty vents — the message, the pressure, what they tapped —
+        written when there was no connection, and the wipe left every one of
+        them on the device under a toast reading "All cleared. Fresh start."
+
+        And it does not merely survive. The wipe drops `mw-anon-id`, so the
+        next `anonId()` mints a new one, and the next time the browser goes
+        online `flushQueue` posts those vents up *under the new identity*.
+        Words somebody asked this product to forget, re-uploaded and attached
+        to the fresh start they asked for.
+
+        Cleared here rather than in `flushQueue`, and only on the success path
+        beside the other three: if the server wipe failed, `putBack()` runs and
+        nothing was deleted, so the last local copy has to stay.
+      */
+      clearQueue();
       toast("All cleared. Fresh start.", "success");
     } catch {
       putBack();

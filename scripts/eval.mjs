@@ -12801,6 +12801,36 @@ check("113 The database's limits and the code's are the same limits", () => {
   ok(/sent === 0/.test(drain) && /nothing went up yet/.test(drain),
     "and names the state where none of them landed",
     "'still waiting' with no count of what went is the partial message wearing the total case");
+
+  /*
+    AND THE WIPE REACHES THE ONLY LOCAL STORE THAT HOLDS THEIR WORDS
+
+    "All cleared. Fresh start." removed `mw-anon-id`, `mw-onboarded` and
+    `mw-alliance` — an id and two flags. `mw-offline-queue` holds up to fifty
+    vents: the message, the pressure, what they tapped, written when there was
+    no connection. Every one survived the wipe under that sentence.
+
+    It is worse than a stale copy left behind. The wipe drops the anon id, so
+    the next `anonId()` mints a new one, and the next `online` event posts
+    those queued vents up *under the new identity*. Words somebody asked this
+    product to forget, re-uploaded and attached to the fresh start they asked
+    for.
+
+    Asserted with the ordering, because clearing before the server confirms
+    would delete the last copy of something that was never deleted: `putBack()`
+    runs on failure, and on that path the queue has to stay.
+  */
+  const history = fs.readFileSync(path.join(ROOT, "src/components/history-list.tsx"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ");
+  ok(/clearQueue\(\)/.test(history),
+    "the full wipe clears the offline queue",
+    "fifty of somebody's vents outliving 'All cleared. Fresh start.' on their own device");
+  const wipeAt = history.indexOf('removeItem("mw-anon-id")');
+  const clearAt = history.indexOf("clearQueue()");
+  const toastAt = history.indexOf('toast("All cleared');
+  ok(wipeAt > 0 && clearAt > wipeAt && toastAt > clearAt,
+    "on the success path, before the sentence that claims it",
+    "clearing before the server confirms would destroy the last copy of something still on the server");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
