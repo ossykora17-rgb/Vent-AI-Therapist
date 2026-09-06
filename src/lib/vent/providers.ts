@@ -555,7 +555,7 @@ export function openAiCompatible(
       // "a stub is bad" and means "a long reply cut mid-sentence is fine".
       // The reply that sent somebody looking was fifty-two words. One rule
       // now, in model.ts, asked by both adapters.
-      if (wasCutOff(text, finishReason === "length")) {
+      if (wasCutOff(text, finishReason)) {
         throw new ProviderError(
           502,
           `${id} was cut off before it finished a sentence (${text.length} chars)`,
@@ -653,7 +653,7 @@ function anthropicProvider(): Provider {
 
       // The guard the OpenAI path already had, on the path that shipped the
       // fragment. Asking is free; not asking cost a sentence.
-      if (wasCutOff(text, completion.stop_reason === "max_tokens")) {
+      if (wasCutOff(text, completion.stop_reason)) {
         throw new ProviderError(
           502,
           `anthropic was cut off before it finished a sentence (${text.length} chars)`,

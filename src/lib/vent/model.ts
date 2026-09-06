@@ -57,10 +57,40 @@ export const MAX_TOKENS = 600;
  * thought that happened to end at the edge; that one ships. Anything else is
  * the model being interrupted, and a fragment in front of somebody having a
  * bad day is worse than saying plainly that we could not answer.
+ *
+ * THE CEILING IS NOT THE ONLY WAY A REPLY GETS CUT OFF
+ *
+ * This took the ceiling as a *boolean* and returned false the moment it was
+ * unset, so it only ever caught one cause. Production found the others: 16 of
+ * 178 real replies end mid-sentence, averaging 229 characters against 309 for
+ * the rest, the shortest of them 16 characters. `MAX_TOKENS` is 600. None of
+ * those are ceiling hits.
+ *
+ * They are interrupted streams. `readSse` loops until `done` and returns what
+ * it has — so a connection that drops, a deadline that fires mid-stream, or a
+ * provider that closes early without ever sending a `finish_reason` all
+ * produce a partial with `finishReason: undefined`, which the old signature
+ * read as "not the ceiling, therefore fine".
+ *
+ * So the question is no longer "did it hit the ceiling" but "did it say it had
+ * finished". Absence is not reassurance: a complete OpenAI-style stream ends
+ * with `finish_reason: "stop"`, and a complete Anthropic one with
+ * `stop_reason: "end_turn"`. Nothing there means nothing finished.
+ *
+ * The text test still guards the other side, and it is what keeps this from
+ * over-firing: a reply that ends on a full stop ships whatever the provider
+ * did or did not say about it. Both halves have to be wrong.
+ *
+ * The reply that sent somebody back here the second time was 121 characters
+ * and ended on "First you". The first one ended on "If you".
  */
-export function wasCutOff(text: string, hitCeiling: boolean): boolean {
-  if (!hitCeiling) return false;
-  return !/[.!?…]["')\]]?$/.test(text.trim());
+
+/** What a provider says when it stopped because it was done. */
+const FINISHED = new Set(["stop", "end_turn", "stop_sequence"]);
+
+export function wasCutOff(text: string, stopReason: string | null | undefined): boolean {
+  if (/[.!?…]["')\]]?$/.test(text.trim())) return false;
+  return !FINISHED.has(String(stopReason));
 }
 
 export type ModelStatus =

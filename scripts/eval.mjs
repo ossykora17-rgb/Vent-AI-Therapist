@@ -5108,12 +5108,70 @@ check("45 A reply is allowed to finish its sentence", () => {
     so it is refused. Keeping it here by name means the rule is tested
     against the sentence that caused it.
   */
-  ok(wasCutOff("Tired. Na", true),
+  ok(wasCutOff("Tired. Na", "length"),
     "the original truncated reply is refused, not published");
-  ok(wasCutOff("Na wa. That one heavy.", true) === false,
+  ok(wasCutOff("Na wa. That one heavy.", "length") === false,
     "a short reply that does land on a full stop still ships");
-  ok(wasCutOff("...before planning the next play. If you", false) === false,
-    "a reply that never hit the ceiling is never second-guessed");
+
+  /*
+    THE ASSERTION THAT USED TO SIT HERE DEFENDED THE BUG
+
+    It read:
+
+      ok(wasCutOff("...before planning the next play. If you", false) === false,
+        "a reply that never hit the ceiling is never second-guessed");
+
+    — the exact fragment from this check's own postmortem, asserted to ship,
+    on the grounds that the ceiling flag was unset. The rule it encoded was
+    "truncation only counts when it comes from the budget", and that is the
+    assumption the whole bug lived inside.
+
+    A second person hit it. 121 characters, ending on "First you", stored in
+    the database that way and shown on a phone. `MAX_TOKENS` is 600, so it was
+    nowhere near the ceiling: `readSse` loops until `done` and returns what it
+    has, so a dropped connection or a deadline firing mid-stream yields a
+    partial with no `finish_reason` at all — which the old signature read as
+    reassurance.
+
+    Production rate: 16 of 178 real replies end mid-sentence, averaging 229
+    characters against 309 for the rest. The question is not "did it hit the
+    ceiling" but "did it say it had finished".
+  */
+  ok(wasCutOff("...before planning the next play. If you", undefined),
+    "a stream that never said it finished is a stream that did not",
+    "absence of a finish reason is not reassurance — it is the interrupted case");
+  ok(wasCutOff("...you dodge feeling like a son who just lost his dad. First you", undefined),
+    "the reply that came back a second time is refused too",
+    "121 chars against a 600-token ceiling — never the budget, always the stream");
+  ok(wasCutOff("Where did the weight land? Not how the day was.", undefined) === false,
+    "a complete sentence ships even when the provider said nothing",
+    "both halves have to be wrong, or this over-fires on every quiet stream");
+  ok(wasCutOff("Na wa. E heavy.", "stop") === false,
+    "and a provider that says it stopped is believed");
+  ok(wasCutOff("that one na wahala", "stop") === false,
+    "including when the text ends without punctuation",
+    "the text test is what keeps this from refusing good replies, not the only test");
+  ok(wasCutOff("I hear you and the thing is", "end_turn") === false,
+    "end_turn counts as finished, because Anthropic says it that way",
+    "one vocabulary per provider, and the set is where they meet");
+
+  /*
+    And every adapter hands over what the provider actually said.
+
+    Found by a mutation that nothing caught: replacing the streamed argument
+    with `finishReason ?? "stop"` passes every assertion above, because those
+    test the rule and this tests the wiring. A guard reached through a
+    coercion is a guard with the interesting case removed — which is the shape
+    the old `finishReason === "length"` had, one layer down.
+  */
+  const args = [...src.matchAll(/wasCutOff\(\s*[\w.]+\s*,\s*([^)]*)\)/g)].map((m) => m[1].trim());
+  is(args.length, 2, `both adapters ask the shared rule (${args.length})`,
+    "a sweep that finds nothing passes loudest");
+  for (const arg of args) {
+    ok(/^[\w.]+$/.test(arg),
+      `the stop reason reaches it unmodified: ${arg}`,
+      "?? or === here decides the answer before the rule sees it, which is the bug this whole check exists for");
+  }
   ok(wasCutOff("Where did the weight land?", true) === false,
     "a question mark ends a sentence too");
   ok(wasCutOff('He said "the rent is due."', true) === false,

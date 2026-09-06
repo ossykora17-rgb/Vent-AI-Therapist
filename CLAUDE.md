@@ -288,6 +288,20 @@ their areas: `.claude/skills/data-quality/` and `.claude/skills/circles-quality/
 
 ## Traps that cost a debugging session
 
+- **An assertion can defend the bug.** Check 45 exists to stop a truncated
+  reply reaching somebody, and it contained
+  `ok(wasCutOff("...the next play. If you", false) === false, "a reply that
+  never hit the ceiling is never second-guessed")` — the exact fragment from
+  its own postmortem, asserted to *ship*, because the ceiling flag was unset.
+  The rule it encoded was "truncation only counts when it comes from the
+  budget", which is the assumption the whole bug lived inside. A second person
+  hit it: 121 characters ending on *"First you"*, stored that way, against a
+  600-token ceiling. `readSse` loops until `done` and returns what it has, so
+  a dropped connection or a deadline firing mid-stream yields a partial with
+  no `finish_reason` at all. 16 of 178 real replies end mid-sentence. The
+  question is not *did it hit the ceiling* but *did it say it had finished*,
+  and absence is not reassurance. When a check fails after a fix, read the
+  assertion before changing the code: it may be the thing that was wrong.
 - **A `\\b` can arrive as a backspace.** A tool wrote seven regexes into
   `intent.ts` with U+0008 where the escape should have been. Valid regexes,
   matching nothing, type-checked, linted, and zero pixels wide in every diff.
