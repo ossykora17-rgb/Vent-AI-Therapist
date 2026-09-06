@@ -1,4 +1,4 @@
-import { NOTES_INSTRUCTION, parseNotes, type Note } from "./notes";
+import { MAX_DETAIL, MAX_SUBJECT, NOTES_ASKED, NOTES_INSTRUCTION, parseNotes, type Note } from "./notes";
 /**
  * THE CARVER — eight words for the wound.
  *
@@ -45,6 +45,42 @@ export const CARVE_FLOOR = 3;
 /** The hard ceiling. Nine words is a sentence; eight is an inscription. */
 export const CARVE_MAX_WORDS = 8;
 
+/**
+ * What the Carver may spend, derived from what it is asked to produce.
+ *
+ * It was `maxTokens: 120`, under a comment reading "Eight words out. The
+ * ceiling is small because the job is small." That was true of the job it was
+ * written for. Then notes joined the same call — up to `NOTES_ASKED` objects,
+ * each with a subject and a detail — and the ceiling stayed where it was.
+ *
+ * This repository's sharpest recorded bug is `max_tokens: 220`, correct for a
+ * model that speaks immediately and wrong for one that thinks first. Same
+ * shape: a budget correct for the original job and never revisited when the
+ * job grew.
+ *
+ * And the failure mode here is worse than a short answer. The output is one
+ * JSON object, so a response cut off mid-notes does not lose the notes — it
+ * loses the *carve* too, because `JSON.parse` of a truncated object throws and
+ * `parseCarve` returns null. A session that had something worth keeping is
+ * exactly the session that produces enough notes to overflow, so the sessions
+ * most worth remembering are the ones most likely to be remembered as nothing.
+ *
+ * Derived rather than typed, so it cannot drift from the limits it is sized
+ * against. Three characters per token is deliberately pessimistic for JSON
+ * with short quoted strings; being wrong here costs headroom on a 120-token
+ * call and nothing else.
+ */
+const JSON_CHARS_PER_TOKEN = 3;
+export const CARVE_MAX_TOKENS = Math.ceil(
+  (CARVE_MAX_WORDS * 6 +
+    // Each note is its own object: two bounded strings plus `kind` and the
+    // three JSON keys around them.
+    NOTES_ASKED * (MAX_SUBJECT + MAX_DETAIL + 40) +
+    // The braces, `remembers`, and the notes array itself.
+    60) /
+    JSON_CHARS_PER_TOKEN,
+);
+
 export const CARVER_SYSTEM = `You are MEMORY — The Carver. You remember.
 
 <job>
@@ -71,7 +107,7 @@ empty carve. Saying nothing is correct far more often than it feels.
 ${NOTES_INSTRUCTION}
 </job>
 
-Output only JSON: {"carve": "your ${CARVE_MAX_WORDS} words", "remembers": true}`;
+Output only JSON: {"carve": "your ${CARVE_MAX_WORDS} words", "remembers": true, "notes": []}`;
 
 export interface Carve {
   carve: string;
@@ -90,6 +126,52 @@ export interface Carve {
 }
 
 /**
+ * The first complete JSON object in the text, counting braces rather than
+ * finding one.
+ *
+ * This replaces `raw.match(/\{[\s\S]*?\}/)`, which was correct for the
+ * response it was written against and silently catastrophic for the one the
+ * Carver actually returns now.
+ *
+ * The regex is **non-greedy**, so it matched from the first `{` to the *first*
+ * `}`. When `notes` is empty that is the closing brace of the whole object and
+ * everything works. The moment the Carver returns a single note, the first `}`
+ * is the one closing that note, the captured text is unbalanced, `JSON.parse`
+ * throws — and `parseCarve` returns null, so the **carve is thrown away too**.
+ *
+ * Production: eight people, two carves, zero notes, across 180 vents. The six
+ * without a carve are the sessions where the Carver had something to say about
+ * the person and the parser could not read past the first nested brace.
+ *
+ * String-aware on purpose. A detail is the person's own words, and a `}` typed
+ * inside one must not end the object — the same class of mistake one level
+ * down.
+ */
+function firstJsonObject(raw: string): string | null {
+  const start = raw.indexOf("{");
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < raw.length; i++) {
+    const ch = raw[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}" && --depth === 0) return raw.slice(start, i + 1);
+  }
+  // Ran out of text with the object still open — a truncated response, which
+  // is what an undersized token ceiling produces. Null rather than a guess.
+  return null;
+}
+
+/**
  * Parse what came back, and refuse anything that is not a carve.
  *
  * Models wrap JSON in prose, in fences, and in apologies. This takes the
@@ -98,12 +180,12 @@ export interface Carve {
  * sentence in somebody's memory that reads like a file note about them.
  */
 export function parseCarve(raw: string): Carve | null {
-  const match = raw.match(/\{[\s\S]*?\}/);
-  if (!match) return null;
+  const object = firstJsonObject(raw);
+  if (!object) return null;
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(match[0]);
+    parsed = JSON.parse(object);
   } catch {
     return null;
   }

@@ -57,7 +57,8 @@ const { openingLine, allianceLine, shouldSayAlliance, ALLIANCE_AT } =
   await app("src/lib/vent/intake.ts");
 const { withoutExample, recentOpenings } = await app("src/lib/vent/prompt.ts");
 const { PROBES, selectProbe, probeBlock, isBroad } = await app("src/lib/vent/probes.ts");
-const { parseNotes, keepable, notesBlock, NOTE_KINDS, MAX_IN_PROMPT, MAX_SUBJECT, MAX_DETAIL, CONDITIONS } =
+const { parseNotes, keepable, notesBlock, NOTE_KINDS, MAX_IN_PROMPT, MAX_SUBJECT, MAX_DETAIL, CONDITIONS,
+        NOTES_ASKED, NOTES_INSTRUCTION } =
   await app("src/lib/vent/notes.ts");
 const { acceptable, prune, learnedBlock, MAX_LEARNED, MAX_RULE_CHARS, LEARNED_RULES } =
   await app("src/lib/vent/learned.ts");
@@ -1450,7 +1451,7 @@ check("15j The authored corpus holds the scan to what it claims", () => {
 });
 
 // ── 15k. the Carver, and the campfire that costs nothing ──────────────────
-const { CARVER_SYSTEM, parseCarve, worthCarving, CARVE_FLOOR, CARVE_MAX_WORDS } =
+const { CARVER_SYSTEM, parseCarve, worthCarving, CARVE_FLOOR, CARVE_MAX_WORDS, CARVE_MAX_TOKENS } =
   await app("src/lib/vent/carve.ts");
 const { MYCELIUM, containsAdvice } = await app("src/lib/circles/rules.ts");
 
@@ -11707,6 +11708,124 @@ check("106 Whether the failsafe fired is written down somewhere that lasts", () 
   ok(/\.filter\(\(v\) => v\.rejected_by\)/.test(heartbeat) && /console\.log\(`failsafe/.test(heartbeat),
     "and the heartbeat reads it back out under its own heading",
     "a record nobody reports is the same blind spot one table further along");
+});
+
+check("107 The Carver can return a note without destroying the carve", () => {
+  /*
+    Production, after a month: eight people, **two** carves, **zero** notes,
+    across 180 vents. The table exists, 0017 is applied, `keepable` is tested
+    by check 83, the refusal message by check 100, `/api/notes` shows them and
+    the button deletes them. Every part of the feature works except the part
+    that produces one.
+
+    Three independent causes, and each one alone is enough to guarantee zero
+    notes for ever. Nothing in 116 checks and 3,569 assertions saw any of them,
+    because no assertion had ever fed `parseCarve` a response with a note in
+    it — the unit tests test the parts, and the bug is in the seam.
+
+    1. THE OUTPUT CONTRACT DID NOT MENTION NOTES
+
+    `NOTES_INSTRUCTION` says `Also return "notes": ...` in the body of the job.
+    The final line said:
+
+      Output only JSON: {"carve": "your 8 words", "remembers": true}
+
+    "Output only JSON", followed by the exact shape, with no `notes` key — the
+    most literal instruction in the prompt, and the last thing the model reads.
+
+    2. THE PARSER COULD NOT READ PAST THE FIRST NESTED BRACE
+
+    `raw.match(/\{[\s\S]*?\}/)` is non-greedy: first `{` to the *first* `}`.
+    With `notes: []` that is the end of the object and everything works. With
+    one note in it, the first `}` closes the *note*, the captured text is
+    unbalanced, `JSON.parse` throws — and `parseCarve` returns null, so the
+    carve is discarded along with the notes.
+
+    That is the one that explains two carves out of eight. A session with
+    something worth remembering is exactly the session that produces a note,
+    and producing a note destroyed the carve.
+
+    3. THE CEILING WAS SIZED FOR THE OLD JOB
+
+    `maxTokens: 120`, under "the ceiling is small because the job is small" —
+    true before notes joined the same call. Same shape as this repo's sharpest
+    recorded bug, `max_tokens: 220`. And because the response is one JSON
+    object, truncation loses the carve too.
+  */
+  const note = { kind: "hard", subject: "the calls", detail: "said he calls every day" };
+  const full = JSON.stringify({
+    carve: "pops sick / fear of useless son", remembers: true, notes: [note],
+  });
+
+  const got = parseCarve(full);
+  ok(got !== null, "a response carrying a note still parses",
+    "the non-greedy match stopped at the brace that opens the note");
+  is(got?.carve, "pops sick / fear of useless son",
+    "and the carve survives it",
+    "two carves out of eight people — the sessions worth remembering were the ones that produced a note");
+  is(got?.notes.length, 1, "and the note comes back",
+    "zero notes across 180 vents, from a feature whose every other part works");
+
+  /*
+    A brace inside their own words must not end the object either — the same
+    mistake one level down, and a detail is the person's words verbatim.
+  */
+  const braced = parseCarve(JSON.stringify({
+    carve: "work heavy / no way out", remembers: true,
+    notes: [{ kind: "hard", subject: "the message", detail: "he typed } at me" }],
+  }));
+  is(braced?.notes[0]?.detail, "he typed } at me",
+    "a brace inside their words is their words",
+    "a string-blind scanner is the same bug wearing a smaller hat");
+
+  // Still refuses what it always refused.
+  is(parseCarve("no json here at all"), null, "prose alone is still nothing");
+  is(parseCarve('{"carve": "x", "remembers": false}'), null, "remembers false is still nothing");
+  is(parseCarve('{"carve": "one two three four five six seven eight nine", "remembers": true}'), null,
+    `over ${CARVE_MAX_WORDS} words is still a summary`);
+  is(parseCarve('{"carve": "a b", "remembers": true, "notes": [{"kind": "hard",'), null,
+    "a truncated object is null rather than a guess",
+    "which is what an undersized ceiling produces, and half a carve is worse than none");
+
+  /*
+    The contract the model is shown must name every field the parser reads.
+    Asserted against the parser's own requirements rather than a list, so a
+    fourth field added tomorrow has to appear in the prompt too.
+  */
+  const contract = CARVER_SYSTEM.slice(CARVER_SYSTEM.lastIndexOf("Output only JSON"));
+  ok(contract.length > 20, "the prompt ends with an output contract",
+    "a sweep that finds nothing passes loudest");
+  for (const field of ["carve", "remembers", "notes"]) {
+    ok(contract.includes(`"${field}"`),
+      `the contract names "${field}"`,
+      "the model emits the shape it is shown, not the shape described three paragraphs earlier");
+  }
+
+  /*
+    And the budget fits what the contract asks for.
+
+    Derived on both sides — this fails if NOTES_ASKED, MAX_SUBJECT or
+    MAX_DETAIL grows and the ceiling does not follow.
+  */
+  const floor = CARVE_MAX_WORDS * 6 + NOTES_ASKED * (MAX_SUBJECT + MAX_DETAIL);
+  ok(CARVE_MAX_TOKENS * 3 >= floor,
+    `the ceiling holds a full response (${CARVE_MAX_TOKENS} tokens ≈ ${CARVE_MAX_TOKENS * 3} chars, needs ${floor})`,
+    "one JSON object, so a response cut off mid-notes loses the carve as well");
+  ok(CARVE_MAX_TOKENS > 120,
+    `and it is no longer the ceiling written before notes existed (${CARVE_MAX_TOKENS})`,
+    "120 was correct for eight words and nothing else");
+
+  /*
+    The number in the instruction is derived, not typed.
+
+    It read "at most four" as a word while `parseNotes` sliced to eight. Not
+    harmful — tolerance above the ask is deliberate — and still a hand-typed
+    integer one file away from the thing it describes, which is the category
+    check 86 exists for.
+  */
+  ok(NOTES_INSTRUCTION.includes(`at most ${NOTES_ASKED}`),
+    "the instruction counts with the constant",
+    "a number is a sentence, and this one was typed out as a word");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

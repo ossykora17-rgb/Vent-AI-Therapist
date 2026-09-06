@@ -238,7 +238,22 @@ export function notesBlock(notes: readonly Note[]): string | null {
 }
 
 /** Appended to the Carver's job, so one call writes the line and the notes. */
-export const NOTES_INSTRUCTION = `Also return "notes": an array of at most four
+/**
+ * How many notes the Carver is asked for.
+ *
+ * Interpolated into the instruction rather than typed into it as a word. It
+ * used to read "at most four" while `parseNotes` sliced to eight — harmless,
+ * because tolerance above the ask is deliberate, and still a hand-typed
+ * integer sitting one file away from the thing it describes. This repository
+ * has a rule about that, and a check.
+ *
+ * It is also the number the token ceiling is derived from, which is what makes
+ * it load-bearing: asking for more notes than the budget can carry produces
+ * truncated JSON, and truncated JSON parses to nothing at all.
+ */
+export const NOTES_ASKED = 4;
+
+export const NOTES_INSTRUCTION = `Also return "notes": an array of at most ${NOTES_ASKED}
 things worth remembering about this person for next time. Each is
 {"kind": one of ${NOTE_KINDS.join("|")}, "subject": 2-4 words, "detail": their
 words where possible}.

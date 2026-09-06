@@ -219,6 +219,24 @@ one. Names only, never details — a column outlives a log line, so the rule is
 stricter here rather than looser. Ask it of anything that only reports to
 stdout: *how long does this record live, and who reads it in that time?*
 
+**Every part working is not the feature working.** Notes had a migration, a
+table, `keepable()`, a refusal message, a page, a delete button, and checks 83
+and 100 over all of it. Production after a month: eight people, **two** carves,
+**zero** notes, 180 vents. Three independent causes, each alone enough to
+guarantee zero for ever, none of them in any of the parts. The output contract
+— *"Output only JSON: {…}"*, the last line the model reads — never named
+`notes`, while the instruction three paragraphs above asked for them. The
+extractor was `/\{[\s\S]*?\}/`, **non-greedy**, so the first `}` it found was
+the one opening the first *note*, the captured text was unbalanced, and
+`JSON.parse` threw — discarding the carve along with the notes, which is why
+six of eight people have no carve. And `maxTokens: 120` was sized for eight
+words under a comment saying the job was small, before notes joined the same
+call. The suite tested every part and had never once fed `parseCarve` a
+response with a note in it. **A seam is not covered by testing both sides of
+it.** Check 107 asserts the contract names every field the parser reads, and
+derives the ceiling from `NOTES_ASKED`, `MAX_SUBJECT` and `MAX_DETAIL` so it
+cannot drift from what is asked for.
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.
