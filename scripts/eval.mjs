@@ -42,6 +42,15 @@ const { BANNED_PHRASES, FILE_LANGUAGE, bannedPhrase, REPLY_SENTENCE_CAP, NO_MEMO
   await app("src/lib/vent/voice.ts");
 const { openThread, threadBlock } = await app("src/lib/vent/prompt.ts");
 const { aimedAtTheMachine, PIDGIN_GRAMMAR, PIDGIN_LEXICAL } = await app("src/lib/vent/intent.ts");
+
+/**
+ * The operator's vocabulary, in one place, because two files enforce it.
+ *
+ * `scripts/no-store-verify.mjs` has zero dependencies by design and cannot
+ * import from here, so check 111 asserts its literal matches this string
+ * instead. Intent is not a mechanism.
+ */
+const FORBIDDEN_SOURCE = String.raw`\bSupabase\b|\bnpm run\b|LIVEKIT_|ANTHROPIC_|NEXT_PUBLIC_|SERVICE_ROLE|\.env\b|\benv var|\blocalhost\b|\bthis deployment\b|\bthis instance\b|\bnot configured on\b`;
 const { localReply } = await app("src/lib/vent/prompt.ts");
 const { parseTechnique, researchBlock, QUERIES, ALLOWED } =
   await app("src/lib/vent/research.ts");
@@ -8079,7 +8088,15 @@ check("75 No sentence a person reads is about our deployment", () => {
     token-gated export exist to be read by whoever deploys this, and telling
     *them* to set LIVEKIT_API_KEY is the whole point.
   */
-  const FORBIDDEN = /\bSupabase\b|\bnpm run\b|LIVEKIT_|ANTHROPIC_|NEXT_PUBLIC_|SERVICE_ROLE|\.env\b|\benv var|\blocalhost\b|\bthis deployment\b|\bthis instance\b|\bnot configured on\b/;
+  /*
+    Case-insensitive, which it was not.
+
+    `\bSupabase\b` without the flag matches the capitalised form only, so a
+    route saying "supabase" in lower case walked past the one check written
+    to stop it. The unconfigured pass had the flag and this did not, which is
+    the drift the two copies were always going to produce.
+  */
+  const FORBIDDEN = new RegExp(FORBIDDEN_SOURCE, "i");
   const OPERATOR = ["health", "heartbeat", "export"];
 
   const files = [];
@@ -12296,6 +12313,45 @@ check("111 Every route is verified by at least one live pass", () => {
   is(stale.join(", "), "",
     `no exemption names a route that is gone${stale.length ? ` — ${stale.join(", ")}` : ""}`,
     "a list of excuses outliving its subject is how the next gap hides");
+
+  /*
+    The pages are derived too, and this is what stops somebody typing the list
+    back in.
+
+    It was `["/", "/chat", "/circles", "/history", "/memory", "/privacy",
+    "/terms"]` — seven of the eight that exist. The missing one was
+    `/circles/[id]`: the room itself, where the transcript and the voice
+    controls live, and the page that displays the refusal which was leaking
+    three environment variable names one route over.
+
+    Asserted as a derivation rather than as a set of names, because a set of
+    names is the thing that was wrong.
+  */
+  const noStore = fs.readFileSync(path.join(ROOT, "scripts/no-store-verify.mjs"), "utf8");
+  ok(/walkPages\(path\.join\(ROOT, "src\/app"\)/.test(noStore) && /page\.tsx/.test(noStore),
+    "the unconfigured pass finds its pages on disk",
+    "a hand-written page list does not survive the next page");
+  ok(!/const pages = \[\s*["'`]/.test(noStore),
+    "and does not carry a hand-written list beside the walk",
+    "two sources for one set is how the seven-of-eight happened");
+
+  /*
+    And the two copies of the operator's vocabulary are the same vocabulary.
+
+    `no-store-verify.mjs` has zero dependencies by design, so it cannot import
+    check 75's regex, and its own comment says the two are "kept in step by
+    intent rather than by import". They were not: this file's copy was missing
+    the `i` flag — so a route saying "supabase" in lower case passed the one
+    check written to catch it — and the pass was missing `not configured on`.
+
+    Intent is not a mechanism. This is.
+  */
+  const theirs = noStore.match(/const OPERATOR_WORDS =\s*\n\s*\/([\s\S]*?)\/i;/)?.[1];
+  ok(theirs, "the unconfigured pass declares its operator vocabulary",
+    "a sweep that finds nothing passes loudest");
+  is(theirs, FORBIDDEN_SOURCE,
+    "and it is the same vocabulary this suite enforces",
+    "two hand-kept copies of one rule is the bug this whole check is about");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

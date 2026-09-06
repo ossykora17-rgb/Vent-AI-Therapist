@@ -34,6 +34,13 @@
  * environment, NODE_ENV=production.
  */
 
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+/** The repo root, so the page walk works from any working directory. */
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
 const BASE = (process.argv[2] || "").replace(/\/$/, "");
 if (!BASE.startsWith("http")) {
   console.error("Usage: node scripts/no-store-verify.mjs http://localhost:3001");
@@ -59,7 +66,7 @@ const post = (path, body) =>
  * next to the list.
  */
 const OPERATOR_WORDS =
-  /\bSupabase\b|\bnpm run\b|LIVEKIT_|ANTHROPIC_|NEXT_PUBLIC_|SERVICE_ROLE|\.env\b|\benv var|\blocalhost\b|\bthis deployment\b|\bthis instance\b/i;
+  /\bSupabase\b|\bnpm run\b|LIVEKIT_|ANTHROPIC_|NEXT_PUBLIC_|SERVICE_ROLE|\.env\b|\benv var|\blocalhost\b|\bthis deployment\b|\bthis instance\b|\bnot configured on\b/i;
 
 async function main() {
   console.log(`Verifying the unconfigured shape at ${BASE}\nanonId: ${ANON}\n`);
@@ -104,13 +111,43 @@ async function main() {
   */
   const LEGAL = /^\/(privacy|terms)$/;
   const JARGON_ONLY = /\bnpm run\b|LIVEKIT_|ANTHROPIC_|NEXT_PUBLIC_|SERVICE_ROLE|\.env\b|\benv var|\blocalhost\b|\bthis deployment\b|\bthis instance\b/i;
-  const pages = ["/", "/chat", "/circles", "/history", "/memory", "/privacy", "/terms"];
+  /*
+    Read off the filesystem, not typed out.
+
+    The list here was `["/", "/chat", "/circles", "/history", "/memory",
+    "/privacy", "/terms"]` — seven of the eight pages that exist. The missing
+    one was `/circles/[id]`: the room itself, where the transcript, the voice
+    controls and the Keeper's lines are, and the page that displays the very
+    refusal that was leaking three environment variable names one route over.
+
+    Same class as the hand-written route list next door, found by asking the
+    same question one file along. A list of pages does not survive the next
+    page.
+  */
+  const pages = [];
+  const walkPages = (dir, route) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) walkPages(path.join(dir, entry.name), `${route}/${entry.name}`);
+      else if (entry.name === "page.tsx") pages.push(route === "" ? "/" : route);
+    }
+  };
+  walkPages(path.join(ROOT, "src/app"), "");
+  pages.sort();
+
   const bad = [];
   const leaks = [];
   for (const p of pages) {
-    const r = await fetch(`${BASE}${p}`);
+    /*
+      A dynamic page is probed with an id that is not there, and a room that
+      is not there is allowed to answer 404. What it is never allowed to do is
+      throw — that is what a 5xx on this page would mean, and it is the whole
+      question this pass asks.
+    */
+    const dynamic = p.includes("[");
+    const url = p.replace(/\[[^\]]+\]/g, "does-not-exist");
+    const r = await fetch(`${BASE}${url}`);
     const html = await r.text();
-    if (r.status !== 200) bad.push(`${p}=${r.status}`);
+    if (dynamic ? r.status >= 500 : r.status !== 200) bad.push(`${p}=${r.status}`);
     // Strip the Next.js payload: it carries source paths and build ids that
     // are not sentences and never reach a screen.
     const visible = html
