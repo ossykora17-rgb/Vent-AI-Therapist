@@ -12210,6 +12210,94 @@ check("110 The road from production to training carries what is on it", () => {
     "that is what the severities already mean, and length is the only minor here");
 });
 
+check("111 Every route is verified by at least one live pass", () => {
+  /*
+    "A new route ships into neither live pass unless you put it there." That
+    rule is in CLAUDE.md, and it names `/api/notes` as the instance: the
+    surface whose entire job is showing somebody what a machine holds about
+    them, verified in zero of twenty-seven checks, by the person who wrote the
+    section of that file about exactly that.
+
+    `/api/notes` was fixed. The class was still open. Both passes name their
+    routes by hand, and comparing those names against the files on disk found
+    two more covered by nothing at all:
+
+      /api/export  — the nightly backup, and the audit's only source of
+                     production rows. The audit could not parse the shape it
+                     returns, which is a bug this pass would have caught the
+                     first time anybody looked.
+      /api/profile — where onboarding writes the chair, and the reason
+                     `vent_users.chair_picked` was set for one person of eight.
+
+    So this enumerates the routes off the filesystem, the way check 95
+    enumerates circle handlers, because a hand-written list of routes is the
+    thing that did not survive.
+  */
+  const apiDir = path.join(ROOT, "src/app/api");
+  const routes = [];
+  const walk = (dir, prefix) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const here = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(here, `${prefix}/${entry.name}`);
+      else if (entry.name === "route.ts") routes.push(prefix);
+    }
+  };
+  walk(apiDir, "/api");
+
+  ok(routes.length > 15, `there are routes to check (${routes.length})`,
+    "a sweep that finds nothing passes loudest");
+
+  const covered =
+    fs.readFileSync(path.join(ROOT, "scripts/live-verify.mjs"), "utf8") +
+    fs.readFileSync(path.join(ROOT, "scripts/no-store-verify.mjs"), "utf8");
+
+  /*
+    Named exemptions, each with the reason, because "not in the list" and
+    "decided against" look identical otherwise — the same argument the failsafe
+    tiers make about graders.
+
+    The `external/*` routes reach real third parties. Probing them in a pass
+    that runs on a laptop and in CI would either hit the network on every run
+    or assert against a stub, and neither says anything true about production.
+    They are covered instead by the four-window tests over `sources.ts`.
+
+    `heartbeat` is a scheduled job with no human on the other end of it.
+  */
+  const exempt = new Map([
+    ["/api/external/economy/context", "third party — covered over sources.ts"],
+    ["/api/external/guardian/score", "third party — covered over guardian.ts"],
+    ["/api/external/jobs/context", "third party — covered over sources.ts"],
+    ["/api/external/quote/context", "third party — covered over sources.ts"],
+    ["/api/external/weather/context", "third party — covered over sources.ts"],
+    ["/api/heartbeat", "scheduled job, no human waiting on the response"],
+  ]);
+
+  /*
+    A dynamic segment is matched by shape, not by text.
+
+    `/api/circles/[id]/messages` is reached in the passes as
+    `${BASE}/api/circles/${id}/messages`, so the literal `[id]` appears
+    nowhere and a plain substring test calls a covered route uncovered. The
+    first version of this check did exactly that — a probe failing on correct
+    code, which is the mistake this suite has now recorded six times.
+  */
+  const named = (route) =>
+    new RegExp(route.replace(/\[[^\]]+\]/g, "[^/\\s\"'`)]+")).test(covered);
+  const missing = routes.filter((r) => !named(r) && !exempt.has(r));
+  is(missing.join(" | "), "",
+    `every route is named in a live pass${missing.length ? ` — ${missing.join(" | ")}` : ""}`,
+    "a route added on Tuesday is covered by nothing on Wednesday, and both passes still report green");
+
+  /*
+    And an exemption for a route that no longer exists is a rule guarding
+    nothing — the same sweep the grader classification gets.
+  */
+  const stale = [...exempt.keys()].filter((r) => !routes.includes(r));
+  is(stale.join(", "), "",
+    `no exemption names a route that is gone${stale.length ? ` — ${stale.join(", ")}` : ""}`,
+    "a list of excuses outliving its subject is how the next gap hides");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

@@ -23,14 +23,33 @@ const schema = z.object({ anonId: z.string().min(8).max(64) });
  *
  * 501 rather than 500 when the keys are absent: not broken, not built yet.
  */
+/*
+  What a person is told when there is no voice, and it is not our shell.
+
+  This said "Set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET to open
+  the room's voice." — and `circle-voice.tsx` prints `grant.message` verbatim,
+  so somebody who tapped the microphone in a live circle was handed three
+  environment variable names.
+
+  CLAUDE.md records this exact bug on `POST /api/circles`: a 503 reading
+  "Circles need storage. Run locally or configure Supabase.", toasted into
+  somebody's face by the lobby. That one was repaired. This one is the same
+  sentence in the same shape on the route next door, and it survived the
+  repair because nothing had ever asked this route what it says — neither
+  verification pass reached the circle sub-routes until now.
+
+  The `error` code is unchanged: machines still get `voice_not_configured`,
+  and it carries no vendor and no variable either. The operator who needs the
+  variable names is reading the deploy docs, not a toast in a circle.
+*/
+const NO_VOICE_HERE =
+  "Voice isn't open in this room yet. The circle still works in text — say it there.";
+
 async function handlePOST(request: Request, { params }: Params) {
   const { id } = await params;
   if (!isLivekitConfigured) {
     return NextResponse.json(
-      {
-        error: "voice_not_configured",
-        message: "Set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET to open the room's voice.",
-      },
+      { error: "voice_not_configured", message: NO_VOICE_HERE },
       { status: 501 },
     );
   }

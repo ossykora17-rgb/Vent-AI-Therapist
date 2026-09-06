@@ -355,6 +355,20 @@ their areas: `.claude/skills/data-quality/` and `.claude/skills/circles-quality/
   SDK's enums.
 - **`FileStore` caches the whole database in memory.** Editing
   `.data/vent.json` under a running server does nothing until restart.
+- **The route list was still hand-written, and it still had holes.** `/api/notes`
+  was added to both passes and the *class* stayed open: neither pass had ever
+  reached `/api/circles/[id]/messages`, `/voice` or `/voice/mute`, and
+  `/api/profile` — where onboarding writes the chair — was in neither. The
+  first run of the new probe found a live one: the voice route answered 501
+  with *"Set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET to open the
+  room's voice"*, and `circle-voice.tsx` prints `grant.message` verbatim — so
+  somebody tapping the microphone in a circle got three environment variable
+  names. The same sentence in the same shape as the lobby's "Circles need
+  storage. Run locally or configure Supabase.", on the route next door, and it
+  survived that repair because nothing had ever asked this route what it says.
+  Check 111 enumerates routes off the filesystem the way check 95 enumerates
+  handlers, with exemptions named and their reasons written down — and a stale
+  exemption fails too.
 - **A new route ships into neither live pass unless you put it there.** The
   two verification passes name their routes by hand — `no-store-verify`'s wire
   sweep and `live-verify`'s checks — so a route added on Tuesday is covered by

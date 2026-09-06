@@ -275,6 +275,70 @@ async function main() {
     `list=${nres.status}/${notes.notes?.length} persisted=${notes.persisted} · ` +
       `del=${ndel.status} deleted=${JSON.stringify(ndelBody.deleted)}`);
 
+  /*
+    14 and 15 — the export in this shape, and the route that was in neither.
+
+    `/api/profile` was covered by nothing at all. It is where onboarding
+    writes the chair, and the reason `vent_users.chair_picked` is set for one
+    person of eight. With no store it must answer without claiming to have
+    kept anything.
+
+    `/api/export` was already checked by live-verify — *with* a store. That is
+    the whole point of two passes: the same route answers differently when
+    nothing is configured, and the unconfigured answer is the one nobody was
+    looking at. It must refuse rather than hand back an empty backup that
+    looks like a complete one, because `complete: true` over zero rows is the
+    artifact that looks exactly like a good one until the day it is needed.
+  */
+  const xres = await fetch(`${BASE}/api/export`, {
+    headers: { authorization: "Bearer whatever-there-is-no-token-here" },
+  });
+  let xbody = {};
+  try { xbody = await xres.json(); } catch { /* a body is optional on a refusal */ }
+  record(14, "The backup refuses rather than exporting nothing",
+    xres.status !== 200 && xbody.complete !== true,
+    `${xres.status} · complete=${xbody.complete ?? "absent"}`);
+
+  const pres = await post("/api/profile", { anonId: ANON, chairPicked: "tight_edge", onboardingDone: true });
+  let pbody = {};
+  try { pbody = await pres.json(); } catch { /* same */ }
+  record(15, "Onboarding never claims a chair was kept",
+    pres.status < 500 && pbody.persisted !== true && pbody.saved !== true,
+    `${pres.status} · persisted=${pbody.persisted ?? "absent"}`);
+
+  /*
+    16 — the circle sub-routes, which neither pass had ever touched.
+
+    Both passes reached `/api/circles/does-not-exist` and stopped there, so
+    the transcript surface and the two voice routes were verified by nothing.
+    The transcript is the one that matters: "close means close" says a circle
+    that is over answers 404 from the room and 410 from every other surface,
+    and **never an empty list**, because `{messages: []}` still tells a caller
+    the room is there.
+
+    Statuses are asserted as a class rather than pinned, because pinning one
+    is how an author with LiveKit keys writes a suite that disagrees with CI —
+    the voice routes answer 501 before they touch the store when there are no
+    keys, and 404 when there are.
+  */
+  const sub = await Promise.all([
+    ["messages", fetch(`${BASE}/api/circles/does-not-exist/messages`)],
+    ["voice", post("/api/circles/does-not-exist/voice", { anonId: ANON })],
+    ["mute", post("/api/circles/does-not-exist/voice/mute", { anonId: ANON, identity: "seat-1" })],
+  ].map(async ([name, p]) => {
+    const res = await p;
+    const text = await res.text();
+    return { name, status: res.status, text };
+  }));
+
+  const refused = sub.every((s) => s.status >= 400);
+  const emptyList = sub.some((s) => s.name === "messages" && /"messages"\s*:\s*\[\s*\]/.test(s.text));
+  const subLeaks = sub.some((s) => /supabase|livekit|env\b|NEXT_PUBLIC/i.test(s.text));
+  record(16, "A room that is not there is not an empty room",
+    refused && !emptyList && !subLeaks,
+    sub.map((s) => `${s.name}=${s.status}`).join(" · ") +
+      `${emptyList ? " · LEAKED AN EMPTY LIST" : ""}${subLeaks ? " · LEAKED CONFIG" : ""}`);
+
   const mark = (p) => (p === true ? "PASS" : "FAIL");
   console.log("\n| # | Check | Result | Detail |");
   console.log("|---|---|---|---|");
