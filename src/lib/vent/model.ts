@@ -243,6 +243,29 @@ export async function probeModel(): Promise<ModelVerdict> {
  * key or a missing model is not transient, and inviting a retry that cannot
  * succeed is a promise the code cannot keep.
  */
+/**
+ * Did *we* write this, because the model did not answer?
+ *
+ * `wasAuthored` in `tactics.ts` asks the same question about the tactic
+ * holds, and its comment calls the authored replies "a closed set". They are
+ * a closed set; that was not all of it. The seven sentences below are ours
+ * too, and nothing could recognise them — so the nightly audit graded a
+ * rate-limit message as if a model had produced it, and `flatReplies` scored
+ * it 4 (no question mark, none of their words) which is high enough to spend
+ * the one paid call of the night asking a model why it was flat.
+ *
+ * Not folded into `wasAuthored`, and that is deliberate rather than untidy:
+ * `tactics.ts` is reached from `circles/rules.ts`, which `circle-room.tsx`
+ * imports, and this file is `server-only`. Putting the union there would move
+ * a server import into the client bundle. The composition lives at the two
+ * call sites that need it, both of them server-side.
+ */
+export function isFailureReply(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const t = text.trim();
+  return MODEL_STATUSES.some((s) => modelFailureReply(s) === t);
+}
+
 export function modelFailureReply(status: ModelStatus): string {
   switch (status) {
     case "rate_limited":

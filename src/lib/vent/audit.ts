@@ -1,6 +1,19 @@
 import { gradeReply, worstOf, type Finding as Note, type GoldenCase } from "./quality";
 import { acceptable, MAX_RULE_CHARS, type LearnedRule } from "./learned";
 import { wasAuthored } from "./tactics";
+import { isFailureReply } from "./model";
+
+/**
+ * Everything in a row that this product wrote rather than a model.
+ *
+ * Two questions because they live in two modules for a build reason — see
+ * `isFailureReply`. Asked once here so the two filters below cannot drift
+ * apart, which is how the audit came to grade seven rate-limit messages as
+ * replies in the first place.
+ */
+const ourOwnWords = (reply: string | null | undefined): boolean =>
+  wasAuthored(reply ?? null) || isFailureReply(reply);
+
 import { echoesThem } from "./echo";
 
 /**
@@ -105,7 +118,7 @@ export function knownProblems(
   const out: Finding[] = [];
   for (const r of rows) {
     if (!r.ai_reply || r.intent_type !== "vent") continue;
-    if (wasAuthored(r.ai_reply)) continue;
+    if (ourOwnWords(r.ai_reply)) continue;
     /*
       A stored row rebuilt into the shape the grader already speaks, rather
       than a second grader that reads rows. The suite's oldest rule: anything
@@ -156,7 +169,7 @@ const PIDGIN = /\b(dey|na|abeg|wetin|don|sabi|wahala|oga|make i|e go)\b/i;
  */
 export function flatReplies(rows: AuditRow[], limit = 10): AuditRow[] {
   const scored = rows
-    .filter((r) => r.ai_reply && r.intent_type === "vent" && !wasAuthored(r.ai_reply))
+    .filter((r) => r.ai_reply && r.intent_type === "vent" && !ourOwnWords(r.ai_reply))
     .map((r) => {
       const reply = r.ai_reply ?? "";
       let weight = 0;

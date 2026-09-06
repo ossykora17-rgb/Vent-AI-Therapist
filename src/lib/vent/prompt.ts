@@ -8,6 +8,7 @@ import { objectLabel, objectReads } from "./chairs";
 import type { Pattern } from "./pattern";
 import { scan, scanBlock } from "./scan";
 import { aimedAtTheMachine, type Classification } from "./intent";
+import { isFailureReply } from "./model";
 import type { Tactic, TacticContext } from "./tactics";
 import { OCCUPATION_PRESSURE } from "@/lib/flavour/profile";
 import type { FlavourProfile } from "@/lib/flavour/types";
@@ -150,7 +151,17 @@ export function memoryBlock(rows: MemoryRow[]): string {
   */
   const RELIEF_FLOOR = 10;
   const top = rows
-    .filter((r) => r.ai_reply && r.tension_before != null && r.tension_after != null)
+    /*
+      Never a sentence we wrote when the model did not answer.
+
+      This picks the reply that moved somebody furthest and shows it to the
+      model as the shape that lands for this person. A rate-limit message is
+      eligible on the numbers — the tension can drop for reasons that have
+      nothing to do with the reply — and it would be presented as exemplary,
+      to the one place in the prompt that says "this worked".
+    */
+    .filter((r) => r.ai_reply && !isFailureReply(r.ai_reply) &&
+      r.tension_before != null && r.tension_after != null)
     .map((r) => ({ r, relief: (r.tension_before as number) - (r.tension_after as number) }))
     .filter(({ relief }) => relief >= RELIEF_FLOOR)
     .sort((a, b) => b.relief - a.relief)[0];

@@ -12302,6 +12302,63 @@ check("110 The road from production to training carries what is on it", () => {
   ok(failures.includes("Too many at once on my side. Give it a minute, then say that again."),
     "including the rate limit, which is the one that was getting through",
     "seven production rows, all with a tactic, all eligible for the training set");
+
+  /*
+    AND THE AUDIT DOES NOT GRADE OUR OWN APOLOGY
+
+    `wasAuthored` covers the tactic holds and calls them "a closed set". They
+    are closed; they were not all of it. A rate-limit message is ours too, and
+    nothing recognised it — so the nightly audit read one as a model reply and
+    `flatReplies` scored it 4 out of the weights below: no question mark (+2),
+    none of their words echoed (+2). That is high enough to be one of the ten
+    the audit spends its single paid call on.
+
+    Asserted through the real `flatReplies` rather than by reading the filter,
+    because the bug was never in what the filter says.
+  */
+  const busy = "Too many at once on my side. Give it a minute, then say that again.";
+  const rows = [
+    { user_message: "rent don pass me this month", ai_reply: busy, intent_type: "vent", mood_score: 2, created_at: "2026-09-01T00:00:00Z" },
+    { user_message: "work is heavy and nobody sees it", ai_reply: "That is a lot to carry alone.", intent_type: "vent", mood_score: 2, created_at: "2026-09-02T00:00:00Z" },
+  ];
+  const flat = flatReplies(rows, 10);
+  ok(!flat.some((r) => r.ai_reply === busy),
+    "a busy upstream is never a candidate for the audit's paid call",
+    "no question mark and none of their words scores it 4 — straight into the ten worst");
+  is(flat.length, 1, "and the real reply beside it still is",
+    "skipping our own text must not skip everything");
+
+  is(knownProblems(rows).some((n) => n.reply === busy), false,
+    "nor is it graded as though a model wrote it",
+    "grading our own apology produces a finding about ourselves");
+
+  /*
+    And the one line in the prompt that says "this worked" never says it about
+    a sentence we wrote when the model did not answer.
+
+    `memoryBlock` picks the reply that moved this person furthest and shows it
+    back as the shape that lands. Tension can fall for reasons that have
+    nothing to do with the reply, so a rate-limit message is eligible on the
+    numbers alone — and it would arrive in the prompt as exemplary.
+
+    The failure row is given the *larger* drop on purpose, so it wins unless
+    something excludes it.
+  */
+  const mem = (msg, reply, before, after, day) => ({
+    user_message: msg, ai_reply: reply, created_at: `2026-09-0${day}T00:00:00Z`,
+    body_tapped: null, chair_picked: null, mood_score: null,
+    tension_before: before, tension_after: after,
+  });
+  const landed = memoryBlock([
+    mem("rent don pass me", busy, 80, 30, 1),
+    mem("work is heavy and nobody sees it", "That is a lot to carry alone. What part is heaviest?", 60, 40, 2),
+  ]);
+  ok(!landed.includes(busy),
+    "the few-shot never holds up a failure message as the shape that worked",
+    "a 50-point drop next to a rate limit is a coincidence, and the prompt would read it as a lesson");
+  ok(/landed, −20/.test(landed),
+    "and it still holds up the real one beside it",
+    "excluding our own text must not empty the few-shot");
 });
 
 check("111 Every route is verified by at least one live pass", () => {
