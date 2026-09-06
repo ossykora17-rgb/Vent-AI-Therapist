@@ -101,6 +101,24 @@ invisible by construction. That direction is the worse one: a Pidgin speaker
 can read an English reply, and somebody who wrote in English may not read
 Pidgin at all.
 
+**The rule is enforced where the person meets it, not one file over.** The
+prompt says *never diagnose, and never name a condition*. `keepable()` has
+refused to write one into a row since notes existed, and check 83 asserts it.
+Nothing had ever checked the sentence a person reads — fourteen reply graders
+and not one of them asked. Of 171 real vents, eight replies name a clinical
+condition and **five name one the person never used**, all five *anxiety*, the
+worst of them *"carrying your parents' marriage anxiety"*: the room diagnosing
+two people who are not in it. `diagnosis` is fatal and in the failsafe's
+rejection set, because a name for your condition is not something you can
+un-hear and an authored line that says less beats a label from a room with no
+licence. `CONDITIONS` is exported from `notes.ts` and imported, never copied.
+The two callers apply it differently on purpose and check 105 asserts the
+asymmetry so nobody "fixes" it: a note refuses the word outright because a row
+outlives the sentence around it; a reply may hand back a word they chose,
+because their own word returned to them is the most useful move here. Matched
+per family — one clinical word of theirs never licenses a different one of
+ours.
+
 **When the thinking is the problem, do not ask about the thing.** Wells' CAS:
 distress is maintained by the *process* — worry, rumination, threat-monitoring
 — not by the content, so a good question about the content is one more lap with

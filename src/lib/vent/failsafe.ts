@@ -88,7 +88,24 @@ import { wasAuthored } from "./tactics";
   exemption lives in `askedForSkill`: if they asked, it is not an offence, and
   the grader never fires.
 */
-export const REJECT = new Set(["advice", "promise", "generic", "generic_task", "invented", "recites", "empty"]);
+export const REJECT = new Set([
+  "advice", "promise", "generic", "generic_task", "invented", "recites", "empty",
+  /*
+    `diagnosis` is the newest and the least arguable.
+
+    Every screen says this is not therapy, the prompt says "never diagnose, and
+    never name a condition", and `keepable()` refused to write one into a row
+    from the day notes existed. None of that was ever checked on the sentence a
+    person reads: five of 171 real replies handed somebody a condition they had
+    never used, all five "anxiety", one of them attributing it to two people
+    who were not in the room.
+
+    Squarely in this tier rather than the retry-only one. A name for your
+    condition is not something you can un-hear, and an authored line that says
+    less is better than a label from a room with no licence.
+  */
+  "diagnosis",
+]);
 
 /**
  * Worth a second call, and never worth the authored line if that call fails.
@@ -261,6 +278,15 @@ function correctionFor(graders: string[], wroteIn: GoldenCase["language"]): stri
       quotes a hallucination launders it.
     */
     lines.push("- You referred to a person or a figure they never gave you. Only what they actually wrote exists. If you do not know, ask.");
+  }
+  if (seen.has("diagnosis")) {
+    /*
+      Names the rule, never the word — the same reason `invented` does not
+      quote its invention. Repeating "you said 'anxiety'" puts the label back
+      into the retry's context, where the next attempt can pick it up as
+      something the person actually said.
+    */
+    lines.push("- You named a condition they never used. This room does not diagnose. Use the word they used, or ask what they would call it.");
   }
   if (seen.has("language")) {
     /*

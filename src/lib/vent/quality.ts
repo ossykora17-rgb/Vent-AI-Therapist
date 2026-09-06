@@ -1,6 +1,7 @@
 import { containsAdvice } from "@/lib/circles/rules";
 import { askedForSkill, BANNED_PHRASES, FILE_LANGUAGE, genericTask, REPLY_SENTENCE_CAP } from "./voice";
 import { coverage, COVERAGE_FLOOR } from "./scan";
+import { CONDITIONS } from "./notes";
 
 /**
  * What a reply has to be, checked without asking a second model.
@@ -149,6 +150,15 @@ const PIDGIN = /\b(?:dey|na|abeg|wetin|no be|sabi|wahala|oga|make i|e go|kuku|sh
  * constantly, and "wahala" in an English sentence is register, not a language
  * switch. Two different markers is a sentence built in the other language.
  */
+/**
+ * One anchored pattern per condition family, built once.
+ *
+ * Compiled at module load rather than inside the grader: this runs on every
+ * model reply and again on every retry, and twenty `new RegExp` per call is
+ * twenty allocations to answer a question whose answer never changes.
+ */
+const CONDITION_PATTERNS = CONDITIONS.map((f) => new RegExp(`\\b(?:${f})\\b`, "i"));
+
 function pidginMarkers(text: string): number {
   const found = text.match(new RegExp(PIDGIN, "gi")) ?? [];
   return new Set(found.map((m) => m.toLowerCase().replace(/\s+/g, " "))).size;
@@ -316,6 +326,56 @@ export function gradeReply(
     // is the same number and not an invention.
     if (sum && !source.replace(/[,.\s]/g, "").includes(sum[0].replace(/[^\d]/g, ""))) {
       add("invented", "fatal", `a figure nobody gave you: "${sum[0]}"`);
+    }
+
+    /*
+      A condition they never named.
+
+      Every screen on this product says it is not therapy, the prompt says
+      "never diagnose, and never name a condition", and `keepable()` in
+      `notes.ts` refuses to write one into a row. None of that was ever checked
+      on the sentence a person actually reads. Fourteen graders and not one of
+      them asked.
+
+      Production, all 171 real vents: eight replies name a clinical condition
+      and five of the eight name one the person had never used. All five are
+      "anxiety". The worst reads "carrying your parents' marriage anxiety" —
+      the room diagnosing two people who are not in it, to somebody who had
+      said nothing of the kind.
+
+      Fatal, and in the failsafe's rejection set, for the reason `notes.ts`
+      gives about rows and which is stronger about sentences: a name for your
+      condition is not something you can un-hear, and this room is not
+      qualified to hand one out. An authored line is better than a diagnosis.
+
+      The exemption is their own word, and it is why this lives inside the
+      `said` block — with no evidence the check cannot tell "you called it
+      anxiety" from "this is anxiety", so it does not run at all rather than
+      guess. Fail open on the second opinion; the crisis path and the
+      no-advice rules are the ones that always run.
+
+      `DIAGNOSIS` is imported, never copied. `notes.ts` refuses the word
+      outright because a row outlives the sentence around it; a reply may hand
+      back a word they chose. Same rule from both ends: the product never
+      introduces a condition.
+
+      Matched per family, not once over the whole list. A single yes/no would
+      let a reply say "bipolar" to somebody who happened to write "burnout" —
+      the same offence wearing a different label, exempted because the person
+      had used *some* clinical word once.
+
+      The families are the ones in the table, and the table is deliberately
+      narrower than the vocabulary. "anxious" is not in it and "anxiet\w*" is,
+      so a reply that answers "I'm anxious about rent" with "that anxiety"
+      fires — correctly. Their word was anxious. Anxiety is a noun the room
+      added, and adding it is the entire thing this grader exists to stop.
+    */
+    for (const pattern of CONDITION_PATTERNS) {
+      const named = reply.match(pattern);
+      if (named && !pattern.test(source)) {
+        add("diagnosis", "fatal", `named a condition they never used: "${named[0]}"`);
+        break;
+      }
     }
   }
 
