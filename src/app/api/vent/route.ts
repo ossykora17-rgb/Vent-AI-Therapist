@@ -4,7 +4,7 @@ import { getStore, type Store, type VentRow } from "@/lib/store";
 import { isModelConfigured } from "@/lib/env";
 import { answerFactual, groundNow } from "@/lib/vent/grounding";
 import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
-import { CARRY_WORDS, OBJECT_IDS } from "@/lib/vent/chairs";
+import { CARRY_WORDS, OBJECT_IDS, tensionNow } from "@/lib/vent/chairs";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
 import { selectProbe } from "@/lib/vent/probes";
 import { blendEfficacy, getEfficacy, measurePersonalEfficacy } from "@/lib/vent/efficacy";
@@ -1147,10 +1147,24 @@ async function handlePATCH(request: Request) {
     );
   }
 
-  // Mood 1–10 becomes tension 0–100, inverted — feeling better is less
-  // tension. The same arithmetic the circle close uses, so the two surfaces
-  // cannot disagree about what a 7 means.
-  const tensionAfter = Math.round((10 - parsed.data.mood) * 10);
+  /*
+    Mood 1–10 becomes tension 0–100, inverted — feeling better is less
+    tension. The same arithmetic the circle close uses, so the two surfaces
+    cannot disagree about what a 7 means.
+
+    That sentence was true and the code did not make it true: it read
+    `Math.round((10 - mood) * 10)` while the circle close called
+    `tensionNow(mood)`. Two copies agreeing by luck, under a comment
+    guaranteeing they could not disagree — which is the same shape as
+    `wasAuthored`'s "closed set" and the operator vocabulary "kept in step by
+    intent rather than by import", both of which had already drifted when
+    somebody finally looked.
+
+    No divergence today: zod pins mood to an integer 1–10, so the missing
+    clamp in the copy could never bite. It is the guarantee that was
+    imaginary, not the arithmetic.
+  */
+  const tensionAfter = tensionNow(parsed.data.mood);
   const anchored = await store.anchorLatestVent(userId, parsed.data.mood, tensionAfter);
 
   return NextResponse.json(

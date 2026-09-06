@@ -12359,6 +12359,38 @@ check("110 The road from production to training carries what is on it", () => {
   ok(/landed, −20/.test(landed),
     "and it still holds up the real one beside it",
     "excluding our own text must not empty the few-shot");
+
+  /*
+    ONE ARITHMETIC FOR WHAT A 7 MEANS
+
+    The anchor handler carried this comment:
+
+      "The same arithmetic the circle close uses, so the two surfaces cannot
+       disagree about what a 7 means."
+
+    directly above `Math.round((10 - mood) * 10)`, while the circle close
+    called `tensionNow(mood)`. Two copies agreeing by luck, under a sentence
+    guaranteeing they could not disagree — the third comment in this codebase
+    to promise that (`wasAuthored`'s "closed set", the operator vocabulary
+    "kept in step by intent"), and the other two had already drifted.
+
+    Nothing had diverged here: zod pins mood to an integer 1–10, so the copy's
+    missing clamp could never bite. It was the guarantee that was imaginary.
+
+    Asserted as "both surfaces call the function", because the values agreeing
+    is exactly what a duplicate does right up until it does not.
+  */
+  const anchor = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
+  const circle = strip(fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/route.ts"), "utf8"));
+  ok(/tensionNow\(parsed\.data\.mood\)/.test(anchor),
+    "the vent anchor asks chairs.ts what a mood is worth",
+    "a second copy of an arithmetic is a second answer waiting for a range change");
+  ok(/tensionNow\(mood\)/.test(circle),
+    "and so does the circle close",
+    "one of the two surfaces the comment promised could not disagree");
+  ok(!/\(10 - (parsed\.data\.)?mood\) \* 10/.test(anchor + circle),
+    "and neither keeps the arithmetic inline",
+    "putting it back is the drift, and it is one line of diff");
 });
 
 check("111 Every route is verified by at least one live pass", () => {
