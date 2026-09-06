@@ -8093,8 +8093,27 @@ check("74 Nothing thanks you for something it dropped", () => {
   const route = fs.readFileSync(path.join(ROOT, "src/app/api/feedback/route.ts"), "utf8");
   ok(/persisted:\s*false/.test(route),
     "the feedback route can answer 200 having written nothing");
-  ok(/persisted:\s*true/.test(route),
-    "and says so the other way when it has");
+  /*
+    Reachable, not literal — and the difference is the whole rule.
+
+    This read `/persisted:\s*true/`, which was exactly right while the route
+    ended in `NextResponse.json({ persisted: true, ... })`. Then the write
+    learned to fail: production carries a UNIQUE constraint on
+    `vent_feedback.user_id` that no migration here declares, so a person's
+    second rating raises 23505 against a rate limiter in the same handler that
+    allows five an hour.
+
+    The fix reports what happened — `persisted` is set after the insert
+    returns — and this assertion failed on it, because the literal it was
+    looking for is the thing that had to go. An assertion pinning the shape of
+    the old implementation blocks the new one; check 45 hit the same wall
+    today and the answer is the same. Assert that success is *reachable*, and
+    let check 104 assert it is never hardcoded. Together they say: the route
+    can report a kept rating, and only by having kept one.
+  */
+  ok(/persisted = true;/.test(route),
+    "and can still say so when the write landed",
+    "a route that can only report failure is the same bug facing the other way");
 
   const fab = fs.readFileSync(path.join(ROOT, "src/components/feedback-fab.tsx"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ");
@@ -12391,6 +12410,54 @@ check("110 The road from production to training carries what is on it", () => {
   ok(!/\(10 - (parsed\.data\.)?mood\) \* 10/.test(anchor + circle),
     "and neither keeps the arithmetic inline",
     "putting it back is the drift, and it is one line of diff");
+
+  /*
+    A RATING THAT CANNOT BE STORED IS NOT A 500
+
+    `/api/feedback` awaited `insertFeedback` bare. `done()` throws, the
+    handler has no boundary and no wrapper, so any write error left the route
+    as a server error — skipping `logPreference` on the next line and giving
+    the client no body to read. The client's honest branch was added under a
+    comment about never thanking somebody for a rating that was dropped; it
+    had nothing to be honest with.
+
+    Production makes it live: `vent_feedback_user_id_key UNIQUE (user_id)`
+    exists on the database and in no migration here, so a person's *second*
+    rating raises 23505 — against a rate limiter in the same handler that
+    allows five an hour. Five an hour versus one for ever, surfacing as a 500.
+
+    The two writes are separate promises and are decoupled here: the table is
+    the record, the log is training data with no such constraint, and losing
+    the log because a row was rejected loses the one place this product learns
+    what is failing.
+  */
+  const feedback = strip(fs.readFileSync(path.join(ROOT, "src/app/api/feedback/route.ts"), "utf8"));
+  ok(/try \{\s*await store\.insertFeedback/.test(feedback),
+    "the feedback write cannot take the request down with it",
+    "a bare await on a throwing store call is a 500 where a body belongs");
+  ok(/\{ persisted, storage: store\.kind \}/.test(feedback),
+    "and the response reports what actually happened",
+    "`persisted: true` written before the write is the oldest bug in this file");
+  ok(!/persisted: true, storage/.test(feedback),
+    "never a hardcoded true beside the store's name",
+    "the client reads this field precisely so it can be false");
+
+  /*
+    Two guards, two properties, and the first draft of this asserted only one.
+
+    The insert's `catch` is what lets `logPreference` run at all after a
+    rejected row — that is the first assertion above. The log's *own* catch is
+    a different promise: a failure writing training data must not cost the
+    person the response to a rating that was kept. A mutation removing it
+    passed, because a `catch` between the two calls is satisfied by the
+    insert's.
+  */
+  ok(/try \{\s*await store\.insertFeedback/.test(feedback),
+    "a rejected row still lets the preference log run",
+    "the table and the log are different promises with different constraints");
+  ok(/try \{\s*await logPreference/.test(feedback),
+    "and a failed log never costs somebody the response to a kept rating",
+    "best-effort means best-effort in both directions");
 });
 
 check("111 Every route is verified by at least one live pass", () => {
