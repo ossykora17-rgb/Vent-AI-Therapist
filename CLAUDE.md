@@ -438,10 +438,24 @@ one per message. The audit runs the free deterministic graders first and only
 asks a model about replies that broke *no* stated rule and are still flat —
 one call, ten samples, and none at all on a night with nothing flat.
 
-Most messages never reach a model: crisis, factual, greeting and meta are all
-answered locally, for free. Only a real vent spends tokens. The eval suite,
-both pipelines and the heartbeat make **zero** model calls by construction —
-if a change to them needs one, the change is wrong.
+Crisis, factual, greeting and meta are answered locally, for free. The eval
+suite, both pipelines and the heartbeat make **zero** model calls by
+construction — if a change to them needs one, the change is wrong.
+
+**"Most messages never reach a model" was the sentence here, and production
+says otherwise.** Of 186 stored turns: 178 vents, 5 greetings, 2 crisis, 1
+meta. The free paths took **4.3%**. The routing is still right — a greeting
+must not cost a model call and a crisis must never reach one — but it is a
+safety and dignity mechanism, not an economic one, and a plan for scale built
+on "most messages are free" is built on a number that is not true.
+
+So the honest per-message cost is the per-vent cost, and it is bounded rather
+than estimated: check 24 caps the system prompt at **3,600 tokens**, and
+`MAX_TOKENS` caps the reply at **600** — about 4,200 a turn, plus one Carver
+call per session (`CARVE_MAX_TOKENS`, derived) and one extra full call on
+whatever share the failsafe rejects. Multiply by the traffic you expect before
+choosing a provider, and remember which one is answering: production currently
+falls through Anthropic on `insufficient_credit` and lands on Gemini Flash.
 
 ## When not to automate
 
