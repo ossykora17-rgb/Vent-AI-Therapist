@@ -284,7 +284,24 @@ records undoing for itself and never told the pipeline.
 
 **Circle transcripts are never training data.** Confidentiality is a deletion
 policy and a training set is its opposite. The pipeline counts circles and
-never quotes them. `data/` is gitignored.
+never quotes them. `data/` is gitignored. A nightly backup is the same
+opposite, so the export refuses them too — and the rule is *derived from the
+sweep* rather than restated: check 112 reads whatever `closeCircle` deletes
+and requires the export to exclude it. `NEVER_EXPORT` was a hand-written set
+of one, the same shape as the route list and the page list that both turned
+out to have holes, and this one guards a promise rather than a status code.
+
+**Derive the list, or the list is the bug.** Four of them in one sweep: the
+verification passes named their routes by hand and covered neither the circle
+sub-routes nor `/api/profile`; `no-store-verify` listed seven of the eight
+pages, missing the circle room itself; the operator-vocabulary regex was kept
+"in step by intent rather than by import" and had already drifted a term and
+the `i` flag, so lowercase *supabase* passed the one check written to catch it;
+and `FULL_SELECT` agreed with `TABLE_CONTRACT.vents` only because somebody kept
+typing columns into both. Anything enumerable — routes, pages, handlers,
+tables, columns, graders — is read off the filesystem or off the contract, and
+what cannot be derived is named as an exemption *with its reason*, because
+"not on the list" and "decided against" look identical otherwise.
 
 **One table, one truth.** Chair tensions lived in four files once and the
 memory filter hid inside a route. Anything the eval suite asserts must be

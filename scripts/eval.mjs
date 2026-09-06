@@ -1740,6 +1740,39 @@ check("16 The store asks PostgREST for something it can parse", () => {
         : `first differs at line ${at + 1}: ${JSON.stringify(a[at] ?? "").slice(0, 60)}`,
     );
   }
+
+  /*
+    And the select list asks for every column the contract knows about.
+
+    Check 16 exists because a select list joined with ", " made every read of
+    `vents` ask for a column named " user_id", and memory across turns
+    returned nothing in production for months. That is the *malformed* case.
+    The *incomplete* case is quieter and has the same ending: a migration adds
+    a column, the contract learns it, `FULL_SELECT` does not, and every read
+    silently comes back without it — through a caller sitting in a try/catch
+    that degrades without saying anything.
+
+    Not hypothetical. 0019 added `rejected_by` and it had to be typed into
+    both by hand; nothing here would have noticed one of them missing.
+
+    Both directions, because a column selected and not in the contract is the
+    other half of the same drift — `/api/health` would never probe it.
+  */
+  const selectList = store.match(/const FULL_SELECT = \[([\s\S]*?)\]\.join/)?.[1] ?? "";
+  const selected = [...selectList.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+  const declared = TABLE_CONTRACT.vents.split(",");
+  ok(selected.length > 15, `the select list is readable (${selected.length} columns)`,
+    "a sweep that finds nothing passes loudest");
+
+  const unread = declared.filter((c) => !selected.includes(c));
+  is(unread.join(", "), "",
+    `every column the contract declares is selected${unread.length ? ` — ${unread.join(", ")}` : ""}`,
+    "a column the store never asks for is a column the product silently does not have");
+
+  const unknown = selected.filter((c) => !declared.includes(c));
+  is(unknown.join(", "), "",
+    `and every column selected is one the contract knows${unknown.length ? ` — ${unknown.join(", ")}` : ""}`,
+    "/api/health probes the contract, so a column missing from it is never checked against the live schema");
 });
 
 // ── 17. the number somebody calls in the worst hour of their life ─────────
@@ -12352,6 +12385,65 @@ check("111 Every route is verified by at least one live pass", () => {
   is(theirs, FORBIDDEN_SOURCE,
     "and it is the same vocabulary this suite enforces",
     "two hand-kept copies of one rule is the bug this whole check is about");
+});
+
+check("112 What a closing circle destroys, a backup never keeps", () => {
+  /*
+    Confidentiality here is a deletion policy: a circle ends and its transcript
+    is destroyed, once, on the transition. A nightly backup is the exact
+    opposite of that — a durable off-site copy — so the one table the sweep
+    deletes has to be the one table the export refuses.
+
+    It is, and it is refused by a hand-written set of one:
+
+      const NEVER_EXPORT = new Set(["circle_messages"]);
+
+    That is the same shape as the route list and the page list, both of which
+    turned out to have holes, and this one guards a promise rather than a
+    status code. A second table joining the sweep — voice transcripts, a
+    reflections log — would be swept from the room and copied into the backup,
+    and nothing would say so.
+
+    So the rule is derived from the sweep rather than restated: whatever
+    `closeCircle` deletes, the export excludes. Add a table to one and the
+    build fails until it is named in the other.
+  */
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const store = strip(fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8"));
+
+  const from = store.indexOf("async closeCircle");
+  ok(from > 0, "closeCircle is findable in the Supabase store",
+    "renamed? this check is scoped to the method that ends a room");
+  const body = store.slice(from, store.indexOf("\n  async ", from + 10));
+  const destroyed = [...body.matchAll(/\.from\("([a-z_]+)"\)\s*\.delete\(\)/g)].map((m) => m[1]);
+  ok(destroyed.length > 0, `closing a circle destroys something (${destroyed.join(", ")})`,
+    "a sweep that finds nothing passes loudest — and a close that deletes nothing is its own bug");
+
+  const exportSrc = strip(fs.readFileSync(path.join(ROOT, "src/app/api/export/route.ts"), "utf8"));
+  const never = exportSrc.match(/NEVER_EXPORT = new Set\(\[([^\]]*)\]\)/)?.[1] ?? "";
+  const excluded = [...never.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+
+  const leaked = destroyed.filter((t) => !excluded.includes(t));
+  is(leaked.join(", "), "",
+    `every table the sweep destroys is excluded from the backup${leaked.length ? ` — ${leaked.join(", ")}` : ""}`,
+    "a transcript deleted from the room and kept in an artifact is the promise broken in the quietest possible way");
+
+  /*
+    And nothing is excluded that the contract does not know about — a stale
+    exclusion reads as protection and protects nothing.
+  */
+  const stale = excluded.filter((t) => !Object.keys(TABLE_CONTRACT).includes(t));
+  is(stale.join(", "), "",
+    `no exclusion names a table that is gone${stale.length ? ` — ${stale.join(", ")}` : ""}`,
+    "the same sweep the route exemptions get");
+
+  /*
+    The export builds its table list by subtraction, so the exclusion has to
+    be applied where the list is made rather than checked afterwards.
+  */
+  ok(/Object\.keys\(FULL_CONTRACT\)\.filter\(\(t\) => !NEVER_EXPORT\.has\(t\)\)/.test(exportSrc),
+    "and the exclusion is applied where the table list is built",
+    "a filter applied after the read has already read it");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
