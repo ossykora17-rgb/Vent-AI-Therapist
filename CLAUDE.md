@@ -193,6 +193,18 @@ call. The rule is not "log less": `[carve] notes refused (3): hard: names a
 condition` is exactly the line that says whether the prompt or the rule is
 wrong, and it carries nothing about a person.
 
+Check 103 is enforced on the *literal*, so a variable walks past it.
+`Verdict.reject` was `${grader}: ${detail}` and the route logged it whole —
+and details quote the reply: `recites` prints the sentence it read back as a
+receipt, which here is usually the person's own words handed to them, and
+`invented` prints the naira figure. The one diagnostic that fires when a reply
+goes wrong was writing fragments of a private conversation to stdout. The fix
+is not a smarter check. **Make the obvious field the safe one**: `reject`
+carries grader names and nothing else, and anybody wanting the detail calls
+`gradeReply` and has to decide on purpose what to do with it. Assert it where
+the value is made, over every grader that can reject — not at the call site,
+which is the place the rule already could not see.
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.

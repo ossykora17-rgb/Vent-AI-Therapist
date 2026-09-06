@@ -11512,6 +11512,37 @@ check("104 A grader the live path can see is a decision somebody made", () => {
   ok(/chooseReply\(/.test(route),
     "the vent route makes the choice through chooseReply",
     "the tiers and the fallback have to live in one place or they drift");
+
+  /*
+    And the field the route logs carries nothing but grader names.
+
+    `reject` used to be `${grader}: ${detail}` and the route logged it
+    verbatim. Details quote the reply — `recites` prints the sentence it read
+    back as a receipt, which on this product is usually the person's own words
+    handed to them, and `invented` prints the naira figure. The one diagnostic
+    that fires when a reply goes wrong was writing fragments of a private
+    conversation to a hosted runtime's stdout.
+
+    Check 103 could not see it: the argument was a variable, and that rule is
+    enforced on the literal. So this is asserted where the value is made,
+    against every grader that can reject, rather than at the call site.
+  */
+  const rejections = [
+    inspectReply(pidginCase, "That sounds heavy. What part of it is sitting with you most right now?"),
+    inspectReply(englishCase, "You should call your sister about the money you owe her, all ₦450,000 of it."),
+    // Carries a figure, so the detail this must not leak actually exists.
+    inspectReply(englishCase, "That ₦450,000 is a lot to be holding. What part of it is heaviest?",
+      "work is heavy and i am tired of it"),
+  ].map((v) => v.reject).filter(Boolean);
+  ok(rejections.length >= 2, `there are rejections to inspect (${rejections.length})`,
+    "a sweep that finds nothing passes loudest");
+  for (const r of rejections) {
+    ok(!/["'₦\d]/.test(r), `a rejection names graders and nothing else: ${r}`,
+      "stdout has no delete button, and a detail quotes the reply");
+    ok(r.split(" · ").every((g) => [...REJECT, ...RETRY_ONLY].includes(g)),
+      `every part of "${r}" is a grader name`,
+      "anything else in this string is something a person wrote");
+  }
   ok(!/inspectReply\([^)]*\)\.reject\s*\n?\s*\?/.test(route),
     "the old one-line ternary is gone",
     "a leftover branch that ignores the tier is the same bug with a new tier on top");

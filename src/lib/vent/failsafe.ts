@@ -135,7 +135,25 @@ export const NOTED = new Set(["coverage", "length"]);
 export const UNREACHABLE = new Set(["routing", "crisis_to_model", "credit_policy", "no_model"]);
 
 export interface Verdict {
-  /** Null when the reply may be sent. */
+  /**
+   * Null when the reply may be sent; otherwise the grader names, and *only*
+   * the grader names.
+   *
+   * This used to carry each finding's detail as well — `${grader}: ${detail}`
+   * — and the route logged it verbatim. Details quote the reply: `recites`
+   * prints the sentence it read back as a receipt, which on this product is
+   * usually the person's own words handed to them, and `invented` prints the
+   * naira figure. So the one diagnostic that fires when a reply goes wrong was
+   * writing fragments of a private conversation to a hosted runtime's stdout,
+   * which has no delete button and outlives every deletion the interface
+   * offers.
+   *
+   * Check 103 could not see it, because the argument was a variable and the
+   * rule was enforced on the literal. The fix is not a smarter check — it is
+   * that the obvious field to log is now the safe one. Anybody who wants the
+   * detail calls `gradeReply` and has to decide, on purpose, what to do with
+   * what comes back.
+   */
   reject: string | null;
   /** What to append to the system prompt for the one retry. */
   correction: string | null;
@@ -191,7 +209,7 @@ export function inspectReply(c: GoldenCase, reply: string, said?: string): Verdi
   if (bad.length === 0) return { reject: null, correction: null, authoredIsBetter: false };
 
   return {
-    reject: bad.map((f) => `${f.grader}: ${f.detail}`).join(" · "),
+    reject: [...new Set(bad.map((f) => f.grader))].join(" · "),
     correction: correctionFor(bad.map((f) => f.grader), c.language),
     authoredIsBetter: bad.some((f) => REJECT.has(f.grader)),
   };
