@@ -12,7 +12,7 @@ import { findPattern, type Pattern } from "@/lib/vent/pattern";
 import { coverage, COVERAGE_FLOOR } from "@/lib/vent/scan";
 import { buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
 import { research } from "@/lib/vent/research";
-import { inspectReply } from "@/lib/vent/failsafe";
+import { chooseReply, inspectReply } from "@/lib/vent/failsafe";
 import { allianceLine, openingLine, shouldSayAlliance } from "@/lib/vent/intake";
 import { MEMORY_TURNS, memoryFetchSize, selectMemory } from "@/lib/vent/memory";
 import { noModelKeyReply } from "@/lib/vent/fallback";
@@ -604,10 +604,29 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
             */
             messages: modelMessages,
           });
-          reply = inspectReply(asCase, again.text, said).reject
-            ? tactic.hold ?? reply
-            : again.text;
-          answeredBy = again.provider;
+          /*
+            Best attempt wins, and the authored line is the floor rather than
+            the default.
+
+            This was `secondVerdict.reject ? tactic.hold : again.text`, which
+            was right while every rejection meant the reply was harmful. It
+            stopped being right when `language` joined the retry tier: a retry
+            that comes back in English again is not harmful, and swapping it
+            for an authored English hold trades an engaged reply for a bland
+            one and calls it a repair. `chooseReply` holds that decision,
+            beside the tiers it depends on, so the two cannot drift.
+          */
+          const attempts = [
+            { text: again.text, verdict: inspectReply(asCase, again.text, said) },
+            { text: reply, verdict: verdictOnReply },
+          ];
+          const chosen = chooseReply(attempts, tactic.hold ?? null);
+          if (chosen) {
+            reply = chosen.text;
+            // Only the retry changes who answered. The hold is ours, and the
+            // first attempt is already attributed.
+            if (chosen.from === 0) answeredBy = again.provider;
+          }
         } catch {
           // The retry is a second opinion on our own output. Unreachable means
           // keep what we have rather than leave somebody with nothing.

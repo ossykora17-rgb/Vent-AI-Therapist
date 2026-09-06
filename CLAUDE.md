@@ -69,6 +69,25 @@ where the line falls, because it is not "no actions" — the library's own drop
 set is a breathing instruction and passes, because it is aimed at the exact
 place in the body they named. Generic is the offence. Task is not.
 
+**A justification covers what it argued about, and nothing standing beside
+it.** The failsafe's rejection set carried one sentence for three graders:
+*"Coverage, length and language mixing are deliberately not grounds for a
+retry ... a reply one sentence over the cap is worth a note and not a second
+billed call."* That argument is about length, it is correct about length, and
+two other graders rode it into the exempt list on the strength of adjacency.
+Production says what it cost: of 171 real vents, six were written in Pidgin,
+classified `pidgin` correctly by the router, prompted with *"Reply in
+Pidgin"* — and answered in English. The instruction lands and the model steps
+over it, which is the one failure a prompt cannot fix from inside itself.
+Answering a Nigerian in English when they wrote to you in Pidgin is not drift;
+it is the room declining the register they chose to be honest in. `language`
+is its own tier now — worth a retry, never worth the authored line, because
+the hold is English too and generic on top, so falling back would swap an
+engaged reply for a bland one and call it a repair. Check 104 makes every
+grader `quality.ts` can emit declare itself as rejected, retried, noted or
+structurally unreachable, because an absent name and a declined name look
+identical and the default is silence.
+
 **When the thinking is the problem, do not ask about the thing.** Wells' CAS:
 distress is maintained by the *process* — worry, rumination, threat-monitoring
 — not by the content, so a good question about the content is one more lap with

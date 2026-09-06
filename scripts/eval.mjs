@@ -49,7 +49,8 @@ const { knownProblems, flatReplies, parseProposals, auditPrompt } =
   await app("src/lib/vent/audit.ts");
 const { echoesThem } = await app("src/lib/vent/echo.ts");
 const { wasAuthored, inTheLoop } = await app("src/lib/vent/tactics.ts");
-const { inspectReply } = await app("src/lib/vent/failsafe.ts");
+const { inspectReply, chooseReply, REJECT, RETRY_ONLY, NOTED, UNREACHABLE } =
+  await app("src/lib/vent/failsafe.ts");
 const { assessTurn } = await app("src/lib/vent/assess.ts");
 const { gradeReply } = await app("src/lib/vent/quality.ts");
 const { openingLine, allianceLine, shouldSayAlliance, ALLIANCE_AT } =
@@ -11322,6 +11323,147 @@ check("103 Nothing a person wrote reaches a log line", () => {
   ok(/console\.warn\(`\[carve\] notes refused/.test(carve),
     "the empty-notes question is still answerable",
     "a rule that silences the diagnostic trades one blind subsystem for another");
+});
+
+check("104 A grader the live path can see is a decision somebody made", () => {
+  /*
+    `quality.ts` knows fourteen things that can be wrong with a reply. The live
+    failsafe ran seven of them and threw the rest away, and only one sentence
+    of comment said so:
+
+      "Coverage, length and language mixing are deliberately *not* grounds for
+      a retry ... a reply one sentence over the cap is worth a note and not a
+      second billed call."
+
+    One economics argument, made about length, carrying two other graders on
+    the strength of sitting beside them in a list. It is right about length.
+    Production says how wrong it was about language: of 171 real vents, six
+    were written in Pidgin, classified `pidgin` by the router, prompted with
+    "Reply in Pidgin" — and answered in English. The instruction lands and the
+    model steps over it, which is the one failure a prompt cannot fix from
+    inside itself.
+
+    Two assertions here, and the first is the one that generalises.
+
+    A hand-written list of seven strings cannot say whether the eighth grader
+    was considered and rejected or simply never noticed — an absent name and a
+    declined name look identical, and the default is silence. So every label
+    `quality.ts` can emit must appear in exactly one of four sets: rejected,
+    retried, noted-and-not-acted-on, or unreachable on this path. Adding a
+    grader tomorrow fails the build until somebody says which it is. Check 95
+    learned this about routes; it is the same lesson about verdicts.
+
+    The rest is behaviour, because a set membership is not a decision until
+    something reads it.
+  */
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const quality = strip(fs.readFileSync(path.join(ROOT, "src/lib/vent/quality.ts"), "utf8"));
+  const emitted = [...quality.matchAll(/\badd\(\s*"([a-z_]+)"/g)].map((m) => m[1]);
+  const graders = [...new Set(emitted)].sort();
+
+  ok(graders.length > 10, `quality.ts emits graders to classify (${graders.length})`,
+    "a sweep that finds nothing passes loudest — check 103 is here for the same reason");
+
+  const sets = { REJECT, RETRY_ONLY, NOTED, UNREACHABLE };
+  for (const g of graders) {
+    const homes = Object.entries(sets).filter(([, s]) => s.has(g)).map(([k]) => k);
+    is(homes.join("+"), homes[0] ?? "",
+      `${g} is classified exactly once${homes.length === 1 ? "" : ` — found in [${homes.join(", ")}]`}`,
+      "an unclassified grader is a decision nobody made");
+    ok(homes.length === 1, `${g} has a home`,
+      "rejected, retried, noted or unreachable — silence is not one of the four");
+  }
+  const classified = new Set(Object.values(sets).flatMap((s) => [...s]));
+  const orphans = [...classified].filter((g) => !graders.includes(g));
+  is(orphans.join(", "), "",
+    `no set names a grader quality.ts cannot emit${orphans.length ? ` — ${orphans.join(", ")}` : ""}`,
+    "a classification for a grader that no longer exists is a rule guarding nothing");
+
+  // ── the language tier, which is why this check exists ────────────────────
+  const pidginCase = {
+    id: "t", message: "money don finish before month end",
+    intent: "vent", language: "pidgin", probes: "check 104",
+  };
+  const inEnglish = inspectReply(pidginCase, "That sounds heavy. What part of it is sitting with you most right now?");
+  ok(/language/.test(inEnglish.reject ?? ""),
+    "a Pidgin message answered in English is rejected",
+    "the router got it right and the model answered in English anyway, six times in 171 turns");
+  is(inEnglish.authoredIsBetter, false,
+    "and the authored line does not take over from it",
+    "the hold is English too, and generic on top — that is not a repair");
+  ok(/Pidgin/.test(inEnglish.correction ?? ""),
+    "the retry is told which register to use",
+    "a correction that repeats the ignored instruction is the same request in the same voice");
+
+  /*
+    The other half of the same grader, which must NOT cost a call.
+
+    Pidgin borrows English function words by construction, so the minor
+    "carrying a lot of English scaffolding" describes most real Pidgin. Billing
+    the product for speaking Pidgin correctly would be a worse bug than the one
+    above.
+  */
+  const scaffolded = inspectReply(pidginCase,
+    "The wahala dey there and that thing with the money from work, na that part dey worry you about am?");
+  is(scaffolded.reject, null,
+    "a Pidgin reply carrying English scaffolding does not buy a retry",
+    "minor is drift, and drift does not spend a billed call");
+
+  const overCap = inspectReply(
+    { id: "t", message: "work is heavy", intent: "vent", language: "en", probes: "check 104" },
+    "That is a lot to carry. It has been going a while. The weight of it is plain. What is the hardest part of it?");
+  is(overCap.reject, null,
+    "four sentences is still a note, not a retry",
+    "the economics argument was always right about length — only language was smuggled in beside it");
+
+  const advising = inspectReply(
+    { id: "t", message: "work is heavy", intent: "vent", language: "en", probes: "check 104" },
+    "You should talk to somebody at work about it.");
+  is(advising.authoredIsBetter, true,
+    "advice still falls back to the authored line",
+    "harmful is a different tier from wrong-language, and the fallback is where the difference is spent");
+
+  // ── which attempt a person actually receives ─────────────────────────────
+  const clean = { reject: null, correction: null, authoredIsBetter: false };
+  const mild = { reject: "language: x", correction: "c", authoredIsBetter: false };
+  const severe = { reject: "advice: x", correction: "c", authoredIsBetter: true };
+  const A = (text, verdict) => ({ text, verdict });
+
+  is(chooseReply([A("retry", clean), A("first", mild)], "hold").text, "retry",
+    "a clean retry wins outright", "that is what the retry was bought for");
+  is(chooseReply([A("retry", mild), A("first", mild)], "hold").text, "retry",
+    "two mild attempts keep a model reply, never the hold",
+    "swapping an engaged English reply for a bland English one is not a repair");
+  is(chooseReply([A("retry", severe), A("first", mild)], "hold").text, "first",
+    "a harmful retry falls back to the mild first attempt, not to the hold",
+    "the authored line is the floor, not the default");
+  is(chooseReply([A("retry", severe), A("first", severe)], "hold").text, "hold",
+    "every attempt harmful means the authored line",
+    "unchanged from before the mild tier existed — this is the behaviour that must not regress");
+  is(chooseReply([A("retry", severe), A("first", severe)], "hold").from, null,
+    "and the hold is not attributed to a provider",
+    "nobody's model wrote it");
+  is(chooseReply([A("retry", severe), A("first", severe)], null).text, "retry",
+    "with no hold, the person still gets something",
+    "a person waiting on a reply that never arrives is worse than a reply with one bad sentence in it");
+  is(chooseReply([A("", clean), A("first", mild)], "hold").text, "first",
+    "an empty attempt is never chosen, whatever its verdict says",
+    "`empty` is a grader, but a blank string reaching this function must not win on a technicality");
+
+  /*
+    And the decision reaches the copy that ships.
+
+    Two correct halves facing each other across one line that ignored both is
+    this repository's sharpest recorded bug. `chooseReply` is only worth
+    anything if the route calls it.
+  */
+  const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
+  ok(/chooseReply\(/.test(route),
+    "the vent route makes the choice through chooseReply",
+    "the tiers and the fallback have to live in one place or they drift");
+  ok(!/inspectReply\([^)]*\)\.reject\s*\n?\s*\?/.test(route),
+    "the old one-line ternary is gone",
+    "a leftover branch that ignores the tier is the same bug with a new tier on top");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
