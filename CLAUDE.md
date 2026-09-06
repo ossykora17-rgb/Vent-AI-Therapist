@@ -528,6 +528,18 @@ Half a repair is more dangerous than none, because the comment above it now
 says the problem is handled. Every one of those comments is still there and
 still reads as true.
 
+**And the field a repair skips is the one that looked already handled.**
+`completeOnboarding` read `r.tension` and let the rest of the onboarding
+answers fall out of scope. That was found and fixed for `object`, `carry` and
+`drop` — and not for the chair, because `r.tension` is *derived* from the
+chair two lines up, so the number survived and the choice did not. Production:
+`chair_picked` null on all 186 vents, set for one user of eight. The chain
+this product calls chair → tension → drop had only ever recorded the middle
+term, and the training pipeline's `[CHAIR:x]` tag has never once fired. Check
+109 asserts the whole shape rather than the missed field: every answer
+`OnboardingResult` carries must reach the vent, with `tension` named as a
+deliberate exemption because it travels as `tension_before` instead.
+
 **And the sharpest version yet: both halves repaired, and the line between them
 throwing the answer away.** `?carve=1` is the button on two screens whose only
 job is to answer "is it gone". `setCarve` was fixed to return whether the write

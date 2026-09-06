@@ -229,6 +229,7 @@ export function VentChat() {
   const [answering, setAnswering] = React.useState<BreakingOffer | null>(null);
   const [shut, setShut] = React.useState(false);
   const [opening, setOpening] = React.useState<{
+    chair: string | null;
     object: string | null;
     carrying: string | null;
     putDown: string | null;
@@ -293,7 +294,22 @@ export function VentChat() {
       wrong as a stale exchange rate: better to know nothing than to state
       something that has quietly stopped being true.
     */
-    setOpening({ object: r.object, carrying: r.carry, putDown: r.drop });
+    /*
+      The chair travels too, and it is the field this repair missed the first
+      time.
+
+      The comment above records `object`, `carry` and `drop` falling out of
+      scope and being rescued. The chair was not rescued with them, because it
+      looked handled — `r.tension` is derived from it two lines up, so the
+      *number* survived and the *choice* did not.
+
+      Production says what that cost: `vents.chair_picked` is null on all 186
+      rows, so the chain this product calls chair → tension → drop has only
+      ever recorded the middle term. The training pipeline's `[CHAIR:x]` tag
+      has never once fired, and nothing can ask whether people who sit on the
+      tight edge drop further than people half off the seat.
+    */
+    setOpening({ chair: r.chair, object: r.object, carrying: r.carry, putDown: r.drop });
 
     requestAnimationFrame(() => inputRef.current?.focus());
   }
@@ -373,6 +389,7 @@ export function VentChat() {
           pressure: pressureSet ? pressure : null,
           bodyTapped: body,
           mood,
+          chairPicked: opening?.chair ?? null,
           openingObject: opening?.object ?? null,
           openingCarrying: opening?.carrying ?? null,
           openingPutDown: opening?.putDown ?? null,

@@ -11881,6 +11881,75 @@ check("108 A migration cannot drop a function that is not there", () => {
     "passing this check by deleting the drop would be worse than the bug");
 });
 
+check("109 Nothing onboarding asks for is collected and then dropped", () => {
+  /*
+    Thirty seconds of the least-defended things anybody says here — which
+    chair, which object, what they are carrying, what they came to put down —
+    and the room has twice opened as though nobody had spoken.
+
+    `completeOnboarding` read `r.tension` and let the rest fall out of scope.
+    That was found and repaired for `object`, `carry` and `drop`, and the
+    comment recording the repair is still there and still reads as true. The
+    chair was not repaired with them, because it *looked* handled: `r.tension`
+    is derived from the chair two lines up, so the number survived and the
+    choice did not.
+
+    Production: `vents.chair_picked` null on all 186 rows, and
+    `vent_users.chair_picked` set for one person of eight. The chain this
+    product calls chair → tension → drop has only ever recorded the middle
+    term, and the training pipeline's `[CHAIR:x]` tag has never fired.
+
+    Half a repair is more dangerous than none, because the comment above it now
+    says the problem is handled. So this asserts the whole shape rather than
+    the field that was missed: every answer `OnboardingResult` carries has to
+    reach the vent, and a sixth question added tomorrow fails the build until
+    it does.
+  */
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const onboarding = strip(fs.readFileSync(path.join(ROOT, "src/components/onboarding.tsx"), "utf8"));
+  const chat = strip(fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8"));
+
+  const shape = onboarding.match(/interface OnboardingResult \{([\s\S]*?)\n\}/);
+  ok(shape, "OnboardingResult still declares what onboarding collects",
+    "a sweep that finds nothing passes loudest");
+  const answers = [...(shape?.[1] ?? "").matchAll(/^\s*(\w+)\s*[?:]/gm)].map((m) => m[1]);
+  ok(answers.length >= 5, `there are onboarding answers to trace (${answers.join(", ")})`,
+    "five questions were asked; the count is the point");
+
+  /*
+    `tension` is the one answer that legitimately does not travel under its own
+    name — it is written to `tension_before` through the pressure control, and
+    check 84 covers that path. Named here so it is an exemption somebody chose
+    rather than a gap nobody noticed.
+  */
+  const carriedAsPressure = new Set(["tension"]);
+  const body = chat.slice(chat.indexOf("body: JSON.stringify({"), chat.indexOf("openingPutDown") + 60);
+  ok(/anonId/.test(body) && /message/.test(body), "the vent POST body was found",
+    "slicing to the wrong window is how three of this suite's checks read a comment instead of code");
+
+  const held = chat.match(/const \[opening, setOpening\] = React\.useState<\{([\s\S]*?)\}/);
+  for (const answer of answers) {
+    if (carriedAsPressure.has(answer)) continue;
+    ok(new RegExp(`r\\.${answer}\\b`).test(chat),
+      `${answer} is read off the onboarding result`,
+      "collected and discarded in the same breath is the bug this check exists for");
+  }
+  ok(/chair/.test(held?.[1] ?? ""), "the chair is held for the sitting",
+    "state rather than localStorage — a word tapped three weeks ago is not tonight's");
+  ok(/chairPicked:\s*opening\?\.chair/.test(body),
+    "and the chair reaches the vent row",
+    "chair_picked was null on all 186 production rows while the column, the route and the pipeline tag all existed");
+
+  /*
+    And the route still accepts it. A client that sends a field the schema
+    rejects fails the whole request, which is a worse outcome than the silence
+    this check exists to end.
+  */
+  const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
+  ok(/chairPicked:\s*z\.enum/.test(route), "the route's schema accepts it",
+    "zod strips nothing — an unexpected field is a 422 and no reply at all");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
