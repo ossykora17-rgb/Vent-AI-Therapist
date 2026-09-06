@@ -46,6 +46,30 @@ jobs:
           if [ -z "$TOKEN" ]; then
             echo "VENT_BACKUP_TOKEN is not set — backups are off. Nothing to do."
             echo "skipped=true" >> "$GITHUB_OUTPUT"
+            # Says so on the run's own page, not only in a log nobody opens.
+            #
+            # Point 3 above is still right — a repository that has not turned
+            # this on should not have a red cross every morning. But the shape
+            # it left behind is this project's oldest recorded bug: fourteen
+            # consecutive green ticks, each one six seconds long, each one
+            # meaning no copy was taken. A green light over a broken road.
+            #
+            # /api/health does report `backups: "off"`, and that is the right
+            # surface for somebody asking on purpose. This is for the surface
+            # somebody actually glances at.
+            {
+              echo "### No backup was taken"
+              echo
+              echo "\`VENT_BACKUP_TOKEN\` is not set on this repository, so this run did nothing."
+              echo "Supabase Hobby keeps no automated backups either — there is currently **no copy**"
+              echo "of anybody's carve, notes or history anywhere."
+              echo
+              echo "To turn it on, the same secret has to exist in two places:"
+              echo "- this repository: Settings → Secrets and variables → Actions → \`VENT_BACKUP_TOKEN\`"
+              echo "- the deployment: Vercel → Project → Settings → Environment Variables → \`VENT_BACKUP_TOKEN\`"
+              echo
+              echo "Set one side only and this job goes red with a 501, which is the intended signal."
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
