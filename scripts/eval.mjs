@@ -12773,6 +12773,34 @@ check("113 The database's limits and the code's are the same limits", () => {
   ok(/catch \(error\)/.test(fb),
     "and a constraint the repo cannot see still cannot 500 the request",
     "the schema will always be able to refuse a write the code thought was fine");
+
+  /*
+    THE OFFLINE QUEUE SAYS SOMETHING IN EVERY STATE BUT THE EMPTY ONE
+
+    `flushQueue` is careful in a way worth naming: it reads `persisted !==
+    true` rather than the status, breaks at the first vent that did not land,
+    and keeps the tail — under a comment saying absence is not success,
+    because this queue is the last copy of words written with no connection.
+
+    The drain that calls it guarded its toast on `if (sent > 0)`. The comment
+    above that guard is about not letting somebody read "3 sent up" while two
+    sat on the device — the partial case, correctly fixed. Zero-sent was left
+    silent: a rate limit on the first vent, or `persisted: false`, and the
+    person came back online to nothing said while their words stayed on the
+    device.
+
+    Four states, and the one that was silent is the one where somebody is owed
+    a sentence most. Asserted as the condition rather than the message, since
+    the wording is the product's to change and the coverage is not.
+  */
+  const drain = fs.readFileSync(path.join(ROOT, "src/components/sw-register.tsx"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ");
+  ok(/if \(sent > 0 \|\| left > 0\)/.test(drain),
+    "the drain speaks when anything is still waiting, not only when something went up",
+    "zero sent with a full queue was the one state that said nothing");
+  ok(/sent === 0/.test(drain) && /nothing went up yet/.test(drain),
+    "and names the state where none of them landed",
+    "'still waiting' with no count of what went is the partial message wearing the total case");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
