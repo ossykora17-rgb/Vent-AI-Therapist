@@ -11828,6 +11828,59 @@ check("107 The Carver can return a note without destroying the carve", () => {
     "a number is a sentence, and this one was typed out as a word");
 });
 
+check("108 A migration cannot drop a function that is not there", () => {
+  /*
+    `drop function if exists public.match_memories(uuid, vector, int, float)`
+    succeeds and does nothing when no function has that signature. Silently,
+    with no warning, and `if exists` is what makes it silent.
+
+    0016 named the four-argument shape 0006 created. 0014 then rewrote
+    `match_memories` to harden it and left a three-argument function behind, so
+    both of 0016's drop lines matched nothing — verified against production,
+    which carries `match_memories(p_user_id uuid, p_embedding vector, p_limit
+    integer)`. Applying 0016 as written would have dropped `memories` out from
+    under a surviving function and left exactly the broken object its own
+    comment says it is avoiding.
+
+    Comparing signatures here would mean normalising `int` against `integer`,
+    `float` against `double precision` and `vector` against
+    `extensions.vector` — which is where this kind of check gets brittle and
+    starts producing false confidence. So the rule is the simpler one, and it
+    is the actual lesson: drop by name.
+
+    This repository has no overloaded functions and no reason to want one. If
+    that ever changes, this check is the place to say so on purpose.
+  */
+  const dir = path.join(ROOT, "supabase/migrations");
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
+  ok(files.length > 15, `there are migrations to read (${files.length})`,
+    "a sweep that finds nothing passes loudest");
+
+  const offenders = [];
+  for (const file of files) {
+    const sql = fs
+      .readFileSync(path.join(dir, file), "utf8")
+      .replace(/^\s*--[^\n]*$/gm, " ");
+    for (const m of sql.matchAll(/drop\s+function\s+(?:if\s+exists\s+)?([\w.]+)\s*\(([^)]*)\)/gi)) {
+      if (m[2].trim()) offenders.push(`${file}: ${m[1]}(${m[2].trim()})`);
+    }
+  }
+  is(offenders.join(" | "), "",
+    `no migration drops a function by signature${offenders.length ? ` — ${offenders.join(" | ")}` : ""}`,
+    "a signature that does not match drops nothing and says nothing — drop by name, in a loop over pg_proc");
+
+  /*
+    And the one that taught this still does the job it was written for.
+    Asserted by behaviour of the text rather than by its absence: 0016 must
+    still remove `match_memories` somehow, or the check above would pass by
+    the migration simply giving up.
+  */
+  const drop = fs.readFileSync(path.join(dir, "0016_drop_account_surface.sql"), "utf8");
+  ok(/proname\s*=\s*'match_memories'/.test(drop) && /drop function if exists %s/.test(drop),
+    "0016 still drops match_memories, by name",
+    "passing this check by deleting the drop would be worse than the bug");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

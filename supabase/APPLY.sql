@@ -1224,8 +1224,37 @@ begin;
 
 -- The function first: it reads `memories`, and dropping the table under a
 -- function that references it leaves a broken object behind.
-drop function if exists public.match_memories(uuid, vector, int, float);
-drop function if exists public.match_memories(uuid, vector, integer, double precision);
+--
+-- BY NAME, NOT BY SIGNATURE, AND THAT IS THE WHOLE POINT
+--
+-- This used to name two four-argument signatures — the shape 0006 created.
+-- 0014 then rewrote `match_memories` to harden it and left a **three**-
+-- argument function behind, so both drops here matched nothing. `drop function
+-- if exists` on a signature that does not exist succeeds and does nothing,
+-- silently, which is the quietest failure available in a migration.
+--
+-- Verified against the live database rather than reasoned about: production
+-- carries `match_memories(p_user_id uuid, p_embedding vector, p_limit
+-- integer)`. Neither line below would have touched it, so this migration —
+-- had it been applied — would have dropped `memories` out from under a
+-- surviving function and left exactly the broken object the comment above
+-- says it is avoiding.
+--
+-- Dropped by name instead. There is one `match_memories` and there has only
+-- ever been one; naming its arguments buys nothing here and is the reason
+-- this did not work.
+do $$
+declare fn record;
+begin
+  for fn in
+    select p.oid::regprocedure as sig
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname = 'match_memories'
+  loop
+    execute format('drop function if exists %s', fn.sig);
+  end loop;
+end $$;
 
 -- `cascade` takes the RLS policies, the indexes and the foreign keys with the
 -- table. Named explicitly rather than relying on it for the function above,

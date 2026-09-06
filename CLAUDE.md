@@ -313,6 +313,22 @@ their areas: `.claude/skills/data-quality/` and `.claude/skills/circles-quality/
   showing somebody what a machine holds about them and letting them delete it,
   verified in zero of twenty-seven checks, by the person who wrote the section
   of this file about exactly that.
+- **`drop function if exists` drops nothing when the signature moved.** 0016
+  named the four-argument `match_memories` that 0006 created; 0014 had already
+  replaced it with a three-argument one, so both drop lines matched nothing and
+  said nothing — and applying it would have dropped `memories` out from under a
+  surviving function, which is the broken object the migration's own comment
+  says it is avoiding. Drop by name, looping over `pg_proc`. Check 108 fails
+  any migration that names an argument list, and separately asserts 0016 still
+  drops the function, because passing by deleting the drop is worse than the
+  bug.
+- **A green tick can mean the job did nothing.** `backup.yml` and `audit.yml`
+  both skip rather than fail when their secrets are missing, which is right —
+  a red cross every morning trains people to ignore red crosses. What it left
+  behind was fourteen successful backups that took no copy and fifteen
+  successful audits that read no reply, each six to ten seconds long. Both now
+  write a `$GITHUB_STEP_SUMMARY` naming what is unset and what did not happen.
+  A skip is only honest if it is legible where somebody looks.
 - **A leftover server will answer your checks.** `npx next start` spawns
   `next-server` as a grandchild; killing the `npx` pid orphans it and it keeps
   port 3001. The next run then reports on the wrong build, or the wrong
