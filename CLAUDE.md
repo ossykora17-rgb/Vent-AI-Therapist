@@ -246,6 +246,18 @@ the no-advice rules are local, free, and always run. Perspective is a second
 opinion: unreachable means pass. A network blip must never mute a room of
 people trying to speak.
 
+**A bad reply costs one night; a bad training example costs everybody.** The
+SFT pipeline had six quality filters and `gradeReply` was not among them — the
+one surface that turns replies into training targets was the one that never
+asked the product's own graders, which are deterministic and free. Of 178 real
+replies, 16 end mid-sentence, 5 name a condition nobody used and 9 are in the
+wrong language; every one was eligible. Fatal and major drop, minor does not,
+because that is what the severities already mean. The drop tally is named by
+the *grader* — `diagnosis: 5` says what the product is doing, `graded: 9` only
+says the filter runs. And the filter it replaced was `checkMessage(reply,
+"share")`: the circles rulebook grading private replies, which `quality.ts`
+records undoing for itself and never told the pipeline.
+
 **Circle transcripts are never training data.** Confidentiality is a deletion
 policy and a training set is its opposite. The pipeline counts circles and
 never quotes them. `data/` is gitignored.

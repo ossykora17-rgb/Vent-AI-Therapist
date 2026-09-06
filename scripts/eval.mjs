@@ -421,13 +421,36 @@ check("10 The pipelines filter, dedup, reweight and score preferences", () => {
   is(num("not_a_vent"), 3, "a greeting, a date question and a crisis are not training data");
   is(num("too_short"), 1, "'ok' is not a vent");
   is(num("fallback_text"), 1, "the key-less apology never becomes a completion");
-  is(num("gives_advice"), 1, "a reply that gives advice is refused by the circle's own rule");
+  /*
+    Named by the grader now, not by the filter.
+
+    `gives_advice` was `checkMessage(completion, "share")` — the circles
+    rulebook applied to private replies, which `quality.ts` records undoing
+    for itself and the pipeline never heard about. `gradeReply` catches the
+    same row through the same `containsAdvice`, without the crosstalk rules
+    and the one-line share cap that belong to a room of six.
+  */
+  is(num("advice"), 1, "a reply that fixes instead of understanding is not training data");
+
+  /*
+    And five of the seventeen fixture rows are a Pidgin vent answered in
+    English — the exact failure production showed on half of its Pidgin turns.
+
+    The reference corpus was demonstrating the bug and feeding those pairs in
+    as exemplary. Asserted rather than quietly absorbed, because the number is
+    a statement about the fixture and somebody should decide to fix it: the
+    replies need writing in Pidgin by someone who speaks it, which is not a
+    job for a gate.
+  */
+  is(num("language"), 5, "a Pidgin vent answered in English never becomes a training pair");
   is(num("exact duplicate"), 1, "the exact repeat goes");
   is(num("near duplicate"), 1, "and the one-word-different repeat goes");
 
   const sft = fs.readFileSync(path.join(out, "sft.jsonl"), "utf8").trim().split("\n").filter(Boolean);
   const ev = fs.readFileSync(path.join(out, "eval.jsonl"), "utf8").trim().split("\n").filter(Boolean);
-  is(sft.length + ev.length, 9, "nine rows survive");
+  is(sft.length + ev.length, 4,
+    "four rows survive everything",
+    "nine before the graders ran — five of the nine were the language mismatches above");
 
   const rows = [...sft, ...ev].map((l) => JSON.parse(l));
   const w = (d) => rows.find((r) => r.domain === d)?.weight ?? 0;
@@ -12006,6 +12029,97 @@ check("109 Nothing onboarding asks for is collected and then dropped", () => {
   const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
   ok(/chairPicked:\s*z\.enum/.test(route), "the route's schema accepts it",
     "zod strips nothing — an unexpected field is a 422 and no reply at all");
+});
+
+check("110 The road from production to training carries what is on it", () => {
+  /*
+    Three surfaces read real replies: the nightly audit, the SFT pipeline and
+    the RLHF pipeline. All three read a *file*, and the only thing that
+    produces that file for a Supabase deployment is `/api/export`.
+
+    Nothing had ever fed one to them.
+
+    `readRows` did `raw.vents ?? raw.rows ?? raw`. The export envelope is
+    `{complete, takenAt, commit, tables, excluded, truncated, errors, data}`
+    with the rows under `data.vents` — so both named branches missed, the
+    fallback returned the envelope object, and `[...all]` threw
+    `TypeError: all is not iterable`. The audit would have crashed the first
+    time it ever ran against production, and it has never run: fifteen green
+    nightly jobs, every one taking the "no token" branch.
+
+    A path written for a shape and never fed one, with a doc comment above it
+    reading "the export endpoint already produces it".
+
+    The envelope here is built from the route's own source rather than typed
+    out, so a field renamed there fails this instead of passing it.
+  */
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const exportSrc = strip(fs.readFileSync(path.join(ROOT, "src/app/api/export/route.ts"), "utf8"));
+
+  // The *last* return, not the first. The route answers 501 and 401 above
+  // this, and `indexOf` found `{error, message}` — a slice landing on the
+  // wrong window, which is the mistake three other checks in this file record.
+  const returned = exportSrc.slice(exportSrc.lastIndexOf("return NextResponse.json("));
+  const keys = [...returned.slice(0, 700).matchAll(/^\s+(\w+)\s*[,:]/gm)].map((m) => m[1]);
+  ok(keys.includes("data") && keys.includes("complete"),
+    `the export envelope's fields are readable from the route (${keys.join(", ")})`,
+    "a sweep that finds nothing passes loudest");
+  ok(/data\[table\] = res\.data/.test(exportSrc),
+    "and the rows sit under data, keyed by table name",
+    "this is the fact readRows was wrong about");
+
+  const audit = strip(fs.readFileSync(path.join(ROOT, "scripts/audit.mjs"), "utf8"));
+  const reader = audit.slice(audit.indexOf("function readRows"), audit.indexOf("const all = readRows"));
+  ok(/raw\?\.data\?\.vents/.test(reader),
+    "the audit unwraps the envelope the export actually returns",
+    "raw.vents ?? raw.rows ?? raw returned the envelope, and spreading it threw");
+
+  /*
+    And it refuses a shape it cannot read instead of crashing four lines
+    later. `[...all]` on a plain object is a TypeError with no useful text,
+    inside a nightly job whose logs live for one hour.
+  */
+  ok(/Array\.isArray\(rows\)/.test(reader),
+    "and says so plainly when handed something else",
+    "a job that dies on a spread tells nobody which file was wrong");
+
+  /*
+    The same rows, through the same envelope, reach the graders — asserted by
+    running the real reader's logic over a real envelope shape rather than by
+    reading it.
+  */
+  const envelope = {
+    complete: true, takenAt: "2026-09-06T00:00:00Z", commit: "abc1234",
+    tables: { vents: 2 }, excluded: ["circle_messages"], truncated: [], errors: {},
+    data: { vents: [{ id: "a", user_message: "m", ai_reply: "r" }, { id: "b" }], vent_users: [] },
+  };
+  const unwrap = (raw) => raw?.data?.vents ?? raw?.vents ?? raw?.rows ?? raw;
+  is(unwrap(envelope).length, 2, "an export envelope yields its vents");
+  is(unwrap({ vents: [{ id: "a" }] }).length, 1, "a bare {vents} object still works");
+  is(unwrap([{ id: "a" }, { id: "b" }]).length, 2, "and so does a plain array");
+
+  /*
+    The training pipeline grades before it exports, which is the other half of
+    this road.
+
+    A bad reply reaches one person on one night. A bad training example
+    teaches the model to produce it for everybody. `gradeReply` is
+    deterministic and free and every other surface that reads a reply asks it;
+    the pipeline was the one that did not.
+  */
+  const pipeline = strip(fs.readFileSync(path.join(ROOT, "scripts/data-pipeline.mjs"), "utf8"));
+  ok(/gradeReply\(/.test(pipeline),
+    "the SFT pipeline runs the product's own graders",
+    "16 truncated, 5 diagnosing, 9 in the wrong language — all eligible for the training set");
+  ok(/endsMidSentence\(/.test(pipeline),
+    "and refuses a reply that stops mid-sentence",
+    "a model trained on fragments learns to produce them");
+  ok(!/checkMessage\(/.test(pipeline),
+    "and no longer grades private replies with the circles rulebook",
+    "quality.ts records undoing exactly this — the lesson reached it and not the pipeline");
+  ok(/severity === "fatal" \|\| f\.severity === "major"/.test(pipeline),
+    "fatal and major drop, minor does not",
+    "that is what the severities already mean, and length is the only minor here");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

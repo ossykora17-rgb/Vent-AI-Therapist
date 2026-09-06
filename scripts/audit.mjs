@@ -58,12 +58,42 @@ const today = new Date().toISOString().slice(0, 10);
  * at a JSON export instead — the export endpoint already produces it, and a
  * nightly job with a service-role key is a credential this script should not
  * need to hold.
+ *
+ * "The export endpoint already produces it" was true of the rows and false of
+ * the shape, and the sentence covered both. See `readRows`.
  */
 function readRows() {
   const explicit = process.env.VENT_AUDIT_ROWS;
   if (explicit) {
     const raw = JSON.parse(fs.readFileSync(path.resolve(explicit), "utf8"));
-    return raw.vents ?? raw.rows ?? raw;
+    /*
+      `raw.data.vents` first, because that is what the export endpoint
+      actually returns and it was the one shape this line could not read.
+
+      It was `raw.vents ?? raw.rows ?? raw`. The export envelope is
+      `{complete, takenAt, commit, tables, excluded, truncated, errors, data}`
+      with the rows under `data.vents`, so the first two both missed, the
+      fallback returned the envelope object, and `[...all]` two lines down
+      threw `TypeError: all is not iterable`.
+
+      The nightly audit would have crashed the first time it ever ran against
+      production. It has run fifteen times, every one of them taking the
+      "no token configured" branch, so nobody found out — and the comment
+      above still said "the export endpoint already produces it".
+
+      A path written for a shape and never fed one. The other branches stay:
+      a bare array and a `{vents}` object are both things somebody will hand
+      this by hand, and refusing them buys nothing.
+    */
+    const rows = raw?.data?.vents ?? raw?.vents ?? raw?.rows ?? raw;
+    if (!Array.isArray(rows)) {
+      console.error(
+        `${explicit} has no vents. Expected an export envelope with data.vents, ` +
+          `a {vents:[...]} object, or a bare array.`,
+      );
+      process.exit(2);
+    }
+    return rows;
   }
   const file = path.join(ROOT, process.env.VENT_DATA_DIR || ".data", "vent.json");
   if (!fs.existsSync(file)) return [];

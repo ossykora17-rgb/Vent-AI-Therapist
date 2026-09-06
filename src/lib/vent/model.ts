@@ -88,8 +88,21 @@ export const MAX_TOKENS = 600;
 /** What a provider says when it stopped because it was done. */
 const FINISHED = new Set(["stop", "end_turn", "stop_sequence"]);
 
+/**
+ * Does this text stop without finishing a sentence?
+ *
+ * Exported because the training pipeline needs the same question and must not
+ * own a second copy of the answer. It reads stored rows, where there is no
+ * provider left to ask why it stopped — but a reply that ends mid-clause is
+ * not a training target whatever the reason was, and a model taught on
+ * fragments learns to produce them.
+ */
+export function endsMidSentence(text: string): boolean {
+  return !/[.!?…]["')\]]?$/.test(text.trim());
+}
+
 export function wasCutOff(text: string, stopReason: string | null | undefined): boolean {
-  if (/[.!?…]["')\]]?$/.test(text.trim())) return false;
+  if (!endsMidSentence(text)) return false;
   return !FINISHED.has(String(stopReason));
 }
 
