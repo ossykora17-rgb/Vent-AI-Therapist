@@ -61,7 +61,7 @@ const { parseNotes, keepable, notesBlock, NOTE_KINDS, MAX_IN_PROMPT, MAX_SUBJECT
   await app("src/lib/vent/notes.ts");
 const { acceptable, prune, learnedBlock, MAX_LEARNED, MAX_RULE_CHARS, LEARNED_RULES } =
   await app("src/lib/vent/learned.ts");
-const { RPC_CONTRACT } = await app("src/lib/store/contract.ts");
+const { RPC_CONTRACT, TABLE_CONTRACT } = await app("src/lib/store/contract.ts");
 const { measurePersonalEfficacy, blendEfficacy, PERSONAL_SPAN } =
   await app("src/lib/vent/efficacy.ts");
 const { REFERRALS, STALE_AFTER_DAYS, HANDOFF_FLOOR, activeReferrals, pastWhatThisHolds, handoffLine } =
@@ -11639,6 +11639,74 @@ check("105 The room does not hand you a condition", () => {
   const kept = keepable({ kind: "hard", subject: "the calls", detail: "anxiety about the calls" });
   ok(kept !== null, "a note still refuses a condition even when they said it first",
     "a note is read back into a prompt weeks later with no sentence around it");
+});
+
+check("106 Whether the failsafe fired is written down somewhere that lasts", () => {
+  /*
+    The failsafe now rejects on eight graders, one of them fatal and clinical.
+    Its entire record was:
+
+      console.warn("[vent] rejected own reply:", verdictOnReply.reject)
+
+    This project runs on a Hobby plan, which keeps runtime logs for **one
+    hour**. Checked, not assumed: a query for "[vent]" over thirty days of
+    production returns nothing, with the retention limit as the reason.
+
+    And the nightly audit cannot recover it. The audit grades the reply that
+    was *sent* — which after a successful retry is the good one. So a failsafe
+    that works and a failsafe that is dead code look identical from every
+    surface this repository has. CLAUDE.md's oldest recorded bug is a green
+    light over a broken road; this is the version with no light at all.
+
+    0019 keeps the grader names on the row. Three things have to hold, and each
+    one has broken somewhere in this repo's history.
+  */
+  const contract = TABLE_CONTRACT.vents.split(",");
+  ok(contract.includes("rejected_by"),
+    "the schema contract knows the column",
+    "/api/health probes the contract, and a column missing from it is a column nobody notices is absent");
+  ok(contract.every((col) => col === col.trim() && col.length > 0),
+    "and no column in the list carries a space",
+    "PostgREST takes a select list verbatim — this exact bug hid a broken memory read for months");
+
+  const migrations = fs.readdirSync(path.join(ROOT, "supabase/migrations"));
+  ok(migrations.some((f) => /rejected_by/.test(f)),
+    "a migration exists for it",
+    "a column in the contract with no migration fails every deployment that has not been hand-patched");
+
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const store = strip(fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8"));
+  ok(/"rejected_by"/.test(store),
+    "the store reads it back",
+    "a column written and never selected is a column the audit and the heartbeat cannot see");
+
+  /*
+    And what goes in it is names, never details.
+
+    A column outlives a log line, so the rule that made `Verdict.reject` safe
+    matters more here, not less. Asserted against the value the route actually
+    writes rather than against the column's type.
+  */
+  const written = inspectReply(
+    { id: "t", message: "work is heavy", intent: "vent", language: "en", probes: "check 106" },
+    "That ₦450,000 is a lot to be holding. What part of it is heaviest?",
+    "work is heavy and i am tired of it").reject;
+  ok(written && !/[₦\d"']/.test(written),
+    `the stored value is grader names only: ${written}`,
+    "the details quote the reply, and a row has no delete button either");
+
+  const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
+  ok(/rejected_by:\s*rejectedBy/.test(route),
+    "the route writes it on the row",
+    "a column nothing writes to is a column that always answers null");
+  ok(route.indexOf("rejectedBy = verdictOnReply.reject") < route.indexOf("leftOnTheClock"),
+    "and it is set before the clock is consulted",
+    "rejected-and-shipped-anyway, because there was no time for a retry, is the state nothing else can see");
+
+  const heartbeat = strip(fs.readFileSync(path.join(ROOT, "scripts/heartbeat-data.mjs"), "utf8"));
+  ok(/\.filter\(\(v\) => v\.rejected_by\)/.test(heartbeat) && /console\.log\(`failsafe/.test(heartbeat),
+    "and the heartbeat reads it back out under its own heading",
+    "a record nobody reports is the same blind spot one table further along");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

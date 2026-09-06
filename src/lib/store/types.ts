@@ -22,6 +22,15 @@ export interface VentRow {
   tactic_used: string | null;
   /** Which extraction question was asked. Mirrors tactic_used — see probes.ts. */
   probe_used: string | null;
+  /**
+   * Which graders rejected the first attempt, or null.
+   *
+   * Names only, never details — the details quote the reply, and a column
+   * outlives a log line. The failsafe's only other record is a `console.warn`
+   * on a plan that keeps stdout for one hour, so without this a failsafe that
+   * works and a failsafe that is dead code look identical.
+   */
+  rejected_by: string | null;
   intent_type: string | null;
   real_world_tag: string | null;
   real_date_used: string | null;

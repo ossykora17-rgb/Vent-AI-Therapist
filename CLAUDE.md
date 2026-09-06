@@ -205,6 +205,20 @@ carries grader names and nothing else, and anybody wanting the detail calls
 the value is made, over every grader that can reject — not at the call site,
 which is the place the rule already could not see.
 
+**A diagnostic that does not outlive the night is not a diagnostic.** The
+failsafe rejects on eight graders and its whole record was
+`console.warn("[vent] rejected own reply:", …)`. This project is on a Hobby
+plan, which keeps runtime logs for **one hour** — checked, not assumed: a
+query for `[vent]` over thirty days of production returns nothing, and names
+retention as the reason. The nightly audit cannot recover it either, because
+the audit grades the reply that was *sent*, which after a successful retry is
+the good one. So a failsafe that works and a failsafe that is dead code looked
+identical from every surface here. 0019 keeps the grader names on the row and
+the heartbeat prints them; a week of zeroes is the finding, not the absence of
+one. Names only, never details — a column outlives a log line, so the rule is
+stricter here rather than looser. Ask it of anything that only reports to
+stdout: *how long does this record live, and who reads it in that time?*
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.

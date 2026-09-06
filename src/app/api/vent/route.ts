@@ -495,6 +495,13 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
   let reply: string;
   let tokensSpent = false;
   let answeredBy: string | null = null;
+  /*
+    Null on every path that never reached a model, which is most of them:
+    crisis, factual, greeting and meta are answered locally and for free, and
+    there is no reply of ours to inspect. Null means "not inspected", not
+    "clean" — the two are distinguishable because `tokensSpent` says which.
+  */
+  let rejectedBy: string | null = null;
   let keyless = false;
 
   if (!isModelConfigured) {
@@ -584,6 +591,25 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
       */
       const said = [...history.map((h) => h.user_message), input.message].join("\n");
       const verdictOnReply = inspectReply(asCase, reply, said);
+      /*
+        Kept for the row, because the log line does not survive the night.
+
+        This runs on a Hobby plan, which keeps runtime logs for one hour. The
+        `console.warn` below is the failsafe's only other record, so without
+        this the question "has the failsafe ever fired in production" has no
+        answer at all — and the nightly audit cannot recover it, because the
+        audit grades the reply that was *sent*, which after a successful retry
+        is the good one. A failsafe that works and a failsafe that is dead code
+        look identical from every surface this repository has.
+
+        Grader names, never details. Same rule as the log line and stricter for
+        the same reason: a column outlives a log.
+
+        Set before the clock is consulted, so the row also records the state
+        nothing else can see — rejected, and shipped anyway because there was
+        not enough time left to afford a second call.
+      */
+      rejectedBy = verdictOnReply.reject;
       const leftOnTheClock = maxDuration * 1000 - (Date.now() - startedAt);
       if (verdictOnReply.reject && leftOnTheClock > RETRY_DEADLINE_MS) {
         console.warn("[vent] rejected own reply:", verdictOnReply.reject);
@@ -669,7 +695,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
 
   const saved =
     store && userId
-      ? await tryPersist(store, userId, input, classification, reply, tactic.id, probe?.id ?? null, grounding.iso)
+      ? await tryPersist(store, userId, input, classification, reply, tactic.id, probe?.id ?? null, grounding.iso, false, rejectedBy)
       : false;
 
   /*
@@ -1044,6 +1070,12 @@ async function persist(
   probeId: string | null,
   isoDate: string,
   safetyFlagged = false,
+  /*
+    Which graders rejected the first attempt, or null on every path that never
+    reached a model. Trailing and defaulted, because only the vent path has an
+    answer — the free paths write no reply of ours to inspect.
+  */
+  rejectedBy: string | null = null,
 ) {
   await store.insertVent({
     user_id: userId,
@@ -1059,6 +1091,7 @@ async function persist(
     pressure_value: input.pressure ?? null,
     tactic_used: tacticId,
     probe_used: probeId,
+    rejected_by: rejectedBy,
     intent_type: classification.intent,
     real_world_tag: classification.realWorldTag,
     real_date_used: isoDate,

@@ -270,6 +270,35 @@ console.log(`since         ${since}`);
 console.log(`new           ${newVents.length} vents · ${newCircles.length} circles · ${newSignals.length} signals`);
 
 /*
+  Whether the failsafe fired, and on what.
+
+  It inspects every model reply and regenerates it once if a grader trips. Its
+  only record used to be a `console.warn` on a plan that keeps stdout for one
+  hour, so the one question worth asking about it — has it ever fired? — had
+  no answer, and the nightly audit could not recover one: the audit grades the
+  reply that was *sent*, which after a successful retry is the good one. 0019
+  keeps grader names on the row, and this prints them.
+
+  A run of zeroes here across a week of real vents is the finding, not the
+  absence of one. It means the graders in `REJECT` never match anything a
+  model actually produces, and every rule they encode is decoration.
+
+  Names only. `rejected_by` carries no detail by construction — the details
+  quote the reply — so this line cannot leak one however it is read.
+*/
+const rejected = newVents.filter((v) => v.rejected_by);
+if (newVents.length) {
+  const byGrader = new Map();
+  for (const v of rejected) {
+    for (const g of String(v.rejected_by).split(" · ")) {
+      byGrader.set(g, (byGrader.get(g) ?? 0) + 1);
+    }
+  }
+  const tally = [...byGrader.entries()].sort((a, b) => b[1] - a[1]).map(([g, n]) => `${g} ${n}`);
+  console.log(`failsafe      ${rejected.length}/${newVents.length} rejected${tally.length ? ` — ${tally.join(" · ")}` : ""}`);
+}
+
+/*
   Nothing to *report* is not nothing to *check*, and this exit did both.
 
   `npm run gate` is the only opinion that counts about whether a change is
