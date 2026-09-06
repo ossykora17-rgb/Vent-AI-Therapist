@@ -106,16 +106,33 @@ export function wasCutOff(text: string, stopReason: string | null | undefined): 
   return !FINISHED.has(String(stopReason));
 }
 
-export type ModelStatus =
-  | "ok"
-  | "not_configured"
-  | "unauthorized"
-  | "model_not_found"
-  | "rate_limited"
-  | "insufficient_credit"
-  | "upstream_down"
-  | "timeout"
-  | "unreachable";
+/**
+ * Every way a model call can end, as a value rather than only a type.
+ *
+ * The union was type-only, so nothing outside TypeScript could enumerate it —
+ * and the training pipeline, which has to recognise a failure message and
+ * refuse to train on it, was left hand-listing two of the seven sentences
+ * `modelFailureReply` can produce. It caught "network dipped on my side" and
+ * missed "Too many at once on my side", which is the one that actually
+ * happens: seven rows of it in production, all with a real tactic and
+ * `intent_type: vent`, all eligible as training targets.
+ *
+ * The type is derived from the list rather than the list from the type, so
+ * there is one place to add a status and no way to add it in only one.
+ */
+export const MODEL_STATUSES = [
+  "ok",
+  "not_configured",
+  "unauthorized",
+  "model_not_found",
+  "rate_limited",
+  "insufficient_credit",
+  "upstream_down",
+  "timeout",
+  "unreachable",
+] as const;
+
+export type ModelStatus = (typeof MODEL_STATUSES)[number];
 
 export interface ModelVerdict {
   status: ModelStatus;

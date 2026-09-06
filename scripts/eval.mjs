@@ -78,7 +78,7 @@ const { REFERRALS, STALE_AFTER_DAYS, HANDOFF_FLOOR, activeReferrals, pastWhatThi
   await app("src/lib/vent/referrals.ts");
 const { allProviders, configuredProviders, openAiCompatible, thinksFirst } =
   await app("src/lib/vent/providers.ts");
-const { wasCutOff, MAX_TOKENS } = await app("src/lib/vent/model.ts");
+const { wasCutOff, MAX_TOKENS, MODEL_STATUSES, modelFailureReply } = await app("src/lib/vent/model.ts");
 
 const BASE = (process.argv[2] || "").replace(/\/$/, "");
 
@@ -430,6 +430,13 @@ check("10 The pipelines filter, dedup, reweight and score preferences", () => {
   is(num("not_a_vent"), 3, "a greeting, a date question and a crisis are not training data");
   is(num("too_short"), 1, "'ok' is not a vent");
   is(num("fallback_text"), 1, "the key-less apology never becomes a completion");
+  /*
+    And the rate limit, which is the failure that actually happens. The
+    fixture row is a real Pidgin vent whose reply is the upstream 429, so the
+    only reason it can drop is this filter — production has seven of these,
+    each with a tactic and each eligible for the training set until now.
+  */
+  is(num("model_failed"), 1, "a busy upstream is not a reply worth training on");
   /*
     Named by the grader now, not by the filter.
 
@@ -12258,6 +12265,43 @@ check("110 The road from production to training carries what is on it", () => {
   ok(/severity === "fatal" \|\| f\.severity === "major"/.test(pipeline),
     "fatal and major drop, minor does not",
     "that is what the severities already mean, and length is the only minor here");
+
+  /*
+    A FALLBACK IS NOT A COMPLETION, AND THERE ARE SEVEN OF THEM
+
+    This file's own header promises that rule, and the filter enforcing it was
+    `/running without my model key|network dipped on my side/i` — two phrases,
+    hand-typed, against a `modelFailureReply` that produces seven sentences.
+
+    It caught the network one and missed the one that actually happens. "Too
+    many at once on my side" is the upstream 429, and production has seven
+    rows of it, each with a real tactic and `intent_type: vent`, each one
+    eligible as a training target. Trained on, it teaches the model to
+    apologise for being busy — which is the exact failure the header names.
+
+    Asserted over every status the union can hold, so a new failure message
+    cannot be added without this filter learning it. `ModelStatus` was a
+    type-only union until now; nothing outside TypeScript could enumerate it,
+    which is why the list next door was written by hand in the first place.
+  */
+  ok(MODEL_STATUSES.length > 5, `every model status is enumerable (${MODEL_STATUSES.length})`,
+    "a type-only union is a list nothing else can read");
+  const failures = MODEL_STATUSES.map((s) => modelFailureReply(s));
+  ok(/FAILURE_REPLIES/.test(pipeline) && /MODEL_STATUSES\.map/.test(pipeline),
+    "the pipeline derives the failure vocabulary rather than listing it",
+    "two of seven is what a hand-typed list of sentences decays to");
+  /*
+    Every status yields a distinct sentence, and every one of them is in the
+    set the pipeline filters on. `new Set` on the messages is smaller than the
+    status list on purpose — `unauthorized` and `model_not_found` share a
+    sentence, and `ok`/`not_configured`/`unreachable` fall to the default.
+  */
+  is(new Set(failures).size >= 5, true,
+    `the statuses produce distinct sentences (${new Set(failures).size})`,
+    "a vocabulary that collapses to one message is a filter that catches one message");
+  ok(failures.includes("Too many at once on my side. Give it a minute, then say that again."),
+    "including the rate limit, which is the one that was getting through",
+    "seven production rows, all with a tactic, all eligible for the training set");
 });
 
 check("111 Every route is verified by at least one live pass", () => {

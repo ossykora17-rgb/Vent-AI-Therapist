@@ -29,7 +29,7 @@ const { classify } = await app("src/lib/vent/intent.ts");
 const { buildFlavour } = await app("src/lib/flavour/profile.ts");
 const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { gradeReply } = await app("src/lib/vent/quality.ts");
-const { endsMidSentence } = await app("src/lib/vent/model.ts");
+const { endsMidSentence, modelFailureReply, MODEL_STATUSES } = await app("src/lib/vent/model.ts");
 
 const DATA_DIR = path.resolve(ROOT, process.env.VENT_DATA_DIR || ".data");
 const OUT_DIR = path.resolve(ROOT, process.env.VENT_OUT_DIR || "data");
@@ -159,7 +159,25 @@ function extract(db) {
 }
 
 // ── quality heuristics ─────────────────────────────────────────────────────
-const PLACEHOLDER = /running without my model key|network dipped on my side/i;
+/*
+  Every sentence the product says when the model did not answer.
+
+  This was `/running without my model key|network dipped on my side/i` — two
+  phrases, hand-typed, against a `modelFailureReply` that produces seven. It
+  caught the network one and missed the one that actually happens: "Too many
+  at once on my side", the upstream 429, which is stored seven times in
+  production with a real tactic and `intent_type: vent` and would have been
+  trained on as if a person had been answered.
+
+  Derived now, by asking the function what it can say for every status it
+  knows. Exact match rather than a regex, because these are authored constants
+  and the route stores them verbatim — a substring rule over somebody's real
+  words is how a filter starts eating replies it should keep.
+*/
+const FAILURE_REPLIES = new Set(MODEL_STATUSES.map((s) => modelFailureReply(s)));
+
+/** The no-key fallback is built from the person's own turn, so it stays a phrase. */
+const PLACEHOLDER = /running without my model key/i;
 
 /*
   THE GRADERS RUN HERE TOO, AND THIS IS WHERE THEY MATTER MOST
@@ -203,6 +221,7 @@ const FILTERS = [
   ["too_short", (r) => norm(r.raw).length < 5],
   ["no_completion", (r) => r.completion.trim().length === 0],
   ["fallback_text", (r) => PLACEHOLDER.test(r.completion)],
+  ["model_failed", (r) => FAILURE_REPLIES.has(r.completion.trim())],
   ["no_tactic", (r) => !r.tactic],
   /*
     A fragment is never a training target, whatever cut it off.
