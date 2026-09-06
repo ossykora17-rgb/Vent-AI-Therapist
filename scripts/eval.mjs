@@ -72,6 +72,7 @@ const { parseNotes, keepable, notesBlock, NOTE_KINDS, MAX_IN_PROMPT, MAX_SUBJECT
 const { acceptable, prune, learnedBlock, MAX_LEARNED, MAX_RULE_CHARS, LEARNED_RULES } =
   await app("src/lib/vent/learned.ts");
 const { RPC_CONTRACT, TABLE_CONTRACT } = await app("src/lib/store/contract.ts");
+const { HELD_CAP, BREAKING_CAP } = await app("src/lib/store/types.ts");
 const { measurePersonalEfficacy, blendEfficacy, PERSONAL_SPAN } =
   await app("src/lib/vent/efficacy.ts");
 const { REFERRALS, STALE_AFTER_DAYS, HANDOFF_FLOOR, activeReferrals, pastWhatThisHolds, handoffLine } =
@@ -12740,6 +12741,34 @@ check("113 The database's limits and the code's are the same limits", () => {
     the route no longer treats a rejected write as fatal, which is what turned
     that drift into a 500.
   */
+  /*
+    The two array caps, where the relationship is deliberately *not* equality.
+
+    `types.ts` states it: "The column constraint allows sixty. This is under it
+    on purpose: the constraint is a ceiling that stops a bug, and this is the
+    product decision." So `HELD_CAP` is 5 under a column ceiling of 20, and
+    `BREAKING_CAP` is under 60. Right, and unasserted — raise either code cap
+    past its column and every write above the ceiling starts failing, in the
+    one direction this suite cannot see because no local run has a Postgres.
+
+    `addHeld`'s own comment says a SQL cap was avoided so "the number would
+    live in two places and drift". There is a SQL cap; it is a different
+    number doing a different job. The invariant is not that they match — it is
+    that the product's number stays under the schema's.
+  */
+  const arrayCeiling = (col) => {
+    const m = sql.match(new RegExp(`jsonb_array_length\\(${col}\\)\\s*<=\\s*(\\d+)`, "i"));
+    return m ? Number(m[1]) : null;
+  };
+  for (const [name, code, col] of [["held", HELD_CAP, "held"], ["breaking", BREAKING_CAP, "breaking"]]) {
+    const ceiling = arrayCeiling(col);
+    ok(ceiling !== null, `${name} has a column ceiling in SQL (${ceiling})`,
+      "a sweep that finds nothing passes loudest");
+    ok(code <= (ceiling ?? 0),
+      `${name}: the product keeps ${code}, the column allows ${ceiling}`,
+      "a code cap above the column's is a write that fails once somebody uses the feature enough");
+  }
+
   const fb = fs.readFileSync(path.join(ROOT, "src/app/api/feedback/route.ts"), "utf8");
   ok(/catch \(error\)/.test(fb),
     "and a constraint the repo cannot see still cannot 500 the request",
