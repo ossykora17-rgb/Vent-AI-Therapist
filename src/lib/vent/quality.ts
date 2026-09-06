@@ -119,8 +119,40 @@ const INVENTED_PERSON =
 const INVENTED_SUM =
   /(?:₦|\bNGN\s*)\s?\d[\d,.]*\s*(?:k|m|million|thousand)?\b|\b\d[\d,.]*\s*(?:naira|dollars?|usd|pounds)\b/i;
 
-/** Pidgin markers, for the mixing check. Not a language detector. */
-const PIDGIN = /\b(dey|na|abeg|wetin|don|no be|sabi|wahala|oga|make i|e go|kuku|sha)\b/i;
+/**
+ * Pidgin markers, for the mixing check. Not a language detector.
+ *
+ * `don` carries a negative lookahead, and it is not a nicety.
+ *
+ * The perfective marker — "I don tire" — is spelled exactly like the first
+ * three letters of the most common contraction in English, and `\bdon\b`
+ * matches inside "don't": the boundary holds because an apostrophe is not a
+ * word character. So *any* English sentence containing "don't" tested as
+ * Pidgin, and this regex is the whole of the test that asks whether a Pidgin
+ * message was answered in English. Seven of fourteen production hits were
+ * "don't" — including "I don't have a credit usage policy", which is neither
+ * Pidgin nor, for that matter, this product.
+ *
+ * The failure mode is the one this repository writes down most often: not a
+ * regex that matches nothing, but a regex that matches too much in the one
+ * place where matching too much means the check never fires. A Pidgin speaker
+ * answered in English by a reply containing "don't" escaped the grader
+ * entirely, and the grader is now a retry tier, so it escaped the retry too.
+ */
+const PIDGIN = /\b(?:dey|na|abeg|wetin|no be|sabi|wahala|oga|make i|e go|kuku|sha)\b|\bdon\b(?!['‘’])/i;
+
+/**
+ * How many *distinct* markers a reply leans on.
+ *
+ * Distinct rather than total, because the two questions are different. One
+ * marker used five times is one borrowed word — Nigerian English does that
+ * constantly, and "wahala" in an English sentence is register, not a language
+ * switch. Two different markers is a sentence built in the other language.
+ */
+function pidginMarkers(text: string): number {
+  const found = text.match(new RegExp(PIDGIN, "gi")) ?? [];
+  return new Set(found.map((m) => m.toLowerCase().replace(/\s+/g, " "))).size;
+}
 /** Unambiguously-English function words that a Pidgin reply should not lean on. */
 const ENGLISH = /\b(the|and|that|with|from|about|because|would|there)\b/i;
 
@@ -343,15 +375,44 @@ export function gradeReply(
     same good idea.
   */
 
-  // Never mix the two in one reply. Only checked on Pidgin cases: an English
-  // reply legitimately contains no Pidgin, but a Pidgin reply leaning on
-  // English function words is the mixing the voice forbids.
+  /*
+    Answer in the language they wrote in. Both directions, and it used to be
+    one.
+
+    "Only checked on Pidgin cases: an English reply legitimately contains no
+    Pidgin, but a Pidgin reply leaning on English function words is the mixing
+    the voice forbids." That sentence is true and it is about *mixing*, which
+    is a different offence from *switching* — and the `if` it justified closed
+    the door on both. Production found the other side: three English messages
+    answered in Pidgin, one of them six markers deep — "That phrase dey hide
+    many tins, but it sound like you dey ask why things no dey go as planned".
+
+    That direction is the worse of the two for comprehension. A Pidgin speaker
+    answered in English can read the reply; they are being refused their
+    register, which is the offence above. Somebody who wrote in English may
+    simply not read Pidgin — and English is itself a chosen register here, the
+    distanced one, often picked precisely because the material is hard to say
+    close up. Answering it in Pidgin is the same refusal, aimed at somebody
+    less able to absorb it.
+
+    Two *distinct* markers, not one, and not two uses of one. Nigerian English
+    borrows constantly — "wahala" in an English sentence is register, not a
+    language switch, and a threshold that fired on it would bill the product
+    for sounding Nigerian. Two different markers is a sentence built in the
+    other language. On the production corpus the line falls exactly where the
+    judgement does: of 159 English turns, four replies carry a single marker
+    and three carry two or more — and the three are the ones a person would
+    call Pidgin.
+  */
+  const markers = pidginMarkers(reply);
   if (c.language === "pidgin") {
-    if (!PIDGIN.test(reply)) {
+    if (markers === 0) {
       add("language", "major", "answered a Pidgin message in English");
     } else if ((reply.match(new RegExp(ENGLISH, "gi")) ?? []).length >= 4) {
       add("language", "minor", "Pidgin reply carrying a lot of English scaffolding");
     }
+  } else if (markers >= 2) {
+    add("language", "major", "answered an English message in Pidgin");
   }
 
   return out;

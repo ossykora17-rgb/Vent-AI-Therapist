@@ -11387,7 +11387,7 @@ check("104 A grader the live path can see is a decision somebody made", () => {
   const inEnglish = inspectReply(pidginCase, "That sounds heavy. What part of it is sitting with you most right now?");
   ok(/language/.test(inEnglish.reject ?? ""),
     "a Pidgin message answered in English is rejected",
-    "the router got it right and the model answered in English anyway, six times in 171 turns");
+    "the router got it right and the model answered in English anyway, on half of every Pidgin turn");
   is(inEnglish.authoredIsBetter, false,
     "and the authored line does not take over from it",
     "the hold is English too, and generic on top — that is not a repair");
@@ -11408,6 +11408,57 @@ check("104 A grader the live path can see is a decision somebody made", () => {
   is(scaffolded.reject, null,
     "a Pidgin reply carrying English scaffolding does not buy a retry",
     "minor is drift, and drift does not spend a billed call");
+
+  /*
+    The marker regex used to match the most common contraction in English.
+
+    `\bdon\b` matches inside "don't" — the boundary holds because an apostrophe
+    is not a word character — and that regex is the whole of the test for
+    "answered a Pidgin message in English". So any English reply containing
+    "don't" tested as Pidgin and escaped the grader, which is now a retry tier,
+    so it escaped the retry too. Seven of fourteen production hits were this.
+
+    Not a regex that matches nothing, this time. A regex that matches too much,
+    in the one place where matching too much means the check never fires.
+  */
+  const contraction = inspectReply(pidginCase,
+    "I don't think that is the whole of it. What part are you leaving out?");
+  ok(/language/.test(contraction.reject ?? ""),
+    "an English reply is still English when it contains the word don't",
+    "the perfective 'don' is spelled like the first three letters of don't, and \\b does not care");
+
+  /*
+    And the other direction, which the grader could not see at all.
+
+    "Only checked on Pidgin cases" was a true statement about *mixing* that
+    closed the door on *switching*. Production: three English messages answered
+    in Pidgin, one six markers deep. That direction is the worse of the two —
+    a Pidgin speaker can read an English reply, and somebody who wrote in
+    English may simply not read Pidgin.
+  */
+  const englishCase = { id: "t", message: "work is heavy", intent: "vent", language: "en", probes: "check 104" };
+  const inPidgin = inspectReply(englishCase,
+    "That phrase dey hide plenty things, but e sound like say the load no be small one.");
+  ok(/language/.test(inPidgin.reject ?? ""),
+    "an English message answered in Pidgin is rejected too",
+    "they chose that register, and it is not ours to change");
+  ok(/English/.test(inPidgin.correction ?? "") && !/answered in English/.test(inPidgin.correction ?? ""),
+    "and the correction points the way it actually went wrong",
+    "one line for both directions would be a confident instruction pointing backwards");
+
+  /*
+    Two *distinct* markers, not one, and not two uses of one.
+
+    Nigerian English borrows constantly. A threshold that fired on a single
+    borrowed word would bill the product for sounding Nigerian, and it would
+    fire on 14 of 159 real English turns instead of 3.
+  */
+  is(inspectReply(englishCase, "That wahala is real, and it has been sitting on you a while. What part is heaviest?").reject, null,
+    "one borrowed word in an English reply is register, not a language switch",
+    "a rule that punishes 'wahala' is a rule against this product's own voice");
+  is(inspectReply(englishCase, "Wahala. Wahala on top wahala, and it is not stopping. What part is heaviest?").reject, null,
+    "and the same word four times is still one borrowed word",
+    "distinct markers, because repetition is emphasis and a second marker is a second language");
 
   const overCap = inspectReply(
     { id: "t", message: "work is heavy", intent: "vent", language: "en", probes: "check 104" },

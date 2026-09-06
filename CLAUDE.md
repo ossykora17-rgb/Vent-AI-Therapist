@@ -75,9 +75,10 @@ it.** The failsafe's rejection set carried one sentence for three graders:
 retry ... a reply one sentence over the cap is worth a note and not a second
 billed call."* That argument is about length, it is correct about length, and
 two other graders rode it into the exempt list on the strength of adjacency.
-Production says what it cost: of 171 real vents, six were written in Pidgin,
-classified `pidgin` correctly by the router, prompted with *"Reply in
-Pidgin"* — and answered in English. The instruction lands and the model steps
+Production says what it cost: of 171 real vents, twelve were written in
+Pidgin, classified `pidgin` correctly by the router, prompted with *"Reply in
+Pidgin"* — and **six of the twelve came back in English**. Half of every
+Pidgin turn this product has taken. The instruction lands and the model steps
 over it, which is the one failure a prompt cannot fix from inside itself.
 Answering a Nigerian in English when they wrote to you in Pidgin is not drift;
 it is the room declining the register they chose to be honest in. `language`
@@ -87,6 +88,18 @@ engaged reply for a bland one and call it a repair. Check 104 makes every
 grader `quality.ts` can emit declare itself as rejected, retried, noted or
 structurally unreachable, because an absent name and a declined name look
 identical and the default is silence.
+
+The grader that decides all of it matched `don't`. `\bdon\b` — the Pidgin
+perfective, "I don tire" — holds its boundary against an apostrophe, so every
+English sentence containing the commonest contraction in the language tested
+as Pidgin and walked past the check. Seven of fourteen production hits were
+that. **Not a regex that matches nothing this time; a regex that matches too
+much, in the one place where matching too much means the check never fires.**
+And "only checked on Pidgin cases" — a true sentence about *mixing* — closed
+the door on *switching*, so three English messages answered in Pidgin were
+invisible by construction. That direction is the worse one: a Pidgin speaker
+can read an English reply, and somebody who wrote in English may not read
+Pidgin at all.
 
 **When the thinking is the problem, do not ask about the thing.** Wells' CAS:
 distress is maintained by the *process* — worry, rumination, threat-monitoring

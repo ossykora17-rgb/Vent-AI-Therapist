@@ -41,11 +41,13 @@ import { wasAuthored } from "./tactics";
  *
  * The argument is right about length. A reply four sentences long instead of
  * three is drift, and drift is not worth a billed call. It is wrong about
- * language, and production says how wrong: of 171 real vents, six were written
- * in Pidgin, classified `pidgin` correctly by the router, prompted with "Reply
- * in Pidgin" — and answered in English anyway. The instruction lands in the
- * prompt and the model steps over it, which is the one failure a prompt can
- * never fix from the inside.
+ * language, and production says how wrong: of 171 real vents, twelve were
+ * written in Pidgin, classified `pidgin` correctly by the router, prompted
+ * with "Reply in Pidgin" at `prompt.ts` — and **six of the twelve were
+ * answered in English**. Not a rare edge. Half of every Pidgin turn this
+ * product has ever taken. The instruction lands in the prompt and the model
+ * steps over it, which is the one failure a prompt can never fix from the
+ * inside.
  *
  * Answering a Nigerian in English when they wrote to you in Pidgin is not
  * style drift. It is the room declining the register they chose to be honest
@@ -70,7 +72,8 @@ import { wasAuthored } from "./tactics";
  * Nothing on a good reply. One extra call on a bad one, once, and then the
  * tactic's authored line — which passes by construction, because check 76
  * fails the build if anything we wrote contains a banned phrase. On the
- * production sample the new tier is six turns in a hundred and seventy-one.
+ * production sample the new tier is nine turns in a hundred and seventy-one —
+ * six Pidgin messages answered in English, three English answered in Pidgin.
  */
 
 /** Grader labels worth spending a second call to avoid. */
@@ -172,7 +175,7 @@ export function inspectReply(c: GoldenCase, reply: string, said?: string): Verdi
 
   return {
     reject: bad.map((f) => `${f.grader}: ${f.detail}`).join(" · "),
-    correction: correctionFor(bad.map((f) => f.grader)),
+    correction: correctionFor(bad.map((f) => f.grader), c.language),
     authoredIsBetter: bad.some((f) => REJECT.has(f.grader)),
   };
 }
@@ -220,7 +223,7 @@ export function chooseReply(
  * from being an instruction. So the note names the rule that was broken and
  * says nothing about the words that broke it.
  */
-function correctionFor(graders: string[]): string {
+function correctionFor(graders: string[], wroteIn: GoldenCase["language"]): string {
   const seen = new Set(graders);
   const lines = ["THAT LAST ATTEMPT WAS REJECTED BEFORE ANYBODY SAW IT. Again, and:"];
   if (seen.has("advice")) {
@@ -272,7 +275,21 @@ function correctionFor(graders: string[]): string {
       they did and what it costs, which is the difference between an
       instruction and a rejection.
     */
-    lines.push("- They wrote to you in Pidgin and you answered in English. Answer in Pidgin. Not English with a few Pidgin words in it — the register they actually used.");
+    /*
+      Reads the direction off the case rather than assuming one.
+
+      The first version of this line said "They wrote to you in Pidgin and you
+      answered in English" for every language rejection — written when the
+      grader could only fire one way, and left standing when it learned to fire
+      both. A correction that describes the opposite of what happened is worse
+      than none: it is a confident instruction pointing the wrong way, and the
+      model has no way to tell that the room is confused rather than it.
+    */
+    lines.push(
+      wroteIn === "pidgin"
+        ? "- They wrote to you in Pidgin and you answered in English. Answer in Pidgin. Not English with a few Pidgin words in it — the register they actually used."
+        : "- They wrote to you in English and you answered in Pidgin. Answer in English. They chose that register; it is not yours to change.",
+    );
   }
   lines.push(`${REPLY_SENTENCE_CAP} sentences, one question, their words.`);
   return lines.join("\n");
