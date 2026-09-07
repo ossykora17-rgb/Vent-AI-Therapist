@@ -484,15 +484,27 @@ the prefix is stable is worth nothing here, because a comment is exactly as
 green as the bug.
 
 It caught its own author on the first run, twice. `STABLE_PREFIX` was built with
-`join("\n")` and the builder uses `.filter(Boolean).join("\n")` — the `""`
-entries between sections read like blank-line separators and are removed, so
-every section of every prompt here is joined by a single newline. One byte,
-and the prefix matched nothing. Then the mutation pass: deleting the
-`startsWith` guard — the one line standing between this and a *corrupted*
-system prompt — left the suite green, because the non-prefix in the assertion
-was twelve characters and returned on the length floor two lines above the
-guard it was written to test. The wrong-window probe again, in the check
-written about invisible failures.
+`join("\n")` and the builder used `.filter(Boolean).join("\n")` — one byte, and
+the prefix matched nothing. Then the mutation pass: deleting the `startsWith`
+guard — the one line standing between this and a *corrupted* system prompt —
+left the suite green, because the non-prefix in the assertion was twelve
+characters and returned on the length floor two lines above the guard it was
+written to test. The wrong-window probe again, in the check written about
+invisible failures.
+
+**And the reason the first of those was possible: the array said one thing and
+the join did another.** The prompt was assembled from a list with `""` written
+between the sections, which reads as a blank-line separator and is removed by
+`filter(Boolean)` before `join` ever sees it. So the delimiter each section
+actually got was whatever its own template literal happened to end with — a
+block closing on a newline got a blank line, a block closing on a full stop did
+not. Seven of twelve headings separated, five sitting on the previous sentence,
+`THE OFFICE` landing on "...is the reason people quit." Nobody typed it wrong;
+eighteen entries that do nothing sat in the file that decides what every reply
+is made of, and read as if they did. `sections()` now does the join, the dead
+entries are gone, and check 114 asserts the blank line on the built prompt
+rather than on the joiner — because the joiner was never the part that was
+wrong.
 
 ## When not to automate
 

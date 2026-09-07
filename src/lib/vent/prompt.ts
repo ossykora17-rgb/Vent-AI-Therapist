@@ -642,6 +642,37 @@ export interface BuildPromptArgs {
 }
 
 /**
+ * Join prompt sections with exactly one blank line between them.
+ *
+ * This existed as `.filter(Boolean).join("\n")` with `""` entries written
+ * between the sections in the array — which read like blank-line separators
+ * and were removed by the `filter` before the join ever saw them. So the
+ * separator every section actually got was whatever its own text happened to
+ * end with. Blocks whose template literal closed on a newline got a blank
+ * line; blocks that closed on a full stop did not. Measured on a real prompt:
+ * seven of twelve section headings had a blank line above them and five sat
+ * directly on the last sentence of the section before, including `THE OFFICE`
+ * landing on "...is the reason people quit."
+ *
+ * Nothing was broken by that and nothing here claims the model was confused by
+ * it — that is the "read by a person, in a real room" question and no gate can
+ * ask it. What can be said is narrower and still worth fixing: the code stated
+ * an intention it did not carry out, in the file that decides what every reply
+ * is made of, and the delimiter between two sections was decided by a trailing
+ * newline nobody was looking at.
+ *
+ * `trimEnd` before the filter, so a block that is only whitespace drops out
+ * rather than becoming a third blank line.
+ */
+export function sections(parts: ReadonlyArray<string | null | false | undefined>): string {
+  return parts
+    .filter((p): p is string => Boolean(p))
+    .map((p) => p.trimEnd())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+/**
  * The head of every system prompt, byte for byte, for everybody.
  *
  * This is the cache key in all but name. A prefix-caching provider matches on
@@ -671,16 +702,14 @@ export interface BuildPromptArgs {
  * provider in the chain with an explicit breakpoint. The reordering it needed
  * benefits every provider with an implicit prefix cache regardless.
  *
- * `.filter(Boolean).join("\n")` and not `join("\n")`, because that is what the
- * builder below does. The `""` entries between sections in its return array
- * read like blank-line separators and are not — `filter(Boolean)` removes
- * them, so every section of every prompt this product sends is joined by a
- * single newline. Harmless there and load-bearing here: a prefix built with
- * the intuitive expression is one byte longer than the real one and matches
- * nothing at all, which is the silent failure this whole constant exists to
- * prevent. Check 114 caught it on its first run.
+ * Built with `sections()`, the same function the builder uses, because the two
+ * have to agree byte for byte and there is no surface anywhere that would
+ * notice if they stopped. The first version of this constant used
+ * `join("\n")` where the builder used `.filter(Boolean).join("\n")` — one
+ * byte, and it matched nothing at all. Same expression or the constant is a
+ * decoration.
  */
-export const STABLE_PREFIX = [VOICE, "", OFFICE_RULES].filter(Boolean).join("\n");
+export const STABLE_PREFIX = sections([VOICE, OFFICE_RULES]);
 
 export function buildSystemPrompt({
   grounding,
@@ -716,7 +745,7 @@ export function buildSystemPrompt({
     .filter(Boolean)
     .join("\n");
 
-  return [
+  return sections([
     /*
       The constitution first, byte for byte, on every call this product makes.
 
@@ -747,20 +776,16 @@ export function buildSystemPrompt({
       still above the output contract.
     */
     VOICE,
-    "",
     // The office contract — shape, memory, and the reflect-to-ask ratio —
     // written once in voice.ts so the grader and the build check read the
     // same words this prompt is assembled from.
     OFFICE_RULES,
-    "",
     arcBlock(turnsToday),
-    "",
     // The clause list goes in *before* the tactic. The move is what to do
     // once you have read them; this is the reading, and putting it after
     // would be handing over an instruction about a message the model has not
     // been made to look at yet.
     message ? scanBlock(scan(message)) : null,
-    "",
     // The three rules, then the three things they govern — and only when at
     // least one of them was actually assembled. A rule about context that is
     // not present is pure weight, and this prompt is already ~3,100 tokens.
@@ -776,36 +801,26 @@ export function buildSystemPrompt({
     ].some(Boolean)
       ? CONTEXT_RULES
       : null,
-    "",
     // The thread first: it is the only block that is a live question rather
     // than a description, and rule 2 says the context aims the one question.
     threadBlock(openThread(memory)),
-    "",
     carveBlock(carve),
-    "",
     patternBlock(pattern),
-    "",
     openingBlock(opening),
-    "",
     flavourBlock(flavour),
-    "",
     // Before the tactic, because it is background the tactic is chosen
     // against — and after the context rules, because "use it only if it fits
     // what they said" is the same instruction rule 3 gives everything else.
     researchBlock(technique),
-    "",
     // What the room got wrong before. Renders nothing until an audit has
     // proposed something and the gate has accepted it, so a deployment that
     // has never run one carries not a token for this.
     learnedBlock(learned),
-    "",
     // Before the tactic, with the other assembled context, and governed by the
     // same three rules — name the thing, never the file, and their sentence
     // outranks all of it.
     notesBlock(notes),
-    "",
     `THIS TURN — the move to make (your own voice, never quoted):\n${withoutExample(tactic.instruction)}`,
-    "",
     /*
       The two halves of the contract, each with a source at last.
 
@@ -820,16 +835,12 @@ export function buildSystemPrompt({
       optional decoration.
     */
     probeBlock(probe),
-    "",
     // The clock, with the rest of what is only true right now. Everything from
     // here down varies per turn, which is exactly why the constitution is not
     // down here with it.
     groundingBlock(grounding),
-    "",
     state && `WHAT YOU KNOW RIGHT NOW\n${state}`,
-    "",
     memoryBlock(memory),
-    "",
     /*
       The last instruction before the output rule, and the one that decides
       the language in practice — so it says what Pidgin *is* rather than
@@ -851,9 +862,7 @@ export function buildSystemPrompt({
       ? `Reply in Pidgin grammar (dey, na, wey, no be) — not English with a Nigerian word in it; the English words inside Pidgin are correct. ${REPLY_SENTENCE_CAP} sentences maximum, and one question.`
       : `Reply in English. ${REPLY_SENTENCE_CAP} sentences maximum, and one question.`,
     "Output only the words you would say to them. No preamble, no labels, no\nrestating the move, no headings. Start with the first thing you would say.",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ]);
 }
 
 /** Greetings and meta replies are written locally — no tokens spent. */

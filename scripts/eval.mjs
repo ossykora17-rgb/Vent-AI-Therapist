@@ -831,7 +831,7 @@ await checkAsync("15a The selector learns from outcomes, and refuses thin eviden
 });
 
 // ── 15b. the arc — a session has a shape, and an uncounted one has none ────
-const { arcBlock, buildSystemPrompt, STABLE_PREFIX } = await app("src/lib/vent/prompt.ts");
+const { arcBlock, buildSystemPrompt, STABLE_PREFIX, sections } = await app("src/lib/vent/prompt.ts");
 
 check("15b The reply knows where in the session it is, or says nothing", () => {
   // The rule this shares with the exchange rate and the flavour floor: a
@@ -12954,6 +12954,35 @@ check("114 The constitution is the same bytes for everybody, and it is first", (
     const out = systemBlocks(system, prefix);
     const sent = typeof out === "string" ? out : out.map((b) => b.text).join("");
     is(sent, system, `nothing is added or lost when the prefix is ${prefix === undefined ? "absent" : `${prefix.length} chars`}`);
+  }
+
+  /*
+    One blank line between sections, everywhere, and it is the same function
+    that makes the prefix.
+
+    The separator used to be whatever a section's own text happened to end
+    with: `.filter(Boolean).join("\n")` over an array with `""` entries between
+    the sections, and `filter` removed them before `join` ever saw them. So a
+    block whose template literal closed on a newline got a blank line and a
+    block that closed on a full stop did not — seven of twelve headings
+    separated, five sitting on the previous sentence, decided by trailing
+    whitespace nobody was looking at.
+
+    Asserted on the built prompt rather than on `sections()` alone, because the
+    thing that broke was not the joiner — it was the gap between what the array
+    said and what the join did.
+  */
+  is(sections(["a\n\n", "", null, "b"]), "a\n\nb", "one blank line, and empties drop out");
+  for (const prompt of built) {
+    const headings = prompt.split("\n")
+      .map((l, i) => [l, i])
+      .filter(([l]) => /^[A-Z][A-Z ,'’—–-]{6,}$/.test(l.trim()) || /^[A-Z][A-Z ]+—/.test(l.trim()));
+    ok(headings.length >= 10, `the prompt has section headings to separate (${headings.length})`);
+    const jammed = headings.filter(([, i]) => i > 0 && prompt.split("\n")[i - 1].trim() !== "");
+    is(jammed.length, 0,
+      "every section heading has a blank line above it",
+      `${jammed.map(([l]) => l.slice(0, 24)).join(", ")} sits on the previous sentence`);
+    ok(!/\n{3,}/.test(prompt), "and never two blank lines, which would read as a missing block");
   }
 
   /*
