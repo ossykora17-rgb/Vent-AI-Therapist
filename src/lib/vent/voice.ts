@@ -124,6 +124,41 @@ export const BANNED_PHRASES: readonly BannedPhrase[] = [
     why: "workshop language, and a job description nobody asked to hear" },
   { say: "what is actually true", re: /\bwhat(?:'?s| is) (?:actually|really) true\b|\bthe (?:actually|really) true thing\b/i,
     why: "a framing exercise offered instead of a question about their life" },
+
+  /*
+    AGREEMENT USED INSTEAD OF ENGAGEMENT
+
+    A different offence from the rest of this table. "You've got this" is a
+    cheer; these are *agreement* — they feel supportive, they cost the room
+    nothing, and they leave somebody exactly where they were. The spec that
+    prompted them puts it well: avoid over-validating in ways that lock the
+    person into the problem.
+
+    They fail this file's own test more plainly than anything else here.
+    "Anyone would feel that way" survives having the message deleted — it is
+    true of every human alive, which is precisely what makes it worthless to
+    the one who wrote in. `THE ROOM` asks for weight over warmth and stillness
+    over cheer, and this is warmth with nothing underneath it.
+
+    `that must be hard` has been banned for a long time and reads
+    `/that must be (hard|difficult|tough)/` — a fixed opener, required. So
+    "that sounds incredibly hard" walked straight past it, which is the
+    journaling regex again: a pattern written the way its author would phrase
+    it, meeting the way a model actually phrases it. Fourth time.
+
+    Checked against all 202 strings this product can author before going in.
+    Zero hits.
+  */
+  { say: "anyone would feel that way", re: /\b(?:anyone|anybody|any ?one) would (?:feel|be|react|do)\b/i,
+    why: "true of everybody, and therefore about nobody" },
+  { say: "completely valid", re: /\b(?:completely|totally|absolutely|perfectly|entirely) (?:valid|understandable|normal|justified|reasonable)\b|\b(?:that'?s|it'?s|this is) (?:so |really |very |such )?(?:valid|understandable)\b/i,
+    why: "a verdict on their feeling, where a question about their life was meant" },
+  { say: "of course you feel", re: /\bof course you (?:feel|felt|would feel|are)\b/i,
+    why: "agreement that closes the sentence instead of opening it" },
+  { say: "you have every right to", re: /\byou have every right to\b|\byou'?re not wrong (?:to|for)\b/i,
+    why: "a ruling nobody asked for — the same shape as 'you are worthy'" },
+  { say: "that sounds incredibly hard", re: /\bsounds? (?:so |really |incredibly |unbelievably |beyond )(?:hard|difficult|tough|painful|exhausting|awful)\b|\bno wonder (?:you|that)\b/i,
+    why: "'that must be hard' with an intensifier, which the older pattern could not see" },
 ];
 
 /**

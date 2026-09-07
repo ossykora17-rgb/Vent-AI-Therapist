@@ -475,6 +475,21 @@ already promised it and where somebody looking for it would look — and check
 because a comment asserting a guarantee that does not exist is the more
 dangerous half.
 
+**Agreement is not engagement, and it was the one failure nothing graded.**
+`advice` catches telling somebody what to do, `diagnosis` a label for what they
+have, `jargon` a word they cannot read, `generic` a phrase that fits anybody —
+and *"anyone would feel that way"* passed all of them. It feels supportive,
+costs the room nothing, and leaves the person exactly where they were. It also
+fails this repository's own test more plainly than anything else in the table:
+it is true of every human alive, so the message could be deleted and the
+sentence would still stand.
+
+`that must be hard` has been banned for years and reads `/that must be
+(hard|difficult|tough)/` — a fixed opener, required — so *"that sounds
+incredibly hard"* walked straight past it. **Fourth** time a pattern written the
+way its author would phrase it has met text phrased the way a model does, after
+`make you`, `\bdon\b` and the journaling row.
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.

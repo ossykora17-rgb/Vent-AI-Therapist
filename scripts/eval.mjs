@@ -13836,6 +13836,51 @@ check("119 The reply that reached somebody is graded, sentence by sentence", () 
   const positioning = fs.readFileSync(path.join(ROOT, "docs/POSITIONING.md"), "utf8");
   ok(/\d+ phrases and unasked-for tasks fail the \*\*build\*\*/.test(positioning),
     "and the competitive claim still states a count check 86 can verify");
+
+  /*
+    AGREEMENT USED INSTEAD OF ENGAGEMENT
+
+    A different failure from the one above and ungraded until now: not advice,
+    not a label, not a task — *agreement*. It feels supportive, costs the room
+    nothing, and leaves somebody exactly where they were.
+
+    These fail this repository's own test more plainly than anything else in
+    the table. "Anyone would feel that way" is true of every human alive, which
+    is exactly what makes it worthless to the one who wrote in — the message
+    could be deleted and the sentence would still stand.
+
+    And one of them is the hedged-pattern bug for the fourth time. `that must
+    be hard` has been banned for a long time and reads `/that must be
+    (hard|difficult|tough)/` — a fixed opener, required — so "that sounds
+    incredibly hard" walked straight past it, exactly as "write down one plain
+    sentence" walked past the journaling row.
+  */
+  /*
+    One sentence per row, and each reaching only its own.
+
+    The first version probed "That sounds incredibly hard, and anyone would
+    feel that way" — which two rows catch, so neutering either one left the
+    assertion green. A test sentence saved by a different rule than the one
+    under test is the mistake this suite has now made three times, in three
+    different checks.
+  */
+  for (const [shape, sentence] of [
+    ["de-individuating", "Anybody would react the same way."],
+    ["a verdict on the feeling", "Your anger is completely valid."],
+    ["agreement that closes it", "Of course you feel exhausted."],
+    ["a ruling nobody asked for", "You have every right to be angry about it."],
+    ["the intensifier the old pattern missed", "That sounds incredibly hard."],
+  ]) {
+    const hit = bannedPhrase(sentence);
+    ok(hit, `over-validation is refused: ${shape}`,
+      `"${sentence}" — supportive, empty, and it locks them where they are`);
+  }
+
+  // And the older pattern genuinely could not reach the newer sentence, which
+  // is why the row exists rather than the old one being widened.
+  ok(!/that must be (hard|difficult|tough)/i.test("That sounds incredibly hard."),
+    "the pre-existing rule could not have caught it",
+    "if it could, this is a duplicate row rather than a gap");
 });
 
 check("120 The database lets a person rate as often as the route says they may", () => {
