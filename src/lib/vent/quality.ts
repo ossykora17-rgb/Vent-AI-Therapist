@@ -154,8 +154,15 @@ const CONDITION_PATTERNS = CONDITIONS.map((f) => new RegExp(`\\b(?:${f})\\b`, "i
  *
  * A word that is jargon *and* ordinary English is not on this list. The list
  * is allowed to grow only in the direction of words that are neither.
+ *
+ * Exported because two surfaces need it and must not hold two copies. On a
+ * *reply* the rule is "not bare" — `unpacked()` lets a term through when the
+ * sentence explains it, because naming a mechanism and then saying it plainly
+ * is the best move in the library. On text *we* author — a tactic instruction,
+ * a hold — the rule is stricter and simpler: never, because an instruction
+ * containing the short abstract noun is teaching the model to reach for it.
  */
-const JARGON: readonly RegExp[] = [
+export const JARGON: readonly RegExp[] = [
   /\binternali[sz]ed?\b/i, /\binternali[sz]ation\b/i, /\binstrumentali[sz]ation\b/i,
   /\bdepersonali[sz]ation\b/i, /\bderealisation\b/i, /\bdysregulat\w+\b/i,
   /\bmaladaptive\b/i, /\bcognitive distortion\b/i, /\bcore belief\b/i,

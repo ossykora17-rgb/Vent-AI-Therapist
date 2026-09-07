@@ -61,7 +61,7 @@ const { wasAuthored, inTheLoop } = await app("src/lib/vent/tactics.ts");
 const { inspectReply, chooseReply, REJECT, RETRY_ONLY, NOTED, UNREACHABLE } =
   await app("src/lib/vent/failsafe.ts");
 const { assessTurn } = await app("src/lib/vent/assess.ts");
-const { gradeReply } = await app("src/lib/vent/quality.ts");
+const { gradeReply, JARGON } = await app("src/lib/vent/quality.ts");
 const { openingLine, allianceLine, shouldSayAlliance, ALLIANCE_AT } =
   await app("src/lib/vent/intake.ts");
 const { withoutExample, recentOpenings } = await app("src/lib/vent/prompt.ts");
@@ -13991,6 +13991,161 @@ check("122 A reply that is correct and incomprehensible is a failed reply", () =
   ok(!/REJECT = new Set\(\[[^\]]*"jargon"/s.test(fs2),
     "and is not in the rejection set",
     "an opaque reply is not a harmful one, and the two tiers mean different things");
+});
+
+check("123 The rule underneath 'I am not enough' has a move of its own", () => {
+  /*
+    Somebody described as a machine that needs fixing is not sad. They are
+    exhausted from earning their own worth, and the rule doing that — if being
+    loved followed from functioning, then not functioning reads as not being
+    lovable — is the entire content of the message. `defusion` puts distance
+    between a person and a sentence and `thought_record` asks what has held up;
+    neither names the rule that made the sentence feel true.
+
+    Asserted by what it selects on, never by the file containing it. A tactic
+    that reads correctly and fires on nothing is the failure this suite has
+    recorded for the Wells MCT set, and a regex written through a script that
+    matches nothing is the one it fails builds over.
+  */
+  const forMessage = (m) => selectTactic({
+    message: m,
+    classification: classify(m),
+    recentTactics: [],
+    pressure: 50, body: null, mood: null, duality: null,
+  });
+
+  is(forMessage("Being treated like a broken machine that needs fixing")?.id, "earned_worth",
+    "it fires on the message that prompted it",
+    "this is the production reply that started the whole thread");
+  is(forMessage("Dem dey treat me like say I be machine wey need repair")?.id, "earned_worth",
+    "and on the same thing said in Pidgin");
+  is(forMessage("I'm just not productive enough, I feel like a burden to everybody")?.id, "earned_worth",
+    "and on the family rather than the sentence");
+
+  /*
+    And not on everything, which is the half that matters. A tactic that fits
+    a recognisable family is one edit away from fitting everybody — the shape
+    that made `exact_mirror` the product's first reply every time.
+  */
+  ok(forMessage("my brother still hasn't called me back since the burial")?.id !== "earned_worth",
+    "and never on a message about somebody else",
+    "bereavement is not a worth problem, and answering it as one is the room not reading");
+
+  /*
+    AND THE SHARE, BECAUSE ONE MESSAGE CANNOT SEE THIS
+
+    The assertion above passed a mutation that widened the predicate to match
+    *everything*. It would: the selector tiers and weights, so at 76 the tactic
+    can fit all comers and still lose that one message to something else. One
+    negative case cannot tell "fits a family" from "fits everybody".
+
+    Which is the failure this repository has measured twice and written down
+    both times — `exact_mirror` making the first reply a template,
+    `rogers_never_said` answering four of five messages the day `probes.ts` was
+    written. Neither was found by a negative case; both were found by counting.
+
+    So this counts, over every real message the repository has: the fixture
+    corpus and the holistic inputs. Two bounds, and the lower one matters as
+    much as the upper — a tactic that reads well and fires on nothing is the
+    Wells MCT set, present and unused.
+  */
+  const corpus = [
+    ...JSON.parse(fs.readFileSync(path.join(ROOT, "scripts/fixtures/vent.json"), "utf8"))
+      .vents.map((v) => v.user_message),
+    ...fs.readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+      .split("\n").filter(Boolean).map((l) => JSON.parse(l).input),
+  ].filter((m) => typeof m === "string" && m.length > 3);
+
+  ok(corpus.length > 50, `there are real messages to count over (${corpus.length})`);
+
+  /*
+    Counted on the *predicate*, not on what won.
+
+    The first version counted selections and failed on its first run: zero of
+    eighty-eight. The predicate matches three — "i dey feel like say i be
+    burden for my family", "i am useless, i cannot do anything right", "i have
+    to prove myself every single day at that office or i am not" — and loses
+    all three, to `iterated_game`, `double_standard` and `ifs_parts`.
+
+    That is written down rather than tuned away. Raising this tactic's weight
+    until it beats three established moves, on a sample of three, so that an
+    assertion written an hour ago goes green, is fitting the code to the test —
+    and `exact_mirror` at 90 is what that looks like after it ships. The
+    weight is a guess, it is declared as one in `tactics.ts`, and whether this
+    move should beat `ifs_parts` on "prove myself every day or I am not
+    enough" is a question for a person in a real room, which CLAUDE.md already
+    says is where every product-quality finding here has come from.
+
+    What the two bounds do catch is the thing that cannot be seen from one
+    message: a predicate narrowed until it matches nothing, and a predicate
+    widened until it matches everybody. Both were mutations that walked past
+    the negative case above.
+  */
+  const t2 = ALL_TACTICS.find((x) => x.id === "earned_worth");
+  const matched = corpus.filter((m) => {
+    try { return t2.fits({ message: m, classification: classify(m), recentTactics: [], pressure: 50, body: null, mood: null, duality: null }); }
+    catch { return false; }
+  }).length;
+  ok(matched > 0, `its predicate reaches real messages (${matched}/${corpus.length})`,
+    "a move that reads well and matches nothing is the Wells set: present, and unused");
+  ok(matched / corpus.length < 0.2,
+    `and a family rather than everybody (${(matched / corpus.length * 100).toFixed(0)}%)`,
+    "`rogers_never_said` answered four of five messages, and no negative case found it — counting did");
+
+  const t = ALL_TACTICS.find((x) => x.id === "earned_worth");
+  ok(t, "the tactic exists to be weighed");
+  const w = t.weight({ pressure: 50, mood: null, duality: null, body: null });
+  ok(w < 90, `weighted under the number that has twice taken over a selector (${w})`,
+    "`exact_mirror` and `rogers_never_said` were both 90, and both became the only move that fired");
+
+  /*
+    THE MOVE MUST NOT CONTAIN THE WORDS FOR THE MOVE
+
+    "Conditional worth", "core belief" and "internalized instrumentalization"
+    are all shorter than the explanation, which is exactly why a model reaches
+    for them. The instruction says to name the rule and forbids naming the
+    name; if the instruction itself used one, it would be teaching the thing
+    check 122 spends a retry undoing.
+  */
+  /*
+    Graded against the list directly, not through `gradeReply`.
+
+    The first version ran the instruction through the reply grader and a
+    mutation replacing "the rule they were taught" with "their core belief"
+    walked straight past it — because `unpacked()` is generous on purpose, and
+    the instruction is one long sentence with a comma and plenty of words after
+    the term. That generosity is right for a reply and wrong here.
+
+    Two surfaces, two rules, one list. On a reply the rule is "not bare",
+    because naming a mechanism and then saying it plainly is the best move in
+    the library. On text we author it is "never", because an instruction
+    carrying the short abstract noun is teaching the model to reach for it —
+    which is the thing the grader then spends a billed retry undoing.
+  */
+  for (const [what, text] of [["instruction", t.instruction], ["hold", t.hold]]) {
+    const hit = JARGON.find((re) => re.test(text));
+    is(hit ? text.match(hit)[0] : null, null,
+      `the ${what} carries none of the words for it`,
+      "an instruction that uses the term teaches the model the term");
+  }
+
+  // And the hold is a sentence somebody can read, not a task.
+  is(genericTask(t.hold), null, "the hold is not a task that would fit anybody");
+  is(bannedPhrase(t.hold), null, "and says nothing VOICE bans");
+
+  /*
+    The action, if one is given, is aimed rather than listed — which is the
+    line this repository already draws for the drop set. "A deliberately
+    unproductive minute" is the move *because* the rule says worth is output;
+    naming a specific act here would put it on every reply this tactic ever
+    produces, and the library's own generic-task table would then be right to
+    refuse it.
+  */
+  ok(/unproductive/.test(t.instruction),
+    "the counter-move is what contradicts the rule, not a coping task");
+  ok(/out of what they told you|never from a list/.test(t.instruction),
+    "and it is drawn from their message rather than a list",
+    "a named act would be generic on every turn this fires, and `drink water` is already banned for that reason");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

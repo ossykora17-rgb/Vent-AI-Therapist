@@ -839,6 +839,49 @@ const TACTICS: Tactic[] = [
   },
 
   {
+    id: "earned_worth",
+    family: "cognitive",
+    /*
+      The rule underneath "I am not enough", not the feeling on top of it.
+
+      `defusion` puts distance between a person and a sentence.
+      `thought_record` asks what has held up. Neither names the *rule* that
+      made the sentence feel true, and for one family of message that rule is
+      the entire content: somebody described as a machine that needs fixing is
+      not sad, they are exhausted from earning their own worth.
+
+      The mechanism is ordinary and nobody says it out loud — if being loved
+      followed from functioning, then not functioning reads as not being
+      lovable. That is a rule somebody was taught, not a fact about them, and
+      saying which of the two it is does more than any amount of reflection.
+
+      TWO THINGS THIS DELIBERATELY DOES NOT DO
+
+      It does not use the words for it. "Conditional worth", "internalized
+      instrumentalization" and "core belief" are the names the literature has,
+      they are all shorter than the explanation, and a model reaches for the
+      short thing — which is the same insight with the person removed from it.
+      `quality.ts` grades that as `jargon` and spends a retry on it.
+
+      And the counter-evidence is what is true in the room tonight rather than
+      an argument: the light is on, they opened this instead of shutting down,
+      they are breathing without producing anything. A rule that says worth is
+      earned is not beaten by a better argument, it is beaten by a minute that
+      contradicts it while they are sitting in it.
+
+      Weight 76, not 90. Two entries at 90 have taken over a selector in this
+      product — `exact_mirror` and `rogers_never_said` — and this one fits a
+      recognisable family of message rather than a rare one, which is exactly
+      the shape that becomes the only move that ever fires.
+    */
+    instruction:
+      "Name the rule they were taught, in words a fourteen-year-old would follow, and say plainly that it is a rule and not a fact — never the word for it. Then give them one true thing in this room tonight that the rule cannot explain: they are here, doing nothing useful, and still here. If an action fits, it is a deliberately unproductive minute — no output, nothing to show for it — because that is what contradicts the rule; pick it out of what they told you, never from a list.",
+    hold: "That is a rule you were taught, not a fact about you. You are sitting here producing nothing, and you are still here.",
+    fits: has(/\b(machine|robot|useless|not enough|no be enough|fixing|fix me|broken|failing|lazy|burden|productive|output|earn)\b/),
+    weight: () => 76,
+  },
+
+  {
     id: "exception_finding",
     family: "narrative",
     /*

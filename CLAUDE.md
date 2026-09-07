@@ -379,6 +379,29 @@ wall.** `projection` is a forecast and `displacement` is what a flood does to a
 street. Fifth time this list has given up a word that is jargon *and* ordinary
 English, after `make you`, `fit`, `belle` and `\bdon\b`.
 
+**A negative case cannot tell "fits a family" from "fits everybody".**
+`earned_worth` was added with an assertion that it does not fire on a
+bereavement message — and a mutation widening its predicate to match *every*
+message walked straight past it, because the selector tiers and weights, so a
+tactic can fit all comers and still lose one message to something else. That is
+the failure this file has recorded twice, and neither time was it found by a
+negative case: `exact_mirror` making the first reply a template and
+`rogers_never_said` answering four of five messages were both found by
+**counting**. Check 123 counts, with two bounds — a predicate narrowed until it
+matches nothing fails the lower one, widened until it matches everybody fails
+the upper.
+
+Counting it also produced a finding about the new move rather than about the
+check. Its predicate reaches three of eighty-eight real messages and **loses all
+three**, to `iterated_game`, `double_standard` and `ifs_parts` — including "i
+have to prove myself every single day at that office or i am not", which is the
+conditional-worth rule almost verbatim. The weight is 76 and it is a guess. It
+was not raised: tuning a new entry until it beats three established ones, on a
+sample of three, so that an assertion written an hour earlier goes green, is
+fitting the code to the test, and `exact_mirror` at 90 is what that looks like
+after it ships. Whether this move should win there is read by a person in a real
+room.
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.
