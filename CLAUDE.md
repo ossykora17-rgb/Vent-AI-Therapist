@@ -457,6 +457,24 @@ construction rather than a bare `go`. Check 124 walks `src` for the constant
 rather than trusting a list of files — and found a sixth surface,
 `circles/[id]/messages`, that four greps had missed.
 
+**The guard against a foreign hotline was documented twice and covered one
+surface.** This file says check 17 "fails any surface that writes the crisis
+number out by hand", and check 102's comment says the same thing in the same
+words. Check 17 swept `src` for *our* number; the **foreign**-line pattern sat
+in check 24 — the prompt-budget check — reading the assembled system prompt and
+nothing else. The crisis path never uses the system prompt: it returns
+`crisisReply()` before a model is called. So `988` written into
+`CRISIS_RESPONSE` itself, or onto the crisis screen, left the suite green. Both
+were tried; both passed.
+
+A US hotline is a busy tone from Lagos, handed over at the worst possible
+moment, and the thing standing between a person and that was a comment. The
+sweep now lives in check 17, over every file under `src`, where the title
+already promised it and where somebody looking for it would look — and check
+102's comment now says what is true, with what it used to claim left beside it,
+because a comment asserting a guarantee that does not exist is the more
+dangerous half.
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.

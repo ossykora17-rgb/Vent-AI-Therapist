@@ -1832,6 +1832,43 @@ check("17 The crisis number exists once, and every surface reads that one", () =
     .filter((f) => fs.readFileSync(f, "utf8").includes("CRISIS_LINES"))
     .map((f) => path.relative(ROOT, f));
   ok(shown.length >= 6, "at least six surfaces import it", `${shown.length}: ${shown.join(", ")}`);
+
+  /*
+    AND NO SURFACE WRITES SOMEBODY ELSE'S NUMBER
+
+    This check's title says "every surface", and the foreign-hotline guard lived
+    in check 24 — the *prompt budget* check — reading the assembled system
+    prompt and nothing else. The crisis path never uses the system prompt: it
+    returns `crisisReply()` before a model is called. So the one place a US
+    hotline would actually reach a person sat outside the only thing scanned.
+
+    Found by mutation, not by reading. `988` was written into `CRISIS_RESPONSE`
+    itself and then onto the crisis screen, and the suite stayed green both
+    times. Check 102's comment says "check 17 fails the build if any surface
+    writes a crisis number out by hand" — a guarantee that did not exist, in a
+    comment one file away from the check it describes.
+
+    It exists now, and it lives here, where its own title already promised it
+    and where somebody looking for it would look.
+
+    Zero occurrences tree-wide today, so the pattern can stay strict: `999` and
+    `911` are ordinary integers in other contexts, and if one ever appears
+    legitimately it should be named as an exemption rather than the guard being
+    loosened.
+  */
+  const FOREIGN_LINES = /\b(988|911|999|116 123|1-?800-?273-?8255)\b/;
+  const everySource = walk(path.join(ROOT, "src"));
+  ok(everySource.length > 50,
+    `every source file is read off the filesystem (${everySource.length})`,
+    "a hand-written list of surfaces is the bug this repository has five times over");
+  const foreign = everySource
+    .map((f) => [path.relative(ROOT, f), fs.readFileSync(f, "utf8").match(FOREIGN_LINES)])
+    .filter(([, m]) => m)
+    .map(([rel, m]) => `${rel}: ${m[0]}`);
+  is(foreign.length, 0,
+    "and none of them hands out a crisis number from another country",
+    foreign.join(" · ") ||
+      "a US hotline is a busy tone from Lagos, handed over at the worst possible moment");
 });
 
 // ── 18. what a screenshot found and no unit test could ────────────────────
@@ -2577,6 +2614,7 @@ check("24 The system prompt has a budget, and every block earns its place", () =
   ok(!FOREIGN_LINES.test(heaviest),
     "the prompt hands out no crisis number from another country",
     "crisis routing is local and imported — a US hotline is a busy tone from Lagos");
+
   ok(!/\b(you are|i am) (a|the) (licensed )?(therapist|psychologist|counsell?or|shrink)\b/i.test(heaviest),
     "and never tells the model it is a therapist",
     "banned in four states, regulated in four more, and untrue in all of them");
@@ -11502,10 +11540,22 @@ check("102 The turn's verdict is computed, never asked for", () => {
     AND THE NUMBER THE SPEC NAMES IS NOT OURS
 
     The spec says to route people to 988. This product is Nigerian, its crisis
-    lines are 0806 210 6493 and 199, and check 17 fails the build if any
-    surface writes a crisis number out by hand. A US hotline handed to somebody
-    in Lagos is not a safety feature; it is a disconnected number at the worst
-    possible moment.
+    lines are 0806 210 6493 and 199. A US hotline handed to somebody in Lagos is
+    not a safety feature; it is a disconnected number at the worst possible
+    moment.
+
+    This sentence used to end "and check 17 fails the build if any surface
+    writes a crisis number out by hand", which was not true. Check 17 swept for
+    *our* number and the foreign-line guard sat in check 24, reading the
+    assembled system prompt alone — and the crisis path never uses the system
+    prompt. Writing `988` into `CRISIS_RESPONSE` itself, and onto the crisis
+    screen, left the suite green.
+
+    It is true now: the sweep moved to check 17, over every file under `src`.
+    Left as a note rather than deleted, because a comment asserting a guarantee
+    that does not exist is the more dangerous half of this bug — the guard was
+    documented as covering everything in two places for as long as it covered
+    one.
   */
   ok(!/\b988\b/.test(prompt) && !/\b988\b/.test(src) && !/\b988\b/.test(route),
     "no foreign hotline reached the crisis path",
