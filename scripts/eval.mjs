@@ -13860,6 +13860,139 @@ check("121 The health probe can tell a hardened function from the one it replace
     "a probe that cannot see something must say so where somebody reads it");
 });
 
+check("122 A reply that is correct and incomprehensible is a failed reply", () => {
+  /*
+    Fourteen graders, and not one asked whether the sentence lands.
+
+    Naming the *mechanism* is the most valuable move this room makes. "You were
+    taught you matter only when you work, so when you can't work you feel you
+    don't matter" does more than any amount of reflection. And it is exactly
+    the move that fails in one specific way: the mechanism has a name in the
+    literature, the name is shorter than the explanation, and a model reaches
+    for it. "You are experiencing internalized instrumentalization" is the same
+    insight with the person taken out of it.
+
+    Nothing here graded comprehension. `advice` catches what a reply tells
+    somebody to do, `diagnosis` catches a label for what they have, `generic`
+    catches a sentence that fits anybody — and a correct, engaged, on-tactic
+    reply nobody can read passed all of them.
+  */
+  const CASE = (said) => ({
+    id: "jargon", intent: "vent", language: "en", message: said, probes: "clarity",
+  });
+  const DEFAULT_SAID = "they treat me like a machine that needs fixing";
+
+  const jargonOf = (reply, said = DEFAULT_SAID) =>
+    gradeReply(CASE(said), reply, { tokensSpent: true, said }).filter((f) => f.grader === "jargon");
+
+  is(jargonOf("You are experiencing internalized instrumentalization.").length, 1,
+    "the bare term is caught",
+    "this is the exact sentence the move degrades into");
+
+  is(jargonOf("You were taught you matter only when you work — so when you can't work, you feel you don't matter.").length, 0,
+    "and the same insight said plainly is not",
+    "a grader that fires on the good version teaches the room to stop naming mechanisms");
+
+  /*
+    THE EXEMPTION IS THE POINT, NOT A CONCESSION
+
+    The rule is "no jargon unless you unpack it in the same sentence", not "no
+    jargon". A reply that names a mechanism and then says what it means has
+    done the work, and refusing it would delete the best move in the library
+    while looking like rigour — the same shape as banning the paper instead of
+    the empty instruction, one check over.
+  */
+  is(jargonOf("That's what people call a core belief — a rule you learned so early it feels like a fact.").length, 0,
+    "a term unpacked in the same sentence passes",
+    "name it, then say it plainly, is the move this is protecting");
+  is(jargonOf("That is a core belief.").length, 1,
+    "and the same term with nothing after it does not");
+
+  /*
+    The unpacking has to be an unpacking, not a dash.
+
+    "core belief — a learned rule" has a connector and four words after it,
+    which is a label with punctuation in front of it. Six is the floor, and
+    without this assertion `unpacked()` could return true for any term followed
+    by a comma and the whole grader would be off — which is exactly what the
+    mutation pass found, because the two assertions above are both about
+    sentences with no connector at all and neither could see it.
+  */
+  is(jargonOf("That is a core belief — a learned rule.").length, 1,
+    "a connector with four words after it is a label, not an explanation");
+  is(jargonOf("That is a core belief — a rule you learned so early it feels like a fact.").length, 0,
+    "and the same connector with an actual explanation after it passes");
+
+  /*
+    Their word handed back is theirs, the same exemption `diagnosis` makes.
+
+    Bare on purpose. The first version of this assertion used "You called it
+    your inner child, and that is the part still waiting" — which passes
+    whether or not this exemption exists, because the comma and the eight words
+    after it satisfy `unpacked()`. Deleting the exemption left the suite green.
+    A probe that cannot reach the guard it is named for, one more time.
+  */
+  is(jargonOf("That is your inner child.", "it's my inner child stuff").length, 0,
+    "a word they used first may be said back to them bare");
+  is(jargonOf("That is your inner child.").length, 1,
+    "and the same bare sentence to somebody who never said it does not pass");
+
+  /*
+    AND THE WORDS THAT ARE ALSO ORDINARY ENGLISH ARE NOT ON THE LIST
+
+    Three candidates were cut, and the first one is the whole lesson: this is a
+    Nigerian product and `conditioning` is what comes out of the wall. Same
+    species as `make you`, `fit`, `belle` and `\bdon\b` — a marker earns its
+    place by what it excludes.
+  */
+  for (const ordinary of [
+    "The air conditioning in that office is the only cold thing about it.",
+    "Their projection for the quarter came in lower than yours.",
+    "The displacement after the flood took the whole street.",
+  ]) {
+    is(jargonOf(ordinary).length, 0, `ordinary English is not jargon: "${ordinary.slice(0, 42)}…"`,
+      "a word that is jargon and ordinary English does not belong on the list");
+  }
+
+  /*
+    Nothing this product authors trips it — the only direction the list may
+    grow. Derived off the files, because the corpus grows and a remembered
+    number does not.
+  */
+  const authored = [];
+  const THEIRS = new Set(["input", "message", "clauses", "affect", "somatic_read", "id", "intent", "language", "probes"]);
+  for (const file of ["src/lib/vent/holisticExamples.jsonl", "src/lib/vent/goldenSet.jsonl"]) {
+    for (const line of fs.readFileSync(path.join(ROOT, file), "utf8").split("\n").filter(Boolean)) {
+      for (const [k, v] of Object.entries(JSON.parse(line))) {
+        if (typeof v === "string" && !THEIRS.has(k)) authored.push(v);
+      }
+    }
+  }
+  const tacticsSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/tactics.ts"), "utf8");
+  for (const m of tacticsSrc.matchAll(/hold:\s*"((?:[^"\\]|\\.)*)"/g)) authored.push(m[1]);
+  const probesSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/probes.ts"), "utf8");
+  for (const m of probesSrc.matchAll(/ask:\s*"((?:[^"\\]|\\.)*)"/g)) authored.push(m[1]);
+
+  ok(authored.length > 120, `there is an authored corpus to check against (${authored.length})`);
+  const selfHits = authored.filter((s) => jargonOf(s).length > 0);
+  is(selfHits.length, 0, "and nothing the room can say trips it",
+    selfHits.slice(0, 2).map((s) => s.slice(0, 60)).join(" · "));
+
+  /*
+    Where it lives when it fires. `jargon` is a retry and never the authored
+    line: the hold is plain by construction so it beats an opaque reply on
+    clarity, and it is generic so it loses on everything else. An opaque
+    sentence made of their words still carries their words; the hold carries
+    nobody's.
+  */
+  const fs2 = fs.readFileSync(path.join(ROOT, "src/lib/vent/failsafe.ts"), "utf8");
+  ok(/RETRY_ONLY = new Set\(\["language", "jargon"\]\)/.test(fs2),
+    "it buys a retry and never the authored line");
+  ok(!/REJECT = new Set\(\[[^\]]*"jargon"/s.test(fs2),
+    "and is not in the rejection set",
+    "an opaque reply is not a harmful one, and the two tiers mean different things");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

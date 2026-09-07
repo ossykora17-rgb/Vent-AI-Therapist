@@ -113,7 +113,26 @@ export const REJECT = new Set([
  * One member. See the header for why it is not in `REJECT` and why it is no
  * longer in the sentence that excuses `length`.
  */
-export const RETRY_ONLY = new Set(["language"]);
+/*
+  `jargon` joins it, and the argument is the same one rather than adjacent to
+  it — which is the mistake this file already records, where one sentence about
+  length carried two other graders into the exempt list on the strength of
+  standing beside them.
+
+  A reply that says "you are experiencing internalized instrumentalization" is
+  not harmful. Nobody is hurt by it; they simply do not know what was said to
+  them, which in a room somebody opened at 2am is its own kind of failure. It is
+  worth a second call — the model reaches for the short abstract noun and asking
+  again usually gets the sentence underneath it.
+
+  It is not worth the authored line, and here the reason differs from
+  `language`'s and lands in the same place. The hold is plain by construction,
+  so it beats a jargon reply on clarity — and it is generic, so it loses on
+  everything else. An opaque sentence built out of *their* words still carries
+  their words; the hold carries nobody's. Retry, and if the retry is opaque too,
+  keep what the model wrote.
+*/
+export const RETRY_ONLY = new Set(["language", "jargon"]);
 
 /**
  * Computed here, deliberately not acted on. Named rather than merely absent,

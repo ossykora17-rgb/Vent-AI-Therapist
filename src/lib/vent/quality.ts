@@ -131,6 +131,75 @@ const INVENTED_SUM =
 const CONDITION_PATTERNS = CONDITIONS.map((f) => new RegExp(`\\b(?:${f})\\b`, "i"));
 
 /**
+ * Process words, which are not condition names.
+ *
+ * `CONDITIONS` covers what somebody *has* and is fatal, because a label for
+ * your condition is not something you can un-hear. This covers what a theory
+ * *calls* the thing that is happening — a different offence with a different
+ * cost. Nobody is harmed by the word "dysregulation"; they simply do not know
+ * what was said to them, which in a product for somebody at 2am is its own
+ * kind of failure.
+ *
+ * EVERY ENTRY EARNED ITS PLACE BY WHAT IT EXCLUDES
+ *
+ * Checked against all 165 strings this product can author — zero hits — and
+ * three candidates were cut for colliding with ordinary speech, which is this
+ * repository's most-repeated lesson after `make you`, `fit`, `belle` and
+ * `\bdon\b`:
+ *
+ *   conditioning   "the air conditioning for the office" — in Lagos, of all
+ *                  the words to ban
+ *   projection     an ordinary noun: a forecast, a projection for the quarter
+ *   displacement   an ordinary noun, and a real thing that happens to families
+ *
+ * A word that is jargon *and* ordinary English is not on this list. The list
+ * is allowed to grow only in the direction of words that are neither.
+ */
+const JARGON: readonly RegExp[] = [
+  /\binternali[sz]ed?\b/i, /\binternali[sz]ation\b/i, /\binstrumentali[sz]ation\b/i,
+  /\bdepersonali[sz]ation\b/i, /\bderealisation\b/i, /\bdysregulat\w+\b/i,
+  /\bmaladaptive\b/i, /\bcognitive distortion\b/i, /\bcore belief\b/i,
+  /\bschema\b/i, /\battachment style\b/i, /\binner child\b/i,
+  /\bself.actuali[sz]ation\b/i, /\bcatastrophi[sz]ing\b/i, /\brumination\b/i,
+  /\bemotional labou?r\b/i, /\bnervous system response\b/i, /\btrauma response\b/i,
+  /\bcoping mechanism\b/i, /\bdefen[cs]e mechanism\b/i, /\bsomati[sz]ation\b/i,
+  /\baffect regulation\b/i, /\bself.effica?cy\b/i, /\blocus of control\b/i,
+  /\breinforcement loop\b/i, /\bexecutive function\b/i, /\blearned helplessness\b/i,
+  /\bcognitive load\b/i,
+];
+
+/** The sentence a match landed in, so "same sentence" means what it says. */
+function sentenceAround(text: string, at: number): string {
+  const start = Math.max(
+    text.lastIndexOf(".", at), text.lastIndexOf("!", at), text.lastIndexOf("?", at),
+    text.lastIndexOf("\n", at),
+  );
+  const rest = text.slice(at);
+  const endRel = rest.search(/[.!?\n]/);
+  return text.slice(start + 1, endRel === -1 ? text.length : at + endRel + 1).trim();
+}
+
+/**
+ * Was the term unpacked where it was used?
+ *
+ * Generous on purpose, and the generosity is the design rather than a
+ * compromise. This decides whether a billed retry is spent, and the move it is
+ * protecting — name the mechanism, then say it plainly — is the most valuable
+ * one in the room. A grader that refuses "that's what people call a core
+ * belief, a rule you learned so early it feels like a fact" teaches the model
+ * to stop naming mechanisms, which is the opposite of what this is for.
+ *
+ * So it asks for two cheap things: a connector that introduces an explanation,
+ * and enough words after it to be one. Six, because "— a learned rule" is a
+ * label and "a rule you learned so early it feels like a fact" is a sentence.
+ */
+function unpacked(sentence: string, term: string): boolean {
+  const after = sentence.slice(sentence.toLowerCase().indexOf(term.toLowerCase()) + term.length);
+  if (!/[—–:,-]|\bwhich means\b|\bthat is\b|\bi\.e\.\b|\bmeaning\b|\bwhen\b|\bso\b/i.test(after)) return false;
+  return after.split(/\s+/).filter(Boolean).length >= 6;
+}
+
+/**
  * How many *distinct* pieces of Pidgin grammar a reply is built on.
  *
  * Grammar, not vocabulary, and the distinction is the whole rule.
@@ -377,6 +446,49 @@ export function gradeReply(
         add("diagnosis", "fatal", `named a condition they never used: "${named[0]}"`);
         break;
       }
+    }
+  }
+
+  /*
+    ── did they understand it ─────────────────────────────────────────────
+
+    A reply can be correct, kind, on-tactic, in the right language, and mean
+    nothing to the person reading it.
+
+    Naming the *mechanism* is the most valuable move this room makes —
+    "you were taught you matter only when you work, so when you can't work you
+    feel you don't matter" is worth more than any amount of reflection. And it
+    is exactly the move that goes wrong in one specific way: the mechanism has
+    a name in the literature, the name is shorter than the explanation, and a
+    model reaches for it. "You are experiencing internalized
+    instrumentalization" is the same insight with the person removed from it.
+
+    So this grades comprehension, which nothing here did. Fourteen graders and
+    not one asked whether the sentence lands on somebody having a bad day at
+    2am in Lagos.
+
+    NOT A BAN — THE RULE IS "UNLESS YOU UNPACK IT IN THE SAME SENTENCE"
+
+    That distinction is the whole design. A reply that says "that's what people
+    call a core belief — a rule you learned so early it feels like a fact" has
+    done the work, and a grader that refuses it would teach the room to avoid
+    naming mechanisms at all, which is the opposite of the point. The offence
+    is the *bare* term, and `unpacked()` is deliberately generous: it errs
+    toward passing, because this severity costs a billed retry and a false
+    reject here would delete the best move in the library.
+  */
+  if (meta.said) {
+    const jargonSource = meta.said.toLowerCase();
+    for (const term of JARGON) {
+      const hit = reply.match(term);
+      if (!hit) continue;
+      // Their word handed back is not jargon — the same exemption `diagnosis`
+      // makes, for the same reason. If they said "core belief", the room may.
+      if (term.test(jargonSource)) continue;
+      const sentence = sentenceAround(reply, hit.index ?? 0);
+      if (unpacked(sentence, hit[0])) continue;
+      add("jargon", "major", `a word that explains nothing: "${hit[0]}"`);
+      break;
     }
   }
 

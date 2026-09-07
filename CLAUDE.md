@@ -354,6 +354,31 @@ next should have deleted something."* This rule replaces nothing, so it is
 enforced by the grader and absent from the prompt. There is no headroom left:
 the next person with a good sentence for the prompt has to delete one.
 
+**A reply can be correct and still say nothing to the person reading it.**
+Naming the *mechanism* is the most valuable move this room makes — *"you were
+taught you matter only when you work, so when you can't work you feel you don't
+matter"* beats any amount of reflection. It is also the move that degrades in
+one specific way: the mechanism has a name in the literature, the name is
+shorter than the explanation, and a model reaches for it. *"You are experiencing
+internalized instrumentalization"* is the same insight with the person taken
+out. Fourteen graders and not one asked whether the sentence lands at 2am in
+Lagos.
+
+`jargon` is that grader, and the rule is **not a ban**: no bare term *unless it
+is unpacked in the same sentence*. "That's what people call a core belief — a
+rule you learned so early it feels like a fact" has done the work and passes; a
+grader that refused it would teach the room to stop naming mechanisms, which is
+the opposite of the point. It buys a retry and never the authored line: the hold
+is plain by construction so it beats an opaque reply on clarity, and generic so
+it loses on everything else — an opaque sentence made of *their* words still
+carries their words.
+
+Three candidates were cut for colliding with ordinary speech, and the first is
+the whole lesson in a Nigerian product: **`conditioning` is what comes out of the
+wall.** `projection` is a forecast and `displacement` is what a flood does to a
+street. Fifth time this list has given up a word that is jargon *and* ordinary
+English, after `make you`, `fit`, `belle` and `\bdon\b`.
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.
