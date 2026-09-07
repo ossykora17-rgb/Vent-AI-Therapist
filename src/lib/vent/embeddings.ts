@@ -48,7 +48,17 @@ export async function embed(text: string): Promise<number[] | null> {
       },
     );
     if (!r.ok) {
-      console.error("[embeddings] upstream said no", r.status, (await r.text()).slice(0, 200));
+      /*
+        The status, and not the body.
+
+        This logged 200 characters of the response, on the one request in this
+        product that sends somebody's vent to a third party for the express
+        purpose of turning it into a vector. Nothing tells us what a provider
+        puts in a validation error, and several echo the input they refused.
+        stdout has no delete button, so the safe assumption about an
+        uncontrolled upstream string is the only assumption available.
+      */
+      console.error("[embeddings] upstream said no", r.status);
       return null;
     }
 

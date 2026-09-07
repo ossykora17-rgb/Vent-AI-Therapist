@@ -184,10 +184,35 @@ export const MODEL = {
 class ProviderError extends Error {
   status: number;
 
-  constructor(status: number, message: string) {
+  /**
+   * The provider's own words, for classification only, and never on `message`.
+   *
+   * Billing arrives as a 400 whose *text* is the whole diagnosis — "credit
+   * balance is too low" — so `classifyModelError` has to read what came back.
+   * The body cannot simply be dropped. What it must not do is ride on
+   * `.message`, because `.message` is the field everything reaches for: two
+   * console calls log it, and `/api/vent` returned it to the browser inside
+   * `detail`, where `vent-chat.tsx` printed it on screen under the reply.
+   *
+   * So somebody having a bad day was shown up to 300 characters of an
+   * arbitrary third-party error body, from a request that had just carried
+   * their vent, their notes and their carve. Seven providers are in this
+   * chain and not one of them has told us what goes in that string.
+   *
+   * This is the same repair `Verdict.reject` already got one file over, and
+   * the rule it was written under is the one that generalises: **make the
+   * obvious field the safe one.** `.message` is a status and a provider id.
+   * Anything wanting the body has to name `.body` on purpose and answer for
+   * what it does with it — and the only caller that names it is the
+   * classifier, which reads it and throws it away.
+   */
+  body?: string;
+
+  constructor(status: number, message: string, body?: string) {
     super(message);
     this.name = "ProviderError";
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -534,7 +559,9 @@ export function openAiCompatible(
           );
           return attempt(useModel, call, false);
         }
-        throw new ProviderError(r.status, `${r.status} ${body.slice(0, 300)}`);
+        // The status and who said it on `message`; their words on `body`,
+        // which only the classifier reads. See ProviderError.
+        throw new ProviderError(r.status, `${id} answered ${r.status}`, body.slice(0, 300));
       }
 
       let text: string | undefined;

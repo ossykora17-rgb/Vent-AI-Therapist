@@ -386,6 +386,34 @@ their areas: `.claude/skills/data-quality/` and `.claude/skills/circles-quality/
   Check 111 enumerates routes off the filesystem the way check 95 enumerates
   handlers, with exemptions named and their reasons written down — and a stale
   exemption fails too.
+- **A third party's error text is not ours to show or to keep.** Three surfaces
+  in one sweep, all downstream of one line. `providers.ts` threw
+  `${r.status} ${body.slice(0, 300)}` — three hundred characters of an
+  arbitrary provider's response, on `Error.message`, the field everything
+  reaches for. `classifyModelError` copied it into `detail`, `/api/vent`
+  returned `detail` in the 503 body, and `vent-chat.tsx` prints it under the
+  reply as `[reason — detail]`. So a person having a bad day was shown an
+  upstream error blob, from a request that had just carried their vent, their
+  notes and their carve. Two console calls logged it in passing, and
+  `embeddings.ts` logged 200 characters of its own upstream body — on the one
+  request here that sends somebody's words to a third party to be vectorised.
+
+  Every comment along that path was right about why it existed. *"Days were
+  lost reading 'Network dipped' as a network problem. If the server said why,
+  show it"* is true, and `reason` is the server saying why:
+  `insufficient_credit` is not a guess, it is what was matched. The body added
+  nothing a person could use and everything we do not control — seven providers
+  are in that chain and none of them has told us what goes in that string.
+
+  Same repair as `Verdict.reject`, same rule: **make the obvious field the safe
+  one.** `.message` is a status and a provider id; the body lives on `.body`,
+  which only the classifier names, and the classifier reads it and throws it
+  away. `detail` is a status and an error kind — the two things the stdout rule
+  allows — and never null, because a bucket with nothing in it is the crime the
+  raw text was added to fix. Check 116 asserts the billing and model-not-found
+  diagnoses still work from either field, which is the half worth more than the
+  leak: that classification is what ended a week-long outage.
+
 - **A caught exception is a user-facing string the moment it is interpolated.**
   `circle-voice.tsx` is the file that already handed somebody three environment
   variable names, and it had a second copy of the same bug one branch over. Its

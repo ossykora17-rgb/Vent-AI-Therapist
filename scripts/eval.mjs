@@ -79,7 +79,8 @@ const { REFERRALS, STALE_AFTER_DAYS, HANDOFF_FLOOR, activeReferrals, pastWhatThi
   await app("src/lib/vent/referrals.ts");
 const { allProviders, configuredProviders, openAiCompatible, thinksFirst, systemBlocks, MIN_CACHEABLE_CHARS } =
   await app("src/lib/vent/providers.ts");
-const { wasCutOff, MAX_TOKENS, MODEL_STATUSES, modelFailureReply } = await app("src/lib/vent/model.ts");
+const { wasCutOff, MAX_TOKENS, MODEL_STATUSES, modelFailureReply, classifyModelError } =
+  await app("src/lib/vent/model.ts");
 
 const BASE = (process.argv[2] || "").replace(/\/$/, "");
 
@@ -13138,6 +13139,86 @@ check("115 An exception never gets to speak to somebody", () => {
   ok(/didn't take that/.test(mute), "the mute refusal still says which side failed");
   ok(!/voice server did not accept that: \$\{/.test(mute),
     "and no longer in the SFU's words, which quote the room name and the seat");
+});
+
+check("116 A provider's words never reach a person or a log line", () => {
+  /*
+    Somebody having a bad day was shown a raw upstream error blob.
+
+    `providers.ts` threw `${r.status} ${body.slice(0, 300)}` — three hundred
+    characters of an arbitrary provider's response, on `Error.message`, which
+    is the field everything reaches for. `classifyModelError` copied it into
+    `detail`, `/api/vent` returned `detail` in the 503, and `vent-chat.tsx`
+    prints it under the reply as `[reason — detail]`. Two console calls logged
+    it on the way past. Seven providers are in this chain and not one of them
+    has told us what goes in that string; the request that produced it had just
+    carried the person's vent, their notes and their carve.
+
+    Every comment along that path was right about why it was there. "Days were
+    lost reading 'Network dipped' as a network problem. If the server said why,
+    show it" is true, and `reason` — the status — is the server saying why.
+    `insufficient_credit` is not a guess, it is what was matched. The body added
+    nothing a person could use and everything we do not control.
+
+    The repair is the one this repository already made for `Verdict.reject` and
+    wrote down as a rule: **make the obvious field the safe one.** `.message` is
+    a status and a provider id. The body lives on `.body`, which only the
+    classifier names, and the classifier reads it and throws it away.
+  */
+  const SECRET = "your credit balance is too low — top up at plans & billing, acct 9f3c";
+
+  // Read from `.message`, the way an SDK throws it.
+  const sdk = classifyModelError({ status: 400, name: "BadRequestError", message: SECRET });
+  is(sdk.status, "insufficient_credit",
+    "billing is still diagnosed from what the provider said",
+    "this is the failure that hid for a week behind a metadata probe — losing it would be worse than the leak");
+
+  // Read from `.body`, the way `ProviderError` carries it now.
+  const ours = classifyModelError({ status: 400, name: "ProviderError", body: SECRET });
+  is(ours.status, "insufficient_credit", "and from the body, when we are the ones who threw");
+
+  const modelGone = classifyModelError({ status: 400, name: "ProviderError", body: "no such model: gemini-2.5-flash" });
+  is(modelGone.status, "model_not_found", "a rejected model id is still read out of the body");
+
+  /*
+    And none of the three may carry a word of it back. Asserted on every
+    branch rather than the one that leaked, because the leak was in a value
+    shared by all of them.
+  */
+  for (const [name, v] of [["sdk", sdk], ["ours", ours], ["model", modelGone]]) {
+    ok(v.detail && v.detail.length > 0, `${name}: the failure bucket is not empty`,
+      "'unreachable' with nothing in it is the crime the raw detail was added to fix");
+    ok(!/credit balance|plans & billing|9f3c|no such model/i.test(v.detail),
+      `${name}: and carries none of what the provider said`,
+      `detail was "${v.detail}"`);
+    ok(v.detail.length < 60, `${name}: it is a shape, not a payload (${v.detail.length} chars)`);
+  }
+
+  // A throw with nothing on it at all — the case that made `detail` raw text
+  // in the first place. It still says something.
+  ok(classifyModelError(new Error("")).detail, "a bare throw still names something");
+  ok(classifyModelError("just a string").detail, "and so does a thrown non-Error");
+
+  /*
+    The source, where the value is made. Asserted here rather than at the call
+    site for the reason CLAUDE.md gives about `Verdict.reject`: the call site is
+    the place the rule already could not see.
+  */
+  const providers = fs.readFileSync(path.join(ROOT, "src/lib/vent/providers.ts"), "utf8");
+  ok(/new ProviderError\(r\.status, `\$\{id\} answered \$\{r\.status\}`, body\.slice/.test(providers),
+    "the status and who said it on message, their words on body",
+    "an upstream body on `.message` is read by every console call and returned to the browser");
+  ok(!/ProviderError\([^)]*body\.slice\(0, 300\)\}`/.test(providers),
+    "and never interpolated into the message");
+
+  const model = fs.readFileSync(path.join(ROOT, "src/lib/vent/model.ts"), "utf8");
+  ok(!/const detail = said/.test(model) && !/message\.slice\(0, 300\)/.test(model),
+    "and `detail` is derived rather than sliced off what came back");
+
+  const embed = fs.readFileSync(path.join(ROOT, "src/lib/vent/embeddings.ts"), "utf8");
+  ok(!/await r\.text\(\)\)\.slice/.test(embed),
+    "the embeddings log records the status and not the response body",
+    "the one request in this product that sends somebody's vent to a third party to be vectorised");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
