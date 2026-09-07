@@ -321,9 +321,38 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
         of their case — which for four of the five is something they can act
         on, and for the fifth was never theirs to fix.
       */
+      /*
+        AND EVERYTHING THAT IS NOT A MICROPHONE, WHICH IS MOST OF THIS BLOCK
+
+        The comment above is about `getUserMedia`, and it is right about
+        `getUserMedia`. But the `try` it belongs to opens four hundred lines
+        earlier: it covers `import("livekit-client")`, `room.connect(grant.url,
+        grant.token)`, and the mask. None of those throw a `DOMException`, so
+        every one of them fell past the five names into the last branch — which
+        printed the raw `Error.message` to whoever pressed Join.
+
+        A LiveKit connection failure names the URL it could not reach. That URL
+        is `grant.url`, our LiveKit project host. A failed dynamic import names
+        a `_next/static/chunks` path. So the branch that exists for
+        "something else went wrong" was handing people our infrastructure —
+        which is the exact bug this file already has recorded against it, where
+        the route replied with three environment variable names and this
+        component printed them verbatim. That fix reached the route's copy of
+        the sentence. This is the component's own.
+
+        It is also backwards on the diagnostic: `if (name)` means a DOMException
+        is logged and a connection failure is not, so the one failure whose
+        message is genuinely ours to read went to the person and not to us. The
+        log is unconditional now, and carries the error's *kind* rather than its
+        text — a name is a name, and a message can quote a host, a path or a
+        token. That is less than was there. `readSse` and the failsafe both
+        record what it costs to have only stdout: on a Hobby plan this line
+        lives an hour. If voice failures ever need a real diagnosis, they need a
+        row, not a longer console call.
+      */
       const name = e instanceof DOMException ? e.name : "";
-      const message = e instanceof Error ? e.message : String(e);
-      if (name) console.warn("[voice] microphone refused:", name, message);
+      const kind = name || (e instanceof Error ? e.constructor.name : typeof e);
+      console.warn("[voice] join failed:", kind);
       setError(
         name === "NotAllowedError"
           ? "The microphone was blocked. Check the permission for this site in your browser settings — the room is still here in text."
@@ -333,7 +362,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
               ? "Something else is using the microphone — a call, or another tab. The room is still here in text."
               : name === "SecurityError"
                 ? "Voice needs a secure connection. The room is still here in text."
-                : `Couldn't reach the voice room. ${message}`,
+                : "Couldn't reach the voice room. The circle still works in text — say it there.",
       );
       setStatus("error");
       roomRef.current = null;

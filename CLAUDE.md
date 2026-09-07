@@ -386,6 +386,33 @@ their areas: `.claude/skills/data-quality/` and `.claude/skills/circles-quality/
   Check 111 enumerates routes off the filesystem the way check 95 enumerates
   handlers, with exemptions named and their reasons written down — and a stale
   exemption fails too.
+- **A caught exception is a user-facing string the moment it is interpolated.**
+  `circle-voice.tsx` is the file that already handed somebody three environment
+  variable names, and it had a second copy of the same bug one branch over. Its
+  catch block is documented at length and correctly about `getUserMedia` — five
+  DOMException names, each with a sentence somebody can act on. The `try` it
+  belongs to opens four hundred lines earlier and covers
+  `import("livekit-client")` and `room.connect(grant.url, grant.token)`, neither
+  of which throws a DOMException, so both fell past the five names into
+  `Couldn't reach the voice room. ${message}` — and a LiveKit connection failure
+  names the URL it could not reach. The log was the mirror image: guarded on
+  `if (name)`, so the microphone cases were recorded and the connection ones
+  were not. The diagnostic went to the person and the person's sentence went
+  nowhere.
+
+  Check 115 scans it as a class — every named `catch` in `src`, following what
+  the caught error flows into rather than grepping for `e.message`, because the
+  leak was two assignments away. Scanning only `.tsx` found **one** named catch
+  block in the whole component tree: the one just fixed, which is a check whose
+  entire sample is its own bug. Widened to `.ts`, with `message:` as a sink
+  because a route's `message` is printed verbatim by every component here, it
+  found a second live one immediately — `voice/mute/route.ts` answering 502
+  with `The voice server did not accept that: ${message}`, where
+  `mutePublishedTrack` is called with the room name and an identity and its
+  failures quote them. The room name is derived from the circle id. A circle's
+  promise is that the room is sealed, and the error path was the one surface
+  reading part of it back.
+
 - **A new route ships into neither live pass unless you put it there.** The
   two verification passes name their routes by hand — `no-store-verify`'s wire
   sweep and `live-verify`'s checks — so a route added on Tuesday is covered by

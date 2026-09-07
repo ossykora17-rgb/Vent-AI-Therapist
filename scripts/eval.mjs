@@ -13001,6 +13001,145 @@ check("114 The constitution is the same bytes for everybody, and it is first", (
     "a call that omits it silently pays full price and no assertion here would fail");
 });
 
+check("115 An exception never gets to speak to somebody", () => {
+  /*
+    `circle-voice.tsx` told people what our LiveKit host is called.
+
+    The catch block it happened in is documented at length, correctly, about
+    `getUserMedia` — five DOMException names, each with a sentence somebody can
+    act on. What the comment does not say is that its `try` opens four hundred
+    lines earlier and covers `import("livekit-client")` and
+    `room.connect(grant.url, grant.token)`. Neither throws a DOMException, so
+    both fell past the five names into the last branch, which read
+    `Couldn't reach the voice room. ${message}` — and a LiveKit connection
+    failure names the URL it could not reach, which is our project host. A
+    failed dynamic import names a `_next/static/chunks` path.
+
+    This is the third time this file has handed somebody our infrastructure and
+    the second under this exact heading. The route used to answer 501 with three
+    environment variable names and this component printed them verbatim; that
+    was repaired in the route. The component had its own.
+
+    So the rule is the class rather than the sentence: nothing derived from a
+    caught exception may reach a string a person reads. Derived, not just the
+    binding — the bug was two assignments away from `e`, which is why the scan
+    below follows `const message = e instanceof Error ? e.message : String(e)`
+    rather than grepping for `e.message`.
+
+    Counts are not exceptions and are not covered: `sw-register.tsx` interpolates
+    how many vents went up, which is a number about them and the whole point of
+    the sentence.
+
+    WIDENED, BECAUSE THE FIRST VERSION OF THIS CHECK WAS THIN AND SAID SO
+
+    Scanning only `.tsx` found one named catch block in the entire component
+    tree — the one that had just been fixed. A check whose whole sample is the
+    bug it was written for is a check that passes for the wrong reason from the
+    next commit onward. So it reads `.ts` as well and adds `message:` to the
+    sinks, because a route's `message` field is a user-facing string: every
+    component in this product prints it verbatim, which is exactly how three
+    environment variable names reached somebody.
+
+    Widening it found a second live one immediately, in a file nobody was
+    looking at. `voice/mute/route.ts` answered 502 with `The voice server did
+    not accept that: ${message}` — and `mutePublishedTrack` is called with the
+    room name and an identity, so its failures quote them. The room name is
+    derived from the circle id. A circle's promise is that the room is sealed,
+    and the error path was the one surface that read part of it back.
+  */
+  const balanced = (src, at, open, close) => {
+    let depth = 0, j = at;
+    for (; j < src.length; j++) {
+      const c = src[j];
+      if (c === open) depth++;
+      else if (c === close) { depth--; if (!depth) { j++; break; } }
+    }
+    return src.slice(at, j);
+  };
+
+  const files = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.tsx?$/.test(p)) files.push(p);
+    }
+  };
+  walk(path.join(ROOT, "src"));
+  ok(files.length > 50, `every source file is read off the filesystem (${files.length})`,
+    "a hand-written list of files is the bug this repository has four times over");
+
+  const leaked = [];
+  let blocks = 0;
+  for (const f of files) {
+    const src = fs.readFileSync(f, "utf8");
+    for (const m of src.matchAll(/catch\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\{/g)) {
+      blocks++;
+      const caught = m[1];
+      const body = balanced(src, src.indexOf("{", m.index), "{", "}");
+
+      // Everything the caught error flows into, one assignment at a time.
+      const tainted = new Set([caught]);
+      for (const b of body.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;]+);/g)) {
+        if (new RegExp(`\\b${caught}\\b`).test(b[2])) tainted.add(b[1]);
+      }
+
+      for (const fn of ["setError", "toast"]) {
+        let i = 0;
+        while ((i = body.indexOf(`${fn}(`, i)) >= 0) {
+          const call = balanced(body, i + fn.length, "(", ")");
+          i += fn.length;
+          for (const t of tainted) {
+            if (new RegExp(`\\$\\{[^}]*\\b${t}\\b`).test(call)) {
+              leaked.push(`${path.relative(ROOT, f)}: ${fn}() interpolates ${t}`);
+            }
+          }
+        }
+      }
+
+      // A route's `message` is a user-facing string. Components print it
+      // verbatim — that is not an assumption, it is the recorded bug.
+      for (const mm of body.matchAll(/message:\s*([^,\n}]+)/g)) {
+        for (const t of tainted) {
+          if (new RegExp(`\\b${t}\\b`).test(mm[1])) {
+            leaked.push(`${path.relative(ROOT, f)}: message: … ${t}`);
+          }
+        }
+      }
+    }
+  }
+  ok(blocks > 20, `there are catch blocks to check (${blocks})`,
+    "a scan whose whole sample is the bug it was written for passes for the wrong reason from the next commit on");
+  is(leaked.length, 0,
+    "no caught exception reaches a sentence a person reads",
+    leaked.join(" · ") || "an error message can name a host, a chunk path or a token");
+
+  /*
+    And the sentence that replaced it, asserted where the person meets it. The
+    rule this repository keeps relearning is that a refusal must be true and
+    must offer what still works — the circle really does still work in text,
+    which is what makes this one honest rather than merely vague.
+  */
+  const voice = fs.readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8");
+  ok(/still works in text/.test(voice),
+    "the fallback names what the person can still do");
+  ok(!/\$\{message\}/.test(voice), "and the raw message is gone from the component");
+  ok(/console\.warn\("\[voice\] join failed:", kind\)/.test(voice),
+    "the failure is logged by kind, unconditionally",
+    "guarding the log on DOMException logged the microphone cases and dropped the connection ones — the diagnostic went to the person and not to us");
+
+  /*
+    And the second one, where the sentence still has to do its original job.
+    The comment it replaced was right about what a Keeper needs — whether the
+    room ignored them or the voice server did — and 502 with a sentence about
+    the voice server still says that. Only the SFU's own words are gone.
+  */
+  const mute = fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/voice/mute/route.ts"), "utf8");
+  ok(/didn't take that/.test(mute), "the mute refusal still says which side failed");
+  ok(!/voice server did not accept that: \$\{/.test(mute),
+    "and no longer in the SFU's words, which quote the room name and the seat");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
