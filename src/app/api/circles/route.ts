@@ -2,7 +2,7 @@ import { errorKind } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore } from "@/lib/store";
-import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
+import { classify, CRISIS_LINES, crisisReply } from "@/lib/vent/intent";
 import { CIRCLE_MINUTES, MAX_SEATS, roleForSeat } from "@/lib/circles/rules";
 import { sweepIfOver } from "@/lib/circles/sweep";
 import { withStore } from "@/lib/http/with-store";
@@ -140,9 +140,10 @@ async function handlePOST(request: Request) {
   const input = parsed.data;
 
   // A circle cannot hold a crisis. Route to a person, not to five strangers.
-  if (input.intent && classify(input.intent).intent === "crisis") {
+  const seedIntent = input.intent ? classify(input.intent) : null;
+  if (seedIntent?.intent === "crisis") {
     return NextResponse.json(
-      { error: "crisis", reply: CRISIS_RESPONSE, crisis: { ...CRISIS_LINES, gated: true } },
+      { error: "crisis", reply: crisisReply(seedIntent.language), crisis: { ...CRISIS_LINES, gated: true } },
       { status: 409 },
     );
   }

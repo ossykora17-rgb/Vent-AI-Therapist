@@ -1791,7 +1791,7 @@ check("16 The store asks PostgREST for something it can parse", () => {
 // description, a `tel:` href and a client-side fallback. Change it once and
 // eight surfaces keep quietly dialling the old one — the exact shape
 // `CLAUDE.md` names for chair tensions, wearing the highest stakes here.
-const { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL, CRISIS_RESPONSE } =
+const { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL, CRISIS_RESPONSE, CRISIS_RESPONSE_PIDGIN, crisisReply } =
   await app("src/lib/vent/intent.ts");
 
 check("17 The crisis number exists once, and every surface reads that one", () => {
@@ -3099,8 +3099,21 @@ check("29 The rate limiter knows who it is refusing", () => {
 
   // And the refusal at the edge is not a closed door.
   const refusal = route.slice(limitAt, limitAt + 700);
-  ok(/reply: CRISIS_RESPONSE/.test(refusal),
+  /*
+    The crisis reply, in whichever language they wrote in.
+
+    This read `/reply: CRISIS_RESPONSE/` and failed the moment that constant
+    became a function of the language — pinning the implementation rather than
+    the behaviour, which is check 74's lesson arriving somewhere else. What it
+    is actually about is that a rate-limited person at the edge gets a human
+    and a number instead of a countdown, and `crisisReply` returns exactly that
+    in either register.
+  */
+  ok(/reply: crisisReply\(/.test(refusal),
     "somebody refused at the edge is handed a human, not a countdown");
+  ok(!/reply: CRISIS_RESPONSE\b/.test(refusal),
+    "and in the language they wrote in, not always English",
+    "the router speaks Pidgin on this path and the reply did not");
   ok(/Small small/.test(refusal),
     "and an ordinary pause keeps its own voice, which reads like a pause");
   ok(/gated: false/.test(refusal),
@@ -14210,6 +14223,134 @@ check("123 The rule underneath 'I am not enough' has a move of its own", () => {
   ok(/out of what they told you|never from a list/.test(t.instruction),
     "and it is drawn from their message rather than a list",
     "a named act would be generic on every turn this fires, and `drink water` is already banned for that reason");
+});
+
+check("124 The crisis turn answers in the language they wrote it in", () => {
+  /*
+    The router speaks Pidgin on this path and the reply did not.
+
+    `intent.ts` is proud of its Pidgin crisis coverage — "i wan die is the
+    sentence this list existed for and did not have" — and the conditional
+    block added "if i no dey again, e go better" beneath it. Then
+    `CRISIS_RESPONSE` was one English string, rendered on five surfaces, and
+    `classification.language` was computed on that path and never read.
+
+    So somebody who reached the most important turn in this product by writing
+    Pidgin was answered in English. That is the rule this repository spends
+    more words on than any other, failing on the one turn where it costs most —
+    and no grader was ever going to catch it, because the crisis path never
+    calls a model and `quality.ts` only grades replies that did.
+  */
+  const pidginCrisis = [
+    "i wan die",
+    "if i no dey again, e go better",
+    "i no wan dey alive again, i don tire for this life",
+    "nobody go miss me",
+  ];
+  for (const m of pidginCrisis) {
+    const c = classify(m);
+    is(c.intent, "crisis", `still routed: "${m.slice(0, 44)}"`);
+    is(c.language, "pidgin", `and read as Pidgin: "${m.slice(0, 44)}"`,
+      "the reply below is chosen from this field, so a misread language is an English answer");
+    is(crisisReply(c.language), CRISIS_RESPONSE_PIDGIN, "and answered in Pidgin");
+  }
+
+  const englishCrisis = classify("i want to kill myself");
+  is(crisisReply(englishCrisis.language), CRISIS_RESPONSE,
+    "an English crisis is still answered in English");
+
+  /*
+    The two say the same three things. Asserted rather than assumed, because
+    a translation that drops one of them is a different reply: name the
+    concern, say plainly that what they need is a person and not this screen,
+    and end on the one sentence that is true and is not a promise.
+  */
+  for (const [what, text] of [["English", CRISIS_RESPONSE], ["Pidgin", CRISIS_RESPONSE_PIDGIN]]) {
+    ok(/person|human/i.test(text) && /screen/i.test(text),
+      `${what} says what they need is a person, not this screen`);
+    ok(/not alone|no dey alone/i.test(text), `${what} ends on the one sentence that is true`);
+    ok(!/\b(I can help|I'?ll be here|I'?m here for you|I dey here for you)\b/i.test(text),
+      `${what} promises nothing it is not`,
+      "the oldest bug in this repository is a sentence the code cannot keep");
+  }
+
+  // Pidgin by grammar, not by a Nigerian noun — the same rule `quality.ts`
+  // grades replies on. A "Pidgin" reply with no `dey`, `na` or `no be` in it
+  // is an English sentence with a borrowed word.
+  ok(PIDGIN_GRAMMAR.filter((re) => re.test(CRISIS_RESPONSE_PIDGIN)).length >= 2,
+    "and the Pidgin one is Pidgin by grammar",
+    "a borrowed noun in an English sentence is not the register they wrote in");
+
+  /*
+    EVERY SURFACE, NOT EVERY SERVER SURFACE
+
+    `vent-chat.tsx` imported `CRISIS_RESPONSE` and rendered that instead of the
+    `reply` the server had already sent — a second copy of the sentence, and
+    the copy the screen actually read. Making the server language-aware would
+    have changed nothing a person sees, with every server-side assertion green.
+
+    So this reads the client too, and the rule is derived off the filesystem
+    rather than from a list of files somebody remembered.
+  */
+  const surfaces = [];
+  const walkSrc = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkSrc(p);
+      else if (/\.tsx?$/.test(p) && /CRISIS_RESPONSE/.test(fs.readFileSync(p, "utf8"))) surfaces.push(p);
+    }
+  };
+  walkSrc(path.join(ROOT, "src"));
+  ok(surfaces.length >= 2, `every file naming it is found (${surfaces.length})`,
+    "a hand-written list of files is the bug this repository has five times over");
+
+  /*
+    An import is not a render, and a `??` fallback is not a second copy.
+
+    The three routes stopped naming the constant at all when they moved to
+    `crisisReply`, so what is left is `intent.ts`, where both live, and the
+    chat component, where the import survives only behind `data.reply ??`. A
+    scan that counted every occurrence read that import as the bug — a probe
+    firing on its own fix, which this suite has now done four times.
+  */
+  const stale = [];
+  for (const f of surfaces) {
+    const rel = path.relative(ROOT, f);
+    if (rel === "src/lib/vent/intent.ts") continue; // where both constants live
+    const src = fs.readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+    for (const m of src.matchAll(/CRISIS_RESPONSE\b/g)) {
+      const line = src.slice(src.lastIndexOf("\n", m.index) + 1, src.indexOf("\n", m.index));
+      if (/^\s*import\b/.test(line)) continue;
+      if (/\?\?\s*CRISIS_RESPONSE\b/.test(line)) continue;
+      stale.push(`${rel}: ${line.trim().slice(0, 56)}`);
+    }
+  }
+  is(stale.length, 0,
+    "and none of them renders its own copy over what the server sent",
+    stale.join(" · ") || "the client printed English while the server sent Pidgin");
+
+  /*
+    AND THE TWO DETECTORS AGREE ABOUT THE SAME SENTENCE
+
+    The crisis list has caught "i wan die" for a while — it is the sentence
+    that list says it existed for. `PIDGIN_GRAMMAR`, which decides the reply's
+    language, read it as English. Nothing consumed that answer on this path
+    until the reply became a function of it, so the two could disagree for ever
+    and no surface would say a word.
+
+    The same shape as the router and the grader disagreeing about Pidgin before
+    `quality.ts` imported these lists — and here it would have made the whole
+    fix above cosmetic.
+  */
+  const pidginCrisisPatterns = ["i wan die", "make i die", "i wan comot for this world",
+    "i no wan dey alive again", "nobody go miss me", "if i no dey again, e go better"];
+  const disagreeing = pidginCrisisPatterns.filter((m) => {
+    const c = classify(m);
+    return c.intent === "crisis" && c.language !== "pidgin";
+  });
+  is(disagreeing.length, 0,
+    "every Pidgin sentence the crisis list catches is also read as Pidgin",
+    disagreeing.join(" · ") || "the router would gate them and the reply would answer in English");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

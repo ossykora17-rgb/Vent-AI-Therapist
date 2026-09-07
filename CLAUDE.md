@@ -431,6 +431,32 @@ must-not list with its reason rather than left silently absent. Check 26 holds
 eleven new catches and ten new false-positive probes, and mutations in *both*
 directions fail it.
 
+**The crisis turn was answered in English, whatever they wrote in.** This file
+spends more words on register than on anything else — *"answering a Nigerian in
+English when they wrote to you in Pidgin is ... the room declining the register
+they chose to be honest in"* — and `CRISIS_RESPONSE` was one English string on
+six surfaces, with `classification.language` computed on that path and never
+read. No grader was ever going to catch it: the crisis path never calls a model,
+and `quality.ts` only grades replies that did.
+
+Three seams, and each was invisible from the others. **The reply** had no Pidgin
+at all. **The client** imported the constant and rendered that instead of the
+`reply` the server sent, so a language-aware server would have changed nothing a
+person sees, with every server-side assertion green. And **the two detectors
+disagreed**: the crisis list has caught `i wan die` for a while — the sentence it
+says it existed for — while `PIDGIN_GRAMMAR`, which decides the reply's language,
+read it as English, because `wan` was not in it. Nothing consumed that answer
+until the reply became a function of it, so the two could have disagreed for
+ever without a surface saying a word. Same shape as the router and the grader
+disagreeing about Pidgin before `quality.ts` imported these lists, and here it
+would have made the whole repair cosmetic.
+
+`wan`, `comot` and the `e go` family were measured against 310 English strings
+before going in and hit zero; `nobody go miss me` is why the subject list is a
+construction rather than a bare `go`. Check 124 walks `src` for the constant
+rather than trusting a list of files — and found a sixth surface,
+`circles/[id]/messages`, that four greps had missed.
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.

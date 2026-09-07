@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore } from "@/lib/store";
-import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
+import { classify, CRISIS_LINES, crisisReply } from "@/lib/vent/intent";
 import { checkMessage } from "@/lib/circles/rules";
 import { sweepIfOver } from "@/lib/circles/sweep";
 import { scoreToxicity } from "@/lib/external/sources";
@@ -95,11 +95,12 @@ async function handlePOST(request: Request, { params }: Params) {
 
   // ── Guardian: crisis inside the room. Nothing is stored, the circle is not
   // the place, and the person gets a number rather than five strangers. ────
-  if (classify(content).intent === "crisis") {
+  const said = classify(content);
+  if (said.intent === "crisis") {
     return NextResponse.json(
       {
         error: "crisis",
-        reply: CRISIS_RESPONSE,
+        reply: crisisReply(said.language),
         crisis: { ...CRISIS_LINES, gated: true },
         exitTo: "/chat",
       },

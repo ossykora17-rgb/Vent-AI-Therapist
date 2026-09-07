@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore } from "@/lib/store";
-import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
+import { classify, CRISIS_LINES, crisisReply } from "@/lib/vent/intent";
 import { tensionDrop, tensionNow } from "@/lib/vent/chairs";
 import { logPreference } from "@/lib/rlhf/log";
 import { presenceOf, shouldTouch } from "@/lib/circles/presence";
@@ -191,9 +191,10 @@ async function handlePOST(request: Request, { params }: Params) {
   }
   const { anonId, intent, pressure } = parsed.data;
 
-  if (intent && classify(intent).intent === "crisis") {
+  const seedIntent = intent ? classify(intent) : null;
+  if (seedIntent?.intent === "crisis") {
     return NextResponse.json(
-      { error: "crisis", reply: CRISIS_RESPONSE, crisis: { ...CRISIS_LINES, gated: true } },
+      { error: "crisis", reply: crisisReply(seedIntent.language), crisis: { ...CRISIS_LINES, gated: true } },
       { status: 409 },
     );
   }

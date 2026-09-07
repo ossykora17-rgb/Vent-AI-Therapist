@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getStore, type Store, type VentRow } from "@/lib/store";
 import { isModelConfigured } from "@/lib/env";
 import { answerFactual, groundNow } from "@/lib/vent/grounding";
-import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
+import { classify, CRISIS_LINES, crisisReply } from "@/lib/vent/intent";
 import { CARRY_WORDS, OBJECT_IDS, tensionNow } from "@/lib/vent/chairs";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
 import { selectProbe } from "@/lib/vent/probes";
@@ -181,7 +181,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
         });
         if (userId) {
           saved = await tryPersist(
-            store, userId, input, classification, CRISIS_RESPONSE, null, null, grounding.iso, true,
+            store, userId, input, classification, crisisReply(classification.language), null, null, grounding.iso, true,
           );
         }
       } catch (error) {
@@ -191,7 +191,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
     return NextResponse.json(
       {
         intent: "crisis",
-        reply: CRISIS_RESPONSE,
+        reply: crisisReply(classification.language),
         crisis: { ...CRISIS_LINES, gated: true },
         /*
           The turn that most needs a risk level was the one without one.
@@ -306,7 +306,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
             edge
               ? {
                   error: "rate_limited",
-                  reply: CRISIS_RESPONSE,
+                  reply: crisisReply(classification.language),
                   crisis: { ...CRISIS_LINES, gated: false },
                 }
               : {

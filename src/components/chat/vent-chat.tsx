@@ -770,7 +770,21 @@ export function VentChat() {
         setGated(true);
         setLines((l) => [
           ...l,
-          { id: nextId.current++, speaker: "vent", text: CRISIS_RESPONSE, crisis: true },
+          /*
+            What the server sent, not our own copy of it.
+
+            This imported `CRISIS_RESPONSE` and rendered that, ignoring the
+            `reply` already in `data` — a second copy of the most important
+            sentence in the product, and the copy the screen actually read. So
+            when the server learned to answer a Pidgin crisis in Pidgin, this
+            line would have gone on printing the English one, and every check
+            on the server side would have stayed green.
+
+            The import survives as the fallback and only as the fallback: if a
+            crisis response ever arrives without a reply, English is better
+            than a blank line on this turn.
+          */
+          { id: nextId.current++, speaker: "vent", text: data.reply ?? CRISIS_RESPONSE, crisis: true },
         ]);
         return;
       }

@@ -342,6 +342,33 @@ export const PIDGIN_GRAMMAR = [
   // The constructions, not the bare words. "I no fit" and "belle dey pain me"
   // are Pidgin; "a good fit" and "the belle of the ball" are not.
   /\b(no|go|fit) fit\b/, /\bfit (do|talk|carry|hold)\b/, /\bbelle (dey|de)\b/,
+
+  /*
+    THE VOLITIONAL, AND THE CRISIS SENTENCES THAT NEEDED IT
+
+    `wan` was missing, and the cost was specific rather than general. The crisis
+    list twenty lines up is proud of "i wan die" — "the sentence this list
+    existed for and did not have" — so the *router* has read it as a crisis for
+    a while. This list decides the *language*, and it read it as English. Two
+    detectors, disagreeing about the most important turn in the product, which
+    is the same shape as the router and the grader disagreeing about Pidgin
+    before `quality.ts` imported these lists.
+
+    It only surfaced when the crisis reply became a function of the language.
+    Before that nothing consumed the answer on this path, so the two could
+    disagree for ever and no surface would say a word.
+
+    Measured before adding, on 310 English strings this product says or has
+    been said to: `wan`, `comot` and the `e go` family hit zero. `\bwan\b` does
+    not reach "want" or "wanna" — the boundary stops both — and the English
+    adjective ("a wan smile") is not a word anybody types into this box.
+
+    `nobody go miss me` needed the subject list widened past `e`. Bare `go` is
+    hopeless — "go to work", "I go to the office" — so it stays a construction:
+    a Pidgin or impersonal subject in front of it.
+  */
+  /\bwan\b/, /\bno wan\b/, /\bcomot\b/,
+  /\b(?:dem|una|nobody|person|dis) go\b/,
 ];
 
 /**
@@ -455,6 +482,45 @@ export function classify(message: string): Classification {
 
 export const CRISIS_RESPONSE =
   "I'm really concerned about you. You deserve support right now, from a person, not a screen. You are not alone.";
+
+/**
+ * The same three things, in the language half this list is written for.
+ *
+ * The router speaks Pidgin on this path and is proud of it — "i wan die is the
+ * sentence this list existed for and did not have" is written twenty lines up,
+ * and the conditional block added "if i no dey again, e go better" beneath it.
+ * The reply did not. So somebody who reached the most important turn in this
+ * product by writing Pidgin was answered in English.
+ *
+ * That is the rule this repository spends more words on than any other,
+ * arriving on the one turn where it costs most. `quality.ts` grades a reply
+ * answered in the wrong language as `major` and buys a retry for it; the crisis
+ * path never calls a model, so no grader was ever going to see this one.
+ *
+ * Three moves, in the same order as the English, because each is doing a job:
+ * name the concern, say plainly that what they need is a person rather than
+ * this screen, and end on the one sentence that is true and is not a promise.
+ *
+ * NEEDS A PIDGIN SPEAKER'S EYES. This is the highest-stakes sentence in the
+ * product and it was written by somebody who does not speak the language. The
+ * grammar is right — `dey`, `na`, `no be`, `no dey` — and whether it *lands* is
+ * not something any check here can answer.
+ */
+export const CRISIS_RESPONSE_PIDGIN =
+  "I dey really worry for you. Wetin you need right now na person, no be screen. You no dey alone.";
+
+/**
+ * The crisis reply, in the register they wrote in.
+ *
+ * A function rather than two exported constants, because five surfaces render
+ * this and the branch belongs in one of them. The client used to import
+ * `CRISIS_RESPONSE` and render that instead of the `reply` the server had
+ * already sent it — a second copy of the most important sentence here, and the
+ * copy the screen actually read.
+ */
+export function crisisReply(language: Classification["language"]): string {
+  return language === "pidgin" ? CRISIS_RESPONSE_PIDGIN : CRISIS_RESPONSE;
+}
 
 /**
  * The one place these digits exist.
