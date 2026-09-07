@@ -490,6 +490,27 @@ incredibly hard"* walked straight past it. **Fourth** time a pattern written the
 way its author would phrase it has met text phrased the way a model does, after
 `make you`, `\bdon\b` and the journaling row.
 
+**And a third Pidgin detector, carrying the bug the first two had fixed.**
+`audit.ts` held `/\b(dey|na|abeg|wetin|don|sabi|wahala|oga|make i|e go)\b/i`
+under a comment claiming it was "the same set the grader uses". It was not:
+`\bdon\b` with no apostrophe guard, so *"i don't know what to do anymore"* was a
+Pidgin message to the nightly job — the failure this file spends three
+paragraphs on, in a copy that never heard about the repair.
+
+Not a mislabel. That language becomes `GoldenCase.language`, `quality.ts` grades
+the reply against it, and an English reply to an English message came back as
+*"answered a Pidgin message in English"* — a **false** finding, in the job whose
+proposals reach the prompt through the gate. `audit.ts` already carries the
+sentence for why that is worse than a miss, about `containsAdvice`.
+
+It asks `classify` now. And the check that guards it had to be narrowed twice:
+a sweep for any regex containing a Nigerian word flagged seven **bilingual
+feature detectors** — `depth.ts` catching "i don tire", `scan.ts` catching "i
+dey try" — which is what this product wants everywhere. What is banned is the
+narrow thing `audit.ts` did: turning a regex test on a message into a language.
+Verified in both directions, because a sweep that no longer matches the code it
+was written for is a green check over nothing.
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.

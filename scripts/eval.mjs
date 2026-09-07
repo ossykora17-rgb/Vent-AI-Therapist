@@ -14448,6 +14448,102 @@ check("124 The crisis turn answers in the language they wrote it in", () => {
     disagreeing.join(" · ") || "the router would gate them and the reply would answer in English");
 });
 
+check("125 The nightly audit asks the router what language a row was", () => {
+  /*
+    A third Pidgin detector, hand-written, carrying the bug the first two had
+    already fixed.
+
+    `audit.ts` held `/\b(dey|na|abeg|wetin|don|sabi|wahala|oga|make i|e go)\b/i`
+    under a comment saying it was "the same set the grader uses". It was not:
+    `\bdon\b` had no apostrophe guard, so "i don't know what to do anymore" was
+    a Pidgin message to the nightly job — the exact failure CLAUDE.md spends
+    three paragraphs on, in a third copy that never heard about the repair.
+
+    That is not a mislabel. The language decided there becomes
+    `GoldenCase.language`, `quality.ts` grades the reply against it, and an
+    English reply to an English message came back as "answered a Pidgin message
+    in English" — a *false* finding in the job whose proposals reach the prompt
+    through the gate. `audit.ts` already carries the sentence for why that is
+    worse than a miss, about `containsAdvice`: a metric that would have somebody
+    rewriting a prompt to stop producing good sentences.
+  */
+  const rows = [
+    { id: "a", user_message: "i don't know what to do anymore", ai_reply: "You said it plainly. What is the part you went quickest past?", created_at: "2026-01-01", intent_type: "vent" },
+    { id: "b", user_message: "i don't want to talk to him", ai_reply: "That silence is doing something. What would you say if he picked up?", created_at: "2026-01-01", intent_type: "vent" },
+  ];
+  const found = knownProblems(rows);
+  const language = found.flatMap((f) => f.problems).filter((p) => /Pidgin/i.test(p));
+  is(language.length, 0,
+    "an English message with a contraction is not graded as Pidgin",
+    language.join(" · ") || "`don't` matched the Pidgin perfective and the reply was reported as the wrong language");
+
+  /*
+    And the fix is the router rather than a fourth list. `classify` is what
+    decided this row's language when it was written, and it imports both marker
+    lists instead of holding its own.
+  */
+  const audit = fs.readFileSync(path.join(ROOT, "src/lib/vent/audit.ts"), "utf8");
+  ok(/classify\(r\.user_message\)\.language/.test(audit),
+    "the audit asks the router",
+    "a fallback that disagrees with production is a fourth opinion, not a fallback");
+
+  /*
+    THE CLASS, NOT THE INSTANCE
+
+    Three copies of this question have now existed: the router, the grader, and
+    this. The first two were merged when `quality.ts` began importing
+    `PIDGIN_GRAMMAR`; this is the third. A fourth would be written the same way
+    — a small inline regex of Nigerian words, in a file that had a reason.
+
+    So no file may hold its own, and the two lists are named as the only place
+    they live.
+  */
+  /*
+    Deciding a language, which is not the same as knowing some Pidgin.
+
+    The first version of this swept for any regex containing a Nigerian word,
+    and flagged seven files — `depth.ts` catching exhaustion as "i don tire",
+    `scan.ts` catching "i dey try", `grounding.ts` catching "wetin you be".
+    Every one of those is a *bilingual feature detector*, which is exactly what
+    this product wants everywhere, and banning them would have been a false
+    finding in the check written about false findings.
+
+    What is banned is narrower and is what `audit.ts` actually did: turning a
+    regex test on a message into a language. Verified in both directions — it
+    matches the code as it was, and nothing in `src` today.
+  */
+  const NIGERIAN = /\.test\([^)]*\)[\s\S]{0,60}"pidgin"|"pidgin"[\s\S]{0,60}\.test\(/;
+  const owners = new Set(["src/lib/vent/intent.ts", "src/lib/vent/quality.ts"]);
+  const walkTs = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkTs(p, out);
+      else if (/\.tsx?$/.test(p)) out.push(p);
+    }
+    return out;
+  };
+  const rogue = [];
+  for (const f of walkTs(path.join(ROOT, "src"))) {
+    const rel = path.relative(ROOT, f);
+    if (owners.has(rel)) continue;
+    const src = fs.readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^\s*\/\/[^\n]*$/gm, " ");
+    const m = src.match(NIGERIAN);
+    if (m) rogue.push(`${rel}: ${m[0].slice(0, 52)}`);
+  }
+  is(rogue.length, 0,
+    "and no other file turns a regex on a message into a language",
+    rogue.join(" · ") || "two detectors disagreeing about this is the most-repeated bug in this repository");
+
+  // The pattern must still match what it was written for, or it is a sweep
+  // that passes because it can no longer see anything.
+  const AS_IT_WAS = `language: (r.language ?? "").startsWith("pid") || (!r.language && PIDGIN.test(r.user_message))
+        ? "pidgin"
+        : "en",`;
+  ok(NIGERIAN.test(AS_IT_WAS),
+    "and the sweep still matches the code it was written for",
+    "a pattern that stops matching its own case is a green check over nothing");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
