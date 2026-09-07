@@ -1,3 +1,4 @@
+import { errorKind } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
 import { containsAdvice } from "@/lib/circles/rules";
@@ -51,7 +52,22 @@ export async function GET() {
     return NextResponse.json(
       {
         error: "storage_unavailable",
-        detail: (error as Error).message,
+        /*
+          The kind, not the database's sentence.
+
+          This route has no token on it. `StoreUnavailableError.message`
+          embeds Postgres's `message` and `hint` verbatim, so an
+          unauthenticated endpoint was publishing whatever the database
+          chose to say — including, in the shape this was found in, a value
+          quoted out of the failing statement. Postgres quotes values, and
+          the value here is usually an anon id, which in this product is the
+          whole credential: `/api/notes?anonId=` needs nothing else.
+
+          `code` survives, because `42501` and `42703` are the two most
+          useful strings this product logs and neither is anybody's words —
+          and `restPath` below is ours.
+        */
+        detail: errorKind(error),
         // The path and nothing else. A PostgREST path error names a path and
         // the eye reads it as a table, so the shape that would cause one is
         // reported next to it. "/" is correct for every hosted project.

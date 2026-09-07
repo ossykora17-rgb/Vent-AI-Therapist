@@ -13220,6 +13220,30 @@ check("116 A provider's words never reach a person or a log line", () => {
   ok(!/await r\.text\(\)\)\.slice/.test(embed),
     "the embeddings log records the status and not the response body",
     "the one request in this product that sends somebody's vent to a third party to be vectorised");
+
+  /*
+    AND THE SURFACE THAT MADE THIS URGENT, WHICH WAS NOT THE CHAT
+
+    `/api/health` is public and unauthenticated, and its `tried` array carries
+    the same `detail`. Fetched from production while this was being written, it
+    was serving to anyone on the internet:
+
+      {"provider":"anthropic","status":"insufficient_credit","detail":
+       "400 {\"type\":\"error\",...\"message\":\"Your credit balance is too
+        low...\"},\"request_id\":\"req_011Ceo…\"}"}
+
+    Not reasoned about — read off the live deployment. One fix covers both
+    because both read `classifyModelError`, and this asserts the shared source
+    rather than the two call sites, which is the arrangement that made one
+    repair enough.
+  */
+  const providersSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/providers.ts"), "utf8");
+  ok(/tried\.push\(\{ provider: p\.id, status: verdict\.status, detail: verdict\.detail \}\)/.test(providersSrc),
+    "the public health probe reports the same derived detail as the chat does",
+    "/api/health is unauthenticated — a second copy of this value is a leak to the whole internet");
+  const health = fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8");
+  ok(/tried: probe\.tried/.test(health),
+    "and passes it through rather than rebuilding it");
 });
 
 check("117 A thrown thing reaches stdout as a kind, never as its words", () => {
@@ -13366,6 +13390,143 @@ check("117 A thrown thing reaches stdout as a kind, never as its words", () => {
   */
   const wordy = errorKind({ code: "could not reach a3f9-not-an-id", name: "E" });
   ok(!wordy.includes("a3f9"), `a prose code is not a code (${wordy})`);
+});
+
+check("118 A route that touches the store answers when the store says no", () => {
+  /*
+    The third deployment shape, and what it found in ten minutes.
+
+    `live-checks.sh` ran the product twice — with a store, and with none. Both
+    are real deployments. The third one is a store that is *there and failing*,
+    which CLAUDE.md names as uncovered in the section about the `?carve=1`
+    button: "no suite here has ever run a store that exists and fails".
+
+    Run once, it found three:
+
+      POST /api/feedback   500, empty body. `countFeedbackSince` — the rate
+                           limiter — sat one line above a try block whose own
+                           comment describes this exact failure and fixes the
+                           write below it. Half a repair, in the file that
+                           already carries the postmortem for the other half.
+      POST /api/profile    500, empty body. `ensureUser` unguarded, so
+                           onboarding failed silently — and onboarding is where
+                           the chair is written, which production has never
+                           recorded for seven of eight people.
+      GET  /api/heartbeat  503 carrying Postgres's `message` and `hint`
+                           verbatim, on a route with no token whose own doc
+                           comment reads: "Counts only. Never content. That is
+                           what makes it safe to leave open."
+
+    A 500 with an empty body is the worst answer available: the client has
+    nothing to branch on, so its honest branch has nothing to be honest with —
+    the same failure as the feedback client that read the status and not the
+    body, one layer down.
+
+    So the list is derived. Every route that calls `getStore()` is either
+    wrapped in `withStore` or named below with the reason it is not, because
+    "not on the list" and "decided against" look identical otherwise.
+  */
+  const routes = [];
+  const walkApi = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkApi(p);
+      else if (e.name === "route.ts") routes.push(p);
+    }
+  };
+  walkApi(path.join(ROOT, "src/app/api"));
+  ok(routes.length > 10, `routes are read off the filesystem (${routes.length})`,
+    "a hand-written route list is the bug this repository has four times over");
+
+  /*
+    Named exemptions, each with the reason it is one. A stale exemption fails
+    too — if one of these stops calling `getStore()`, it should stop being
+    listed here.
+  */
+  const EXEMPT = {
+    "health/route.ts":
+      "it is the diagnostic. Turning a store failure into 503 would make the probe unable to report the failure it exists to report — a green light over a broken road, from the other direction.",
+    "heartbeat/route.ts":
+      "it catches the one call it makes and answers in an operator's shape, not a person's. Asserted live in the failing-store pass rather than here.",
+    "community/route.ts":
+      "it degrades to `{carrying: null}` internally, because a community count that cannot be read is an absent sentence, not an error.",
+  };
+
+  /*
+    Read the exports, not the file.
+
+    The first version of this asked whether the source contained the word
+    `withStore` — and deleting `export const POST = withStore(handlePOST)` from
+    `feedback/route.ts` left the suite green, because the *import* line still
+    said `withStore`. A route that imports the wrapper and never uses it is
+    exactly the bug, and the check was reading the one line that survives it.
+
+    Next.js dispatches on the exported name, so that is what has to be
+    wrapped: `export async function POST` is a handler with no boundary, and
+    `export const POST = withStore(handlePOST)` is one with. Nothing else in
+    the file decides it.
+  */
+  const METHODS = "GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS";
+  const unwrapped = [];
+  let wrapped = 0;
+  for (const f of routes) {
+    const raw = fs.readFileSync(f, "utf8");
+    if (!/\bgetStore\(\)/.test(raw)) continue;
+    const rel = f.slice(f.indexOf("src/app/api/") + "src/app/api/".length);
+    if (EXEMPT[rel]) continue;
+
+    /*
+      Comments stripped, because this file's comments quote the code.
+
+      `feedback/route.ts` carries the postmortem for its own bug, and that
+      postmortem contains the sentence "`export async function POST` has no
+      wrapper". The first run of this rule read the explanation of the fix as
+      the presence of the bug — which is the same shape as check 45 asserting
+      the fragment from its own postmortem, two years of lessons apart.
+    */
+    const src = raw.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+
+    const bare = [...src.matchAll(new RegExp(`export\\s+async\\s+function\\s+(${METHODS})\\b`, "g"))];
+    const consts = [...src.matchAll(new RegExp(`export\\s+const\\s+(${METHODS})\\s*=\\s*([A-Za-z_$][\\w$]*)`, "g"))];
+    for (const m of bare) unwrapped.push(`${rel}: export async function ${m[1]} has no boundary`);
+    for (const m of consts) {
+      if (m[2] === "withStore") wrapped++;
+      else unwrapped.push(`${rel}: ${m[1]} is wrapped in ${m[2]}, not withStore`);
+    }
+    if (bare.length === 0 && consts.length === 0) {
+      unwrapped.push(`${rel}: touches the store and exports no recognised handler`);
+    }
+  }
+  ok(wrapped >= 10, `there are wrapped handlers to find (${wrapped})`,
+    "a scan that matches nothing passes for the wrong reason");
+  is(unwrapped.length, 0,
+    "every store-touching route wraps every handler it exports",
+    unwrapped.join(" · ") || "an unguarded store call is a 500 with no body, and the client's honest branch has nothing to be honest with");
+
+  // A stale exemption is the other half of the same rule.
+  const stale = Object.keys(EXEMPT).filter((rel) => {
+    const f = path.join(ROOT, "src/app/api", rel);
+    if (!fs.existsSync(f)) return true;
+    const src = fs.readFileSync(f, "utf8");
+    return !/\bgetStore\(\)/.test(src) || /withStore/.test(src);
+  });
+  is(stale.length, 0, "and no exemption outlives its reason", stale.join(" · "));
+
+  for (const [rel, why] of Object.entries(EXEMPT)) {
+    ok(why.length > 60, `${rel} says why, at length`,
+      "a one-word exemption is a list entry, not a decision");
+  }
+
+  /*
+    And the third pass exists and is wired in. A verify script nothing runs is
+    the shape of `backup.yml` succeeding fourteen times while taking no copy.
+  */
+  const sh = fs.readFileSync(path.join(ROOT, ".github/live-checks.sh"), "utf8");
+  ok(/failing-store-verify\.mjs/.test(sh), "live-checks runs the failing-store pass");
+  ok(/broken-store\.mjs/.test(sh), "and boots the database that refuses");
+  ok(/would not let go of/.test(sh.slice(sh.indexOf("third pass"))),
+    "and refuses a port the previous server is still holding",
+    "a leftover server answering the third pass would report on the second one's build");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

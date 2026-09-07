@@ -20,7 +20,7 @@ constraint. It outranks elegance, cleverness, and feature count.
 ```bash
 npm run local      # the whole product, no accounts, no cloud  → :3001
 npm run gate       # selector + eval + pipelines + live-verify → merge or don't
-npm run live-checks # boots its own build twice — with a store and without
+npm run live-checks # boots its own build three times — store, none, and one that fails
 npm run eval       # the whole suite, no server; add a URL for the live room
 npm run audit      # grade last 50 turns; --dry is free, --apply writes a diff
 npm run heartbeat  # what changed, what is dirty, who should fix it
@@ -611,6 +611,38 @@ sentence CLAUDE.md already listed as fixed.
 Do not read that as the gap being closed. It is one shape, now covered. The
 question below is the thing that generalises; the second pass is only the
 answer for the shape that had already cost eleven bugs.
+
+**And there is a third, which this file named as uncovered and which is now
+covered too.** *"No suite here has ever run a store that exists and fails"* —
+the sentence in the `?carve=1` section, about the two shapes a first Supabase
+deployment passes through: `42501` before the GRANTs land, `42703` before 0011
+does. Neither has a store of `null`, so `no-store-verify` cannot reach them.
+`scripts/broken-store.mjs` is a PostgREST-shaped server that refuses
+everything, and because `hasStore` is only `supabaseUrl && serviceKey` and the
+URL check accepts `http:`, pointing the app at it gives a **real**
+`SupabaseStore` making real requests to a database that says no. Nothing inside
+the product is stubbed, which is the point: these bugs live in the seam between
+a store call and the handler around it, and a fake below the adapter tests
+neither side of it.
+
+Three on the first run. `POST /api/feedback` and `POST /api/profile` both
+answered **500 with an empty body** — an unhandled throw, which is the worst
+answer available, because the client has nothing to branch on and its honest
+branch has nothing to be honest with. Feedback's was
+`countFeedbackSince`, the rate-limiter read, sitting *one line above* a try
+block whose own comment describes this exact failure and fixes the write below
+it; profile's was `ensureUser`, so onboarding — where the chair is written —
+failed silently. And `/api/heartbeat` answered 503 carrying Postgres's
+`message` and `hint` verbatim, on a route with no token whose own doc comment
+reads *"Counts only. Never content. That is what makes it safe to leave open."*
+The justification for leaving it open was true of every branch but the one
+nobody had run.
+
+Check 118 derives the rule rather than listing it: every route calling
+`getStore()` wraps every handler it *exports* in `withStore`, or is named with
+the reason it does not. Reading the file for the word `withStore` is not
+enough and was the first version — deleting the wrapped export left the suite
+green, because the import line still said it.
 
 That gap has now produced the same bug thirteen times, wearing thirteen faces:
 

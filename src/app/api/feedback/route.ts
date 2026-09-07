@@ -1,3 +1,4 @@
+import { withStore } from "@/lib/http/with-store";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore } from "@/lib/store";
@@ -13,7 +14,7 @@ const schema = z.object({
   message: z.string().trim().max(2000).optional(),
 });
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   let json: unknown;
   try {
     json = await request.json();
@@ -91,3 +92,5 @@ export async function POST(request: Request) {
     { headers: { "cache-control": "no-store" } },
   );
 }
+
+export const POST = withStore(handlePOST);
