@@ -231,7 +231,14 @@ of the throw — and check 117 enforces it by following what the caught value
 flows into. Derived is not the same as unsafe and the check says which is
 which: a name made from `.name`, `.code` or `typeof` is a *kind* and is exactly
 what the rule wants; a name made by reading `.message` or stringifying the
-throw is the thing being banned. `42501` and `42703` are the two most useful
+throw is the thing being banned. And the sweep is wider than the catch blocks
+that started it: PostgREST does not throw, it returns `{data, error}`, so six
+lines in `supabase-store.ts` — `console.warn("[store] setCarve", error.code,
+error.message)` — sat in `if (error)` branches where no control-flow scan could
+reach them, on the paths handling somebody's carve, their held note and their
+breaking point. Postgres is the thing that quotes values. So the rule is stated
+flatly and swept over every file rather than over a control-flow shape: **no
+console call logs a `.message`, anywhere.** `42501` and `42703` are the two most useful
 strings this product has ever logged, and neither is anybody's words.
 
 Check 103 is enforced on the *literal*, so a variable walks past it.

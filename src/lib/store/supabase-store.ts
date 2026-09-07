@@ -189,7 +189,7 @@ export class SupabaseStore implements Store {
       if (error) {
         // 42703 is the column not existing yet — 0011 pending, which is a
         // normal state and not a fault. The room opens knowing nothing.
-        console.warn("[store] getCarve", error.code, error.message);
+        console.warn("[store] getCarve", error.code);
         return null;
       }
       // Whitespace is not a carve. Normalised here so no caller has to.
@@ -217,7 +217,7 @@ export class SupabaseStore implements Store {
         .eq("id", userId)
         .maybeSingle();
       if (error) {
-        console.warn("[store] getHeld", error.code, error.message);
+        console.warn("[store] getHeld", error.code);
         return [];
       }
       return Array.isArray(data?.held) ? (data.held as HeldNote[]) : [];
@@ -253,7 +253,7 @@ export class SupabaseStore implements Store {
         .eq("id", userId)
         .select("id");
       if (error) {
-        console.warn("[store] addHeld", error.code, error.message);
+        console.warn("[store] addHeld", error.code);
         return false;
       }
       return (data?.length ?? 0) > 0;
@@ -290,7 +290,7 @@ export class SupabaseStore implements Store {
       if (error) {
         // 42703 is 0015 pending, which is a normal state on a deployment
         // mid-migration and not a fault. It is still not an empty list.
-        console.warn("[store] getBreaking", error.code, error.message);
+        console.warn("[store] getBreaking", error.code);
         return null;
       }
       if (!data) return null;
@@ -333,7 +333,7 @@ export class SupabaseStore implements Store {
         .eq("id", userId)
         .select("id");
       if (error) {
-        console.warn("[store] addBreaking", error.code, error.message);
+        console.warn("[store] addBreaking", error.code);
         return false;
       }
       return (data?.length ?? 0) > 0;
@@ -371,7 +371,7 @@ export class SupabaseStore implements Store {
         .eq("id", userId)
         .select("id");
       if (error) {
-        console.warn("[store] setCarve", error.code, error.message);
+        console.warn("[store] setCarve", error.code);
         return false;
       }
       return (data?.length ?? 0) > 0;

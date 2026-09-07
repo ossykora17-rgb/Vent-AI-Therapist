@@ -13347,6 +13347,40 @@ check("117 A thrown thing reaches stdout as a kind, never as its words", () => {
   }
   ok(logged > 15, `there are console calls inside catch blocks to check (${logged})`,
     "a scan that finds nothing passes for the wrong reason");
+
+  /*
+    AND THE SHAPE THAT IS NOT A THROW AT ALL
+
+    Everything above walks `catch` blocks, and PostgREST does not throw. It
+    returns `{ data, error }`, so six log lines in `supabase-store.ts` sat in
+    `if (error)` branches — `console.warn("[store] setCarve", error.code,
+    error.message)` — and the scan above went straight past all of them.
+
+    Those are the worst six in the file. `error.message` there is Postgres's
+    own sentence, and Postgres is the thing that quotes values: `invalid input
+    syntax for type uuid: "…"`, `Key (anon_id)=(…) already exists`. Every one
+    of them is on a path handling somebody's carve, their held note, or their
+    breaking point.
+
+    So the rule is stated plainly and swept over every file rather than over a
+    control-flow shape: **no console call logs a `.message`, anywhere.** That
+    is what CLAUDE.md already says — "never their message" — and it needs no
+    dataflow analysis to enforce. `error.code` stays, because a code is a code
+    and `contract.ts` maps the ones that matter to sentences that are ours.
+  */
+  const anyMessage = [];
+  for (const f of files) {
+    const src = fs.readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+    for (const mm of src.matchAll(/console\.(log|warn|error|info|debug)\(/g)) {
+      const call = balanced(src, mm.index + mm[0].length - 1, "(", ")");
+      if (/\.message\b/.test(call)) {
+        anyMessage.push(`${path.relative(ROOT, f)}: ${call.replace(/\s+/g, " ").slice(0, 60)}`);
+      }
+    }
+  }
+  is(anyMessage.length, 0,
+    "and no console call anywhere logs a `.message`",
+    anyMessage.join(" · ") || "PostgREST returns its errors rather than throwing, so a catch-block scan cannot see them");
   is(raw.length, 0,
     "no caught value is logged raw, and no `.message` is logged at all",
     raw.join(" · ") || "console.warn(x, error) prints the message and the stack");
