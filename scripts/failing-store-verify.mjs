@@ -61,6 +61,13 @@
  */
 
 const BASE = (process.argv[2] || "http://localhost:3055").replace(/\/$/, "");
+/**
+ * `refusing` — the database says no to everything.
+ * `writes-only` — reads succeed and writes are refused, which is `GRANT
+ *   SELECT` without `GRANT UPDATE`: an ordinary half-applied migration, and
+ *   the only shape that can reach `setCarve`'s failure path at all.
+ */
+const MODE = process.argv[3] === "writes-only" ? "writes-only" : "refusing";
 const ANON = "9f3c1b7e-4a20-4c11-8d3e-2b6a5c0f7e18";
 
 const rows = [];
@@ -102,7 +109,78 @@ const leaks = (text) => THEIR_WORDS.filter((w) => text.includes(w));
 */
 const OPERATOR_WORDS = /supabase|livekit|NEXT_PUBLIC|SERVICE_ROLE|env var|npm run/i;
 
+/**
+ * `"storage":"supabase"` is not the leak this is looking for.
+ *
+ * `store.kind` is a deliberate field on a dozen responses — it is how the
+ * client knows whether anything is being kept, and it is what makes
+ * `persisted: false` legible. It is a machine field in JSON, not a sentence
+ * rendered at somebody; the rule it looks like it breaks ("no page says the
+ * word Supabase to a person") is about pages, and `no-store-verify` check 3
+ * already holds that where it belongs.
+ *
+ * Removed before the operator-word sweep rather than removed from the sweep,
+ * so a *second* occurrence of the vendor's name in the same response still
+ * fails. Without this the check reads a designed field as a leak, which is a
+ * false finding — and a false finding is worse than a missed one, because
+ * somebody acts on it.
+ */
+const withoutStorageKind = (t) => t.replace(/"storage"\s*:\s*"[a-z]+"/gi, '"storage":""');
+
+/**
+ * The half-applied schema, which is the only shape that reaches the bug.
+ *
+ * `setCarve` is the one mutation in `supabase-store.ts` that reports by
+ * returning `false` instead of throwing — deliberately, because `42703` with
+ * 0011 pending is a normal state rather than a fault. The route between it and
+ * the two screens dropped that boolean and reported `deleted: "carve"`
+ * unconditionally, so the room said "Forgotten." about a sentence it was still
+ * holding, on the two screens whose entire job is that question.
+ *
+ * `FORGET_FAILED` — "Could not clear that. It is still here." — was unreachable
+ * code for the whole life of the product, because reaching it needs a store
+ * that *succeeds* at `findUserId` and *fails* at the update. With everything
+ * refused the route dies at the first read and never calls `setCarve` at all.
+ *
+ * This is that shape. The route's own comment names the honest answer —
+ * "`deleted: 0` with `had: true` ... which until now was unreachable" — and
+ * this is the assertion that it is not unreachable any more.
+ */
+async function writesOnly() {
+  const carve = await get(`/api/carve?anonId=${ANON}`);
+  let cd = {};
+  try { cd = JSON.parse(carve.text); } catch { /* asserted below */ }
+  record(1, "A read still works when only writes are refused",
+    carve.status === 200 && typeof cd.carve === "string" && cd.carve.length > 0,
+    `${carve.status} · carve=${JSON.stringify(cd.carve)}`,
+  );
+
+  const forget = await fetch(`${BASE}/api/vent?anonId=${ANON}&carve=1`, { method: "DELETE" });
+  const text = await forget.text();
+  let fd = {};
+  try { fd = JSON.parse(text); } catch { /* asserted below */ }
+  record(2, "A carve the database refused to clear is never reported as cleared",
+    fd.deleted !== "carve",
+    `deleted=${JSON.stringify(fd.deleted)}`);
+  record(3, "and the answer is the shape both screens turn into FORGET_FAILED",
+    fd.deleted === 0 && fd.had === true,
+    `deleted=${JSON.stringify(fd.deleted)} had=${JSON.stringify(fd.had)}`);
+  record(4, "Nothing Postgres said comes back with it",
+    leaks(text).length === 0 && !OPERATOR_WORDS.test(withoutStorageKind(text)),
+    leaks(text).join(", ") || "clean");
+
+  const mark = (p) => (p === true ? "PASS" : "FAIL");
+  console.log("\n| # | Check | Result | Detail |");
+  console.log("|---|---|---|---|");
+  for (const r of rows) console.log(`| ${r.n} | ${r.name} | ${mark(r.pass)} | ${r.detail} |`);
+  const failed = rows.filter((r) => r.pass !== true);
+  console.log(`\n${rows.length - failed.length} passed, ${failed.length} failed — half-applied-schema shape\n`);
+  process.exit(failed.length === 0 ? 0 : 1);
+}
+
 async function main() {
+  if (MODE === "writes-only") return writesOnly();
+
   // ── 1. Nothing crashes ──────────────────────────────────────────────────
   const writes = [
     ["feedback", await post("/api/feedback", { anonId: ANON, rating: 4 })],
@@ -173,7 +251,7 @@ async function main() {
     leaked.length ? leaked.map(([n, l]) => `${n}: ${l.join(", ")}`).join(" · ")
       : "no upstream message, hint or quoted value on any surface");
 
-  const opWords = all.map(([n, r]) => [n, r.text.match(OPERATOR_WORDS)]).filter(([, m]) => m);
+  const opWords = all.map(([n, r]) => [n, withoutStorageKind(r.text).match(OPERATOR_WORDS)]).filter(([, m]) => m);
   record(6, "and no route names our configuration",
     opWords.length === 0,
     opWords.length ? opWords.map(([n, m]) => `${n}: ${m[0]}`).join(" · ") : `${all.length} routes, clean`);

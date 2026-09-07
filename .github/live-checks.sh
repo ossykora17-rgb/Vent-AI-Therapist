@@ -190,7 +190,52 @@ if [ "$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$PORT/api/healt
   exit 1
 fi
 
-node scripts/failing-store-verify.mjs "http://localhost:$PORT"
+node scripts/failing-store-verify.mjs "http://localhost:$PORT" || { kill "$DB" 2>/dev/null; exit 1; }
+
+# ── fourth pass: reads succeed, writes are refused ──────────────────────────
+#
+# GRANT SELECT without GRANT UPDATE. An ordinary half-applied migration, and
+# the only shape that can reach the bug the third pass was named after: with
+# everything refused a route dies at `findUserId` and never calls `setCarve`
+# at all, so its failure path — the one store method that reports by returning
+# false rather than throwing — stayed unreachable even here.
+#
+# `FORGET_FAILED`, "Could not clear that. It is still here.", was dead code for
+# the whole life of the product. This pass is the proof that it is not.
+kill "$DB" 2>/dev/null || true
+kill -- -"$SERVER" 2>/dev/null || kill "$SERVER" 2>/dev/null || true
+for _ in $(seq 1 30); do
+  curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1 || break
+  sleep 1
+done
+if curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1; then
+  echo "the failing-store server would not let go of :$PORT — refusing to test against it."
+  exit 1
+fi
+
+node scripts/broken-store.mjs --port "$DB_PORT" --code 42703 \
+  --fail-methods PATCH,POST,PUT,DELETE >"$LOG.halfschema" 2>&1 &
+DB=$!
+
+setsid env -u VENT_LOCAL_STORE NODE_ENV=production \
+  NEXT_PUBLIC_SUPABASE_URL="http://127.0.0.1:$DB_PORT" \
+  SUPABASE_SERVICE_ROLE_KEY="eyJfake.service.role" \
+  VENT_EXTERNAL_FIXTURE=scripts/fixtures/external \
+  npx next start -p "$PORT" >"$LOG.halfschema.app" 2>&1 &
+SERVER=$!
+
+for _ in $(seq 1 30); do
+  curl -sf -m 2 "http://localhost:$PORT/api/health" >/dev/null 2>&1 && break
+  sleep 1
+done
+
+if [ "$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$PORT/api/health")" = "000" ]; then
+  echo "the half-applied-schema server never came up:"
+  tail -30 "$LOG.halfschema.app"
+  exit 1
+fi
+
+node scripts/failing-store-verify.mjs "http://localhost:$PORT" writes-only
 RC=$?
 kill "$DB" 2>/dev/null || true
 exit $RC

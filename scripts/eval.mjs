@@ -13558,6 +13558,30 @@ check("118 A route that touches the store answers when the store says no", () =>
   const sh = fs.readFileSync(path.join(ROOT, ".github/live-checks.sh"), "utf8");
   ok(/failing-store-verify\.mjs/.test(sh), "live-checks runs the failing-store pass");
   ok(/broken-store\.mjs/.test(sh), "and boots the database that refuses");
+
+  /*
+    And the fourth shape, which is the only one that reaches the bug.
+
+    With every request refused, a route dies at `findUserId` and never calls
+    `setCarve` — the one store method that reports by returning `false` rather
+    than throwing. So even the third pass could not exercise its failure path,
+    and `FORGET_FAILED` — "Could not clear that. It is still here." — stayed
+    the dead code CLAUDE.md says it always was.
+
+    `--fail-methods PATCH,POST,PUT,DELETE` is `GRANT SELECT` without `GRANT
+    UPDATE`: an ordinary half-applied migration. Reads succeed, the write is
+    refused with `42703`, and the route answers `deleted: 0` with `had: true` —
+    the shape its own comment names as honest and describes as unreachable.
+    It is reachable now, and the fourth pass is the proof.
+  */
+  ok(/writes-only/.test(sh), "and runs the half-applied-schema pass after it",
+    "the shape where reads work and writes do not is the only one that reaches setCarve");
+  ok(/--fail-methods PATCH,POST,PUT,DELETE/.test(sh),
+    "with reads allowed through, which is what makes the write the thing that fails");
+  const verify = fs.readFileSync(path.join(ROOT, "scripts/failing-store-verify.mjs"), "utf8");
+  ok(/fd\.deleted === 0 && fd\.had === true/.test(verify),
+    "and asserts the exact shape both screens turn into FORGET_FAILED",
+    "asserting only that it is not `deleted: \"carve\"` would pass on a 503, which is a different answer");
   ok(/would not let go of/.test(sh.slice(sh.indexOf("third pass"))),
     "and refuses a port the previous server is still holding",
     "a leftover server answering the third pass would report on the second one's build");

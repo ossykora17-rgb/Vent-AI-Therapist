@@ -20,7 +20,7 @@ constraint. It outranks elegance, cleverness, and feature count.
 ```bash
 npm run local      # the whole product, no accounts, no cloud  → :3001
 npm run gate       # selector + eval + pipelines + live-verify → merge or don't
-npm run live-checks # boots its own build three times — store, none, and one that fails
+npm run live-checks # four shapes: store, none, one that fails, one half-applied
 npm run eval       # the whole suite, no server; add a URL for the live room
 npm run audit      # grade last 50 turns; --dry is free, --apply writes a diff
 npm run heartbeat  # what changed, what is dirty, who should fix it
@@ -650,6 +650,25 @@ Check 118 derives the rule rather than listing it: every route calling
 the reason it does not. Reading the file for the word `withStore` is not
 enough and was the first version — deleting the wrapped export left the suite
 green, because the import line still said it.
+
+**And a fourth shape, because the third still could not reach the bug it was
+named after.** With every request refused, a route dies at `findUserId` and
+never calls `setCarve` at all — so the one store method that reports by
+*returning false* rather than throwing still had no test, and `FORGET_FAILED`
+was still dead code. `--fail-methods PATCH,POST,PUT,DELETE` is `GRANT SELECT`
+without `GRANT UPDATE`: an ordinary half-applied migration. Reads succeed, the
+update is refused with `42703`, and the route answers `deleted: 0` with
+`had: true` — the shape its own comment calls honest and describes as
+unreachable. It is reachable now, and asserted.
+
+Getting there took two probes that could not see what they were looking at,
+in a file about probes that cannot see what they are looking at. First the stub
+returned no carve, so the route short-circuited on "nothing to delete" and
+answered a true sentence about a different question. Then it returned `[]` for
+list reads — but `maybeSingle()` does not send `Accept: vnd.pgrst.object+json`,
+that is `single()`; it asks for an array and resolves 0-or-1 itself. So
+`findUserId` was null, the shape booted, the health probe went green on seven
+of eight tables, and the thing it was built to reach was never reached.
 
 That gap has now produced the same bug thirteen times, wearing thirteen faces:
 

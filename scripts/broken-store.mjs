@@ -56,6 +56,24 @@ const arg = (name, fallback) => {
 const CODE = arg("code", "42501");
 const PORT = Number(arg("port", "54321"));
 
+/**
+ * Which methods are refused. Default: all of them.
+ *
+ * `--fail-methods PATCH,POST,PUT,DELETE` is the fourth shape, and it is a real
+ * one rather than a contrivance: `GRANT SELECT` without `GRANT UPDATE` is an
+ * ordinary half-applied migration, and it is the only configuration that can
+ * reach the bug CLAUDE.md says was unreachable.
+ *
+ * With everything refused, a route fails at `findUserId` and never gets to the
+ * write — so `setCarve`, the one mutation in `supabase-store.ts` that reports
+ * by *returning false* instead of throwing, is never actually called. Its
+ * failure path, and the `FORGET_FAILED` sentence behind it, stayed unprovable.
+ * Letting reads through is what makes the write the thing that fails.
+ */
+const FAIL_METHODS = new Set(
+  (arg("fail-methods", "") || "").split(",").map((m) => m.trim().toUpperCase()).filter(Boolean),
+);
+
 /** What Postgres says, including the part that quotes somebody's id. */
 const BODIES = {
   42501: {
@@ -77,16 +95,48 @@ const status = CODE === "42501" ? 403 : 400;
 
 let served = 0;
 
+/**
+ * A user id and a carve, so a read can succeed and the *write* is the thing
+ * that fails. Without a carve on the row the forget route short-circuits on
+ * "there was nothing to delete" and never calls `setCarve` at all — which is
+ * a true answer to a different question, and it is what the first run of this
+ * shape actually measured.
+ */
+const USER_ID = "0b2d5a41-7c38-4f9e-9a6b-1e4c8d05f3a2";
+
 const server = http.createServer((req, res) => {
   served++;
-  /*
-    Everything fails, including reads.
 
-    A store that can read and not write is a fourth shape and a kinder one.
-    This is the harsh case on purpose: the product must stay usable when the
-    database answers nothing at all, and every sentence it prints must still
-    be true.
+  /*
+    In the default mode everything fails, including reads — the harsh case on
+    purpose: the product must stay usable when the database answers nothing at
+    all, and every sentence it prints must still be true.
+
+    With `--fail-methods`, the rest succeed. `maybeSingle()` and `single()` set
+    `Accept: application/vnd.pgrst.object+json` and a bare list read does not,
+    so the shape of the answer follows the header rather than a guess about the
+    path. Getting that wrong returns a 406 from `supabase-js` itself and the
+    read fails for a reason that has nothing to do with the test.
   */
+  if (FAIL_METHODS.size > 0 && !FAIL_METHODS.has(req.method ?? "")) {
+    const wantsObject = String(req.headers.accept ?? "").includes("vnd.pgrst.object+json");
+    res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+    const row = { id: USER_ID, carve: "the burial", anon_id: "seeded" };
+    /*
+      A one-row array for list reads, not an empty one.
+
+      `maybeSingle()` does not send `Accept: vnd.pgrst.object+json` — that is
+      `single()`. It asks for an array and resolves 0-or-1 itself, so an empty
+      array made `findUserId` return null, and the forget route short-circuited
+      on "no such user" without ever calling `setCarve`. The shape booted, the
+      health probe went green on seven of eight tables, and the thing it was
+      built to reach was never reached. One more probe that could not see what
+      it was looking at.
+    */
+    res.end(wantsObject ? JSON.stringify(row) : JSON.stringify([row]));
+    return;
+  }
+
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     // PostgREST sends this and `supabase-js` reads it. Without it the client
