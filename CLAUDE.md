@@ -285,6 +285,34 @@ it.** Check 107 asserts the contract names every field the parser reads, and
 derives the ceiling from `NOTES_ASKED`, `MAX_SUBJECT` and `MAX_DETAIL` so it
 cannot drift from what is asked for.
 
+**A hedged pattern cannot catch an unhedged model.** `GENERIC_TASKS` banned
+journaling as `/(?:try |start |consider |do some )(?:journal…|writing it
+down)/` — a leading hedge, required. A model asked for an instruction does not
+hedge, and a production reply told somebody to *"write down one plain sentence
+about what is actually true"* and then offered to *"witness this with you, or
+push"*. Three sentences, three things that survive having the message deleted,
+and fourteen reply graders passed all of it. Third time this shape has cost
+something, after `make you` and `\bdon\b`: a pattern written the way its author
+would phrase it, meeting text phrased the way a model does.
+
+What is banned is the **empty object**, never the paper. The library's own
+*"Write down the one it keeps returning to, on paper, next to the bed"* is
+correct — aimed at somebody whose mind loops before sleep, and next-to-the-bed
+is the CBT-I protocol rather than a gesture at one. Same line the drop set
+falls on: aimed is fine, generic is the offence. Check 119 holds both halves,
+and its mutation pass fails on a *widened* ban as well as a removed one,
+because the over-broad fix would delete a working clinical move and look like
+diligence.
+
+The positive half of that rule — an action must be doable in the room, in under
+a minute, out of what they said — is **not in the prompt**, and the reason is
+written into `voice.ts` beside it. Check 24 measures the heaviest assembly at
+exactly 3,600 against a 3,600 ceiling, and that check's own comment settled it
+in advance: *"the next block pays by removal ... whoever raises this number
+next should have deleted something."* This rule replaces nothing, so it is
+enforced by the grader and absent from the prompt. There is no headroom left:
+the next person with a good sentence for the prompt has to delete one.
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.

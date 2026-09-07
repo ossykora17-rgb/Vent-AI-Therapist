@@ -93,6 +93,37 @@ export const BANNED_PHRASES: readonly BannedPhrase[] = [
   { say: "your journey", re: /\byour journey\b/i, why: "their life is not a journey" },
   { say: "hold space", re: /\bhold space\b/i, why: "workshop language" },
   { say: "sit with it", re: /\bsit with (?:it|that)\b/i, why: "the thing said when there is nothing to say" },
+
+  /*
+    FOUR MORE, FROM A REPLY SOMEBODY ACTUALLY RECEIVED
+
+    Not from a list of therapy clichés — from one production screenshot, which
+    is the only instrument that finds these. The reply read, in full:
+
+      "Being treated like a broken machine is its own kind of exhaustion. When
+       that voice starts, write down one plain sentence about what is actually
+       true. Do you want me to just witness this with you, or push?"
+
+    Three sentences, and the person had just said they were being treated like
+    a machine that needs fixing. The room answered with a task, a piece of
+    therapy vocabulary, and a menu of what it might do next. Every one of those
+    survives having the message deleted, which is this file's whole test.
+
+    Each regex below was run against all 464 authored strings this product can
+    emit — the holistic examples, the golden set, every tactic hold and
+    instruction, every probe — before it went in. Zero hits, which is the only
+    direction this list is allowed to grow in.
+  */
+  { say: "I hear you", re: /\bi hear you\b|\bi hear how (?:hard|heavy|much)\b/i,
+    why: "the same claim as 'I understand', one verb over" },
+  { say: "safe space", re: /\b(?:this is a |a )?safe space\b/i,
+    why: "a promise about the room, made by the room" },
+  { say: "the weight you're carrying", re: /\bheavy weight\b|\bthe weight (?:that )?you(?:'?re| are) carrying\b/i,
+    why: "narrating their feeling back at them as an object" },
+  { say: "witness this with you", re: /\bwitness (?:this|that|it) with you\b|\bi(?:'?ll| will) (?:just )?witness\b/i,
+    why: "workshop language, and a job description nobody asked to hear" },
+  { say: "what is actually true", re: /\bwhat(?:'?s| is) (?:actually|really) true\b|\bthe (?:actually|really) true thing\b/i,
+    why: "a framing exercise offered instead of a question about their life" },
 ];
 
 /**
@@ -217,6 +248,37 @@ export const GENERIC_TASKS: readonly BannedPhrase[] = [
     why: "they are already writing it down — that is what this box is" },
   { say: "get some rest", re: /\b(?:get|have) (?:some |a )?(?:good |early )?(?:rest|sleep|early night)\b|\bsleep it off\b/i,
     why: "the end of a conversation, dressed as care" },
+
+  /*
+    THE IMPERATIVE, WHICH THE JOURNALING ROW ABOVE CANNOT SEE
+
+    `try journaling` reads `/(?:try |start |consider |do some )(?:journal…|writing
+    it down)/` — it requires a hedging verb in front. A model asked for an
+    instruction does not hedge. It writes "write down one plain sentence", and
+    that walks past every grader in this product, which is how it reached
+    somebody.
+
+    Same species as `make you` and `\bdon\b` in `intent.ts`: a pattern written
+    in the shape the author would phrase it, meeting text phrased the way a
+    model actually phrases it.
+
+    NARROW ON PURPOSE, AND THE NARROWNESS IS THE ARGUMENT
+
+    This does *not* ban writing something down. `holisticExamples.jsonl` has
+    "Write down the one it keeps returning to, on paper, next to the bed" —
+    aimed at somebody whose mind loops before sleep, and next-to-the-bed is the
+    actual CBT-I protocol rather than a gesture. By this file's own stated line
+    that passes: aimed at the exact thing they named, so task is not the
+    offence and generic is.
+
+    What is banned is the *empty object*. "One plain sentence" names nothing,
+    ties to nothing they said, and could be appended to any message on earth.
+    The difference between the two is not the paper. It is whether the thing
+    being written down came out of their message.
+  */
+  { say: "write down one plain sentence",
+    re: /\b(?:write|jot|put) (?:down |out )?(?:just )?(?:one|a|a single) (?:plain|simple|single|short|honest|true) (?:sentence|line|thing|statement)\b|\bname (?:one|a) (?:plain|simple|true) thing\b/i,
+    why: "an instruction with nothing of theirs in it — homework, not a move" },
 ];
 
 /** The first generic task in a piece of text, or null. */
@@ -389,3 +451,28 @@ Four parts reflecting what they actually said to one part asking, and zero
 parts advice they did not ask for. If they ask for advice you may give it;
 until then their sentence is the material and there is nothing to improve.
 `;
+
+/*
+  WHAT IS NOT IN THE PROMPT ABOVE, AND WHY
+
+  A rule was written for this block and did not go in: "when you do give an
+  action, it happens in the room they are in, in under a minute, out of what
+  they told you — no paper, no notebook, no tomorrow morning."
+
+  It is a good rule. It came from a production reply that told somebody to
+  write down one plain sentence, and it is now enforced — as the
+  `write down one plain sentence` row in `GENERIC_TASKS`, which the failsafe
+  rejects and regenerates.
+
+  It is not in the prompt because the prompt has no room. Check 24 measures the
+  heaviest possible assembly at exactly 3,600 tokens against a 3,600 ceiling,
+  and that check's own comment settled the question before this one came up:
+  "the next block pays by removal ... whoever raises this number next should
+  have deleted something." This rule replaces nothing. `THE ONE RULE ABOUT THE
+  BODY` is the closest thing to it and is the *more* specific of the two, which
+  by this repository's own ranking makes it the one that stays.
+
+  So the instruction is enforced where it can be measured and absent where it
+  would only be hoped for — which is the split this file already makes for
+  everything else. If the ceiling is ever raised, this is drafted and ready.
+*/

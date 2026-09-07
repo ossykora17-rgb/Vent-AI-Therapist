@@ -13587,6 +13587,130 @@ check("118 A route that touches the store answers when the store says no", () =>
     "a leftover server answering the third pass would report on the second one's build");
 });
 
+check("119 The reply that reached somebody is graded, sentence by sentence", () => {
+  /*
+    One production screenshot, kept as a fixture because it is the only
+    instrument that finds this class.
+
+    Somebody wrote that they were being treated like a broken machine that
+    needs fixing. The room answered:
+
+      "Being treated like a broken machine is its own kind of exhaustion. When
+       that voice starts, write down one plain sentence about what is actually
+       true. Do you want me to just witness this with you, or push?"
+
+    Three sentences: a task, a piece of therapy vocabulary, and a menu of what
+    the room might do next. Every one of them survives having the message
+    deleted, which is the test this product states and had no way to enforce
+    on any of the three. Fourteen reply graders and it passed all of them.
+
+    Why it passed is the useful part. `GENERIC_TASKS` already banned
+    journaling — `/(?:try |start |consider |do some )(?:journal…|writing it
+    down)/` — and that regex needs a hedging verb in front of it. A model asked
+    for an instruction does not hedge; it writes "write down one plain
+    sentence". Same species as `make you` and `\bdon\b` in `intent.ts`: a
+    pattern in the shape its author would phrase it, meeting text phrased the
+    way a model actually phrases it.
+
+    Held as the whole reply rather than as three separate strings, because
+    what made it bad was cumulative and a check on fragments would not have
+    noticed that.
+  */
+  const SHIPPED =
+    "Being treated like a broken machine is its own kind of exhaustion. " +
+    "When that voice starts, write down one plain sentence about what is actually true. " +
+    "Do you want me to just witness this with you, or push?";
+
+  const banned = bannedPhrase(SHIPPED);
+  ok(banned, "the reply is refused by name", "it passed all fourteen graders when it shipped");
+
+  // Each offence separately, so a single over-broad row cannot stand in for
+  // the other two and report the class as covered.
+  const caught = [];
+  for (const fragment of [
+    "write down one plain sentence about it",
+    "what is actually true here",
+    "do you want me to just witness this with you",
+  ]) {
+    if (bannedPhrase(fragment) || genericTask(fragment)) caught.push(fragment);
+  }
+  is(caught.length, 3, "and all three offences are caught, not one standing for three",
+    `missed: ${["write down one plain sentence about it", "what is actually true here", "do you want me to just witness this with you"].filter((f) => !caught.includes(f)).join(" · ")}`);
+
+  /*
+    THE HALF THAT MATTERS MORE THAN THE BAN
+
+    A ban that also refuses the good version of the same move is worse than no
+    ban: it teaches the room to avoid a clinical technique it is right to use.
+
+    `holisticExamples.jsonl` carries "Write down the one it keeps returning to,
+    on paper, next to the bed" — for somebody whose mind loops before sleep,
+    which is the actual CBT-I protocol rather than a gesture at one. It is a
+    task, it involves paper, and it is correct, because the thing being written
+    down came out of their message. That is the line this file already draws
+    for the drop set: aimed is fine, generic is not.
+  */
+  const aimed = "Write down the one it keeps returning to, on paper, next to the bed. Not to solve it.";
+  is(genericTask(aimed), null, "and the aimed version of the same move still passes",
+    "banning the paper rather than the emptiness would delete a correctly targeted CBT-I move");
+  is(bannedPhrase(aimed), null, "by name as well as by table");
+
+  /*
+    And every new row is checked against everything this product can author,
+    which is the only direction `GENERIC_TASKS` says it may grow in. Derived
+    off the files rather than a remembered number — the corpus grows.
+  */
+  /*
+    Only what the room says, never what the person said.
+
+    The first version of this read every string field in both corpora, and
+    failed — on `holisticExamples.jsonl`'s `input`, which is somebody writing
+    "i know exactly what this is ... i understand". `I understand` is a banned
+    *reply*: it claims a thing the room cannot claim. Coming from the person it
+    is the most ordinary sentence in the file, and a check that refuses it has
+    stopped being about tone and started policing the vent.
+
+    `input` and `message` are theirs. `full_integration` is the authored reply,
+    and the tactic holds and probe asks are what the room may say. That is the
+    whole set.
+  */
+  const THEIRS = new Set(["input", "message", "clauses", "affect", "somatic_read", "id", "intent", "language", "probes"]);
+  const authored = [];
+  for (const file of ["src/lib/vent/holisticExamples.jsonl", "src/lib/vent/goldenSet.jsonl"]) {
+    for (const line of fs.readFileSync(path.join(ROOT, file), "utf8").split("\n").filter(Boolean)) {
+      for (const [k, v] of Object.entries(JSON.parse(line))) {
+        if (typeof v === "string" && !THEIRS.has(k)) authored.push(v);
+      }
+    }
+  }
+  const tacticsSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/tactics.ts"), "utf8");
+  for (const m of tacticsSrc.matchAll(/hold:\s*"((?:[^"\\]|\\.)*)"/g)) authored.push(m[1]);
+  const probesSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/probes.ts"), "utf8");
+  for (const m of probesSrc.matchAll(/ask:\s*"((?:[^"\\]|\\.)*)"/g)) authored.push(m[1]);
+
+  // 72 holistic replies + 35 tactic holds + 58 probe asks. The floor is well
+  // under that so the corpus can grow, and well over zero so a scan that
+  // reads nothing cannot pass.
+  ok(authored.length > 120, `there is an authored corpus to check against (${authored.length})`,
+    "a corpus of nothing passes for the wrong reason");
+  const selfHits = authored.filter((s) => bannedPhrase(s) || genericTask(s));
+  is(selfHits.length, 0,
+    "and nothing this product authors is refused by its own tables",
+    selfHits.slice(0, 2).map((s) => s.slice(0, 60)).join(" · "));
+
+  /*
+    THE NUMBER IS A SENTENCE, AND IT IS ALREADY WRONG ONCE PER TABLE GROWTH
+
+    Check 86 asserts `POSITIONING.md`'s count against the tables. It failed on
+    the first run of this change, which is the check working — the rows went
+    in and the hand-typed integer one document away did not move. Recorded
+    here so the next person adding a row knows the doc is downstream of it.
+  */
+  const positioning = fs.readFileSync(path.join(ROOT, "docs/POSITIONING.md"), "utf8");
+  ok(/\d+ phrases and unasked-for tasks fail the \*\*build\*\*/.test(positioning),
+    "and the competitive claim still states a count check 86 can verify");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
