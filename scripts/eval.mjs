@@ -13787,6 +13787,79 @@ check("120 The database lets a person rate as often as the route says they may",
     "if this ever becomes 1 the constraint was right and this check is the thing to delete");
 });
 
+check("121 The health probe can tell a hardened function from the one it replaced", () => {
+  /*
+    The repo fixed `match_memories` and production ran the broken version for
+    months.
+
+    CLAUDE.md's entry on 0014 is the sharpest thing in the file. The vulnerable
+    definition was `security definer`, filtered on a uuid the *caller* supplied,
+    and was granted to `authenticated` — so any signed-in person could read
+    anybody's memories over `/rest/v1/rpc/match_memories`. 0014 replaced it,
+    documented it at length, and nothing anywhere compared the live schema to
+    this one: `/api/health` probed tables and columns and never a function.
+
+    `RPC_CONTRACT` held exactly one entry, `vent_rate_count`, so the RPC probe
+    existed and did not cover the RPC that mattered.
+
+    Why the signature is enough to tell them apart: 0006 created a *four*
+    argument `match_memories` and 0014 replaced it with a *three* argument one —
+    the same fact that made 0016's `drop function` match nothing. PostgREST
+    resolves by named parameters, so a call carrying exactly 0014's three
+    answers PGRST202 against a database still running 0006.
+  */
+  const sql = fs.readFileSync(path.join(ROOT, "supabase/migrations/0014_rpc_hardening.sql"), "utf8");
+
+  /*
+    Derived off the migration, not typed twice. A hand-written parameter list
+    beside the schema it describes is this repository's most-repeated bug, and
+    here the two drifting apart turns the probe into one that always passes.
+  */
+  const decl = sql.match(/create or replace function public\.match_memories\(([\s\S]*?)\)\s*returns/);
+  ok(decl, "0014 still declares match_memories", "the probe below is derived from this");
+  const declared = [...decl[1].matchAll(/^\s*(p_[a-z_]+)/gm)].map((m) => m[1]);
+  is(declared.length, 3, `0014 declares three parameters (${declared.join(", ")})`,
+    "0006's was four — that difference is the whole discriminator");
+
+  const probed = Object.keys(RPC_CONTRACT.match_memories ?? {});
+  is(probed.sort().join(","), declared.slice().sort().join(","),
+    "and the health probe calls it with exactly those",
+    "a probe whose parameters drift from the schema resolves to nothing and reports a fault that is not there, or resolves to the old function and reports health");
+
+  /*
+    And the probe is over the RPC that carries the vulnerability, not merely
+    over some RPC. Named rather than counted: the point is which one.
+  */
+  ok("match_memories" in RPC_CONTRACT,
+    "the function 0014 hardened is the one being watched",
+    "the RPC probe existed for a year and covered vent_rate_count alone");
+
+  // The vector has to be the width the column is, or the call fails for a
+  // reason that has nothing to do with the question being asked.
+  const contractSrc = fs.readFileSync(path.join(ROOT, "src/lib/store/contract.ts"), "utf8");
+  const probeDims = Number(contractSrc.match(/const PROBE_DIMS = (\d+)/)?.[1]);
+  const embedSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/embeddings.ts"), "utf8");
+  const embedDims = Number(embedSrc.match(/EMBED_DIMS = (\d+)/)?.[1]);
+  is(probeDims, embedDims,
+    `the probe vector is the width the column is (${probeDims})`,
+    "`embeddings.ts` is server-only and cannot be imported here, so the copy is asserted rather than trusted");
+  is((RPC_CONTRACT.match_memories.p_embedding ?? []).length, embedDims,
+    "and the array actually built is that wide");
+
+  /*
+    WHAT THIS CANNOT SEE, STATED SO NOBODY READS IT AS MORE
+
+    It separates the signatures and not `security invoker` from `security
+    definer`. Two functions with these three parameters and different bodies
+    are identical from here. That limit belongs in the file, because the
+    failure this whole check exists to prevent was somebody reading a green
+    light as a guarantee it never made.
+  */
+  ok(/Supabase's own advisors|advisors/.test(contractSrc) || /advisors/.test(fs.readFileSync(path.join(ROOT, "CLAUDE.md"), "utf8")),
+    "and the limit points at the tool that does cover bodies and grants",
+    "a probe that cannot see something must say so where somebody reads it");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

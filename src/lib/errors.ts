@@ -39,6 +39,34 @@
  * recorded four times, and "unknown" that says *why* it is unknown is worth
  * more than a blank.
  */
+/**
+ * A database's sentence with the identifiers taken out of it.
+ *
+ * `/api/health` publishes Postgres's `message` on a public, unauthenticated
+ * endpoint, and the comment defending that is right about why: `42703` says
+ * *which column* is missing, and "the schema has drifted" is true, useless, and
+ * one more round trip to find out what everybody already knew.
+ *
+ * The risk is narrower than the whole string and so is the redaction. Most of
+ * what Postgres names is a schema object — `column vents.carve does not exist`,
+ * `permission denied for table vents` — and those are ours and worth printing.
+ * A few codes quote the *value* instead: `22P02 invalid input syntax for type
+ * uuid: "…"` is the one that matters here, because in this product an anon id
+ * is not an identifier, it is the entire credential. `/api/notes?anonId=`
+ * needs nothing else.
+ *
+ * So uuids go and everything else stays. Exact rather than broad on purpose:
+ * stripping every quoted run would take the column name with it, which is the
+ * one thing the message was being kept for.
+ */
+export function redactIds(text: string | null | undefined): string | undefined {
+  if (!text) return undefined;
+  return text.replace(
+    /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+    "<id>",
+  );
+}
+
 export function errorKind(e: unknown): string {
   if (e === null) return "null";
   if (e === undefined) return "undefined";

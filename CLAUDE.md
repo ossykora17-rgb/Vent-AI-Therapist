@@ -194,6 +194,31 @@ the repair does not guess a name, that it says so when it did nothing, and that
 `vent_feedback.user_id` keeps an index after the unique one goes with its
 constraint.
 
+**The probe that would have caught it now exists, and so does the leak it
+found on the way in.** `RPC_CONTRACT` held one entry, `vent_rate_count`, so the
+RPC probe existed and did not cover the RPC that mattered. `match_memories` is
+in it now, and the discriminator is an accident worth naming: 0006 created a
+*four*-argument version and 0014 replaced it with a *three*-argument one — the
+same fact that made 0016's `drop function` match nothing — and PostgREST
+resolves by named parameters, so a call carrying 0014's three answers PGRST202
+against a database still running 0006. A deployment on the vulnerable
+definition now reports a failing RPC instead of looking identical to a fixed
+one. It separates the *signatures*, not `security invoker` from `security
+definer`; two functions with those three parameters and different bodies read
+the same from here, and the advisors are still the tool for that.
+
+Wiring it up meant fetching a real health response, and that is where the leak
+was: `/api/health` publishes the database's `hint` and `message` in **four**
+places — `tableErrors` twice, `transient`, and `writeError` — on a route with
+no token. Most of what Postgres names is a schema object worth printing, which
+is why the message is kept and `redactIds` only takes out uuids: an anon id in
+this product is not an identifier, it is the whole credential. Three of the
+four sites were redacted in one pass and the fourth was missed, with every
+assertion still green — it showed up only in a response fetched off a running
+server with a planted id in it. So the assertion is the class: no uuid anywhere
+in that response, *and* the redaction marker present, because "no uuid" is
+satisfied just as well by an endpoint that reported nothing at all.
+
 **A migration that is written is not a migration that has been applied.**
 0014 hardened `match_memories` — the vulnerable version was `security definer`,
 filtered on a uuid the *caller* supplied, and was granted to `authenticated`,

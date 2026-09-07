@@ -256,6 +256,55 @@ async function main() {
     opWords.length === 0,
     opWords.length ? opWords.map(([n, m]) => `${n}: ${m[0]}`).join(" · ") : `${all.length} routes, clean`);
 
+  /*
+    ── 3b. And the public health endpoint, field by field it does not have ──
+
+    `/api/health` has no token on it, and it publishes what the database says
+    in four places: `tableErrors.hint`, `tableErrors.message`, `transient.hint`
+    and `writeError`. Three of the four were redacted in one pass and the
+    fourth was missed — every assertion in the suite still passed, and the leak
+    only appeared in a response fetched off a running server with a planted id
+    in it.
+
+    So this asserts the class rather than the fields: no uuid anywhere in the
+    response, wherever it came from. `broken-store.mjs` plants one in its
+    `hint` precisely so this has something to find.
+
+    An anon id is not an identifier in this product. It is the whole
+    credential — `/api/notes?anonId=` needs nothing else.
+  */
+  const health = await get("/api/health");
+  const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
+  const found = [];
+  const walk = (node, at) => {
+    if (typeof node === "string") { if (UUID.test(node)) found.push(`${at}: ${node.slice(0, 60)}`); return; }
+    if (node && typeof node === "object") for (const k of Object.keys(node)) walk(node[k], `${at}.${k}`);
+  };
+  try { walk(JSON.parse(health.text), ""); } catch { found.push("health did not return JSON"); }
+  /*
+    And proof the redaction ran, rather than proof nothing arrived.
+
+    "No uuid in the response" is satisfied just as well by a health endpoint
+    that reported nothing at all, which is the failure bucket with nothing in
+    it — the shape this repository has recorded four times. `broken-store.mjs`
+    plants an id in its `hint` on purpose, so a redacted response must carry
+    the marker where it was.
+  */
+  const redacted = health.text.includes("<id>");
+  record(11, "The public health endpoint carries no identifier from the database",
+    found.length === 0 && redacted,
+    found.length
+      ? found.join(" · ")
+      : redacted
+        ? "no uuid in any field, and the planted one came back redacted"
+        : "no uuid — but no redaction marker either, so nothing was checked");
+
+  // The probe that would have caught a live vulnerability, on the wire rather
+  // than in the contract file. See check 121.
+  const probed = /match_memories/.test(health.text);
+  record(12, "and it probes the function 0014 hardened", probed,
+    probed ? "match_memories reported" : "the RPC probe covered vent_rate_count alone for a year");
+
   // ── 4. The private session still works ──────────────────────────────────
   const vent = await post("/api/vent", { anonId: ANON, message: "work is crushing me and I cannot sleep" });
   let vd = {};

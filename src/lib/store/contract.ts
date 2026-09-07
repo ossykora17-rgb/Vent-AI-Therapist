@@ -48,10 +48,58 @@
  * exists and accepts this signature, which is precisely what a caller needs
  * to know before it depends on it.
  */
+/**
+ * The dimension `match_memories` is probed at.
+ *
+ * Kept here rather than imported from `embeddings.ts`, which is `server-only`
+ * and would stop the eval suite from loading this file at all. Check 121
+ * asserts the two are the same number, which is the arrangement this
+ * repository uses everywhere a constant cannot be imported: not two copies
+ * kept in step by intent, but two copies and an assertion.
+ */
+const PROBE_DIMS = 768;
+
 export const RPC_CONTRACT: Readonly<Record<string, Record<string, unknown>>> = {
   vent_rate_count: {
     p_user_id: "00000000-0000-0000-0000-000000000000",
     p_since: "1970-01-01T00:00:00.000Z",
+  },
+
+  /*
+    THE ONE PROBE THAT WOULD HAVE CAUGHT A LIVE VULNERABILITY
+
+    CLAUDE.md's entry on 0014 is the sharpest thing in the file: the repo fixed
+    `match_memories`, documented it at length, and production went on running
+    the broken 0006 definition for months. The vulnerable version was `security
+    definer`, filtered on a uuid the *caller* supplied, and was granted to
+    `authenticated` — so any signed-in person could read anybody's memories over
+    `/rest/v1/rpc/match_memories`. Nothing here compared the live schema to this
+    one: `/api/health` checked tables and columns and never a function.
+
+    This is that comparison, and it works because of an accident worth naming.
+    0006 created a **four**-argument `match_memories`; 0014 replaced it with a
+    **three**-argument one, which is why 0016's `drop function` matched nothing.
+    PostgREST resolves an RPC by its named parameters, so calling with exactly
+    these three answers PGRST202 — "could not find the function in the schema
+    cache" — when only the old one is there.
+
+    So a deployment running the vulnerable definition now reports a failing RPC
+    on a public health endpoint, instead of looking identical to a fixed one.
+
+    It cannot see everything, and the limit is worth stating rather than
+    discovering: it distinguishes the signatures, not `security invoker` from
+    `security definer`. Two functions with the same three parameters and
+    different bodies read the same from here. Supabase's own advisors are the
+    tool for that, and CLAUDE.md already says to run them when the schema
+    changes.
+
+    Safe to call: `stable`, no writes, a nil uuid that owns nothing, and a
+    limit of one.
+  */
+  match_memories: {
+    p_user_id: "00000000-0000-0000-0000-000000000000",
+    p_embedding: new Array(PROBE_DIMS).fill(0),
+    p_limit: 1,
   },
 };
 

@@ -1,3 +1,4 @@
+import { redactIds } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { FULL_CONTRACT, RPC_CONTRACT, explainDbCode } from "@/lib/store/contract";
@@ -173,7 +174,7 @@ export async function GET() {
         if (res.error.code === "PGRST303") {
           transient[name] = {
             code: res.error.code,
-            hint: res.error.hint ?? explainDbCode(res.error.code) ?? undefined,
+            hint: redactIds(res.error.hint) ?? explainDbCode(res.error.code) ?? undefined,
           };
           continue;
         }
@@ -181,13 +182,19 @@ export async function GET() {
         missingTables.push(name);
         tableErrors[name] = {
           code: res.error.code ?? undefined,
-          hint: res.error.hint ?? explainDbCode(res.error.code) ?? undefined,
+          hint: redactIds(res.error.hint) ?? explainDbCode(res.error.code) ?? undefined,
           // 42703 says a column is missing and puts *which* column in the
           // message, with no hint at all. Reporting the code alone turns
           // "column pressure_seeded does not exist" into "the schema has
           // drifted" — true, useless, and one more round trip to find out
           // what everybody already knew.
-          message: res.error.message ?? undefined,
+          //
+          // So the message stays and `redactIds` takes the uuids out of it.
+          // This endpoint is public and unauthenticated, most of what Postgres
+          // names is a schema object worth printing, and a few codes quote a
+          // *value* instead — where the value is an anon id, which in this
+          // product is not an identifier but the whole credential.
+          message: redactIds(res.error.message),
         };
       }
 
@@ -255,10 +262,10 @@ export async function GET() {
         tableErrors[name] = {
           code: res.error.code ?? undefined,
           hint:
-            res.error.hint ??
+            redactIds(res.error.hint) ??
             explainDbCode(res.error.code) ??
             "a stored procedure the server calls is missing — check the migrations",
-          message: res.error.message ?? undefined,
+          message: redactIds(res.error.message),
         };
       }
 
@@ -309,10 +316,20 @@ export async function GET() {
           writeError = {
             code: wrote.error.code ?? undefined,
             hint:
-              wrote.error.hint ??
+              redactIds(wrote.error.hint) ??
               explainDbCode(wrote.error.code) ??
               "this role can read but not write — check GRANT INSERT/UPDATE in 0008_grants.sql",
-            message: wrote.error.message ?? undefined,
+            /*
+              The fourth of four, and the one the suite would not have caught.
+
+              Three sites were redacted, this one was missed, and every
+              assertion still passed — the leak only showed up in a response
+              fetched off a running server with a planted id in it. Same shape
+              as every "a fix that reached the copy in front of it" entry in
+              CLAUDE.md. Check 122 asserts the class instead: no uuid anywhere
+              in this response, whatever field it came from.
+            */
+            message: redactIds(wrote.error.message),
           };
         }
       } else {
