@@ -77,7 +77,7 @@ const { measurePersonalEfficacy, blendEfficacy, PERSONAL_SPAN } =
   await app("src/lib/vent/efficacy.ts");
 const { REFERRALS, STALE_AFTER_DAYS, HANDOFF_FLOOR, activeReferrals, pastWhatThisHolds, handoffLine } =
   await app("src/lib/vent/referrals.ts");
-const { allProviders, configuredProviders, openAiCompatible, thinksFirst } =
+const { allProviders, configuredProviders, openAiCompatible, thinksFirst, systemBlocks, MIN_CACHEABLE_CHARS } =
   await app("src/lib/vent/providers.ts");
 const { wasCutOff, MAX_TOKENS, MODEL_STATUSES, modelFailureReply } = await app("src/lib/vent/model.ts");
 
@@ -831,7 +831,7 @@ await checkAsync("15a The selector learns from outcomes, and refuses thin eviden
 });
 
 // ── 15b. the arc — a session has a shape, and an uncounted one has none ────
-const { arcBlock, buildSystemPrompt } = await app("src/lib/vent/prompt.ts");
+const { arcBlock, buildSystemPrompt, STABLE_PREFIX } = await app("src/lib/vent/prompt.ts");
 
 check("15b The reply knows where in the session it is, or says nothing", () => {
   // The rule this shares with the exchange rate and the flavour floor: a
@@ -12831,6 +12831,145 @@ check("113 The database's limits and the code's are the same limits", () => {
   ok(wipeAt > 0 && clearAt > wipeAt && toastAt > clearAt,
     "on the success path, before the sentence that claims it",
     "clearing before the server confirms would destroy the last copy of something still on the server");
+});
+
+check("114 The constitution is the same bytes for everybody, and it is first", () => {
+  /*
+    A cache that never hits looks exactly like a cache that works.
+
+    Every other failure in this suite announces itself: a wrong status code, a
+    missing sentence, an exception. This one is silent by construction — the
+    reply is correct, the assertions pass, the logs say nothing, and the only
+    surface that knows is a bill that arrives a month later. It had already
+    happened and nobody could have seen it: `groundingBlock` sat at byte 0 of
+    every system prompt this product has ever sent, carrying `Current time` to
+    the minute and `ISO` to the millisecond, so the longest prefix any two
+    requests ever shared was about twenty-five tokens. Roughly 1,574 tokens of
+    constitution sat behind a timestamp and were billed in full on every turn,
+    for every person, on every day this has been live.
+
+    So the invariant is asserted rather than commented: `STABLE_PREFIX` is what
+    `buildSystemPrompt` actually returns first, over inputs that vary
+    everything a prompt can vary.
+  */
+  ok(STABLE_PREFIX.length >= MIN_CACHEABLE_CHARS,
+    `the prefix is over the floor worth marking (${STABLE_PREFIX.length} chars)`,
+    "below it the block is sent, ignored, and buys nothing — silently");
+
+  /*
+    The clock is the thing that broke it, so the clock is what varies here.
+    Two different people, two different days, two different times, two
+    different classifications, and different context assembled behind them.
+  */
+  const shapes = [
+    {
+      grounding: { date: "5 August 2026", time: "18:00", iso: "2026-08-05T17:00:00.123Z", lines: [] },
+      classification: { intent: "vent", realWorldTag: null, language: "en", body: null },
+      tactic: ALL_TACTICS[0], ctx: { ...base }, memory: [],
+    },
+    {
+      grounding: { date: "11 January 2027", time: "3:07 AM", iso: "2027-01-11T02:07:44.998Z", lines: [] },
+      classification: { intent: "vent", realWorldTag: "fuel", language: "pidgin", body: "chest" },
+      tactic: ALL_TACTICS[ALL_TACTICS.length - 1],
+      ctx: { ...base, pressure: 88, mood: 2, body: "chest", recentTactics: ["a", "b", "c"] },
+      memory: [], turnsToday: 9, message: "Everything don tire me abeg",
+    },
+  ];
+  const built = shapes.map((s) => buildSystemPrompt(s));
+  for (const [i, prompt] of built.entries()) {
+    ok(prompt.startsWith(STABLE_PREFIX),
+      `shape ${i + 1} begins with the stable prefix`,
+      "a prompt whose head is not byte-identical cannot be cached by anyone, and nothing else here would notice");
+  }
+  ok(built[0] !== built[1], "and the shapes really are different prompts");
+
+  /*
+    Moved, not deleted. The date-answering job runs locally in `answerFactual`
+    before a model is called, so this block is a backstop — but a backstop that
+    quietly stopped being sent is the "half a repair" bug, and it would read as
+    a successful optimisation.
+  */
+  for (const prompt of built) {
+    ok(prompt.includes("REAL TIME GROUNDING"), "the clock is still in the prompt");
+    ok(prompt.includes("You know the date and time exactly."),
+      "with the whole instruction, not a truncated copy of it");
+    ok(prompt.indexOf("REAL TIME GROUNDING") > STABLE_PREFIX.length,
+      "below the prefix, where the rest of this turn's volatile facts are");
+    ok(prompt.trimEnd().endsWith("Start with the first thing you would say."),
+      "and the output contract is still the last thing read");
+  }
+
+  /*
+    The split itself. Every branch that returns a plain string is a case where
+    two blocks would be wrong, and the one that returns blocks must rejoin to
+    exactly what would otherwise have been sent — a system prompt assembled
+    from a bad guess is a different product answering somebody.
+  */
+  const long = "x".repeat(MIN_CACHEABLE_CHARS);
+  const blocks = systemBlocks(long + "TAIL", long);
+  ok(Array.isArray(blocks) && blocks.length === 2, "a real prefix splits into two blocks");
+  ok(blocks[0].cache_control?.type === "ephemeral", "the head is the one marked");
+  ok(blocks[1].cache_control === undefined, "and the tail is not");
+  is(blocks.map((b) => b.text).join(""), long + "TAIL",
+    "the two halves rejoin to the exact string that would have been sent");
+
+  is(systemBlocks(long + "TAIL"), long + "TAIL", "no prefix given sends one block");
+  is(systemBlocks("short tail", "short"), "short tail",
+    "a prefix under the floor sends one block");
+  is(systemBlocks(long, long), long,
+    "a prefix that is the whole prompt sends one block — the API rejects an empty second");
+
+  /*
+    The prefix that is not a prefix, and it has to be long enough to get here.
+
+    The first version of this assertion passed "not-a-prefix" — twelve
+    characters, which returns on the length floor two lines above the guard it
+    was written to test. Deleting `startsWith` entirely left the suite green.
+    That is this repository's most-recorded mistake in miniature: a probe
+    shaped so it cannot reach the thing it is looking at.
+
+    It matters more than the other branches because it is the only one whose
+    failure is *silent and wrong* rather than silent and free. Without the
+    guard, `slice(cachePrefix.length)` still runs — so the model is handed a
+    first block of somebody else's text and a second block with 4,096
+    characters cut off its front. A cache miss costs a fraction of a cent; this
+    is a different product answering somebody at 2am.
+  */
+  const wrong = "y".repeat(MIN_CACHEABLE_CHARS);
+  ok(wrong.length >= MIN_CACHEABLE_CHARS && !(long + "TAIL").startsWith(wrong),
+    "the non-prefix case is long enough to reach the guard being tested",
+    "an assertion satisfied by the length floor tests the length floor");
+  is(systemBlocks(long + "TAIL", wrong), long + "TAIL",
+    "a prefix that is not a prefix sends one block rather than a guess");
+
+  /*
+    And the invariant behind all of it, over every shape at once: whatever
+    comes back must be the same characters the caller passed in. Branch
+    assertions cover the cases somebody thought of; this covers the next one.
+  */
+  for (const [system, prefix] of [
+    [long + "TAIL", long], [long + "TAIL", undefined], [long + "TAIL", wrong],
+    [long + "TAIL", "short"], [long, long], [long, long.slice(0, 100)],
+  ]) {
+    const out = systemBlocks(system, prefix);
+    const sent = typeof out === "string" ? out : out.map((b) => b.text).join("");
+    is(sent, system, `nothing is added or lost when the prefix is ${prefix === undefined ? "absent" : `${prefix.length} chars`}`);
+  }
+
+  /*
+    And the callers. Both billed calls on a vent turn carry it: the retry
+    appends its correction to the end, so it hits the entry the first call just
+    wrote. The Carver is named as a deliberate exemption — its system prompt is
+    short and bespoke, with nothing stable in it to mark.
+  */
+  const route = fs
+    .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ");
+  const passes = route.match(/cachePrefix:\s*STABLE_PREFIX/g) ?? [];
+  const calls = route.match(/generateReply\(\{/g) ?? [];
+  is(passes.length, calls.length,
+    `every generateReply in the vent route passes the prefix (${calls.length})`,
+    "a call that omits it silently pays full price and no assertion here would fail");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

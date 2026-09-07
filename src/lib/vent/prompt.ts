@@ -641,6 +641,47 @@ export interface BuildPromptArgs {
   probe?: Probe | null;
 }
 
+/**
+ * The head of every system prompt, byte for byte, for everybody.
+ *
+ * This is the cache key in all but name. A prefix-caching provider matches on
+ * a literal prefix and charges the discounted rate for the part that matched,
+ * so what this constant is worth is decided entirely by whether it is
+ * *identical* — not whether it is early, and not whether it is large.
+ *
+ * Two properties make it so, and both are asserted rather than asserted-about:
+ *
+ * - `VOICE` contains no interpolation at all, and `OFFICE_RULES` interpolates
+ *   only `REPLY_SENTENCE_CAP`, a module constant. Nothing per-user, per-turn,
+ *   per-day or per-deployment reaches either one.
+ * - It is built by the same expression the prompt is built from, and check 114
+ *   asserts `buildSystemPrompt(...).startsWith(STABLE_PREFIX)` over varied
+ *   inputs, times and people. Derive the prefix or the prefix is the bug: a
+ *   hand-copied constitution here would drift from the real one silently, and
+ *   the failure mode of that is a cache that never hits and never says so.
+ *
+ * ~1,574 tokens. That clears the 1,024-token minimum for `claude-sonnet-5`,
+ * which is what `MODEL.anthropic` is. It does **not** clear the 2,048-token
+ * minimum on Haiku — so a switch to Haiku silently turns this off rather than
+ * breaking it, which is the right failure but an invisible one; check 114
+ * records the number so the next person changing models can see what they are
+ * standing on.
+ *
+ * Only the Anthropic adapter consumes it today, because it is the only
+ * provider in the chain with an explicit breakpoint. The reordering it needed
+ * benefits every provider with an implicit prefix cache regardless.
+ *
+ * `.filter(Boolean).join("\n")` and not `join("\n")`, because that is what the
+ * builder below does. The `""` entries between sections in its return array
+ * read like blank-line separators and are not — `filter(Boolean)` removes
+ * them, so every section of every prompt this product sends is joined by a
+ * single newline. Harmless there and load-bearing here: a prefix built with
+ * the intuitive expression is one byte longer than the real one and matches
+ * nothing at all, which is the silent failure this whole constant exists to
+ * prevent. Check 114 caught it on its first run.
+ */
+export const STABLE_PREFIX = [VOICE, "", OFFICE_RULES].filter(Boolean).join("\n");
+
 export function buildSystemPrompt({
   grounding,
   classification,
@@ -676,8 +717,35 @@ export function buildSystemPrompt({
     .join("\n");
 
   return [
-    groundingBlock(grounding),
-    "",
+    /*
+      The constitution first, byte for byte, on every call this product makes.
+
+      It used to be third, behind `groundingBlock`, and that ordering made the
+      prompt uncacheable by construction — not expensively cached, *impossible*
+      to cache. Every prefix-caching provider matches on a literal prefix, and
+      grounding's first four lines carry `Current time` to the minute and `ISO`
+      to the millisecond. So the longest prefix any two requests in this
+      product's history have shared is about twenty-five tokens, from anybody,
+      ever. Roughly 1,574 tokens of constitution sat immediately behind a
+      timestamp and were re-read, and re-billed, on every single turn.
+
+      Moving it is the whole change: `STABLE_PREFIX` below is now byte-identical
+      across users, sessions, days and deployments, and check 114 asserts that
+      against varied inputs rather than trusting this comment.
+
+      Grounding is not deleted, it is moved — down beside `WHAT YOU KNOW RIGHT
+      NOW`, which is where the rest of this turn's volatile facts already live.
+      The date-answering job it was written for does not depend on being first:
+      `answerFactual` handles "what day is it" locally, before a model is
+      called at all, and the block here is the backstop for a date mentioned in
+      passing rather than the mechanism.
+
+      What cannot be verified from here: whether the model reads the clock as
+      well from two-thirds down as it did from the top. No gate can ask that —
+      it is the "read by a person, in a real room" case CLAUDE.md names. What
+      *is* asserted is that the block is still present, still complete, and
+      still above the output contract.
+    */
     VOICE,
     "",
     // The office contract — shape, memory, and the reflect-to-ask ratio —
@@ -752,6 +820,11 @@ export function buildSystemPrompt({
       optional decoration.
     */
     probeBlock(probe),
+    "",
+    // The clock, with the rest of what is only true right now. Everything from
+    // here down varies per turn, which is exactly why the constitution is not
+    // down here with it.
+    groundingBlock(grounding),
     "",
     state && `WHAT YOU KNOW RIGHT NOW\n${state}`,
     "",

@@ -457,6 +457,43 @@ whatever share the failsafe rejects. Multiply by the traffic you expect before
 choosing a provider, and remember which one is answering: production currently
 falls through Anthropic on `insufficient_credit` and lands on Gemini Flash.
 
+**About 1,574 of those tokens are the same tokens every time, and they were
+uncacheable by construction.** Prefix caching matches on a literal prefix.
+`groundingBlock` sat at byte 0 of every system prompt this product has ever
+sent, and it carries `Current time` to the minute and `ISO` to the
+millisecond — so the longest prefix any two requests have ever shared, from
+anybody, on any day, is about twenty-five tokens. The constitution sat
+immediately behind a timestamp and was re-read and re-billed on every turn.
+Moving one line fixed it: `STABLE_PREFIX` is `VOICE` plus `OFFICE_RULES`,
+neither of which interpolates anything but a module constant, and the clock now
+sits with the other volatile facts two-thirds down. It clears Sonnet's
+1,024-token floor and not Haiku's 2,048 — so a model switch turns this off
+silently rather than breaking it, which is the right failure and an invisible
+one.
+
+**And it is invisible that is the point.** Every other failure in this file
+announces itself somewhere — a status code, a missing sentence, a red check, a
+line in a log that survives an hour. This one has no surface at all. The reply
+is correct, the suite is green, the audit sees nothing, and the only witness is
+a bill that arrives a month later with no breakdown. There was never going to
+be a moment where somebody noticed. So the rule for anything whose whole value
+is that two strings are identical: **assert the identity, over inputs that vary
+what the strings are made of** — check 114 builds two prompts a year and a
+language apart and requires both to start with the same bytes. A comment saying
+the prefix is stable is worth nothing here, because a comment is exactly as
+green as the bug.
+
+It caught its own author on the first run, twice. `STABLE_PREFIX` was built with
+`join("\n")` and the builder uses `.filter(Boolean).join("\n")` — the `""`
+entries between sections read like blank-line separators and are removed, so
+every section of every prompt here is joined by a single newline. One byte,
+and the prefix matched nothing. Then the mutation pass: deleting the
+`startsWith` guard — the one line standing between this and a *corrupted*
+system prompt — left the suite green, because the non-prefix in the assertion
+was twelve characters and returned on the length floor two lines above the
+guard it was written to test. The wrong-window probe again, in the check
+written about invisible failures.
+
 ## When not to automate
 
 The heartbeat applies a four-condition test per finding: does it repeat, is it

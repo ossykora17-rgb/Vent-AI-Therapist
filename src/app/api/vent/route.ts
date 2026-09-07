@@ -10,7 +10,7 @@ import { selectProbe } from "@/lib/vent/probes";
 import { blendEfficacy, getEfficacy, measurePersonalEfficacy } from "@/lib/vent/efficacy";
 import { findPattern, type Pattern } from "@/lib/vent/pattern";
 import { coverage, COVERAGE_FLOOR } from "@/lib/vent/scan";
-import { buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
+import { STABLE_PREFIX, buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
 import { research } from "@/lib/vent/research";
 import { chooseReply, inspectReply } from "@/lib/vent/failsafe";
 import { allianceLine, openingLine, shouldSayAlliance } from "@/lib/vent/intake";
@@ -544,6 +544,11 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
       ];
       const answered = await generateReply({
         system: systemPrompt,
+        // What `buildSystemPrompt` guarantees is at the front of what it just
+        // returned. Passed rather than recomputed inside the adapter, so a
+        // provider that cannot use it ignores a field instead of importing the
+        // prompt builder.
+        cachePrefix: STABLE_PREFIX,
         maxTokens: MAX_TOKENS,
         // Cheap for the ordinary 80%, everything for the edge. Decided by a
         // regex pass over a message that is already classified — this product
@@ -615,7 +620,15 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
         console.warn("[vent] rejected own reply:", verdictOnReply.reject);
         try {
           const again = await generateReply({
+            /*
+              The correction is appended, so the prefix survives it — and this
+              is the call that benefits most. A retry happens seconds after the
+              call that wrote the cache entry, on the same constitution, so the
+              second billed call of a rejected turn pays the discounted rate
+              for the ~1,574 tokens the first one just paid full price for.
+            */
             system: `${systemPrompt}\n\n${verdictOnReply.correction}`,
+            cachePrefix: STABLE_PREFIX,
             maxTokens: MAX_TOKENS,
             depth: verdict.depth,
             deadlineMs: RETRY_DEADLINE_MS,
