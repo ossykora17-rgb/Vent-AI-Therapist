@@ -88,6 +88,53 @@ const CRISIS = [
   // something ordinary.
   /\bwant to disappear\b(?!\s+(from|off|out of|into)\b)/,
 
+  /*
+    ── passive: the conditional, which is how it is usually first said ──────
+
+    Every pattern above this block needs a first-person present desire — "I
+    want", "I don't want", "I wish I was". Passive ideation is more often
+    hypothetical than declarative, and the router caught none of that shape:
+
+      "If I disappeared tomorrow"              → vent
+      "what if I just disappeared"             → vent
+      "sometimes I think about disappearing"   → vent
+      "nobody would miss me if I was gone"     → vent
+      "I wish I could just not wake up"        → vent
+      "if i no dey again, e go better"         → vent
+
+    Every one of those is a positive item on the C-SSRS's first category —
+    wish to be dead — and the last one is the Pidgin form, which is the gap
+    this file already learned once with "i wan die". The section above says
+    "a router that waits for 'kill myself' is waiting for the version many
+    people never write down", and then waited for a version many people never
+    write down either.
+
+    Found by a person reading a product screenshot, not by anything here.
+
+    THE EXCLUSIONS ARE THE WORK
+
+    Each pattern carries the same `(?:for|from|off|to)` guard the disappear
+    line already had, because the words are ordinary the moment a destination
+    follows them: "disappeared for a week", "gone from that team", "think
+    about disappearing from that WhatsApp group". The `nobody` pattern
+    requires an absence clause within the same sentence, so "nobody would
+    notice if I changed my hair" is untouched.
+
+    AND ONE THAT IS DELIBERATELY NOT HERE
+
+    Bare "if I died". "If I died my laptop password is in the drawer" is a
+    practical sentence people write, and gating it would be the group-chat
+    false positive again. It is the most arguable omission in this list — the
+    clinical reading of somebody unprompted putting their affairs in order is
+    not nothing — and it is left out rather than left undecided. "What if I
+    just died" is a different sentence and is covered below.
+  */
+  /\bif i (?:disappeared|vanished|was gone|were gone|wasn'?t here|was not here|wasn'?t around)\b(?!\s+(?:for|from|off|to)\b)/,
+  /\bwhat if i (?:just )?(?:disappeared|vanished|wasn'?t here|stopped existing|died)\b(?!\s+(?:for|from|off|to)\b)/,
+  /\bthink(?:ing)? about (?:just )?(?:disappearing|vanishing|not existing|not being here)\b(?!\s+(?:for|from|off|to)\b)/,
+  /\bwish i could (?:just )?(?:not wake up|never wake up|stop existing|disappear|sleep forever|not be here|not exist)\b/,
+  /\b(?:nobody|no one|no-one)\b[^.?!]{0,44}\bif i (?:was|were|wasn'?t|weren'?t|disappeared|vanished|died|left)\b/,
+
   // ── Pidgin ───────────────────────────────────────────────────────────────
   //
   // "i wan die" is the sentence this list existed for and did not have.
@@ -99,6 +146,17 @@ const CRISIS = [
   /\bi wan comot for this world\b/,
   /\btire for this life\b/,
   /\bi no fit continue this life\b/,
+  /*
+    The conditional, in Pidgin. Same gap as the English block above and the
+    one that would be missed longest, because this is the register somebody
+    reaches for when they are not ready to say it plainly.
+
+    "if i no dey" needs its guard as much as the English does — "if i no dey
+    for work tomorrow, who go cover me?" is a rota question.
+  */
+  /\bif i no dey\b(?!\s+(?:for|house|work|here)\b)/,
+  /\be go better if i no dey\b/,
+  /\bnobody go miss me\b/,
 ];
 
 const FACTUAL = [

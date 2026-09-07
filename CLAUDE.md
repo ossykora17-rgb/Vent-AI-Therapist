@@ -402,6 +402,35 @@ fitting the code to the test, and `exact_mirror` at 90 is what that looks like
 after it ships. Whether this move should win there is read by a person in a real
 room.
 
+**The router waited for the version many people never write down — twice.**
+`intent.ts` already carries a section headed *"Passive ideation counts"*, citing
+screening instruments and arguing that "a router that waits for 'kill myself' is
+waiting for the version many people never write down". Every pattern under it
+then required a first-person present desire — *I want*, *I don't want*, *I wish
+I was*. Passive ideation is more often **conditional** than declarative, and none
+of that shape was caught: *"If I disappeared tomorrow"*, *"what if I just
+disappeared"*, *"sometimes I think about disappearing"*, *"nobody would miss me
+if I was gone"*, *"I wish I could just not wake up"*, and *"if i no dey again, e
+go better"* all routed to `vent`. Each is a positive item on the C-SSRS's first
+category. A correct argument, written down, applied to half the sentences it
+covers.
+
+Found by a person reading a screenshot. Nothing here could see it, because
+everything here tested the shape its author had in mind — which is this file's
+oldest lesson, arriving on the one path where a miss is not a wasted round trip.
+
+The exclusions are the work, and they are the same guard `want to disappear`
+already carried: the words are ordinary the moment a destination follows them —
+*"disappeared for a week"*, *"gone from that team"*, *"think about disappearing
+from that WhatsApp group"* — and the `nobody` pattern requires an absence clause
+in the same sentence, so *"nobody would notice if I changed my hair"* is
+untouched. Bare **"if I died" is deliberately not gated**: it is ordinary
+practical speech about passwords and wills, the clinical reading of somebody
+putting their affairs in order is not nothing, and it is written into the
+must-not list with its reason rather than left silently absent. Check 26 holds
+eleven new catches and ten new false-positive probes, and mutations in *both*
+directions fail it.
+
 **Governance is enforced on the server.** `checkMessage()` runs where the
 message is written, because curl walks around a greyed-out button. The UI
 mirrors the rules for kindness, never for safety.

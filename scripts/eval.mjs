@@ -2784,6 +2784,42 @@ check("26 Crisis is caught in the words people use, and not in the ones they don
     "i no wan dey alive again, i don tire for this life",
     "make i die",
     "i wan comot for this world",
+
+    /*
+      THE CONDITIONAL, WHICH THE ROUTER MISSED ENTIRELY
+
+      Every pattern above needs a first-person present desire — "I want", "I
+      don't want", "I wish I was". Passive ideation is more often hypothetical
+      than declarative, and none of this shape was caught:
+
+        "If I disappeared tomorrow"            → vent
+        "what if I just disappeared"           → vent
+        "sometimes I think about disappearing" → vent
+        "nobody would miss me if I was gone"   → vent
+        "I wish I could just not wake up"      → vent
+        "if i no dey again, e go better"       → vent
+
+      Each is a positive item on the C-SSRS's first category, wish to be dead.
+      The section above this list already says "a router that waits for 'kill
+      myself' is waiting for the version many people never write down" — and
+      then waited for a version many people never write down either.
+
+      Found by a person reading a product screenshot. Nothing here could see
+      it, because everything here tested the shape its author had in mind.
+    */
+    "if i disappeared tomorrow",
+    "if i disappeared tomorrow nobody would notice",
+    "what if i just disappeared",
+    "sometimes i think about disappearing",
+    "i wish i could just not wake up",
+    "i wish i could stop existing",
+    "if i was gone nobody would even notice",
+    "nobody would miss me if i was gone",
+    "what if i wasn't here anymore",
+    // Pidgin, and the one that would have been missed longest — this is the
+    // register somebody reaches for when they are not ready to say it plainly.
+    "if i no dey again, e go better",
+    "nobody go miss me",
   ];
   for (const m of MUST) {
     is(intent(m), "crisis", `caught: "${m.slice(0, 52)}"`);
@@ -2801,6 +2837,34 @@ check("26 Crisis is caught in the words people use, and not in the ones they don
     "i want to disappear from that group chat",
     "no point, nothing go change",
     "i be failure",
+
+    /*
+      AND THE PROBES THAT SHAPED THE CONDITIONAL PATTERNS
+
+      Every one of these was a real false positive during drafting, and each
+      is why a guard exists. The words are ordinary the moment a destination
+      follows them, which is the same lesson `want to disappear` already
+      carried: a router that over-fires locks somebody out of the room for
+      saying something entirely normal.
+    */
+    "if i disappeared for a week nobody would even notice i was on leave",
+    "what if i just disappeared from twitter for a month",
+    "nobody would notice if i changed my hair",
+    "nobody would care if i moved desks",
+    "i think about disappearing from that whatsapp group every day",
+    "if i was gone from that team the project would still ship",
+    "i wish i could sleep in tomorrow",
+    "if i no dey for work tomorrow, who go cover me?",
+    "she said nobody would miss the meeting",
+    /*
+      The most arguable line in the whole list, and it is left out on purpose
+      rather than left undecided. "If I died" appears in ordinary practical
+      speech — passwords, insurance, wills — and gating it would be the
+      group-chat false positive again. The clinical reading of somebody
+      unprompted putting their affairs in order is not nothing, which is why
+      this is written down here instead of being silently absent.
+    */
+    "if i died my laptop password is in the drawer",
   ];
   for (const m of MUST_NOT) {
     ok(intent(m) !== "crisis", `not gated: "${m.slice(0, 52)}"`, intent(m));
