@@ -13711,6 +13711,82 @@ check("119 The reply that reached somebody is graded, sentence by sentence", () 
     "and the competitive claim still states a count check 86 can verify");
 });
 
+check("120 The database lets a person rate as often as the route says they may", () => {
+  /*
+    Production carries `vent_feedback_user_id_key UNIQUE (user_id)` and no
+    migration in this repository declares it.
+
+    `0002_truth_anchor.sql` creates the table with a plain `user_id` and no
+    uniqueness — using `create table if not exists`, which does nothing at all
+    to a table that is already there in a different shape. So the repo's
+    definition has never applied to the database it describes, and the name
+    Postgres generated, `<table>_<column>_key`, is the fingerprint of a
+    `unique` written on the column by something no longer in this history.
+
+    The cost is a disagreement nobody could see: the route allows five ratings
+    an hour and the database allows one for ever, so a person's second rating
+    raises 23505 and is dropped. `feedback/route.ts` says why that matters —
+    "silently losing them corrupts the one place the product learns what is
+    losing" — and `npm run rlhf` is downstream of it. Every DPO pair this
+    product has built came from first ratings only, and nothing said so.
+
+    Two assertions, because the interesting one is not "0020 exists".
+  */
+  const migrations = fs.readdirSync(path.join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql"));
+  const all = migrations
+    .map((f) => fs.readFileSync(path.join(ROOT, "supabase/migrations", f), "utf8"))
+    .join("\n");
+
+  /*
+    1. Nothing here may introduce the constraint again. Written against the
+       schema rather than against 0002, because the next person to add a
+       column to this table is the one who would type `unique` by reflex.
+  */
+  const declares = migrations.filter((f) => {
+    const src = fs.readFileSync(path.join(ROOT, "supabase/migrations", f), "utf8")
+      .replace(/^\s*--[^\n]*$/gm, " ");
+    return /vent_feedback[\s\S]{0,400}?\buser_id\b[^\n,)]*\bunique\b/i.test(src)
+      || /add\s+constraint[^\n]*unique[^\n]*\(\s*user_id\s*\)/i.test(src)
+      || /create\s+unique\s+index[^\n]*vent_feedback\s*\(\s*user_id\s*\)/i.test(src);
+  });
+  is(declares.length, 0,
+    "no migration makes a rating a once-ever thing",
+    declares.join(" · ") || "the route allows five an hour, and the disagreement is invisible from either side");
+
+  /*
+    2. And the repair drops it by *lookup*, not by the name somebody guessed.
+
+       0016's lesson, which cost a debugging session: `drop ... if exists`
+       matches nothing and says nothing when the thing moved.
+       `vent_feedback_user_id_key` is auto-generated, which makes it a guess
+       about what an earlier tool happened to call it.
+  */
+  const fix = fs.readFileSync(path.join(ROOT, "supabase/migrations/0020_feedback_not_once_ever.sql"), "utf8");
+  ok(/pg_constraint/.test(fix) && /contype\s*=\s*'u'/.test(fix),
+    "0020 finds the constraint in the catalogue",
+    "dropping an auto-generated name by hand is the 0016 bug wearing a constraint");
+  ok(!/drop\s+constraint\s+if\s+exists\s+vent_feedback_user_id_key/i.test(fix),
+    "and not by a hardcoded name");
+  ok(/raise notice[^\n]*nothing to do/i.test(fix),
+    "and says so when it did nothing",
+    "a migration that did nothing and one that worked must not look identical — the green-tick lesson from backup.yml");
+
+  /*
+    3. The foreign key keeps an index after the unique one goes with its
+       constraint. Asserted because it is the collateral a reviewer would not
+       think to check, and an unindexed FK makes every cascade delete a scan.
+  */
+  ok(/create index if not exists vent_feedback_user_idx/.test(all),
+    "and vent_feedback.user_id is still indexed on its own",
+    "dropping a unique constraint drops its index with it");
+
+  // The route's number, read from the route, so this cannot drift from it.
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/feedback/route.ts"), "utf8");
+  const perHour = Number(route.match(/FEEDBACK_PER_HOUR\s*=\s*(\d+)/)?.[1]);
+  ok(perHour > 1, `the route allows more than one rating (${perHour}/hour)`,
+    "if this ever becomes 1 the constraint was right and this check is the thing to delete");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

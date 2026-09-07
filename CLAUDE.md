@@ -178,6 +178,22 @@ Show the sentence the prompt actually reads, never a tidied version of it: a
 summary is a second copy, and the one they could not check is the one still in
 the prompt.
 
+**`create table if not exists` does nothing to a table that is already there.**
+Production carries `vent_feedback_user_id_key UNIQUE (user_id)` and no migration
+here declares it — 0002 creates the table with a plain `user_id` and no
+uniqueness, and creates it *if not exists*, so its definition has never once
+applied to the database it is supposed to describe. The generated name
+`<table>_<column>_key` is the fingerprint: a `unique` written on the column by
+something no longer in this history. The cost was invisible from either side —
+the route allows five ratings an hour, the database allows one for ever, so a
+person's second rating raises `23505` and is dropped. Every DPO pair `npm run
+rlhf` has ever built came from first ratings only. 0020 drops it by looking the
+constraint up in `pg_constraint` rather than by the auto-generated name, which
+is 0016's lesson; check 120 asserts that no migration can reintroduce it, that
+the repair does not guess a name, that it says so when it did nothing, and that
+`vent_feedback.user_id` keeps an index after the unique one goes with its
+constraint.
+
 **A migration that is written is not a migration that has been applied.**
 0014 hardened `match_memories` — the vulnerable version was `security definer`,
 filtered on a uuid the *caller* supplied, and was granted to `authenticated`,
