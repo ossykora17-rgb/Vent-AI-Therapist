@@ -1,3 +1,4 @@
+import { errorKind } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore, type Store, type VentRow } from "@/lib/store";
@@ -184,7 +185,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
           );
         }
       } catch (error) {
-        console.error("[vent] store unreachable on the crisis path", error);
+        console.error("[vent] store unreachable on the crisis path", errorKind(error));
       }
     }
     return NextResponse.json(
@@ -333,7 +334,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
           .filter((t): t is string => Boolean(t));
       }
     } catch (error) {
-      console.error("[vent] store unreachable — continuing without it", error);
+      console.error("[vent] store unreachable — continuing without it", errorKind(error));
       userId = null;
       history = [];
       recentTactics = [];
@@ -1068,7 +1069,7 @@ async function tryPersist(...args: Parameters<typeof persist>): Promise<boolean>
     await persist(...args);
     return true;
   } catch (error) {
-    console.error("[vent] store write failed", error);
+    console.error("[vent] store write failed", errorKind(error));
     return false;
   }
 }
@@ -1297,7 +1298,7 @@ export const POST = withStore(async (request: Request) => {
           event instead, where the client reads it exactly as it reads every
           other `done`.
         */
-        console.error("[vent] stream failed", error);
+        console.error("[vent] stream failed", errorKind(error));
         send("done", {
           status: 500,
           body: {

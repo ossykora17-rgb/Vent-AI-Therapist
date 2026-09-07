@@ -217,6 +217,23 @@ call. The rule is not "log less": `[carve] notes refused (3): hard: names a
 condition` is exactly the line that says whether the prompt or the rule is
 wrong, and it carries nothing about a person.
 
+**Nineteen of them walked past it as `error`.** Check 103 reads the string
+somebody typed, so it stops `console.warn("[carve] refused", n.subject)` and
+cannot read `console.warn("[carve] failed", error)` — which looks like nothing
+and prints the message and the stack. Every model path, every store path, the
+lobby, the voice close and the generic `[api]` handler were writing an
+unbounded string from somewhere else into a place with no delete button: an SDK
+throw carries the provider's response body on `.message`; Postgres quotes the
+value it refused, and here the value is usually an anon id; LiveKit quotes the
+room name, which is derived from the circle id. `errorKind()` in
+`src/lib/errors.ts` is the one policy — an HTTP status, a short code, the class
+of the throw — and check 117 enforces it by following what the caught value
+flows into. Derived is not the same as unsafe and the check says which is
+which: a name made from `.name`, `.code` or `typeof` is a *kind* and is exactly
+what the rule wants; a name made by reading `.message` or stringifying the
+throw is the thing being banned. `42501` and `42703` are the two most useful
+strings this product has ever logged, and neither is anybody's words.
+
 Check 103 is enforced on the *literal*, so a variable walks past it.
 `Verdict.reject` was `${grader}: ${detail}` and the route logged it whole —
 and details quote the reply: `recites` prints the sentence it read back as a

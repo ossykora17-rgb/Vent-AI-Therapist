@@ -1,3 +1,4 @@
+import { errorKind } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore } from "@/lib/store";
@@ -110,7 +111,7 @@ async function handleGET() {
     const stale = await store.expiredUnclosedCircles(SWEEP_BATCH);
     await Promise.allSettled(stale.map((c) => sweepIfOver(store, c)));
   } catch (error) {
-    console.error("[circles] lobby sweep failed", error);
+    console.error("[circles] lobby sweep failed", errorKind(error));
   }
 
   return NextResponse.json(
@@ -182,7 +183,7 @@ async function handlePOST(request: Request) {
     });
     if (!took) throw new Error("the creator's own seat did not land");
   } catch (error) {
-    console.error("[circles] could not open a circle", error);
+    console.error("[circles] could not open a circle", errorKind(error));
     return NextResponse.json(
       { error: "no_storage", message: NO_CIRCLES_HERE },
       { status: 503, headers: { "cache-control": "no-store" } },

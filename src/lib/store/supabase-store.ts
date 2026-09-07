@@ -1,4 +1,5 @@
 import "server-only";
+import { errorKind } from "@/lib/errors";
 import { TABLE_CONTRACT } from "./contract";
 import type { Note } from "@/lib/vent/notes";
 import type { StoredNote } from "./file-store";
@@ -194,7 +195,7 @@ export class SupabaseStore implements Store {
       // Whitespace is not a carve. Normalised here so no caller has to.
       return (data as { carve?: string | null } | null)?.carve?.trim() || null;
     } catch (e) {
-      console.warn("[store] getCarve threw", e);
+      console.warn("[store] getCarve threw", errorKind(e));
       return null;
     }
   }
@@ -221,7 +222,7 @@ export class SupabaseStore implements Store {
       }
       return Array.isArray(data?.held) ? (data.held as HeldNote[]) : [];
     } catch (e) {
-      console.warn("[store] getHeld threw", e);
+      console.warn("[store] getHeld threw", errorKind(e));
       return [];
     }
   }
@@ -257,7 +258,7 @@ export class SupabaseStore implements Store {
       }
       return (data?.length ?? 0) > 0;
     } catch (e) {
-      console.warn("[store] addHeld threw", e);
+      console.warn("[store] addHeld threw", errorKind(e));
       return false;
     }
   }
@@ -295,7 +296,7 @@ export class SupabaseStore implements Store {
       if (!data) return null;
       return Array.isArray(data.breaking) ? (data.breaking as BreakingAnswer[]) : [];
     } catch (e) {
-      console.warn("[store] getBreaking threw", e);
+      console.warn("[store] getBreaking threw", errorKind(e));
       return null;
     }
   }
@@ -337,7 +338,7 @@ export class SupabaseStore implements Store {
       }
       return (data?.length ?? 0) > 0;
     } catch (e) {
-      console.warn("[store] addBreaking threw", e);
+      console.warn("[store] addBreaking threw", errorKind(e));
       return false;
     }
   }
@@ -375,7 +376,7 @@ export class SupabaseStore implements Store {
       }
       return (data?.length ?? 0) > 0;
     } catch (e) {
-      console.warn("[store] setCarve threw", e);
+      console.warn("[store] setCarve threw", errorKind(e));
       return false;
     }
   }

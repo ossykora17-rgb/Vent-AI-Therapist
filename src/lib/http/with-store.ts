@@ -1,3 +1,4 @@
+import { errorKind } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { isStoreDown } from "@/lib/store/errors";
 
@@ -22,7 +23,7 @@ export function withStore<A extends unknown[]>(
       return await handler(...args);
     } catch (error) {
       if (!isStoreDown(error)) throw error;
-      console.error("[api]", error.message);
+      console.error("[api]", errorKind(error));
       return NextResponse.json(
         {
           error: "storage_unavailable",

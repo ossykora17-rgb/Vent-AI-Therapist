@@ -1,4 +1,5 @@
 import "server-only";
+import { errorKind } from "@/lib/errors";
 import { env } from "@/lib/env";
 
 /**
@@ -74,7 +75,7 @@ export async function embed(text: string): Promise<number[] | null> {
     }
     return values;
   } catch (error) {
-    console.error("[embeddings] unreachable", error);
+    console.error("[embeddings] unreachable", errorKind(error));
     return null;
   }
 }

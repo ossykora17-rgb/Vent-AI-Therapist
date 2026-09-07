@@ -1,4 +1,5 @@
 import "server-only";
+import { errorKind } from "@/lib/errors";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -64,7 +65,7 @@ export function logPreference(signal: PreferenceSignal): Promise<void> {
       await fs.promises.appendFile(FILE, line, "utf8");
     } catch (error) {
       // A lost preference signal is not worth failing a request over.
-      console.error("[rlhf] could not log preference", error);
+      console.error("[rlhf] could not log preference", errorKind(error));
     }
   });
 

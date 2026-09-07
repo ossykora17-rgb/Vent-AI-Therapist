@@ -1,4 +1,5 @@
 import "server-only";
+import { errorKind } from "@/lib/errors";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { env, isSupabaseUrlValid } from "@/lib/env";
 
@@ -27,7 +28,7 @@ export function createAdminClient() {
       auth: { persistSession: false, autoRefreshToken: false },
     });
   } catch (error) {
-    console.error("[supabase] admin client construction failed", error);
+    console.error("[supabase] admin client construction failed", errorKind(error));
     return null;
   }
 }

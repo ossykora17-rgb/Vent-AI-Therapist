@@ -1,3 +1,4 @@
+import { errorKind } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore } from "@/lib/store";
@@ -155,7 +156,7 @@ async function handlePOST(req: Request) {
   } catch (error) {
     // A provider outage at the end of a session is not something the person
     // needs to hear about. They already got their reply and their drop.
-    console.warn("[carve] model call failed", error);
+    console.warn("[carve] model call failed", errorKind(error));
     return NextResponse.json({ carved: false, reason: "model_unavailable" });
   }
 
@@ -176,7 +177,7 @@ async function handlePOST(req: Request) {
   try {
     noted = notes.length > 0 ? await store.saveNotes(userId, notes) : 0;
   } catch (error) {
-    console.warn("[carve] notes did not land", error);
+    console.warn("[carve] notes did not land", errorKind(error));
   }
   return NextResponse.json({
     carved: kept,

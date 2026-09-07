@@ -79,6 +79,7 @@ const { REFERRALS, STALE_AFTER_DAYS, HANDOFF_FLOOR, activeReferrals, pastWhatThi
   await app("src/lib/vent/referrals.ts");
 const { allProviders, configuredProviders, openAiCompatible, thinksFirst, systemBlocks, MIN_CACHEABLE_CHARS } =
   await app("src/lib/vent/providers.ts");
+const { errorKind } = await app("src/lib/errors.ts");
 const { wasCutOff, MAX_TOKENS, MODEL_STATUSES, modelFailureReply, classifyModelError } =
   await app("src/lib/vent/model.ts");
 
@@ -13219,6 +13220,152 @@ check("116 A provider's words never reach a person or a log line", () => {
   ok(!/await r\.text\(\)\)\.slice/.test(embed),
     "the embeddings log records the status and not the response body",
     "the one request in this product that sends somebody's vent to a third party to be vectorised");
+});
+
+check("117 A thrown thing reaches stdout as a kind, never as its words", () => {
+  /*
+    Check 103 reads the literal, and nineteen call sites logged a variable.
+
+    The stdout rule is old and clear — codes, counts, kinds, statuses and
+    durations, never a message, never a note's subject or detail, never an anon
+    id — and 103 enforces it on the string somebody typed. It can stop
+    `console.warn("[carve] refused", n.subject)`. It cannot read
+    `console.warn("[carve] failed", error)`, which looks like nothing at all
+    and prints the message and the stack.
+
+    So nineteen lines were writing an unbounded string from somewhere else into
+    a place with no delete button, under a rule that exists because a hosted
+    runtime keeps stdout for as long as it keeps stdout:
+
+      model providers   an SDK throw carries the response body on `.message`,
+                        from a request that had just carried somebody's vent
+      Postgres          `invalid input syntax for type uuid: "…"` quotes the
+                        value, and here the value is usually an anon id
+      LiveKit           its failures quote the room name, which is derived
+                        from the circle id
+
+    `errorKind()` is the one policy: an HTTP status, a short error code, and
+    the class of the throw. `42501` and `42703` are the two most useful strings
+    this product has ever logged and neither is anybody's words.
+
+    The rule below is not "never mention the error". A sanitiser wrapping it is
+    the whole point — `console.warn("[voice] join failed:", kind)` is exactly
+    what is wanted. What is banned is the raw binding as a direct argument, and
+    `.message` on anything derived from it.
+  */
+  const balanced = (src, at, open, close) => {
+    let depth = 0, j = at;
+    for (; j < src.length; j++) {
+      const c = src[j];
+      if (c === open) depth++;
+      else if (c === close) { depth--; if (!depth) { j++; break; } }
+    }
+    return src.slice(at, j);
+  };
+  const files = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.tsx?$/.test(p)) files.push(p);
+    }
+  };
+  walk(path.join(ROOT, "src"));
+
+  const raw = [];
+  let logged = 0;
+  for (const f of files) {
+    const src = fs.readFileSync(f, "utf8");
+    for (const m of src.matchAll(/catch\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\{/g)) {
+      const caught = m[1];
+      const body = balanced(src, src.indexOf("{", m.index), "{", "}");
+      /*
+        Derived is not the same as unsafe, and for this sink the difference is
+        the whole rule.
+
+        `const kind = name || e.constructor.name` mentions the error and is
+        exactly what the stdout rule asks for — a kind. `const message =
+        e instanceof Error ? e.message : String(e)` mentions it too and is the
+        thing being banned. So a derived name counts as tainted only when it was
+        made by *reading the message* or by stringifying the throw whole.
+
+        Check 115 keeps the broader rule on purpose: its sink is a sentence
+        somebody reads, and `TypeError` in front of a person having a bad day is
+        noise even when it is not a leak.
+      */
+      const tainted = new Set([caught]);
+      const READS_WORDS = new RegExp(
+        `\\.message\\b|String\\(\\s*${caught}\\s*\\)|JSON\\.stringify\\(\\s*${caught}\\s*\\)|\\$\\{\\s*${caught}\\s*\\}`,
+      );
+      for (const b of body.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;]+);/g)) {
+        if (new RegExp(`\\b${caught}\\b`).test(b[2]) && READS_WORDS.test(b[2])) tainted.add(b[1]);
+      }
+      for (const mm of body.matchAll(/console\.(log|warn|error|info|debug)\(/g)) {
+        logged++;
+        const call = balanced(body, mm.index + mm[0].length - 1, "(", ")");
+        /*
+          Strip call expressions before looking. `errorKind(error)` is a
+          sanitiser doing its job; `error` on its own is the bug. Without this
+          the check reads its own fix as the thing it forbids — which it did,
+          on the run that produced this comment.
+        */
+        const direct = call.replace(/[A-Za-z_$][\w$.]*\([^()]*\)/g, "SAFE()");
+        for (const t of tainted) {
+          if (new RegExp(`[,(]\\s*${t}\\s*[,)]`).test(direct)) {
+            raw.push(`${path.relative(ROOT, f)}: console.${mm[1]}(… ${t} …)`);
+          }
+          if (new RegExp(`\\b${t}\\.message\\b`).test(call)) {
+            raw.push(`${path.relative(ROOT, f)}: console.${mm[1]}(… ${t}.message …)`);
+          }
+        }
+      }
+    }
+  }
+  ok(logged > 15, `there are console calls inside catch blocks to check (${logged})`,
+    "a scan that finds nothing passes for the wrong reason");
+  is(raw.length, 0,
+    "no caught value is logged raw, and no `.message` is logged at all",
+    raw.join(" · ") || "console.warn(x, error) prints the message and the stack");
+
+  /*
+    And the policy itself, because a sanitiser that returns "" would satisfy
+    every assertion above while making the logs useless — which is the failure
+    bucket with nothing in it, the one this repository has recorded four times.
+  */
+  const SECRET = "invalid input syntax for type uuid: \"a3f9-not-an-id\"";
+
+  // What it keeps: the three fields that belong to the system.
+  is(errorKind({ status: 503, name: "ProviderError", message: SECRET }), "503 · ProviderError",
+    "an HTTP status and the class of the throw");
+  is(errorKind({ code: "42501", name: "PostgrestError", message: SECRET }), "42501 · PostgrestError",
+    "a Postgres code — the difference between 'the grants never landed' and '0011 is not applied'");
+  is(errorKind(new TypeError(SECRET)), "TypeError", "and a bare throw is its class");
+
+  // What it drops, asserted over every shape rather than the one that leaked.
+  for (const thrown of [
+    { status: 400, message: SECRET }, { code: "22P02", message: SECRET },
+    new Error(SECRET), new TypeError(SECRET), SECRET,
+    { message: SECRET }, { name: "X", detail: SECRET, hint: SECRET },
+  ]) {
+    const out = errorKind(thrown);
+    ok(!out.includes("a3f9") && !out.includes("uuid"),
+      `nothing of what it said survives (${out})`,
+      "Postgres quotes the value it refused, and here the value is usually an anon id");
+    ok(out.length > 0 && out.length < 48, `and it is a shape, not a payload (${out.length} chars)`);
+  }
+
+  // Never a blank, including for the values nobody thinks to throw.
+  for (const odd of [null, undefined, 0, "", {}, []]) {
+    ok(errorKind(odd), `${JSON.stringify(odd) ?? "undefined"} still answers something`,
+      "a bucket with nothing in it is the failure this repository has recorded four times");
+  }
+
+  /*
+    And a `code` that is really a sentence does not sneak through on the
+    strength of its field name. Some libraries put prose in `code`.
+  */
+  const wordy = errorKind({ code: "could not reach a3f9-not-an-id", name: "E" });
+  ok(!wordy.includes("a3f9"), `a prose code is not a code (${wordy})`);
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
