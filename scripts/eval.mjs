@@ -85,6 +85,62 @@ const { wasCutOff, MAX_TOKENS, MODEL_STATUSES, modelFailureReply, classifyModelE
 
 const BASE = (process.argv[2] || "").replace(/\/$/, "");
 
+/*
+  "0 tokens · 0 model calls" was typed, not measured.
+
+  The assertion count in the footer is computed. The two numbers beside it were
+  string literals, and they are the numbers this whole repository's credit
+  argument rests on — CLAUDE.md says the suite, both pipelines and the heartbeat
+  make "**zero** model calls by construction", and quotes that line as the
+  reason a change needing one is a change that is wrong.
+
+  Nothing enforced it. "By construction" was an argument about how the checks
+  are written, and the suite imports the real product: `research.ts` is loaded
+  at the top of this file, and `research()` makes a paid Anthropic web search.
+  A check that called it — or `generateReply`, or `embed` — would spend real
+  money on every gate run and print `0 model calls` underneath, in the exact
+  shape this repository calls "the interface reported an intention instead of
+  an outcome".
+
+  So it is counted. Anything leaving this process that is not the live server
+  under test is recorded, printed, and fails the run. `BASE` is the one allowed
+  destination: it is argv[2], the URL `live-checks.sh` passes, and every fetch
+  the suite makes on purpose goes there.
+
+  Two limits, stated rather than papered over. A provider SDK that does not go
+  through `globalThis.fetch` would not be seen — the ones here do. And a
+  subprocess (`execFileSync`) has its own `fetch`, so the pipelines and the
+  heartbeat are outside this count; their own claims are their own.
+*/
+/**
+ * Whether a URL leaving this process is somebody's bill rather than the server
+ * under test.
+ *
+ * A named function, and check 131 asserts *this* one, because the first version
+ * inlined the rule in the meter and re-implemented it in the check. A mutation
+ * then rewrote the meter so an empty `BASE` — the ordinary gate run — whitelists
+ * the entire internet, and the check passed: it was grading its own copy. That
+ * is this repository's oldest rule, broken inside the check written to stop a
+ * typed number.
+ */
+export const countsAsSpend = (url, base) => !(base && url.startsWith(base));
+
+const outbound = [];
+{
+  const realFetch = globalThis.fetch;
+  const counted = function (input, init) {
+    const url = String(
+      typeof input === "string" ? input
+        : input instanceof URL ? input.href
+          : (input && input.url) ?? input,
+    );
+    if (countsAsSpend(url, BASE)) outbound.push(url.replace(/[?#].*$/, "").slice(0, 90));
+    return realFetch.call(this, input, init);
+  };
+  counted.metered = true;
+  globalThis.fetch = counted;
+}
+
 // ── harness ────────────────────────────────────────────────────────────────
 const results = [];
 let current = null;
@@ -15351,6 +15407,79 @@ check("130 A dead upstream is asked once, not once per message", () => {
       || "the one that had none was awaited in front of a person, against an SDK default of ten minutes");
 });
 
+check("131 The suite's own bill is measured, not typed", () => {
+  /*
+    The footer read `0 tokens · 0 model calls`, and both were **string
+    literals**. The assertion count beside them is computed; those two were
+    typed, and they are the numbers this repository's whole credit argument
+    rests on. CLAUDE.md: the suite, both pipelines and the heartbeat make
+    "**zero** model calls by construction — if a change to them needs one, the
+    change is wrong."
+
+    "By construction" was an argument about how checks are written, and nothing
+    enforced it. The suite imports the real product — `research.ts` is loaded at
+    the top of this file and `research()` makes a paid Anthropic web search — so
+    a check that called it, or `generateReply`, or `embed`, would have spent
+    real money on every gate run and printed `0 model calls` underneath it.
+    That is this file's second recurring mechanism exactly: **the interface
+    reported an intention instead of an outcome**, in the one place that reports
+    on the interface.
+
+    It is counted now, and a run that spent anything fails whatever the checks
+    said. This check guards the meter itself, because a meter that stops
+    counting looks identical to the typed zero it replaced.
+  */
+  ok(globalThis.fetch.metered === true,
+    "the fetch the suite runs on is the metered one",
+    "unwrapped, the footer goes back to being a sentence somebody typed");
+
+  /*
+    And the classifier, in both directions, on the rule that matters: the live
+    server under test is the one allowed destination, and everything else is
+    somebody's bill.
+
+    `countsAsSpend` itself, not a copy of it. The first version of this check
+    re-implemented the predicate two lines up, and a mutation that rewrote the
+    real one — so that an empty `BASE`, which is every ordinary gate run,
+    whitelists the whole internet — walked straight past it. A suite that
+    checks its own copy passes while the thing regresses, which is the oldest
+    rule in this repository and was worth re-learning here of all places.
+  */
+  const counts = countsAsSpend;
+  ok(counts("https://api.anthropic.com/v1/messages", "http://localhost:3001"),
+    "a provider is counted",
+    "the whole point is that a paid call cannot hide behind a green footer");
+  ok(counts("https://generativelanguage.googleapis.com/v1beta/models", ""),
+    "and is counted with no live server configured, which is the ordinary gate run",
+    "an empty BASE must not whitelist the internet");
+  ok(!counts("http://localhost:3001/api/vent", "http://localhost:3001"),
+    "the server under test is not counted",
+    "the live pass makes hundreds of these on purpose");
+  ok(counts("http://localhost:9999/api/vent", "http://localhost:3001"),
+    "and another port is not the server under test",
+    "an orphaned next-server on the wrong port has produced a false pass here twice");
+
+  /*
+    The exit is part of it. A footer that reports the spend and still exits 0
+    is the green light over a broken road, which is the oldest entry in
+    CLAUDE.md's list.
+  */
+  const tail = fs.readFileSync(path.join(ROOT, "scripts/eval.mjs"), "utf8");
+  ok(/process\.exit\(passed === total && outbound\.length === 0 \? 0 : 1\)/.test(tail),
+    "and a run that spent anything exits non-zero",
+    "reporting the bill and passing anyway is a light over a road nobody checked");
+
+  /*
+    And the meter asks the same function these assertions just graded. Without
+    this the predicate can stay correct while the meter stops calling it, which
+    is the same distance between a rule and its enforcement that this check
+    exists to close.
+  */
+  ok(/if \(countsAsSpend\(url, BASE\)\) outbound\.push/.test(tail),
+    "and the meter decides with the function above, not a second copy of it",
+    "a correct predicate nothing calls is the shape of every finding in this file");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
@@ -15367,5 +15496,18 @@ for (const r of results) {
 
 const total = results.length;
 console.log("─".repeat(72));
-console.log(`${passed}/${total} PASS · ${results.reduce((n, r) => n + r.asserts.length, 0)} assertions · 0 tokens · 0 model calls\n`);
-process.exit(passed === total ? 0 : 1);
+
+/*
+  The spend, measured. Zero prints as the sentence it always printed, so the
+  footer reads the same on a clean run — and a run that spent anything says so
+  and fails, which is the half that never existed.
+*/
+const spent = outbound.length === 0
+  ? "0 tokens · 0 model calls"
+  : `${outbound.length} OUTBOUND CALL${outbound.length === 1 ? "" : "S"} — ${[...new Set(outbound)].join(", ")}`;
+console.log(`${passed}/${total} PASS · ${results.reduce((n, r) => n + r.asserts.length, 0)} assertions · ${spent}\n`);
+if (outbound.length > 0) {
+  console.log("The suite is supposed to cost nothing. Something in it reached the network.\n");
+}
+// A run that spent money did not pass, whatever the checks said about it.
+process.exit(passed === total && outbound.length === 0 ? 0 : 1);

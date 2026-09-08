@@ -787,6 +787,39 @@ Crisis, factual, greeting and meta are answered locally, for free. The eval
 suite, both pipelines and the heartbeat make **zero** model calls by
 construction — if a change to them needs one, the change is wrong.
 
+**And that zero was a string literal.** The suite's footer read
+`… assertions · 0 tokens · 0 model calls`. The assertion count is computed; the
+two numbers beside it were typed, and they are the numbers this entire section
+rests on. "By construction" was an argument about how checks are written, and
+nothing enforced it — the suite imports the real product, `research.ts` is
+loaded at the top of `eval.mjs`, and `research()` makes a paid Anthropic web
+search. A check that called it, or `generateReply`, or `embed`, would have spent
+real money on every gate run and printed `0 model calls` underneath. Second
+mechanism, in the one place that reports on the interface: **an intention
+instead of an outcome.**
+
+It is metered now. `globalThis.fetch` is wrapped before any check runs, anything
+leaving the process that is not the live server under test is recorded and
+printed, and a run that spent anything **exits non-zero whatever the checks
+said**. On a clean run the footer is byte-identical to what it always said,
+which is the point: the sentence stopped being a promise and became a
+measurement without changing.
+
+Two limits, stated rather than papered over: a provider SDK bypassing
+`globalThis.fetch` would not be seen (the ones here do not), and a subprocess
+has its own `fetch`, so the pipelines and the heartbeat are outside this count.
+
+**The mutation that escaped is the lesson.** Four of five caught. The fifth
+rewrote the meter so an empty `BASE` — which is every ordinary gate run —
+whitelists the entire internet, and the check passed, because the check had
+**re-implemented the predicate** two lines above the assertions instead of
+calling the one the meter uses. *A suite that checks its own copy passes while
+the thing regresses*: the oldest rule in this file, broken inside the check
+written to stop a typed number, by the person who had just quoted it twice that
+hour. `countsAsSpend` is one function now, the check grades that function, and a
+sixth mutation asserts the meter still calls it — because a correct predicate
+nothing calls is the shape of half the findings here.
+
 **"Most messages never reach a model" was the sentence here, and production
 says otherwise.** Of 186 stored turns: 178 vents, 5 greetings, 2 crisis, 1
 meta. The free paths took **4.3%**. The routing is still right — a greeting
