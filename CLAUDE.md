@@ -1213,3 +1213,45 @@ attempt at that assertion was a slack bound — "a request within 60 lines must 
 examined" — and it was wrong in the way this file keeps recording: at 60 a claim
 borrows the `fetch` of an unrelated function further up, which is the exact
 over-reach the 30-line bound was chosen to avoid.
+
+**And underneath all of it, the suite had four answers to what a comment is.**
+`strip` was written out by hand **fourteen times**, identically, inside fourteen
+different checks, and its line-comment half appeared in four forms across sixty-
+one uses. Two of them spare a URL and two truncate it — and **54 of the 61 were
+the truncating kind**. `const ENDPOINT = "https://…"` becomes `const ENDPOINT =
+"https: `, and everything after it on that line is gone before any assertion
+reads it.
+
+Nothing was blind because of it *today*: `providers.ts` is the only stripped
+source carrying URLs, and the two spans that slice it both start after the six
+endpoint lines. That is luck with a short shelf life, and it is the `\bdon\b`
+shape again — not a regex that matches nothing, but one that matches too much,
+in the one place where matching too much means the check never fires. The other
+two forms have the opposite fault: anchored to line start, so every **trailing**
+note survives stripping and its prose stays in the text being scanned, where a
+`// data.saved` at the end of a line can satisfy a positive assertion on its own.
+Neither rule was a superset of the other. That is this repository's most-repeated
+finding, wearing the suite's own clothes.
+
+One rule now, at the top where a decision is visible: a comment's slashes open a
+line or follow whitespace. A URL's follow a colon, a protocol-relative one
+follows a quote. All 54 repaired, all 14 copies deleted, and the suite stayed
+green through every step — which is the honest result, not a vindication.
+
+**Three attempts to count the damage were wrong before one was right**, each
+wrong in a way that looked right, and that is the part worth keeping. The first
+classifier tested for `^` in the pattern source and read the `^` inside `[^\n]`
+as an anchor, so it called the dangerous form safe and reported **1** offender
+instead of 54. The second ran a behavioural probe whose survivor sat on the
+*next* line, where the damage never reaches — it reported **0**. Only the third
+put the survivor on the same line as the URL. *Classify a regex by what it does,
+never by what it looks like*, and put the probe where the damage is: the same
+lesson as the HEAD request that could not carry its own error, arrived at three
+times in ten minutes on the question of what a comment is.
+
+Check 128 therefore judges the **pattern**, not the `.replace` pair. Its first
+version read pattern and replacement together and so excluded every stripper
+whose replacement is a *function* — which is not hypothetical: `blankComments`,
+written an hour earlier for check 48, is exactly that shape and was still
+holding the anchored rule. The check written to abolish second opinions about
+comments could not see one of them.

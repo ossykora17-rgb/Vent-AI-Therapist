@@ -162,6 +162,42 @@ function ok(cond, what, detail = "") {
   return cond;
 }
 
+// What a comment is. One answer, because there were four.
+//
+// Line comments rather than a block, and not by preference: this doc has to
+// quote the patterns it is replacing, several of which end in a star and a
+// slash, and `^\s*//` closes a block comment from inside the sentence
+// describing it. The first two drafts of this paragraph broke the file.
+//
+// This helper was written out by hand **fourteen times**, identically, inside
+// fourteen different checks, and its line-comment half appeared in four forms
+// across the suite (delimiters omitted, for the reason above):
+//
+//     //[^\n]*           x53  strips trailing notes — and truncates URLs
+//     ^\s*//[^\n]*$       x4  URL-safe — and misses every trailing note
+//     ^[ \t]*//.*$         x3  the same
+//     //.*$                x1  truncates URLs
+//
+// Neither rule is a superset of the other, which is this repository's
+// most-repeated finding wearing the suite's own clothes: the common one
+// over-matches, the safe one under-matches, and 54 of 61 uses were the
+// over-matching kind.
+//
+// The over-match is the dangerous half, for the reason CLAUDE.md records about
+// `\bdon\b`: not a regex that matches nothing, but one that matches too much,
+// in the one place where matching too much means the check never fires.
+// `const ENDPOINT = "https://…"` becomes `const ENDPOINT = "https: ` and the
+// rest of that line is gone, so an assertion whose span crosses a URL is
+// reading a truncated file and cannot say so.
+//
+// The rule holding all six cases is that a comment's slashes open a line or
+// follow whitespace. A URL's follow a colon; a protocol-relative one follows a
+// quote. Asserted in both directions by check 128 rather than argued for here,
+// because this is the fourth opinion the file has held on the question and the
+// previous three all looked reasonable in review.
+const strip = (s) =>
+  s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
+
 const base = {
   intent: "vent",
   realWorldTag: null,
@@ -1083,7 +1119,7 @@ check("15e The voice mask shifts far enough to break recognition", () => {
   const mask = fs
     .readFileSync(path.join(ROOT, "src/lib/voice/mask.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^[ \t]*\/\/.*$/gm, "");
+    .replace(/(^|[ \t])\/\/.*$/gm, "$1");
 
   ok(/disableNormalization: true/.test(mask),
     "the sweep runs on an un-normalized wave, not a browser's idea of ±1");
@@ -2629,7 +2665,7 @@ check("24 The system prompt has a budget, and every block earns its place", () =
     unclear priority, and it spends attention the person's message needs.
   */
   const src = fs.readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8");
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[ \t])\/\/.*$/gm, "$1");
   ok(/const CONTEXT_RULES = /.test(code), "the shared rules exist");
   is((code.match(/Do not say it back|Never say it back|NEVER THE FILE/g) ?? []).length, 1,
     "and the do-not-recite rule is stated exactly once in the whole prompt");
@@ -3100,7 +3136,7 @@ check("29 The rate limiter knows who it is refusing", () => {
   const route = fs
     .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^[ \t]*\/\/.*$/gm, "");
+    .replace(/(^|[ \t])\/\/.*$/gm, "$1");
 
   // Order is the whole fix: the router has to run before the limiter.
   const depthAt = route.indexOf("depthFor({");
@@ -4243,7 +4279,7 @@ check("40 Weather is measured, and the rest of the news is not invented", () => 
   for (const f of surfaces) {
     const t = fs.readFileSync(path.join(ROOT, f), "utf8");
     // Comments explaining the refusal are the point; a fetch is not.
-    const code = t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    const code = t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[ \t])\/\/.*$/gm, "$1");
     const hit = code.match(NEWS);
     ok(!hit, `${f} does not bring a war into somebody's bad hour`, hit?.[0]);
   }
@@ -5213,7 +5249,7 @@ check("45 A reply is allowed to finish its sentence", () => {
   const call = anthropic
     .slice(anthropic.indexOf("async send("), anthropic.indexOf("const text"))
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   /*
     Thinking must be stated, not left to the default.
@@ -5400,7 +5436,7 @@ check("46 The always-visible line says it is an AI, and says it once", () => {
     about learning it, and this one still did it. A prose explanation of a rule
     is not the rule. Scan what runs.
   */
-  const home = raw.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const home = raw.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   // The disclosure itself, in the one place it lives.
   ok(/\bAI\b/.test(home), "the shared disclaimer says it is an AI");
@@ -5575,10 +5611,17 @@ check("48 No screen says it happened without reading the answer", () => {
     lines, so 30 keeps its headroom and its original intent — near enough not
     to borrow another function's check.
   */
+  /*
+    Blanking rather than removing, so line numbers still name the real file —
+    and the same rule about what a comment is that `strip` uses at the top,
+    because the anchored form this held first missed every trailing note and
+    left its prose in the text being scanned. A `// data.saved` sitting at the
+    end of a line would have satisfied the read test below on its own.
+  */
   const blankComments = (text) =>
     text
       .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
-      .replace(/^([ \t]*)\/\/[^\n]*$/gm, (m) => m.replace(/[^\n\t ]/g, " "));
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, (m, lead) => lead + " ".repeat(m.length - lead.length));
 
   /** The last `n` lines of actual code at or above `i`, prose skipped. */
   const codeWindow = (code, i, n) => {
@@ -5735,7 +5778,7 @@ check("48 No screen says it happened without reading the answer", () => {
     // because the comment explaining why `persisted` must be read contains
     // the word "persisted". Fourth time in this file. Scan what runs.
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   const flush = anon.slice(anon.indexOf("export async function flushQueue"));
   const drain = flush.slice(0, flush.indexOf("return sent"));
   ok(/persisted/.test(drain),
@@ -5789,7 +5832,7 @@ check("49 The health probe asks as the identity that does the work", () => {
     identity that does the work" and "I could not ask".
   */
   const src = fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8");
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   ok(!/createAdminClient\(\)\s*\?\?/.test(code),
     "the admin client has no fallback",
@@ -5826,7 +5869,7 @@ check("49 The health probe asks as the identity that does the work", () => {
   const storeSrc = fs
     .readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   const called = [...storeSrc.matchAll(/\.rpc\(\s*"([a-z_]+)"/g)].map((m) => m[1]);
   const covered = Object.keys(RPC_CONTRACT);
 
@@ -5951,7 +5994,7 @@ check("51 Closing a circle destroys the words before it claims to be closed", ()
     .readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8")
     // Code only — the comment above the statements names both of them.
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   const fn = store.slice(store.indexOf("async closeCircle"));
   const body = fn.slice(0, fn.indexOf("\n  }"));
@@ -5971,7 +6014,7 @@ check("51 Closing a circle destroys the words before it claims to be closed", ()
   const sweep = fs
     .readFileSync(path.join(ROOT, "src/lib/circles/sweep.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/status === "closed"\)\s*return true/.test(sweep),
     "and a circle already closed is not swept twice",
     "this early return is why the delete has to come first");
@@ -6185,7 +6228,6 @@ await checkAsync("55 What was streamed is a preview; what was committed is the a
   const providers = fs.readFileSync(path.join(ROOT, "src/lib/vent/providers.ts"), "utf8");
   const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
   const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 
   // ── the chain ────────────────────────────────────────────────────────────
   /*
@@ -6528,7 +6570,6 @@ check("56 The room only says it remembers when it can produce the thing", () => 
   */
   const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
   const carveRoute = fs.readFileSync(path.join(ROOT, "src/app/api/carve/route.ts"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
   const client = strip(chat);
 
   /*
@@ -6656,7 +6697,6 @@ check("57 An absent record is not a failed deletion", () => {
   const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
   const history = fs.readFileSync(path.join(ROOT, "src/components/history-list.tsx"), "utf8");
   const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 
   // ── the route says which of the two it is ────────────────────────────────
   const del = strip(route).slice(strip(route).indexOf("async function handleDELETE"));
@@ -6733,7 +6773,7 @@ check("58 The light that says words are being saved is wired to a write", () => 
     *about the operation it claims to describe*. The third clause is this one.
   */
   const src = fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8");
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   ok(!/persisting:\s*Boolean\(store\)\s*,/.test(code),
     "`persisting` is not the existence of a store object",
@@ -7045,7 +7085,6 @@ await checkAsync("61 A circle nobody is asking about still gets closed", async (
   const sweep = fs.readFileSync(path.join(ROOT, "src/lib/circles/sweep.ts"), "utf8");
   const lobby = fs.readFileSync(path.join(ROOT, "src/app/api/circles/route.ts"), "utf8");
   const types = fs.readFileSync(path.join(ROOT, "src/lib/store/types.ts"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 
   /*
     Somebody has to be able to ask for the rows nobody is asking for. Without
@@ -7265,7 +7304,6 @@ check("62 A third party being down cannot hold a page open", () => {
   */
   const close = fs.readFileSync(path.join(ROOT, "src/lib/voice/close.ts"), "utf8");
   const lobby = fs.readFileSync(path.join(ROOT, "src/app/api/circles/route.ts"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 
   const body = strip(close).slice(strip(close).indexOf("export async function closeVoiceRoom"));
   ok(/Promise\.race\(|AbortSignal|signal:/.test(body),
@@ -7333,7 +7371,6 @@ check("63 The arrival reading is a reading, or it is nothing", () => {
   */
   const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
   const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
   const client = strip(chat);
 
   /*
@@ -7449,7 +7486,7 @@ check("64 No route gives up before the work it does is allowed to finish", () =>
     if (!callsModel) continue;
     checked += 1;
 
-    const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
     const declared = /export const maxDuration = (\d+)/.exec(code);
     const name = path.relative(path.join(ROOT, "src/app"), file);
     ok(declared,
@@ -7510,7 +7547,7 @@ check("65 The backup copies what can be lost and nothing that was promised destr
     Neither failure shows up in an artifact that looks fine.
   */
   const src = fs.readFileSync(path.join(ROOT, "src/app/api/export/route.ts"), "utf8");
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   // ── shut without a secret ────────────────────────────────────────────────
   /*
@@ -7598,7 +7635,6 @@ check("66 A fix that stops the damage still has to answer for the damage done", 
   */
   const eff = fs.readFileSync(path.join(ROOT, "src/lib/vent/efficacy.ts"), "utf8");
   const pipe = fs.readFileSync(path.join(ROOT, "scripts/rlhf-pipeline.mjs"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 
   ok(/PRE_FIX_DEFAULT\s*=\s*50/.test(strip(eff)),
     "the value that means 'never answered' is named where the arithmetic is",
@@ -7699,7 +7735,7 @@ check("67 A silent microphone is never published as a masked one", () => {
   */
   const mask = fs.readFileSync(path.join(ROOT, "src/lib/voice/mask.ts"), "utf8");
   const voice = fs.readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8");
-  const code = mask.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const code = mask.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   ok(/state === "suspended"/.test(code) && /\.resume\(/.test(code),
     "a suspended context is resumed rather than wired up silently",
@@ -7762,7 +7798,6 @@ check("68 A room does not tell you the same thing twice", () => {
   */
   const room = fs.readFileSync(path.join(ROOT, "src/components/circle-room.tsx"), "utf8");
   const voice = fs.readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 
   /*
     The transcript placeholder is guarded on somebody else being present. It
@@ -7802,7 +7837,7 @@ check("68 A room does not tell you the same thing twice", () => {
         const text = fs
           .readFileSync(full, "utf8")
           .replace(/\/\*[\s\S]*?\*\//g, " ")
-          .replace(/\/\/[^\n]*/g, " ");
+          .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
         spoken.push(...(text.match(/first one here/g) ?? []));
       }
     }
@@ -7905,7 +7940,7 @@ check("69 A security header does not silently disable the feature it guards", ()
     insecure context — and one sentence covering all of them is how the real
     cause here stayed invisible.
   */
-  const code = voice.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const code = voice.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   for (const n of ["NotAllowedError", "NotFoundError", "NotReadableError", "SecurityError"]) {
     ok(code.includes(n), `${n} is told apart from the others`);
   }
@@ -7937,7 +7972,7 @@ check("70 A mute you performed is not a mute somebody did to you", () => {
     between them.
   */
   const src = fs.readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8");
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   ok(/ownMutesRef/.test(code),
     "the component tracks which mutes are its own",
@@ -8422,7 +8457,7 @@ check("75 No sentence a person reads is about our deployment", () => {
       .readFileSync(f, "utf8")
       // Comments explain the strings they are about, by quoting them.
       .replace(/\/\*[\s\S]*?\*\//g, " ")
-      .replace(/\/\/[^\n]*/g, " ")
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ")
       // A class list is a string with spaces in it and nobody reads it.
       .replace(/className=(?:"[^"]*"|\{`[^`]*`\})/g, " ");
 
@@ -8550,7 +8585,7 @@ check("76 The office has one voice, and nothing we wrote breaks it", () => {
     const src = fs
       .readFileSync(f, "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, " ")
-      .replace(/\/\/[^\n]*/g, " ")
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ")
       .replace(/className=(?:"[^"]*"|\{`[^`]*`\})/g, " ");
     const prose = [
       ...[...src.matchAll(/"([^"\n]*\s[^"\n]*)"|'([^'\n]*\s[^'\n]*)'/g)].map((m) => m[1] ?? m[2] ?? ""),
@@ -8982,7 +9017,7 @@ check("80 Six seats means six, in the store that can race", () => {
     fs
       .readFileSync(path.join(ROOT, rel), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, " ")
-      .replace(/^\s*\/\/[^\n]*$/gm, " ");
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   const types = read("src/lib/store/types.ts");
   const supa = read("src/lib/store/supabase-store.ts");
   const file = read("src/lib/store/file-store.ts");
@@ -9105,7 +9140,7 @@ check("81 A sentence a person reads lives in one file", () => {
     const src = fs
       .readFileSync(f, "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, " ")
-      .replace(/^\s*\/\/[^\n]*$/gm, " ")
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ")
       .replace(/className=(?:"[^"]*"|\{`[^`]*`\})/g, " ");
     const prose = [
       ...[...src.matchAll(/"([^"\n]{25,})"/g)].map((m) => m[1]),
@@ -9722,7 +9757,7 @@ check("86 Nobody is handed a task that would fit anybody", () => {
     const src = fs
       .readFileSync(f, "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, " ")
-      .replace(/\/\/[^\n]*/g, " ")
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ")
       .replace(/className=(?:"[^"]*"|\{`[^`]*`\})/g, " ");
     const prose = [
       ...[...src.matchAll(/"([^"\n]*\s[^"\n]*)"|'([^'\n]*\s[^'\n]*)'/g)].map((m) => m[1] ?? m[2] ?? ""),
@@ -9752,7 +9787,7 @@ check("86 Nobody is handed a task that would fit anybody", () => {
   const promptSrc = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   const speaks = slice(promptSrc, "HOW YOU SPEAK", 700);
   ok(speaks.length > 400, "the block is found and read whole",
     "a marker that lands in a comment slices 700 characters of prose about the code");
@@ -9878,7 +9913,7 @@ check("87 A deletion is reported by what the store answered", () => {
   const route = fs
     .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   const forget = slice(route, "if (forgetCarve)", 700);
   ok(forget.length > 200, "the carve-deletion branch is found",
@@ -9924,7 +9959,7 @@ check("87 A deletion is reported by what the store answered", () => {
   const bare = (p) => fs
     .readFileSync(path.join(ROOT, p), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   const supa = bare("src/lib/store/supabase-store.ts");
   const file = bare("src/lib/store/file-store.ts");
   for (const [name, src] of [["supabase", supa], ["file", file]]) {
@@ -9968,7 +10003,7 @@ check("87 A deletion is reported by what the store answered", () => {
         const src = fs
           .readFileSync(full, "utf8")
           .replace(/\/\*[\s\S]*?\*\//g, " ")
-          .replace(/\/\/[^\n]*/g, " ");
+          .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
         for (const m of BOOLEAN_METHODS) {
           // A call whose line starts with `await` and assigns to nothing.
           const re = new RegExp(`(^|[;{}]\\s*)await\\s+\\w+\\.${m}\\(`, "m");
@@ -10096,7 +10131,7 @@ check("88 The room asks one question, chosen against their words", () => {
   const promptSrc = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/probeBlock\(probe\)/.test(promptSrc), "the prompt renders it");
   ok(promptSrc.indexOf("probeBlock(probe)") > promptSrc.indexOf("THIS TURN"),
     "immediately after the move",
@@ -10130,7 +10165,7 @@ check("88 The room asks one question, chosen against their words", () => {
   const route = fs
     .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/selectProbe\(input\.message, recentProbes\)/.test(route),
     "the route selects against what was already asked");
   ok(/probe_used:\s*probeId/.test(route), "and records which one it asked");
@@ -10241,7 +10276,7 @@ check("89 The room never invents a person or a figure", () => {
   const route = fs
     .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/history\.map\(\(h\) => h\.user_message\)/.test(route),
     "every earlier message is part of the evidence",
     "this turn alone makes every cross-session recall look invented");
@@ -10524,7 +10559,7 @@ check("92 When the thinking is the problem, the question is not about the thing"
   const src = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/probes.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/inTheLoop\(message\) \? PROBES\.filter\(\(p\) => p\.process\)/.test(src),
     "the content questions are removed from the pool, not outranked",
     "on turn two a weight has already been beaten by the rotation");
@@ -10588,7 +10623,7 @@ check("93 What it worked out about you is on the page, with a button", () => {
     somebody correct a wrong note.
   */
   const route = fs.readFileSync(path.join(ROOT, "src/app/api/notes/route.ts"), "utf8");
-  const bare = route.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const bare = route.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/export const GET/.test(bare), "there is a way to read them");
   ok(/export const DELETE/.test(bare), "and a way to take one back");
   ok(/store\.deleteNote\(userId, id\)/.test(bare),
@@ -10612,7 +10647,7 @@ check("93 What it worked out about you is on the page, with a button", () => {
     const src = fs
       .readFileSync(path.join(ROOT, "src/lib/store", file), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, " ")
-      .replace(/\/\/[^\n]*/g, " ");
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
     ok(/async deleteNote\(/.test(src), `${name} store implements it`);
     /*
       The method, and only the method.
@@ -10815,7 +10850,6 @@ check("95 Every door onto a circle asks whether it is over", () => {
   */
   // Comments stripped before any of this is read: three checks in a row have
   // now asserted about a note explaining the code instead of the code.
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
   const dir = path.join(ROOT, "src/app/api/circles");
   const files = [];
   const walk = (d) => {
@@ -11067,7 +11101,7 @@ check("97 It answers in the language they wrote in", () => {
   const src = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/intent.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/any\(PIDGIN_STRONG, m\)/.test(src),
     "only the unambiguous markers decide the language");
   ok(!/any\(PIDGIN_AMBIGUOUS/.test(src),
@@ -11161,7 +11195,7 @@ check("98 The gate cannot pass by not running", () => {
     execution falls through to the gate.
   */
   const src = fs.readFileSync(path.join(ROOT, "scripts/heartbeat-data.mjs"), "utf8");
-  const bare = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const bare = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   const exits = [...bare.matchAll(/process\.exit\(0\)/g)];
   ok(exits.length > 0, `there are success exits to check (${exits.length})`);
@@ -11272,7 +11306,7 @@ check("99 One masked voice per seat, never one key for everybody", () => {
   const src = fs
     .readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/maskMicrophone\(mic, personaFor\(grant\.identity\)/.test(src),
     "the room masks by the seat the server assigned",
     "a constant here is the global key again, and it is one word of diff");
@@ -11359,7 +11393,7 @@ check("100 A note that was refused says so", () => {
   const src = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/carve.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/read\.dropped/.test(src), "the carve path reads what was refused");
   ok(!/parseNotes\(notes\)\.keep/.test(src),
     "and no longer takes only the survivors",
@@ -11420,7 +11454,7 @@ check("101 The room does not promise that somebody is coming", () => {
   const room = fs
     .readFileSync(path.join(ROOT, "src/components/circle-room.tsx"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/\{ALONE_LINE\}/.test(room) && /\{ALONE_DOOR\}/.test(room),
     "the room renders both, imported rather than retyped");
   const alone = room.slice(room.indexOf("state.seats < 2"));
@@ -11560,7 +11594,7 @@ check("102 The turn's verdict is computed, never asked for", () => {
   const shape = fs
     .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   /*
     Scoped to actual responses, not to every object that names an intent.
 
@@ -11637,7 +11671,7 @@ check("102 The turn's verdict is computed, never asked for", () => {
   const src = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/assess.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(!/generateReply|providers|max_?[Tt]okens/.test(src),
     "the assessment spends nothing",
     "a second call to describe the first is the credit policy broken for a label");
@@ -11645,7 +11679,7 @@ check("102 The turn's verdict is computed, never asked for", () => {
   const prompt = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(!/<risk_level>|<reasoning_summary>|<handoff_flag>|<next_skill>/.test(prompt),
     "and the model is never asked to emit the schema",
     "tags in the output are output tokens, a parse that can fail, and a rating the message can argue with");
@@ -11656,7 +11690,7 @@ check("102 The turn's verdict is computed, never asked for", () => {
   const route = fs
     .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/assessment: assessTurn\(\{/.test(route), "the turn carries it");
   ok(route.indexOf("assessTurn({") > route.indexOf("const classification"),
     "computed from what the router already decided");
@@ -11734,7 +11768,7 @@ check("103 Nothing a person wrote reaches a log line", () => {
         const src = fs
           .readFileSync(full, "utf8")
           .replace(/\/\*[\s\S]*?\*\//g, " ")
-          .replace(/\/\/[^\n]*/g, " ");
+          .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
         /*
           The call's own arguments, by balancing parentheses — the same reader
           check 102 needed. A line-based match reads whatever happens to sit
@@ -11776,7 +11810,7 @@ check("103 Nothing a person wrote reaches a log line", () => {
   const carve = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/carve.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/console\.warn\(`\[carve\] notes refused/.test(carve),
     "the empty-notes question is still answerable",
     "a rule that silences the diagnostic trades one blind subsystem for another");
@@ -11813,7 +11847,6 @@ check("104 A grader the live path can see is a decision somebody made", () => {
     The rest is behaviour, because a set membership is not a decision until
     something reads it.
   */
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
   const quality = strip(fs.readFileSync(path.join(ROOT, "src/lib/vent/quality.ts"), "utf8"));
   const emitted = [...quality.matchAll(/\badd\(\s*"([a-z_]+)"/g)].map((m) => m[1]);
   const graders = [...new Set(emitted)].sort();
@@ -12175,7 +12208,6 @@ check("106 Whether the failsafe fired is written down somewhere that lasts", () 
     "a migration exists for it",
     "a column in the contract with no migration fails every deployment that has not been hand-patched");
 
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
   const store = strip(fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8"));
   ok(/"rejected_by"/.test(store),
     "the store reads it back",
@@ -12405,7 +12437,6 @@ check("109 Nothing onboarding asks for is collected and then dropped", () => {
     reach the vent, and a sixth question added tomorrow fails the build until
     it does.
   */
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
   const onboarding = strip(fs.readFileSync(path.join(ROOT, "src/components/onboarding.tsx"), "utf8"));
   const chat = strip(fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8"));
 
@@ -12472,7 +12503,6 @@ check("110 The road from production to training carries what is on it", () => {
     The envelope here is built from the route's own source rather than typed
     out, so a field renamed there fails this instead of passing it.
   */
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
   const exportSrc = strip(fs.readFileSync(path.join(ROOT, "src/app/api/export/route.ts"), "utf8"));
 
   // The *last* return, not the first. The route answers 501 and 401 above
@@ -12863,7 +12893,6 @@ check("112 What a closing circle destroys, a backup never keeps", () => {
     `closeCircle` deletes, the export excludes. Add a table to one and the
     build fails until it is named in the other.
   */
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
   const store = strip(fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8"));
 
   const from = store.indexOf("async closeCircle");
@@ -13770,7 +13799,7 @@ check("118 A route that touches the store answers when the store says no", () =>
       the presence of the bug — which is the same shape as check 45 asserting
       the fragment from its own postmortem, two years of lessons apart.
     */
-    const src = raw.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+    const src = raw.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
     const bare = [...src.matchAll(new RegExp(`export\\s+async\\s+function\\s+(${METHODS})\\b`, "g"))];
     const consts = [...src.matchAll(new RegExp(`export\\s+const\\s+(${METHODS})\\s*=\\s*([A-Za-z_$][\\w$]*)`, "g"))];
@@ -14651,7 +14680,7 @@ check("125 The nightly audit asks the router what language a row was", () => {
   for (const f of walkTs(path.join(ROOT, "src"))) {
     const rel = path.relative(ROOT, f);
     if (owners.has(rel)) continue;
-    const src = fs.readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^\s*\/\/[^\n]*$/gm, " ");
+    const src = fs.readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
     const m = src.match(NIGERIAN);
     if (m) rogue.push(`${rel}: ${m[0].slice(0, 52)}`);
   }
@@ -14778,7 +14807,7 @@ check("126 Nothing pluralises a thing there is only one of", () => {
     every component here. That is check 115's finding, and it means a sentence
     reaches a person from a file with no JSX in it.
   */
-  const bare = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^\s*\/\/[^\n]*$/gm, " ");
+  const bare = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   const offenders = [];
   for (const noun of onePerPerson) {
     const re = new RegExp(`\\b${plural(noun)}\\b`, "i");
@@ -14908,6 +14937,118 @@ check("127 A price the pipeline declares is a price something pays", () => {
       "and a migration has moved memories off auth.users first",
       "0006 keys memories to auth.users(id); an anonymous venter is not in that id space, so every insert is rejected and every call still billed");
   }
+});
+
+check("128 The suite has one answer to what a comment is, and it spares URLs", () => {
+  /*
+    Fourteen identical hand-written copies of `strip`, and four different
+    answers to the question underneath them. The line-comment half appeared as
+    an unanchored slash-slash 54 times out of 61, and that form truncates every
+    line holding a URL: `const ENDPOINT = "https://…"` becomes
+    `const ENDPOINT = "https: `, with the rest of the line gone.
+
+    Nothing was blind because of it *today* — `providers.ts` is the only
+    stripped source carrying URLs, and the two spans that slice it start after
+    the six endpoint lines. That is luck with a short shelf life, and it is the
+    shape CLAUDE.md records about `\bdon\b`: not a regex that matches nothing,
+    but one that matches too much, in the one place where matching too much
+    means the check never fires. A suite that reads a truncated file cannot say
+    that it did.
+
+    CLASSIFIED BY WHAT IT DOES, NOT BY WHAT IT LOOKS LIKE
+
+    Three attempts to count the damage by inspecting the regexes were wrong,
+    each in a way that looked right. The first tested for `^` in the pattern
+    source and read the `^` inside `[^\n]` as an anchor, so it reported the
+    dangerous form as safe — 1 offender instead of 54. The second ran a probe
+    whose survivor sat on the *next* line, where the damage never reaches, so
+    it reported zero. Only the third put the survivor on the same line as the
+    URL and got the true number.
+
+    So this check runs every stripper in the file rather than reading it. Six
+    cases, and the two rules the suite already held each fail one of them: the
+    common form destroys the URL line, the anchored form misses every trailing
+    note. The rule that holds all six is that a comment's slashes open a line
+    or follow whitespace.
+  */
+  const suite = fs.readFileSync(path.join(ROOT, "scripts/eval.mjs"), "utf8");
+
+  const CASES = [
+    ["a URL keeps the rest of its line", 'const E = "https://api.example.com/v1"; SURVIVOR();', "SURVIVOR", true],
+    ["a protocol-relative URL too", 'src="//cdn.example.com/x"; SURVIVOR();', "SURVIVOR", true],
+    ["a full-line note goes", "  // a note REMOVED\n  keep();", "REMOVED", false],
+    ["a note at column 0 goes", "// a note REMOVED", "REMOVED", false],
+    ["a trailing note goes", "foo(); // trailing REMOVED", "REMOVED", false],
+    ["and the code before it stays", "SURVIVOR(); // trailing note", "SURVIVOR", true],
+  ];
+  const judge = (fn) => CASES.filter(([, src, needle, lives]) => fn(src).includes(needle) !== lives);
+
+  for (const [what, src, needle, lives] of CASES) {
+    is(strip(src).includes(needle), lives,
+      `the shared stripper: ${what}`,
+      `on ${JSON.stringify(src)}`);
+  }
+
+  /*
+    And the sweep, over the suite's own text — judging the PATTERN, not the
+    whole `.replace(…)`.
+
+    The first version read pattern *and* replacement and evaluated the pair,
+    which quietly excluded every stripper whose replacement is a function. That
+    is not a hypothetical exclusion: `blankComments` in check 48 is exactly
+    that shape, it blanks rather than removes so line numbers survive, and it
+    was sitting outside this sweep still holding the anchored rule that misses
+    trailing notes. The check written to abolish second opinions about comments
+    could not see one of them.
+
+    A pattern is enough to judge, and it covers both shapes: a stripper must
+    not match inside a URL, and must match a comment whether it opens the line
+    or follows code.
+  */
+  const strippers = [...suite.matchAll(/\.replace\((\/(?:\\.|\[[^\]]*\]|[^/\\\n])+\/[a-z]*),/g)]
+    .filter((m) => m[1].includes("\\/\\/"));
+
+  ok(strippers.length >= 20,
+    "the sweep found the strippers it is meant to judge",
+    `found ${strippers.length} — a sweep that matches nothing reports green over everything`);
+
+  const MUST_NOT_MATCH = [
+    ['a URL', 'const E = "https://api.example.com/v1"; keep();'],
+    ['a protocol-relative URL', 'src="//cdn.example.com/x"; keep();'],
+  ];
+  const MUST_MATCH = [
+    ["a note opening a line", "  // a note"],
+    ["a note at column 0", "// a note"],
+    ["a note following code", "foo(); // a note"],
+  ];
+
+  const broken = [];
+  for (const m of strippers) {
+    const parts = m[1].match(/^\/(.*)\/([a-z]*)$/);
+    let re;
+    try { re = new RegExp(parts[1], parts[2].replace("g", "")); } catch { continue; }
+    const bad = [
+      ...MUST_NOT_MATCH.filter(([, s]) => re.test(s)).map(([w]) => `matches ${w}`),
+      ...MUST_MATCH.filter(([, s]) => !re.test(s)).map(([w]) => `misses ${w}`),
+    ];
+    if (bad.length) broken.push(`${m[1]} — ${bad.join("; ")}`);
+  }
+  is(broken.length, 0,
+    "and every stripper in the suite spares URLs and catches every comment",
+    [...new Set(broken)].join(" · ")
+      || "over-matching hands a truncated file to whatever asserts on it; under-matching leaves prose in it");
+
+  /*
+    One definition. The fourteen copies were identical, which is why nobody
+    noticed they were a decision — a repeated line reads as boilerplate, and
+    boilerplate does not get reviewed.
+  */
+  is((suite.match(/^const strip = /gm) ?? []).length, 1,
+    "and it is defined once, at the top, where a decision is visible",
+    "fourteen identical copies is fourteen chances to fix thirteen of them");
+  is((suite.match(/^ {2}const strip = /gm) ?? []).length, 0,
+    "with no check holding a private copy",
+    "the second detector is this repository's most-repeated bug");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
