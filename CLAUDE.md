@@ -569,7 +569,7 @@ own copy passes while the product regresses.
 | What the audit proposed and the gate kept | `src/lib/vent/learned.ts` |
 | Intent routing, crisis, meta-vs-vent, injection | `src/lib/vent/intent.ts` |
 | The turn's verdict, computed not asked for | `src/lib/vent/assess.ts` |
-| 32 tactics, 3-turn block, somatic gate | `src/lib/vent/tactics.ts` |
+| 45 tactics, 3-turn block, somatic gate | `src/lib/vent/tactics.ts` |
 | Memory: vents only, six-turn cap | `src/lib/vent/memory.ts` |
 | The office across sessions, and no diagnosis | `src/lib/vent/notes.ts` |
 | What it worked out, shown and deletable | `src/app/api/notes/route.ts` |
@@ -1166,6 +1166,29 @@ Check 86 asserts it against the tables now. Any claim of the form "N things are
 enforced" is a copy of something the code already knows, and it belongs in the
 same category as a duplicated sentence: derive it, or assert it, or do not
 write the number.
+
+**And then this file did it.** The "Where things live" table above said **32
+tactics**. There are **45**. Nobody typed it wrong; thirteen were added and the
+integer stayed — the same mechanism, in the document that records the
+mechanism, four hundred lines below the paragraph you just read.
+
+The guard that paragraph produced reads `docs/POSITIONING.md`. Nothing in the
+suite had ever read `CLAUDE.md` as *data* — every mention of it in `eval.mjs` is
+prose inside a comment. So the document written for somebody who cannot check it
+was covered, and the operating manual, read by whoever is about to change the
+code, was not. Same shape as the foreign-hotline guard: the rule stated twice,
+enforced on one surface.
+
+Check 132 closes it, scoped to the table on purpose. This file is full of
+integers — 171 vents, 3,600 tokens, 1,574 cacheable — and nearly all of them are
+observations about a moment rather than live counts; a check asserting those
+would be wrong the day production moved. What is asserted is the narrow set the
+code can still answer for itself, and it asserts the sibling guard still exists
+too, so the asymmetry cannot come back from the other direction.
+
+The row that maps an English phrase to a module stays hand-written, because that
+mapping cannot be derived. The integer beside it always can, and the integer is
+the half that goes stale.
 
 **And a plural is a number.** The chat's sticky header — the one line that says
 what the room holds about somebody — read *"Remembers · 4 earlier carves"*. A

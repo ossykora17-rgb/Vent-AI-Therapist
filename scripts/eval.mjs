@@ -27,7 +27,7 @@ const { buildFlavour } = await app("src/lib/flavour/profile.ts");
 const { flavourBlock, openingBlock, carveBlock, memoryBlock } = await app("src/lib/vent/prompt.ts");
 const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/vent/chairs.ts");
-const { selectMemory } = await app("src/lib/vent/memory.ts");
+const { selectMemory, MEMORY_TURNS } = await app("src/lib/vent/memory.ts");
 const { checkMessage, economyFact, weatherFact, keeperIntention, keeperReflection, roleForSeat,
         ALONE_LINE, ALONE_DOOR } =
   await app("src/lib/circles/rules.ts");
@@ -15478,6 +15478,75 @@ check("131 The suite's own bill is measured, not typed", () => {
   ok(/if \(countsAsSpend\(url, BASE\)\) outbound\.push/.test(tail),
     "and the meter decides with the function above, not a second copy of it",
     "a correct predicate nothing calls is the shape of every finding in this file");
+});
+
+check("132 The operating manual's counts are the code's counts", () => {
+  /*
+    `CLAUDE.md`'s "Where things live" table said **32 tactics**. There are 45.
+
+    Nobody typed it wrong. Thirteen tactics were added and the integer stayed
+    where it was — the exact mechanism this file records about
+    `POSITIONING.md`'s "23 banned phrases", in the paragraph that ends: *"Any
+    claim of the form 'N things are enforced' is a copy of something the code
+    already knows. Derive it, or assert it, or do not write the number."*
+
+    That paragraph produced a guard, and the guard covers `POSITIONING.md`.
+    Nothing in this suite has ever read `CLAUDE.md` as data — every mention of
+    it in this file is prose in a comment. So the document written **for
+    somebody who cannot check it** was the one covered, and the operating
+    manual, which is read by whoever is about to change the code, was not.
+    Same shape as the foreign-hotline guard: documented twice, enforced on one
+    surface.
+
+    Scoped to the table, deliberately. `CLAUDE.md` is full of integers — 171
+    vents, 3,600 tokens, 1,574 cacheable — and almost all of them are
+    observations about a moment, not live counts. A check that asserted those
+    would be wrong the day production moved. What belongs here is the narrow
+    set the code can still answer for itself.
+  */
+  const manual = fs.readFileSync(path.join(ROOT, "CLAUDE.md"), "utf8");
+
+  /*
+    The phrase is hand-written and the number is not — which is the whole rule.
+    Mapping an English row to a module cannot be derived; the integer beside it
+    always can, and that is the half that goes stale.
+  */
+  const CLAIMS = [
+    ["extraction questions", /(\d+) extraction questions/, PROBES.length],
+    ["tactics", /(\d+) tactics, 3-turn block/, ALL_TACTICS.length],
+  ];
+
+  for (const [what, re, live] of CLAIMS) {
+    const m = manual.match(re);
+    ok(m, `the table still states a count of ${what}`,
+      `${re} matched nothing — a claim check that cannot find the claim reports green over it`);
+    if (m) {
+      is(Number(m[1]), live, `and the manual's ${what} count is the code's`,
+        `CLAUDE.md says ${m[1]}, the code has ${live} — a row was added and the integer stayed`);
+    }
+  }
+
+  /*
+    The prose count that is not a table row, and is load-bearing: the memory
+    window appears as a word rather than a digit, and `MEMORY_TURNS` is what
+    every caller actually reads.
+  */
+  ok(/six-turn cap/.test(manual), "the table still names the memory window");
+  is(MEMORY_TURNS, 6, "and six is still what the module means by it",
+    "the words in the table and the constant in the module are one claim");
+
+  /*
+    And the reason this check exists at all: the guard for exactly this bug
+    was pointed at the other document. Asserted so the asymmetry cannot come
+    back by someone deleting this check and leaving that one.
+  */
+  const suite = fs.readFileSync(path.join(ROOT, "scripts/eval.mjs"), "utf8");
+  ok(/readFileSync\(path\.join\(ROOT, "docs\/POSITIONING\.md"\)/.test(suite),
+    "the sibling document is still guarded too",
+    "one of the two covered is how this started");
+  ok(/readFileSync\(path\.join\(ROOT, "CLAUDE\.md"\)/.test(suite),
+    "and the manual is now read as data rather than only quoted in comments",
+    "every other mention of it in this suite is prose inside a comment");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
