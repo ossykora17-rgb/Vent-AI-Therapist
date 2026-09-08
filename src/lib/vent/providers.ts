@@ -698,8 +698,23 @@ function anthropicProvider(): Provider {
     model: MODEL.anthropic,
     configured: Boolean(apiKey),
     keyState: keyStateOf("ANTHROPIC_API_KEY", apiKey),
-    async send({ system, messages, maxTokens, onDelta, cachePrefix }) {
-      const client = new Anthropic({ apiKey });
+    async send({ system, messages, maxTokens, onDelta, cachePrefix, deadlineMs }) {
+      /*
+        The deadline the rest of the chain already had.
+
+        `deadlineMs` is declared on `ProviderCall` and the OpenAI-compatible
+        adapter honours it — `AbortSignal.timeout(call.deadlineMs ??
+        PROVIDER_DEADLINE_MS)`. This adapter never destructured it. So the
+        *primary* provider, on the path a person is waiting on, ran against the
+        SDK's own default of ten minutes with retries, while model discovery
+        (15s) and every sibling call were bounded.
+
+        Set on the client so both branches below get it: the streaming one and
+        the plain `create`. A per-request option would have covered whichever
+        branch somebody remembered, which is how this file already learned
+        about `wasCutOff` being applied on one path and not the other.
+      */
+      const client = new Anthropic({ apiKey, timeout: deadlineMs ?? PROVIDER_DEADLINE_MS });
       const params = {
         model: MODEL.anthropic,
         max_tokens: maxTokens,

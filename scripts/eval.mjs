@@ -15407,24 +15407,58 @@ check("130 A dead upstream is asked once, not once per message", () => {
     question and a different one; answering it here would have been a rule
     invented to make a sweep go green.
   */
+  /*
+    COUNTED PER CALL SITE, BECAUSE PER FILE LET THE MAIN ONE THROUGH
+
+    The first version asked whether an outbound file contained a deadline
+    *anywhere*. `providers.ts` does — two of them, on model discovery and on
+    the OpenAI-compatible chat path — so it passed while the **Anthropic**
+    adapter, the primary provider on the path a person is waiting on, never
+    destructured `deadlineMs` at all and ran against the SDK's ten-minute
+    default. One bounded call was vouching for its unbounded neighbours.
+
+    So each raw `fetch(` and each `messages.create(` must have a deadline
+    marker of its own. Three sites and two markers in one file is the shape
+    that hid it, and counting is what makes that visible.
+  */
   const unbounded = [];
   let outbound = 0;
+  let outboundFiles = 0;
   for (const f of walkTs(path.join(ROOT, "src/lib"))) {
     const code = strip(fs.readFileSync(f, "utf8"));
     const callsOut = (/\bfetch\(/.test(code) && /https:\/\//.test(code)) || /messages\.create\(/.test(code);
     if (!callsOut) continue;
-    outbound++;
-    if (!/AbortSignal\.timeout\(|timeout:\s*[A-Z_0-9]/.test(code)) {
-      unbounded.push(path.relative(ROOT, f));
+    outboundFiles++;
+    const sites = (code.match(/\bfetch\(/g) ?? []).length + (code.match(/messages\.create\(/g) ?? []).length;
+    const bounded = (code.match(/AbortSignal\.timeout\(/g) ?? []).length
+      + (code.match(/timeout:\s*[A-Za-z_0-9]/g) ?? []).length;
+    outbound += sites;
+    if (bounded < sites) {
+      unbounded.push(`${path.relative(ROOT, f)} (${sites} call sites, ${bounded} bounded)`);
     }
   }
-  ok(outbound >= 3,
-    "the sweep found the outbound calls it is meant to bound",
+  ok(outbound >= 5,
+    "the sweep found the outbound call sites it is meant to bound",
     `found ${outbound} — a sweep over nothing reports green over everything`);
   is(unbounded.length, 0,
-    "and every outbound call in src/lib has a deadline",
+    "and every outbound call site in src/lib has a deadline of its own",
     unbounded.join(", ")
-      || "the one that had none was awaited in front of a person, against an SDK default of ten minutes");
+      || "an unbounded call in front of a person runs to the SDK's default, which is ten minutes");
+
+  /*
+    And the granularity, pinned by the difference it makes — check 48's trick,
+    for check 48's reason. Every site is bounded today, so reverting this sweep
+    to "does the file contain a deadline anywhere" would break nothing, fail
+    nothing, and silently un-cover the primary provider again. Two assertions,
+    because the two halves fail differently: the tree must actually distinguish
+    the rules, and the comparison must be the per-site one.
+  */
+  ok(outbound > outboundFiles,
+    "and at least one file holds more outbound calls than deadlines would cover file-wide",
+    `${outbound} call sites across ${outboundFiles} files — equal, and per-file is the same rule`);
+  ok(/if \(bounded < sites\) \{/.test(fs.readFileSync(path.join(ROOT, "scripts/eval.mjs"), "utf8")),
+    "and the comparison is per call site, not per file",
+    "`bounded < 1` passes providers.ts on the strength of a neighbour, which is how this was missed");
 });
 
 check("131 The suite's own bill is measured, not typed", () => {

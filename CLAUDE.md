@@ -764,14 +764,31 @@ credit, so every vent has been paying a doomed round trip **inline, before the
 reply**, for a second opinion the module's own header says the room must not
 depend on.
 
-**And it had no deadline** — the only outbound call here that did not.
-`PROVIDER_DEADLINE_MS` is 50s, model discovery 15s, `embeddings.ts` 15s, and
-all four windows in `sources.ts` list `AbortSignal.timeout(3_000)` among the
-file's rules. `research()` is awaited in `api/vent/route.ts` *before* the model
-is called, so its latency is the person's latency, against an SDK default of
-ten minutes. The comment beside that await reads *"the reply is unaffected
-either way"* — true of the reply's **content**, and silent about the one
-dimension a hanging upstream touches.
+**And it had no deadline.** `PROVIDER_DEADLINE_MS` is 50s, model discovery 15s,
+`embeddings.ts` 15s, and all four windows in `sources.ts` list
+`AbortSignal.timeout(3_000)` among the file's rules. `research()` is awaited in
+`api/vent/route.ts` *before* the model is called, so its latency is the person's
+latency, against an SDK default of ten minutes. The comment beside that await
+reads *"the reply is unaffected either way"* — true of the reply's **content**,
+and silent about the one dimension a hanging upstream touches.
+
+**This paragraph said "the only outbound call here that did not", and that was
+wrong.** There was a second, and it was the worse one: the **Anthropic
+adapter** in `providers.ts` — the primary provider, on the path a person is
+actually waiting on. `ProviderCall` declares `deadlineMs`, the
+OpenAI-compatible adapter honours it as `AbortSignal.timeout(call.deadlineMs ??
+PROVIDER_DEADLINE_MS)`, and `send()` in the Anthropic adapter never
+destructured it. Both branches — the stream and the plain `create` — ran on the
+SDK's ten-minute default with its own retries.
+
+Found by tightening the check, not by reading. Check 130's sweep asked whether
+an outbound *file* carried a deadline anywhere, and `providers.ts` carries two —
+on model discovery and on the OpenAI-compatible chat call — so it passed while
+the third call site in the same file had none. **One bounded call was vouching
+for its unbounded neighbours.** The sweep counts call sites now, and the
+granularity is pinned by the difference it makes on the real tree, because every
+site is bounded today and reverting to per-file would break nothing, fail
+nothing, and silently un-cover the primary provider again.
 
 Check 130 exercises the cache rather than asserting about it, in a subprocess
 with `VENT_DATA_DIR` pointed at a scratch directory, because a suite that
