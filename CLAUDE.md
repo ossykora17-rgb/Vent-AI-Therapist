@@ -645,8 +645,11 @@ their areas: `.claude/skills/data-quality/` and `.claude/skills/circles-quality/
   reply as `[reason — detail]`. So a person having a bad day was shown an
   upstream error blob, from a request that had just carried their vent, their
   notes and their carve. Two console calls logged it in passing, and
-  `embeddings.ts` logged 200 characters of its own upstream body — on the one
-  request here that sends somebody's words to a third party to be vectorised.
+  `embeddings.ts` logged 200 characters of its own upstream body — which that
+  fix corrected to a bare status. This sentence used to end "on the one request
+  here that sends somebody's words to a third party to be vectorised", and that
+  half was **not true**: nothing imports `embeddings.ts`, so there is no such
+  request and never has been. See the entry below on prices nothing pays.
 
   Every comment along that path was right about why it existed. *"Days were
   lost reading 'Network dipped' as a network problem. If the server said why,
@@ -1131,3 +1134,33 @@ nouns is the bug. What holds instead has no noun and no integer in it: every
 not be empty, so a contract that legitimately changes moves both sides together
 and stays green. CLAUDE.md's oldest trap — *an assertion can defend the bug* —
 found inside the guard written against it.
+
+**And a price nobody pays is a plan wearing the word cost.** `embeddings.ts` is
+86 lines, exports `embed()`, and is imported by **nothing** in this repository.
+Its own doc comment says *"the caller stores what it has"* about a caller that
+does not exist. Dead code is worth a line; what made it worth a check is that
+two places a person goes for exactly this question said the opposite.
+`orchestrator.ts` priced the MEMORY stage's semantic recall at *"one embedding
+call on the surfaces that use it"*, implying surfaces. This file called it *"the
+one request here that sends somebody's words to a third party to be
+vectorised"* — present tense, inside a paragraph about a real leak. So the
+repository's answer to *what leaves this machine* was wrong, and its answer to
+*is there an approved path for semantic memory* was yes.
+
+The loaded half is the destination. `memories.user_id` is `uuid not null
+references auth.users(id)` (0006) and every RLS policy on that table is
+`auth.uid() = user_id`. Anonymous venters are not in that id space — which is
+the entire finding of 0011, where the carve was moved to `vent_users.carve` for
+this exact reason. So wiring `embed()` today buys one Gemini call per vent **and
+a foreign-key rejection per vent**, silently, for ever: the per-message cost
+doubles and not one row lands. The credit arithmetic above — "about 4,200 a
+turn" — goes wrong the moment somebody adds the import, and nothing would have
+said so.
+
+Check 127 is therefore written forward rather than as an epitaph. `StageCost` is
+read off the type; every price must be paid by a stage or named in
+`UNPAID_COSTS` with its reason, and never both. The transition is the point: the
+day `embed()` acquires an importer the build fails until a stage carries its
+price *and* a migration has moved `memories` off `auth.users`. Not a check
+standing in front of a feature — the feature's first two steps, written where
+the next person will be standing.

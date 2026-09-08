@@ -4957,7 +4957,7 @@ check("37 Every utility written actually compiles to something", () => {
 // message — two of them to map a sentence to a body part and to parse affect,
 // both of which are already regex and a table — and nothing in the repo could
 // have failed it. Now something can.
-const { PIPELINE, FREE_STAGES, MAX_COMPLETIONS_PER_MESSAGE, describePipeline } =
+const { PIPELINE, FREE_STAGES, MAX_COMPLETIONS_PER_MESSAGE, UNPAID_COSTS, describePipeline } =
   await app("src/lib/vent/orchestrator.ts");
 
 check("19 A vent costs one model call, and the free stages stay free", () => {
@@ -14678,6 +14678,111 @@ check("126 Nothing pluralises a thing there is only one of", () => {
   ok(!new RegExp(`\\b${plural("carve")}\\b`, "i").test('{memoryCount === 1 ? "vent" : "vents"}'),
     "and does not catch the repair",
     "a sweep that flags the fix teaches the next person to delete the sweep");
+});
+
+check("127 A price the pipeline declares is a price something pays", () => {
+  /*
+    `embeddings.ts` is 86 lines, exports `embed()`, and is imported by nothing
+    anywhere in this repository. Its own doc comment says "the caller stores
+    what it has"; there is no caller.
+
+    That alone is dead code and would be worth a line. What made it worth a
+    check is the documentation trail, which said the opposite in two places a
+    person goes for exactly this question:
+
+      orchestrator.ts — the MEMORY stage "costs one embedding call on the
+                        surfaces that use it", implying surfaces
+      CLAUDE.md       — "the one request here that sends somebody's words to a
+                        third party to be vectorised", present tense, in a
+                        paragraph about a real leak
+
+    So the repository's answer to "what leaves this machine?" was wrong, and
+    its answer to "is there an approved path for semantic memory?" was yes.
+
+    THE LOADED HALF
+
+    `memories.user_id` is `uuid not null references auth.users(id)` (0006) and
+    every RLS policy on that table is `auth.uid() = user_id`. Anonymous venters
+    are not in that id space — the entire finding of 0011, which moved the
+    carve to `vent_users.carve` for this reason. Wiring `embed()` today buys
+    one Gemini call per vent and a foreign-key rejection per vent, silently,
+    for ever: the per-message cost doubles and no row lands. CLAUDE.md's cost
+    arithmetic ("about 4,200 a turn") is wrong the moment that happens, and
+    nothing would have said so.
+
+    So this check is written forward rather than as an epitaph. It pins the
+    state the repo is in and fails the build on the transition.
+  */
+  const orch = fs.readFileSync(path.join(ROOT, "src/lib/vent/orchestrator.ts"), "utf8");
+
+  // The union, off the type — not a list typed into this file.
+  const union = orch.match(/export type StageCost\s*=\s*([^;]+);/);
+  ok(Boolean(union), "the pipeline still declares its prices as a type",
+    "a derivation that parses nothing sweeps nothing and reports green");
+  const declared = [...(union?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  ok(declared.length >= 2, "and there is more than one price to tell apart",
+    `declared: [${declared.join(", ")}]`);
+
+  const paid = new Set(PIPELINE.map((s) => s.cost));
+  const named = new Set(UNPAID_COSTS);
+
+  const unaccounted = declared.filter((c) => !paid.has(c) && !named.has(c));
+  is(unaccounted.length, 0,
+    "every price is either paid by a stage or named as unpaid",
+    unaccounted.join(", ") || "a declared price nobody pays reads as true, is green, and misleads the next person");
+
+  const both = declared.filter((c) => paid.has(c) && named.has(c));
+  is(both.length, 0,
+    "and nothing is listed as unpaid while a stage is paying it",
+    both.join(", ") || "an exemption that stopped being true is the stale-exemption bug, which fails here too");
+
+  /*
+    The transition, which is the whole point.
+
+    Not "embeddings.ts must stay unwired" — that would be a check standing in
+    front of a feature. The rule is that wiring it and pricing it happen in the
+    same commit, and that the migration comes first. Whoever adds the import
+    gets a red build naming both, rather than a bill and an empty table.
+  */
+  const walkTs = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkTs(p, out);
+      else if (/\.tsx?$/.test(p)) out.push(p);
+    }
+    return out;
+  };
+  const importers = walkTs(path.join(ROOT, "src"))
+    .filter((f) => !f.endsWith(`${path.sep}embeddings.ts`))
+    .filter((f) => /^\s*import[^;]*from\s+["'][^"']*vent\/embeddings["']/m.test(
+      fs.readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, " "),
+    ))
+    .map((f) => path.relative(ROOT, f));
+
+  const wired = importers.length > 0;
+  is(wired, !named.has("one-embedding"),
+    wired
+      ? "embeddings has a caller, so a stage must carry its price"
+      : "embeddings has no caller, and the pipeline says so out loud",
+    wired
+      ? `imported by ${importers.join(", ")} — add the stage cost, or the per-message figure in CLAUDE.md is wrong`
+      : "nothing imports it; `one-embedding` is named in UNPAID_COSTS");
+
+  if (wired) {
+    /*
+      0011's lesson, enforced rather than remembered. A vector written against
+      `memories` is rejected for every person this product has: the FK is to
+      `auth.users(id)` and anonymous venters are not in it.
+    */
+    const memoriesFk = fs
+      .readdirSync(path.join(ROOT, "supabase/migrations"))
+      .filter((f) => f.endsWith(".sql"))
+      .map((f) => fs.readFileSync(path.join(ROOT, "supabase/migrations", f), "utf8"))
+      .join("\n");
+    ok(/alter table[\s\S]{0,200}memories[\s\S]{0,400}drop constraint/i.test(memoriesFk),
+      "and a migration has moved memories off auth.users first",
+      "0006 keys memories to auth.users(id); an anonymous venter is not in that id space, so every insert is rejected and every call still billed");
+  }
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

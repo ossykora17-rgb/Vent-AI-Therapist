@@ -34,10 +34,14 @@ import { VENT_MODEL } from "./model";
  *
  *   3. MEMORY   — what they have said before. `memory.selectMemory()` over
  *                 rows the store already holds, filtered to vents and capped
- *                 at six turns. **Zero tokens.** Semantic recall over the
- *                 `memories` table (0006, pgvector) costs one embedding call
- *                 on the surfaces that use it, which is why it is listed at
- *                 its real price rather than as free.
+ *                 at six turns. **Zero tokens**, and that is the whole of it.
+ *
+ *                 This used to read "semantic recall over the `memories` table
+ *                 (0006, pgvector) costs one embedding call on the surfaces
+ *                 that use it". There are no such surfaces. `embeddings.ts`
+ *                 has no importer anywhere in this repository — see the header
+ *                 there for what wiring it would actually cost, which is not
+ *                 what that sentence implied.
  *
  *   4. WEAVER   — the only stage that speaks. One call, through the provider
  *                 chain, with a tactic chosen and the memory already in the
@@ -108,6 +112,32 @@ export const FREE_STAGES = PIPELINE.filter((s) => s.cost === "free").map((s) => 
 export const MAX_COMPLETIONS_PER_MESSAGE = PIPELINE.filter(
   (s) => s.cost === "one-completion",
 ).length;
+
+/**
+ * Prices this pipeline can name and nothing pays.
+ *
+ * `one-embedding` is a plan, not a cost. `embeddings.ts` is written, tested by
+ * nothing, imported by nothing, and one line away from being wired by somebody
+ * who read the sentence that used to sit on the MEMORY stage above and
+ * reasonably concluded the path already existed.
+ *
+ * A declared price nobody pays is the same shape as a comment asserting a
+ * guarantee that does not exist: it reads as true, it is green, and the person
+ * it misleads is the next one. So the gap is a value rather than a silence —
+ * check 127 requires every `StageCost` to be either paid by a stage or named
+ * here, and it fails the build the day `embed()` acquires an importer without
+ * a stage acquiring its price.
+ *
+ * Wiring it is not a small change and the reason is 0011's. `memories.user_id`
+ * is `uuid not null references auth.users(id)`, and every RLS policy on that
+ * table is `auth.uid() = user_id`. Anonymous venters — which is everybody this
+ * product serves — are not in that id space. So an embedding written today
+ * costs one Gemini call per vent and is then rejected by Postgres, silently,
+ * on every single row: paying per message for writes that never land. That is
+ * the exact bug 0011 was written to fix, still loaded, with a documentation
+ * trail that used to say it was already approved.
+ */
+export const UNPAID_COSTS: readonly StageCost[] = ["one-embedding"];
 
 /** For `/api/health`, so the pipeline is inspectable rather than asserted. */
 export function describePipeline() {

@@ -5,6 +5,9 @@ import { env } from "@/lib/env";
 /**
  * Embeddings, for the half of memory that is about meaning rather than recency.
  *
+ * **NOTHING IMPORTS THIS FILE.** Read the next four paragraphs before you
+ * become the first thing that does.
+ *
  * Zero dependencies — one fetch to Gemini's embedding endpoint, which is on
  * the same free key the chain already uses. Anthropic has no embedding API and
  * Groq has none either, so this is deliberately single-provider rather than
@@ -14,6 +17,32 @@ import { env } from "@/lib/env";
  * memory is stored without one and is still readable, listable and deletable —
  * it simply will not be found by similarity until it is re-embedded. A vent
  * must never fail because a vector service was slow.
+ *
+ * WHAT WIRING IT COSTS, WHICH IS NOT WHAT THE REPOSITORY USED TO SAY
+ *
+ * `orchestrator.ts` described the MEMORY stage as costing "one embedding call
+ * on the surfaces that use it", and `CLAUDE.md` called this "the one request
+ * here that sends somebody's words to a third party to be vectorised" — in the
+ * present tense, in a paragraph about a real leak. Both read as an approved,
+ * existing path. There is no such path and there never has been: memory is
+ * `selectMemory()` over six stored turns, free, and the doc comment on `embed`
+ * below says "the caller stores what it has" about a caller that does not
+ * exist.
+ *
+ * The destination is the problem, not this file. `memories.user_id` is
+ * `uuid not null references auth.users(id) on delete cascade` (0006), and
+ * every RLS policy on the table is `auth.uid() = user_id`. Anonymous venters
+ * are not in that id space — which is the entire finding of 0011, where the
+ * carve was moved to `vent_users.carve` for exactly this reason. So calling
+ * `embed()` and inserting the result today buys one Gemini call per vent and
+ * a foreign-key rejection per vent, for ever, silently: the per-message cost
+ * doubles and not one row lands.
+ *
+ * Wiring it therefore means a migration first, and the pipeline pricing it
+ * second. Check 127 will fail the build until both happen — see `UNPAID_COSTS`
+ * in `orchestrator.ts`. That is not an obstacle to the feature; it is the
+ * feature's first two steps, written down where the next person will be
+ * standing.
  */
 
 /** Must match the `vector(768)` column in 0006_memory_vectors.sql. */
