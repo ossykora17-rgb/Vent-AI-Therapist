@@ -74,6 +74,14 @@ export const QUERIES: Record<string, string> = {
 const TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * How long a person waits for a second opinion they never asked for.
+ *
+ * Exported so check 130 reads the number the call actually uses rather than a
+ * copy of it.
+ */
+export const SEARCH_TIMEOUT_MS = 8_000;
+
+/**
  * Domains worth reading, and everything else refused.
  *
  * An open web search for therapy techniques lands on content farms and
@@ -125,7 +133,25 @@ export async function research(tag: string | null): Promise<Technique | null> {
 
   const entry = await cached<Technique>(`research:${tag}`, TTL_MS, "anthropic:web_search", async () => {
     try {
-      const client = new Anthropic({ apiKey: key });
+      /*
+        A deadline, because this call is awaited in front of a person.
+
+        `sources.ts` lists `AbortSignal.timeout(3_000)` among its rules and
+        every one of its four windows carries it. This module had none, and it
+        is the one that matters most: `research()` is `await`ed at
+        `api/vent/route.ts` *before* the model is called, so its latency is the
+        person's latency. The SDK's own default is ten minutes.
+
+        The route's comment beside that await reads "the reply is unaffected
+        either way" — true of the reply's *content*, silent about the only
+        dimension a hanging upstream touches.
+
+        Longer than three seconds because a web search legitimately is: three
+        `max_uses` against real sites. Eight is generous for the work and still
+        a bound, and this file's own rule is that the room must not depend on
+        this — a bound is what makes that sentence true rather than hopeful.
+      */
+      const client = new Anthropic({ apiKey: key, timeout: SEARCH_TIMEOUT_MS });
       const res = await client.messages.create({
         model: MODEL.anthropic,
         max_tokens: 1024,

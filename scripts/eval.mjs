@@ -15214,6 +15214,143 @@ check("129 Nothing the database holds about a person outlives the promise", () =
     "asserted beside the new one so a rewrite cannot drop the old guarantee to satisfy the new");
 });
 
+check("130 A dead upstream is asked once, not once per message", () => {
+  /*
+    `research()` is the paid web lookup, and CLAUDE.md's credit argument says
+    it is "keyed to the pressure and cached a day, so it is **ten calls a day
+    for the whole userbase** rather than one per message". Ten is `QUERIES`'
+    ten tags, and the sentence is true of a shared cache.
+
+    There is no shared cache. `cache.ts` says so itself, one file over: "In
+    production the disk is ephemeral, so it degrades to an in-process Map —
+    still useful (one lambda serves many requests), and honest about being
+    per-instance rather than shared." Honest in the module, and not carried
+    into the paragraph that does the arithmetic. Ten a day for the userbase is
+    ten a day *per lambda instance*, and on a product with eight people almost
+    every request is a cold start.
+
+    THE HALF THAT COSTS SOMETHING TODAY
+
+    Worse than the ceiling: **only successes were written**. `cached()` stored
+    nothing on a null, so an upstream that is *down* was asked again by the
+    very next request, for ever, by the cache whose job is to stop that.
+    Production sits in that state right now — `ANTHROPIC_API_KEY` is set and
+    out of credit — so every vent has been paying a doomed round trip inline,
+    before the reply, on a call the module's own header calls a second opinion
+    the room must not depend on.
+
+    AND IT HAD NO DEADLINE
+
+    Every other outbound call here carries one: `PROVIDER_DEADLINE_MS` is
+    50s, model discovery 15s, `embeddings.ts` 15s, and all four windows in
+    `sources.ts` list `AbortSignal.timeout(3_000)` among the file's rules.
+    `research()` had none, and it is the one awaited in front of a person —
+    `api/vent/route.ts` awaits it *before* the model is called, so its latency
+    is the person's latency, against an SDK default of ten minutes. The
+    comment beside that await reads "the reply is unaffected either way",
+    which is true of the reply's content and silent about the only dimension a
+    hanging upstream touches.
+
+    Exercised rather than asserted about. The cache is real code with a disk
+    behind it, so it runs in a subprocess with `VENT_DATA_DIR` pointed at a
+    scratch directory — the idiom check 10 already uses — because a suite that
+    writes into `.data/external.json` pollutes the heartbeat that reads it.
+  */
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "mw-cache-"));
+  const probe = path.join(scratch, "probe.mjs");
+  fs.writeFileSync(probe, `
+    import { app } from ${JSON.stringify(path.join(ROOT, "scripts/app-imports.mjs"))};
+    const { cached, FAILURE_TTL_MS } = await app("src/lib/external/cache.ts");
+    let downCalls = 0, upCalls = 0, otherCalls = 0;
+    const down = () => { downCalls++; return Promise.resolve(null); };
+    const up = () => { upCalls++; return Promise.resolve({ n: 1 }); };
+    const other = () => { otherCalls++; return Promise.resolve(null); };
+
+    const a = await cached("dead", 60000, "probe", down);
+    const b = await cached("dead", 60000, "probe", down);
+    const c = await cached("live", 60000, "probe", up);
+    const d = await cached("live", 60000, "probe", up);
+    const e = await cached("dead-two", 60000, "probe", other);
+
+    console.log(JSON.stringify({
+      downCalls, upCalls, otherCalls,
+      failureReturnsNull: a === null && b === null,
+      successCached: c?.value?.n === 1 && d?.value?.n === 1,
+      failureTtl: FAILURE_TTL_MS,
+    }));
+  `);
+  const out = execFileSync(process.execPath, [probe], {
+    cwd: ROOT,
+    encoding: "utf8",
+    env: { ...process.env, VENT_DATA_DIR: scratch },
+  });
+  const r = JSON.parse(out.trim().split("\n").pop());
+
+  is(r.downCalls, 1,
+    "an upstream that answered nothing is not asked again on the next request",
+    `called ${r.downCalls} times — this is the bug: a null stored nothing, so every message paid a fresh round trip`);
+  ok(r.failureReturnsNull,
+    "and the caller still gets null, never a value",
+    "remembering a failure must not become serving one — the whole file exists to not show a number it did not fetch");
+  is(r.otherCalls, 1,
+    "a different key is unaffected by another's failure",
+    "one dead upstream must not mute the other three windows");
+  is(r.upCalls, 1,
+    "and a success is still cached exactly as before",
+    "the repair must not cost the behaviour it is protecting");
+  ok(r.successCached, "with its value intact");
+
+  /*
+    Short enough that a restored upstream is noticed inside one value window.
+    `HOUR` is the shortest TTL any caller uses, so a failure memory longer than
+    that would outlive the thing it is standing in for.
+  */
+  ok(r.failureTtl > 0 && r.failureTtl < 60 * 60 * 1000,
+    "the failure is remembered for less than the shortest value it replaces",
+    `${r.failureTtl}ms — longer than an hour and a fixed key stays unnoticed past its own cache window`);
+
+  /*
+    And the deadline, over every outbound call in `src/lib` rather than on
+    `research.ts` alone. It was the only one missing, which is exactly why a
+    sweep is worth more here than an assertion naming it.
+  */
+  const walkTs = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkTs(p, out);
+      else if (/\.ts$/.test(p)) out.push(p);
+    }
+    return out;
+  };
+  /*
+    Outbound means *somewhere we do not control*: an absolute endpoint, or the
+    SDK's own client. A relative `fetch("/api/vent")` is this product calling
+    itself and is deliberately not in the class — the first version of this
+    sweep flagged `anon.ts`, which is the browser-side offline queue posting
+    to our own origin. Whether a queue flush wants a deadline is a real
+    question and a different one; answering it here would have been a rule
+    invented to make a sweep go green.
+  */
+  const unbounded = [];
+  let outbound = 0;
+  for (const f of walkTs(path.join(ROOT, "src/lib"))) {
+    const code = strip(fs.readFileSync(f, "utf8"));
+    const callsOut = (/\bfetch\(/.test(code) && /https:\/\//.test(code)) || /messages\.create\(/.test(code);
+    if (!callsOut) continue;
+    outbound++;
+    if (!/AbortSignal\.timeout\(|timeout:\s*[A-Z_0-9]/.test(code)) {
+      unbounded.push(path.relative(ROOT, f));
+    }
+  }
+  ok(outbound >= 3,
+    "the sweep found the outbound calls it is meant to bound",
+    `found ${outbound} — a sweep over nothing reports green over everything`);
+  is(unbounded.length, 0,
+    "and every outbound call in src/lib has a deadline",
+    unbounded.join(", ")
+      || "the one that had none was awaited in front of a person, against an SDK default of ten minutes");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

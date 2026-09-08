@@ -741,10 +741,47 @@ their areas: `.claude/skills/data-quality/` and `.claude/skills/circles-quality/
 
 The nightly audit and the web lookup are the two paid jobs added since this
 was written, and both are shaped by it. The lookup is keyed to the pressure
-and cached a day, so it is ten calls a day for the whole userbase rather than
+and cached a day, so it is **ten calls a day per running instance** rather than
 one per message. The audit runs the free deterministic graders first and only
 asks a model about replies that broke *no* stated rule and are still flat —
 one call, ten samples, and none at all on a night with nothing flat.
+
+**That sentence said "for the whole userbase", and the cache one file over
+says otherwise in its own header:** *"In production the disk is ephemeral, so
+it degrades to an in-process Map — still useful (one lambda serves many
+requests), and honest about being per-instance rather than shared."* Honest in
+the module, and not carried into the paragraph doing the arithmetic. Ten a day
+for the userbase is ten a day *per lambda*, and on a product with eight people
+almost every request is a cold start — which is the "one per message" the
+sentence was written to deny.
+
+**The half that cost something was worse, and it was in `cached()` itself:
+only successes were ever written.** A `null` stored nothing, so an upstream
+that is *down* — a dead key, an exhausted quota, a refusal — was asked again by
+the very next request, for ever, by the cache whose entire job is to stop that.
+Production is in exactly that state: `ANTHROPIC_API_KEY` is set and out of
+credit, so every vent has been paying a doomed round trip **inline, before the
+reply**, for a second opinion the module's own header says the room must not
+depend on.
+
+**And it had no deadline** — the only outbound call here that did not.
+`PROVIDER_DEADLINE_MS` is 50s, model discovery 15s, `embeddings.ts` 15s, and
+all four windows in `sources.ts` list `AbortSignal.timeout(3_000)` among the
+file's rules. `research()` is awaited in `api/vent/route.ts` *before* the model
+is called, so its latency is the person's latency, against an SDK default of
+ten minutes. The comment beside that await reads *"the reply is unaffected
+either way"* — true of the reply's **content**, and silent about the one
+dimension a hanging upstream touches.
+
+Check 130 exercises the cache rather than asserting about it, in a subprocess
+with `VENT_DATA_DIR` pointed at a scratch directory, because a suite that
+writes to `.data/external.json` pollutes the heartbeat that reads it. And the
+deadline is swept over every outbound call in `src/lib` rather than named on
+the one that was missing — with a relative `fetch("/api/vent")` deliberately
+out of the class, because the first version flagged `anon.ts`, the browser's
+offline queue posting to our own origin. Whether a queue flush wants a deadline
+is a real question and a different one; answering it there would have been a
+rule invented to make a sweep go green.
 
 Crisis, factual, greeting and meta are answered locally, for free. The eval
 suite, both pipelines and the heartbeat make **zero** model calls by
