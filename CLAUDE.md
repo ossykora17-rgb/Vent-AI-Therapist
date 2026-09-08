@@ -1093,3 +1093,41 @@ Check 86 asserts it against the tables now. Any claim of the form "N things are
 enforced" is a copy of something the code already knows, and it belongs in the
 same category as a duplicated sentence: derive it, or assert it, or do not
 write the number.
+
+**And a plural is a number.** The chat's sticky header — the one line that says
+what the room holds about somebody — read *"Remembers · 4 earlier carves"*. A
+carve is `vent_users.carve`: one text column, added by 0011, read by
+`getCarve(userId): Promise<string | null>`, rendered on the Memory page as a
+single sentence. **One per person, ever.** There is no shape of this product in
+which a second one exists, so every number that line has shown above 1 was a
+count of something else wearing the word — and somebody who read it and tapped
+through to Memory found one sentence or none.
+
+Nothing upstream was wrong, which is why a hundred and twenty-five checks, four
+deployment shapes and fourteen graders all walked past it. `memoryUsed` is
+`history.length`; `history` is `selectMemory(recent, MEMORY_TURNS)` — their own
+vents, filtered, capped at six, exactly what went into the prompt. Honest
+number, borrowed noun. The bug was the last two words, sitting two lines above
+*"Not saved — this session only"*, a sentence this repo defends at length for
+being scrupulously true.
+
+Check 126 derives the noun set instead of holding one: a holding is one per
+person when it is `get<Noun>(userId, …)` returning something that is not an
+array. The three it excludes are what make it usable — `getHeld` and
+`getBreaking` return arrays, and `getCircle` is scalar but keyed by a *circle*
+id, so "circles" is the whole lobby. A rule of "scalar getter, never plural"
+would have flagged it and been deleted within a week; the `userId` key is what
+makes the claim true.
+
+**And the guard against an empty derivation nearly re-made the bug it guards.**
+The first version proved the parse worked with `onePerPerson.includes("carve")`.
+A mutation then changed the *contract* — `getCarve` to `Promise<string[]>` — and
+the check went **red**, when the only correct answer is green: if the store
+really could hold several, "carves" is a true word and no check has business
+objecting to it. Naming the noun turned a rule about the contract into an
+assertion about today's contract, in the check whose own comment says a list of
+nouns is the bug. What holds instead has no noun and no integer in it: every
+`get<Noun>(userId, …)` must land in exactly one bucket and the array bucket must
+not be empty, so a contract that legitimately changes moves both sides together
+and stays green. CLAUDE.md's oldest trap — *an assertion can defend the bug* —
+found inside the guard written against it.

@@ -14544,6 +14544,142 @@ check("125 The nightly audit asks the router what language a row was", () => {
     "a pattern that stops matching its own case is a green check over nothing");
 });
 
+check("126 Nothing pluralises a thing there is only one of", () => {
+  /*
+    "Remembers · 4 earlier carves", on the one line that says what the room
+    holds about somebody.
+
+    A carve is `vent_users.carve` — one text column, added by 0011, read by
+    `getCarve(userId): Promise<string | null>`, rendered on the Memory page as
+    a single sentence. One per person, ever. There is no shape of this product
+    in which a second one exists, so every number that line has ever shown
+    above 1 was a count of something else wearing the word.
+
+    And it was: `memoryUsed` is `history.length`, `history` is
+    `selectMemory(recent, MEMORY_TURNS)` — their own vents, filtered, capped at
+    six, exactly what went into the prompt. The number was right the whole
+    time. The bug is entirely in the last two words, which is why fourteen
+    graders, four live-check shapes and a hundred and twenty-five checks all
+    walked past it: nothing upstream was wrong.
+
+    DERIVED, BECAUSE A LIST OF NOUNS IS THE BUG
+
+    CLAUDE.md: anything enumerable is read off the contract. So the noun set is
+    not "carve" typed into this file — it is every holding the store declares
+    as **one per person**, which is exactly a `get<Noun>(userId, …)` whose
+    return type is not an array. That is a real discriminator rather than a
+    convenient one, and the three it excludes are the proof:
+
+      getHeld(userId)     → HeldNote[]              many, plural is correct
+      getBreaking(userId) → BreakingAnswer[] | null many, plural is correct
+      getCircle(id)       → CircleRow | null        scalar, but keyed by a
+                                                    circle id, not a person —
+                                                    "circles" is the product
+
+    A rule of "scalar getter, never plural" would have flagged `circles`, which
+    is the whole lobby, and been deleted within a week. The `userId` key is
+    what makes the claim true.
+
+    The next `get<Noun>(userId: string): Promise<T | null>` is covered on the
+    day it is written, with nobody remembering this check exists.
+  */
+  const types = fs.readFileSync(path.join(ROOT, "src/lib/store/types.ts"), "utf8");
+
+  const onePerPerson = [];
+  const manyPerPerson = [];
+  for (const m of types.matchAll(/^\s+get([A-Z][A-Za-z]*)\((\w+): string[^)]*\): Promise<([^;]+)>;/gm)) {
+    const [, Noun, key, ret] = m;
+    if (key !== "userId") continue;
+    (ret.includes("[]") ? manyPerPerson : onePerPerson).push(Noun.toLowerCase());
+  }
+
+  /*
+    A derivation that found nothing is a green check over nothing — the oldest
+    failure shape here, and one this check can reach by a typo in its own
+    regex. So the parse is asserted healthy. What is NOT asserted is that it
+    found the word `carve`, and that distinction cost a mutation to learn.
+
+    The first version guarded the derivation with `onePerPerson.includes
+    ("carve")`. A mutation then changed the contract itself — `getCarve` to
+    `Promise<string[]>`, many per person — and the check went **red**. It
+    should have gone green: if the store really could hold several, "carves"
+    is a true word and this check has no business objecting to it. Naming the
+    noun turned a rule about the contract into an assertion about today's
+    contract, in the check whose own comment says a list of nouns is the bug.
+    CLAUDE.md's oldest trap, in the guard written against it: an assertion can
+    defend the bug.
+
+    What holds instead is a consistency invariant with no noun and no integer
+    in it. Every `get<Noun>(userId, …)` the file declares must land in exactly
+    one of the two buckets, and the array bucket must not be empty. A regex
+    that stops parsing drops one side and not the other; an inverted key filter
+    drops both counts apart; a removed array discriminator empties a bucket.
+    A contract that legitimately loses a getter moves both sides together and
+    stays green, which is correct — it is a changed contract, not a broken
+    check.
+  */
+  const keyedToPerson = [...types.matchAll(/^\s+get[A-Z][A-Za-z]*\(userId: string[^)]*\): Promise</gm)].length;
+  is(onePerPerson.length + manyPerPerson.length, keyedToPerson,
+    "every holding the store declares per person was classified",
+    "a parse that drops one side sweeps for nothing and reports green");
+  ok(manyPerPerson.length > 0,
+    "and the array return still separates many-per-person from one",
+    "with nothing in the many bucket the discriminator is not discriminating");
+  ok(keyedToPerson < [...types.matchAll(/^\s+get[A-Z][A-Za-z]*\(\w+: string[^)]*\): Promise</gm)].length,
+    "and a holding keyed by something other than a person is excluded",
+    "getCircle is scalar and keyed by a circle id — a rule that flagged 'circles' would be deleted within a week");
+
+  // Deliberately the simple English rule. It has one job — turn `carve` into
+  // `carves` — and it is asserted below rather than trusted, so a noun it
+  // cannot pluralise fails loudly instead of sweeping for the empty string.
+  const plural = (n) => (/(?:s|x|ch|sh)$/.test(n) ? `${n}es` : /[^aeiou]y$/.test(n) ? `${n.slice(0, -1)}ies` : `${n}s`);
+  is(plural("carve"), "carves", "and the plural rule produces the word the bug used");
+
+  const walkSrc = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkSrc(p, out);
+      else if (/\.tsx?$/.test(p)) out.push(p);
+    }
+    return out;
+  };
+
+  /*
+    Only what a person reads. Comments discuss carves constantly — this check's
+    own prose does — and check 103 learned the same lesson on `console.*`: read
+    the string somebody typed, not the line it sits on.
+
+    Both `.tsx` and `.ts`, because a route's `message` is printed verbatim by
+    every component here. That is check 115's finding, and it means a sentence
+    reaches a person from a file with no JSX in it.
+  */
+  const bare = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^\s*\/\/[^\n]*$/gm, " ");
+  const offenders = [];
+  for (const noun of onePerPerson) {
+    const re = new RegExp(`\\b${plural(noun)}\\b`, "i");
+    for (const f of walkSrc(path.join(ROOT, "src"))) {
+      const hit = bare(fs.readFileSync(f, "utf8")).match(re);
+      if (hit) offenders.push(`${path.relative(ROOT, f)}: ${hit[0]}`);
+    }
+  }
+  is(offenders.length, 0,
+    "and no surface pluralises one of them",
+    offenders.join(" · ") || "a plural of a singular column is a promise the schema cannot keep");
+
+  /*
+    The sweep still matches the code it was written for. Without this the fix
+    could be reverted and the check would stay green on a narrowed regex, which
+    is the failure it exists to prevent — asserted here as the literal that
+    shipped, not as a paraphrase of it.
+  */
+  ok(new RegExp(`\\b${plural("carve")}\\b`, "i").test('{memoryCount === 1 ? "carve" : "carves"}'),
+    "and the sweep still catches the line as it shipped",
+    "a pattern that no longer matches its own case is a green check over nothing");
+  ok(!new RegExp(`\\b${plural("carve")}\\b`, "i").test('{memoryCount === 1 ? "vent" : "vents"}'),
+    "and does not catch the repair",
+    "a sweep that flags the fix teaches the next person to delete the sweep");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

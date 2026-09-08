@@ -923,10 +923,34 @@ export function VentChat() {
         */}
         {(memoryCount > 0 || persisted === false) && (
           <div className="mx-auto flex max-w-[640px] flex-wrap items-center gap-x-2 px-4 pb-3">
+            {/*
+              A plural of a thing there is only ever one of.
+
+              This said "carves", and a carve is `vent_users.carve` — one text
+              column, one per person, `getCarve(userId): Promise<string | null>`,
+              rendered on the Memory page as a single sentence. There has never
+              been a second one and there is no shape in which there could be.
+              So "Remembers · 4 earlier carves" was a count of four of something
+              the store can hold one of.
+
+              What it actually counts is right, and that is what made it hard to
+              see: `memoryUsed` is `history.length`, and `history` is
+              `selectMemory(recent, MEMORY_TURNS)` — their own vents, capped at
+              six, exactly the turns that went into this prompt. Honest number,
+              borrowed noun. Nothing was wrong upstream of the last two words.
+
+              The cost is not pedantry. This line is the one place the room says
+              what it holds about somebody, and it sits two lines above "Not
+              saved — this session only" — a sentence the comment block above
+              defends at length for being scrupulously true. Somebody who reads
+              "4 earlier carves" and taps through to Memory finds one sentence
+              or none, and the two screens disagree about the same word. That is
+              the two-copies bug with the arity wrong as well as the text.
+            */}
             {memoryCount > 0 && (
               <p className="label-mono">
                 Remembers · {memoryCount} earlier{" "}
-                {memoryCount === 1 ? "carve" : "carves"}
+                {memoryCount === 1 ? "vent" : "vents"}
               </p>
             )}
             {persisted === false && (
