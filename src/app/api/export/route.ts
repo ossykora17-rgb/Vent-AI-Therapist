@@ -49,7 +49,7 @@ const LIMIT = 5000;
  * that must never become automatic. If a future table holds something the
  * product promises to destroy, it belongs on this list and not in the dump.
  */
-const NEVER_EXPORT = new Set(["circle_messages"]);
+const NEVER_EXPORT = new Set(["circle_messages", "circle_members"]);
 
 /**
  * Compare without leaking length or position through timing.

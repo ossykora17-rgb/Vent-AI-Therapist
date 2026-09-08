@@ -10905,6 +10905,49 @@ check("95 Every door onto a circle asks whether it is over", () => {
   ok(/status: 404/.test(body) && body.indexOf("not_found") < body.indexOf("not_keeper"),
     "and a circle that never existed answers 404, not 403",
     "listMembers on a bad id returns nothing, so the Keeper check fired first and told them the wrong thing");
+
+  /*
+    AND THE SAME ORDER IN EVERY HANDLER, NOT JUST THE ONE THAT WAS FIXED
+
+    The three assertions above are about DELETE, and they are right about
+    DELETE. The seal handler in the same file had the identical bug and none
+    of them reached it: it answered **403 not_a_member** to somebody sealing a
+    circle that had already ended, because it looked up the seat before asking
+    whether the room was still there.
+
+    It stayed invisible for as long as `closeCircle` left the seats behind —
+    the row it depended on was the row that should not have existed, so one
+    defect was holding the other's symptom down. Fixing the deletion made a
+    live check go red, which is how it surfaced at all.
+
+    So the rule is swept over every handler in the file rather than written
+    out a second time: if a handler asks whether the circle is over *and*
+    refuses somebody by their seat, the question comes first. "This room is
+    over" is true of every caller; "you are not a member" is true of only
+    some, and answering the narrower one first can only answer the wrong
+    question.
+  */
+  const bodies = del.split(/(?=async function handle[A-Z]+)/).filter((h) => /^async function handle/.test(h));
+  ok(bodies.length >= 3,
+    "the file still splits into handlers",
+    `found ${bodies.length} — a sweep over nothing reports green over everything`);
+
+  const wrongOrder = [];
+  for (const h of bodies) {
+    const name = h.match(/async function (handle[A-Z]+)/)?.[1] ?? "?";
+    const over = h.indexOf("sweepIfOver");
+    const seat = Math.min(
+      ...["not_a_member", "not_keeper"].map((r) => {
+        const at = h.indexOf(r);
+        return at < 0 ? Infinity : at;
+      }),
+    );
+    if (over >= 0 && seat !== Infinity && over > seat) wrongOrder.push(name);
+  }
+  is(wrongOrder.length, 0,
+    "and every handler asks whether the room is over before it checks a seat",
+    wrongOrder.join(", ")
+      || "a refusal naming somebody's seat, about a room that has ended, is a false sentence");
 });
 
 check("96 A definer function never takes the caller's word for who they are", () => {
@@ -15049,6 +15092,126 @@ check("128 The suite has one answer to what a comment is, and it spares URLs", (
   is((suite.match(/^ {2}const strip = /gm) ?? []).length, 0,
     "with no check holding a private copy",
     "the second detector is this repository's most-repeated bug");
+});
+
+check("129 Nothing the database holds about a person outlives the promise", () => {
+  /*
+    The front page says **"one tap deletes everything, for good"** and links to
+    the button on `/history`. It was true of every vent, note, carve, held note
+    and breaking answer. It was false of `circle_members`.
+
+    That table is keyed by `anon_id` — a bare text column with no foreign key
+    to `vent_users` — and each row holds the role, the join time,
+    `last_seen_at`, and `pressure_seeded`: a 0–100 reading of how bad it was
+    when that person sat down. **Nothing deleted one.** Not `closeCircle`,
+    which took the words and left the seats. Not `deleteAll`, which cannot
+    reach them — it works in `userId` space and these are keyed by anon id.
+    There is no leave path; `removeMember` exists only to roll back a lost seat
+    race. And the wipe drops `mw-anon-id` on the way out, so afterwards the
+    person no longer holds the only key that could ever have addressed them.
+
+    It goes at close rather than in `deleteAll`, and that is not convenience.
+    `seat` is not a column: `voice/route.ts` computes `seat: index + 1` from
+    the member list's order, and `personaFor` keys the voice mask to the seat.
+    Removing one row from a *live* circle renumbers everybody after it and
+    changes which masked voice belongs to whom, mid-session, invisibly to every
+    test that can run here. At close the room is over, the seats mean nothing,
+    and no read of a closed circle's members exists.
+
+    DERIVED FROM THE SCHEMA, BECAUSE THE LIST IS THE BUG
+
+    A hand-kept list of "tables holding personal data" is how `circle_members`
+    stayed off one for as long as it existed. So the tables come out of the
+    migrations: anything with a column naming a person must be destroyed by
+    `deleteAll` — directly or by cascade from `vent_users` — or by
+    `closeCircle`, or be named below with its reason.
+  */
+  const sql = fs
+    .readdirSync(path.join(ROOT, "supabase/migrations"))
+    .filter((f) => f.endsWith(".sql"))
+    .map((f) => fs.readFileSync(path.join(ROOT, "supabase/migrations", f), "utf8"))
+    .join("\n");
+
+  const tables = new Map();
+  for (const m of sql.matchAll(/create table if not exists (?:public\.)?(\w+)\s*\(([\s\S]*?)\n\);/g)) {
+    tables.set(m[1], m[2]);
+  }
+  ok(tables.size >= 8, "the migrations still parse into tables",
+    `found ${tables.size} — a schema sweep that finds nothing reports green over everything`);
+
+  const store = fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8");
+  const bodyOf = (name) => {
+    const at = store.indexOf(`async ${name}(`);
+    return at < 0 ? "" : store.slice(at, store.indexOf("\n  }", at));
+  };
+  const deleteAll = bodyOf("deleteAll");
+  const closeCircle = bodyOf("closeCircle");
+  ok(deleteAll.length > 40 && closeCircle.length > 40,
+    "and both destruction paths were found in the store",
+    "an empty body makes every table below look undestroyed or exempt at random");
+
+  /*
+    The pre-anonymous schema. `sessions`, `messages`, `subscriptions` and
+    `memories` are keyed to `auth.users(id)`, and no anonymous venter is in
+    that id space — which is 0011's entire finding, the reason the carve moved
+    to `vent_users.carve`, and the reason `embeddings.ts` still has no caller.
+    They hold nothing about anybody this product serves.
+
+    The exemption is checked, not taken on trust: each must still be keyed to
+    `auth.users` and not to `vent_users`. The day one is re-keyed to the person
+    this product actually has, it stops being exempt and starts needing a
+    delete path.
+  */
+  const NOT_OURS = new Set(["sessions", "messages", "subscriptions", "memories"]);
+
+  const orphans = [];
+  const used = new Set();
+  for (const [t, cols] of tables) {
+    const namesAPerson = /\b(user_id|anon_id)\b/.test(cols) || t === "vent_users";
+    if (!namesAPerson) continue;
+
+    if (NOT_OURS.has(t)) {
+      used.add(t);
+      ok(/references\s+auth\.users/.test(cols) && !/references\s+public\.vent_users/.test(cols),
+        `${t} is still keyed to auth.users, so the exemption still holds`,
+        "re-keyed to vent_users it holds real people and needs a delete path");
+      continue;
+    }
+
+    const dies =
+      new RegExp(`references\\s+public\\.vent_users\\s*\\(id\\)\\s*on delete cascade`).test(cols) ||
+      new RegExp(`from\\("${t}"\\)[\\s\\S]{0,60}\\.delete\\(`).test(deleteAll) ||
+      new RegExp(`from\\("${t}"\\)[\\s\\S]{0,60}\\.delete\\(`).test(closeCircle);
+    if (!dies) orphans.push(t);
+  }
+
+  is(orphans.length, 0,
+    "every table naming a person is destroyed by a path somebody can reach",
+    orphans.join(", ")
+      || "a row keyed to an anon id, with no delete path, outlives 'deletes everything, for good'");
+
+  const stale = [...NOT_OURS].filter((t) => !used.has(t));
+  is(stale.length, 0,
+    "and no exemption names a table that is no longer there",
+    stale.join(", ") || "'not on the list' and 'decided against' look identical otherwise");
+
+  /*
+    Two backends behind one interface must destroy the same things — the rule
+    check 83 holds for notes, asserted here for the seats because the file
+    store does it as a statement and a statement is a thing a delete path can
+    forget.
+  */
+  const fileStore = fs.readFileSync(path.join(ROOT, "src/lib/store/file-store.ts"), "utf8");
+  const fileClose = fileStore.slice(
+    fileStore.indexOf("async closeCircle("),
+    fileStore.indexOf("async listMembers("),
+  );
+  ok(/circleMembers = db\.circleMembers\.filter/.test(fileClose),
+    "and the file store's close destroys the seats too",
+    "one backend keeping what the other destroys is the split that put the carve in the wrong table");
+  ok(/circleMessages = db\.circleMessages\.filter/.test(fileClose),
+    "along with the words, which it already did",
+    "asserted beside the new one so a rewrite cannot drop the old guarantee to satisfy the new");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

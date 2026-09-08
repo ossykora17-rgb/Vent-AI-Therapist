@@ -1255,3 +1255,75 @@ whose replacement is a *function* — which is not hypothetical: `blankComments`
 written an hour earlier for check 48, is exactly that shape and was still
 holding the anchored rule. The check written to abolish second opinions about
 comments could not see one of them.
+
+**And the strongest promise on the front page was false about one table.**
+*"One tap deletes everything, for good."* True of every vent, note, carve, held
+note and breaking answer. False of `circle_members`.
+
+That table is keyed by `anon_id` — a bare text column, **no foreign key to
+`vent_users`** — and each row carries the role, the join time, `last_seen_at`
+and `pressure_seeded`: a 0–100 reading of how bad it was when that person sat
+down. **Nothing deleted one.** Not `closeCircle`, which takes the words and
+leaves the seats. Not `deleteAll`, which cannot reach them — it works in
+`userId` space and these are keyed by anon id. There is no leave path;
+`removeMember` exists only to roll back a lost seat race. And the wipe drops
+`mw-anon-id` on its way out, so afterwards the person no longer holds the only
+key that could ever have addressed those rows.
+
+It is fixed at **close**, not in `deleteAll`, and the reason is a live-room one.
+`seat` is not a column: `voice/route.ts` computes `seat: index + 1` from the
+member list's order, and `personaFor` keys the voice mask to the seat. Deleting
+one row from a circle that is still running renumbers everybody after it and
+changes which masked voice belongs to whom, mid-session — invisible to every
+test that can run here, and the same shape as the roles-fixed-at-join bug this
+file opens with. At close the room is over, the seats mean nothing, and no read
+of a closed circle's members exists. Bounded rather than eventual: closure is
+driven by `expiredUnclosedCircles` from the lobby, the same sweep that already
+deletes the transcript.
+
+Check 129 derives the tables off the migrations, because a hand-kept list of
+"tables holding personal data" is exactly how this one stayed off a list for as
+long as it existed. Anything with a column naming a person must die by
+`deleteAll` — directly or by cascade from `vent_users` — or by `closeCircle`,
+or be named with its reason. Four are: `sessions`, `messages`, `subscriptions`
+and `memories` are keyed to `auth.users(id)`, and no anonymous venter is in that
+id space. That is 0011's finding, the reason the carve moved to
+`vent_users.carve`, and the reason `embeddings.ts` still has no caller — one
+fact now load-bearing in three places. The exemption is checked rather than
+trusted: each must still be keyed to `auth.users`, so the day one is re-keyed to
+the person this product actually has, it stops being exempt.
+
+**And the derivation paid for itself immediately.** Adding `circle_members` to
+what `closeCircle` destroys turned check 112 red on its own — that check reads
+whatever the close deletes and requires the backup to exclude it, so the nightly
+export was told about the new promise without anybody remembering to go there.
+That is what deriving a list buys, stated once by a check going red rather than
+by a paragraph.
+
+**Then the live checks went red, and the second bug was underneath the first.**
+Deleting the seats made the seal handler answer **403 `not_a_member`** to
+somebody sealing a circle that had ended. That is the refusal this file opens
+with: *they were a member*. The room is over. A false sentence, at the moment
+somebody is trying to close the worst hour of their week.
+
+The handler looked up the seat before asking whether the room was still there.
+Check 95 already asserts that exact order — *"'you are not the Keeper' about a
+room that no longer exists is the wrong refusal"* — **for the DELETE handler
+only**, in the same file, forty lines away. Third mechanism again: the fix
+reached the copy in front of it and not the one beside it.
+
+And it had been unreachable the whole time. The 403 needed `listMembers` to come
+back empty, which only happens once the seats are deleted — so the row that
+should not have outlived the promise was the thing holding the ordering bug's
+symptom down. **One defect was hiding another, and fixing the first is what
+surfaced the second.** Nothing static found it; a live check did, on the run
+after the change.
+
+So the order is swept over every handler in the file rather than written out a
+second time: if a handler asks whether the circle is over *and* refuses somebody
+by their seat, the question comes first. **True for everybody is the right
+order** — "this room is over" is true of any caller, "you are not a member" of
+only some, and asking the narrower one first can only ever answer the wrong
+question. Statically, too, because `npm run gate` skips `live-verify` when
+nothing is serving on :3001 — the check that caught this does not run in the
+command this file tells you to trust.

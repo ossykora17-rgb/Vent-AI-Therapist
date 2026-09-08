@@ -527,6 +527,33 @@ export class SupabaseStore implements Store {
     */
     done("closeCircle:transcript",
       await this.db.from("circle_messages").delete().eq("circle_id", id));
+    /*
+      And the seats, which outlived every promise made about them.
+
+      `circle_members` is keyed by `anon_id` — a bare text column, no foreign
+      key to `vent_users` — and holds the role, the join time, `last_seen_at`,
+      and `pressure_seeded`: a 0–100 reading of how bad it was when they sat
+      down. Nothing deleted these rows. Not the close, which took the words and
+      left the seats. Not `deleteAll`, which cannot reach them: it works in
+      `userId` space and these are keyed by anon id. There is no leave path.
+
+      The front page says **"one tap deletes everything, for good"**, and it
+      links to `/history` where that tap lives. It was true of every vent, note,
+      carve, held note and breaking answer, and false of this.
+
+      Here rather than in `deleteAll`, and that is not convenience. `seat` is
+      not a column — `voice/route.ts` computes `seat: index + 1` from the
+      member list's order, and `personaFor` keys the voice mask to the seat. So
+      removing one row from a *live* circle renumbers everybody after it and
+      changes which masked voice belongs to whom, mid-session, invisibly to
+      every test that can run here. The room is over at this point; the seats
+      mean nothing and no read of a closed circle's members exists.
+
+      Before the status flag, for the same reason the transcript is: a delete
+      that fails leaves the circle open and the next sweep retries it.
+    */
+    done("closeCircle:seats",
+      await this.db.from("circle_members").delete().eq("circle_id", id));
     done("closeCircle", await this.db.from("circles").update({ status: "closed" }).eq("id", id));
   }
 

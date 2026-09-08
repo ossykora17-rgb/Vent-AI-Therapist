@@ -427,6 +427,17 @@ export class FileStore implements Store {
       if (c) c.status = "closed";
       // Closing ends confidentiality's only real guarantee: the words go.
       db.circleMessages = db.circleMessages.filter((m) => m.circle_id !== id);
+      /*
+        And the seats. `circle_members` is keyed by `anon_id` and carries the
+        role, the join time and `pressure_seeded` — how bad it was when they
+        sat down — and nothing had ever deleted one. Not the close, not
+        `deleteAll`, which works in `userId` space and cannot reach an anon id.
+        The front page promises one tap deletes everything, for good.
+
+        Two backends behind one interface must destroy the same things, which
+        is why check 83 asserts the pair rather than trusting them to agree.
+      */
+      db.circleMembers = db.circleMembers.filter((m) => m.circle_id !== id);
     });
   }
 
