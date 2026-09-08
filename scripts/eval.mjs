@@ -122,8 +122,28 @@ const BASE = (process.argv[2] || "").replace(/\/$/, "");
  * the entire internet, and the check passed: it was grading its own copy. That
  * is this repository's oldest rule, broken inside the check written to stop a
  * typed number.
+ *
+ * **Loopback is not spend, and CI is what taught that.** The first version
+ * allowed only `BASE`, went green locally, and failed the gate with
+ * `1 OUTBOUND CALL — http://127.0.0.1:9/twirp/livekit.RoomService/DeleteRoom`.
+ * That call is real and deliberate: `heartbeat.yml` sets
+ * `LIVEKIT_URL: ws://127.0.0.1:9` with dummy credentials, so the voice routes
+ * take their *configured* branch against the discard port — the "verify both
+ * deployment shapes" discipline, working exactly as intended. It never leaves
+ * the machine and costs nothing, so it is not what this meter is for.
+ *
+ * The trade is stated rather than hidden: a check talking to a model server on
+ * localhost would not be counted. The class being guarded is money leaving the
+ * account, and nothing on loopback can do that.
+ *
+ * Worth knowing anyway, since nothing else records it: the suite does issue a
+ * genuine `DeleteRoom` while exercising the circle close. Harmless against port
+ * 9. If `LIVEKIT_URL` in CI ever pointed at a real SFU, the suite would be
+ * sending destructive calls to it.
  */
-export const countsAsSpend = (url, base) => !(base && url.startsWith(base));
+export const countsAsSpend = (url, base) =>
+  !(base && url.startsWith(base)) &&
+  !/^[a-z][a-z0-9+.-]*:\/\/(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(url);
 
 const outbound = [];
 {
@@ -15455,9 +15475,22 @@ check("131 The suite's own bill is measured, not typed", () => {
   ok(!counts("http://localhost:3001/api/vent", "http://localhost:3001"),
     "the server under test is not counted",
     "the live pass makes hundreds of these on purpose");
-  ok(counts("http://localhost:9999/api/vent", "http://localhost:3001"),
-    "and another port is not the server under test",
-    "an orphaned next-server on the wrong port has produced a false pass here twice");
+  /*
+    Loopback, which CI taught. The first version counted
+    `http://127.0.0.1:9/twirp/livekit.RoomService/DeleteRoom` — a real call the
+    suite makes on purpose, against the discard port `heartbeat.yml` configures
+    so the voice routes take their configured branch without an SFU. It never
+    leaves the machine and cannot cost anything.
+  */
+  ok(!counts("http://127.0.0.1:9/twirp/livekit.RoomService/DeleteRoom", ""),
+    "a loopback address is not spend, whatever the port",
+    "this is the call that failed the gate the first time the meter ran in CI");
+  ok(!counts("http://localhost:9999/api/vent", "http://localhost:3001"),
+    "and neither is another port on this machine",
+    "the class being guarded is money leaving the account");
+  ok(counts("https://127.0.0.1.evil.example/v1", ""),
+    "but a host that merely begins with a loopback address is not loopback",
+    "an anchored pattern is the difference between a guard and a hole");
 
   /*
     The exit is part of it. A footer that reports the spend and still exits 0

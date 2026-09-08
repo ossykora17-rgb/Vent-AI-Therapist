@@ -820,6 +820,38 @@ hour. `countsAsSpend` is one function now, the check grades that function, and a
 sixth mutation asserts the meter still calls it — because a correct predicate
 nothing calls is the shape of half the findings here.
 
+**And the meter's first CI run failed the gate, correctly.** Green locally,
+red on the runner:
+
+```
+142/142 PASS · 3973 assertions · 1 OUTBOUND CALL —
+  http://127.0.0.1:9/twirp/livekit.RoomService/DeleteRoom
+```
+
+The suite really does issue a LiveKit `DeleteRoom` while exercising the circle
+close. It is deliberate and it is fine: `heartbeat.yml` sets
+`LIVEKIT_URL: ws://127.0.0.1:9` with dummy credentials so the voice routes take
+their *configured* branch against the discard port — the "verify both deployment
+shapes" discipline doing its job. It never leaves the machine and costs nothing.
+
+So the meter was too broad, not the suite wrong: **loopback is not spend.** The
+predicate now exempts `127.0.0.1`, `localhost` and `[::1]` on any scheme and
+port, anchored so `https://127.0.0.1.evil.example` is still counted. The trade
+is stated rather than hidden — a check talking to a model server on localhost
+would not be caught — because the class being guarded is money leaving the
+account, and nothing on loopback can do that.
+
+Two things worth keeping from it. The first is that **this is the shape the
+whole file is about, arriving in the meter's favour**: a rule written from where
+its author was standing, correct there, wrong one deployment shape over. The
+local run had no `LIVEKIT_*` set, so the branch never ran. Reproducing it needed
+the workflow's own three environment variables and nothing else.
+
+The second is smaller and worth writing down anyway, since nothing else records
+it: the suite sends a genuine destructive `DeleteRoom`. Harmless against port 9.
+If `LIVEKIT_URL` in CI ever pointed at a real SFU, the suite would be deleting
+rooms on it.
+
 **"Most messages never reach a model" was the sentence here, and production
 says otherwise.** Of 186 stored turns: 178 vents, 5 greetings, 2 crisis, 1
 meta. The free paths took **4.3%**. The routing is still right — a greeting
