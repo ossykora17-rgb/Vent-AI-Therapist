@@ -1164,3 +1164,52 @@ day `embed()` acquires an importer the build fails until a stage carries its
 price *and* a migration has moved `memories` off `auth.users`. Not a check
 standing in front of a feature — the feature's first two steps, written where
 the next person will be standing.
+
+**And the check that holds all of this counted comments as distance.** Check 48
+is the gate on this file's second recurring mechanism — *did this wait for the
+thing, and did it read what came back?* It scans **30 lines** back from a claim
+for the request it reports on, and `if (!fetch) return` reads anything further
+as *nothing was asked*. Three of the eight claims standing downstream of a
+request were further than that, and every one of them is comfortably inside 30
+lines of **code**:
+
+| the claim | lines up | of those, code |
+| --- | --- | --- |
+| *"Thank you. Na so we dey improve."* | 52 | 22 |
+| *"Deleted."* | 36 | 20 |
+| *"All cleared. Fresh start."* | 73 | 24 |
+
+What pushed them out was prose. At `history-list.tsx:330`, **49 of those 73
+lines are the comment explaining the anon-id bug** — the explanation that makes
+the wipe trustworthy is what hid it from the check written to hold it. The
+better the postmortem, the blinder the check that depends on it, in the
+repository whose defining discipline is long postmortems.
+
+The first row is the sharpest. That is the thank-you whose postmortem check 48
+was written *from*, and check 48 has never once looked at it; only check 74, by
+name, ever did. An instance is not a class — and the check's own closing note
+saw the symptom without the cause: *"the sharpest instance, asserted by name,
+because a heuristic above should never be the only thing holding the worst
+case."* The heuristic was not weak on the wipe. It could not see the wipe.
+
+Two repairs, and the second was only findable once the first landed. The window
+now counts code, comments blanked rather than deleted so line numbers still name
+the real file — check 103's trick, for check 103's reason. And with all eight
+sites finally visible, `/\.ok\b/` and `/\bstatus\b/` turned out to be accepted
+as sufficient *reads*, which is the precise half-measure the feedback
+postmortem names: **it read the status and never read the body.** Measured
+before removing: of the eight, **zero** are saved only by the status. Gone, with
+`persisted` added to the field list because that is what the feedback client
+correctly reads.
+
+**Every site was already correct, which is what made this dangerous.** Widening
+the window exposed no bug and fixed no sentence, so narrowing it back would have
+broken nothing, failed nothing, and silently un-covered the thank-you, the
+delete and the wipe — a check passing by not looking, the failure this file
+opens with. So the window is pinned by the *difference it makes*: the two
+windows are run against each other over the real tree and counting code must
+examine strictly more claims than counting lines. Eight against five. The first
+attempt at that assertion was a slack bound — "a request within 60 lines must be
+examined" — and it was wrong in the way this file keeps recording: at 60 a claim
+borrows the `fetch` of an unrelated function further up, which is the exact
+over-reach the 30-line bound was chosen to avoid.

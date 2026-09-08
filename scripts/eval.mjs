@@ -5542,10 +5542,58 @@ check("48 No screen says it happened without reading the answer", () => {
       return /\.tsx$/.test(e.name) ? [full] : [];
     });
 
+  /*
+    THE WINDOW COUNTED COMMENTS, IN THE REPOSITORY THAT WRITES THEM
+
+    This scanned 30 raw lines back for the request a claim reports on. Three
+    of the eight claims standing downstream of one were further away than
+    that and were skipped entirely — `if (!fetch) return` reads a documented
+    call site as "nothing was asked":
+
+      "Thank you. Na so we dey improve."   52 lines up · 22 lines of code
+      "Deleted."                           36 lines up · 20 lines of code
+      "All cleared. Fresh start."          73 lines up · 24 lines of code
+
+    Every one is comfortably inside 30 lines of *code*. What pushed them out
+    was prose — and at `history-list.tsx:330`, 49 of those 73 lines are the
+    comment explaining the anon-id bug, the explanation that makes the wipe
+    trustworthy. The better the postmortem, the blinder the check that
+    depends on it. The first of the three is the sharpest: it is the
+    thank-you whose postmortem this check was written from, and this check
+    has never once looked at it. Only check 74, by name, ever did — and
+    CLAUDE.md's rule is that an instance is not a class.
+
+    Its own closing note saw the symptom without the cause: "the sharpest
+    instance, asserted by name, because a heuristic above should never be the
+    only thing holding the worst case." The heuristic was not weak on the
+    wipe. It could not see the wipe.
+
+    So the window is measured in code. Comments are blanked rather than
+    deleted so line numbers still name the real file, which is the same trick
+    check 103 needed for the same reason: read what somebody typed, never the
+    prose beside it. The furthest request among all twelve sites is 24 code
+    lines, so 30 keeps its headroom and its original intent — near enough not
+    to borrow another function's check.
+  */
+  const blankComments = (text) =>
+    text
+      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+      .replace(/^([ \t]*)\/\/[^\n]*$/gm, (m) => m.replace(/[^\n\t ]/g, " "));
+
+  /** The last `n` lines of actual code at or above `i`, prose skipped. */
+  const codeWindow = (code, i, n) => {
+    const out = [];
+    for (let j = i; j >= 0 && out.length < n; j--) {
+      if (code[j].trim().length > 0) out.push(code[j]);
+    }
+    return out.reverse().join("\n");
+  };
+
   const offenders = [];
+  const examined = [];
   for (const file of walk(path.join(ROOT, "src"))) {
-    const lines = fs.readFileSync(file, "utf8").split("\n");
-    lines.forEach((line, i) => {
+    const code = blankComments(fs.readFileSync(file, "utf8")).split("\n");
+    code.forEach((line, i) => {
       /*
         Anchored on the severity, not on `toast(`.
 
@@ -5554,21 +5602,39 @@ check("48 No screen says it happened without reading the answer", () => {
         single bug CLAUDE.md calls the sharpest this product ever shipped.
         That one is correct today, and the check written to protect it was
         walking straight past it.
+
+        Read off the blanked copy, so a `"success"` written inside a comment
+        is not scanned as a claim somebody is shown.
       */
       if (!/"success"/.test(line)) return;
       // Confirm it is a toast and not some other "success" string.
-      const near = lines.slice(Math.max(0, i - 6), i + 1).join("\n");
+      const near = codeWindow(code, i, 7);
       if (!/toast\(/.test(near)) return;
 
       // The claim's neighbourhood: far enough back to hold the request it
       // is reporting on, near enough not to borrow another function's check.
-      const from = Math.max(0, i - 30);
-      const before = lines.slice(from, i + 1).join("\n");
+      const before = codeWindow(code, i, 30);
       if (!/\bfetch\(/.test(before)) return; // nothing was asked; nothing to read
+      /*
+        READING THE STATUS IS THE HALF-MEASURE, NOT THE ANSWER
+
+        `/\.ok\b/` and `/\bstatus\b/` used to be sufficient here — and the
+        postmortem this check was written from says, in CLAUDE.md, of the
+        feedback bug: "It read the status and never read the body: one of the
+        two doors closed, and the other left open under a note explaining why
+        the door mattered." `POST /api/feedback` answers **200** with
+        `persisted: false` when there is no store. So `res.ok` is exactly the
+        pattern that shipped, and this check accepted it.
+
+        Dropping it is free, measured rather than assumed: of the eight claims
+        standing downstream of a request, **zero** are saved only by the
+        status. Every one reads a body field or picks its sentence from the
+        answer. `persisted` joins the field list in the same breath, because
+        it is what the feedback client correctly reads and leaving it out
+        would fail the one site that learned this lesson first.
+      */
       const read =
-        /\.ok\b/.test(before) ||
-        /\bstatus\b/.test(before) ||
-        /\b(body|data|d)\??\.(deleted|saved|anchored|ok)\b/.test(before) ||
+        /\b(body|data|d|res)\??\.(deleted|saved|anchored|persisted)\b/.test(before) ||
         /*
           A toast whose message is chosen by a ternary has read something to
           choose with. `seal(w).then((sealed) => toast(sealed ? … : …))` is
@@ -5578,12 +5644,71 @@ check("48 No screen says it happened without reading the answer", () => {
       if (!read) {
         offenders.push(`${path.relative(ROOT, file)}:${i + 1}`);
       }
+      examined.push(`${path.relative(ROOT, file)}:${i + 1}`);
     });
   }
 
   is(offenders.length, 0,
     "every success message downstream of a request has read the response",
     offenders.join(", "));
+
+  /*
+    AND THE WINDOW ITSELF, BECAUSE EVERY SITE IS CORRECT TODAY
+
+    The three claims this check could not previously see all turned out to
+    read their answer properly. So narrowing the window back to raw lines
+    breaks nothing, fails nothing, and silently un-covers the thank-you, the
+    delete and the full wipe — the check would pass by not looking, which is
+    the failure CLAUDE.md opens with about `heartbeat-data.mjs`.
+
+    Two assertions, because the two halves fail differently.
+
+    The mechanism, on a synthetic case: forty lines of prose between a request
+    and its claim must not consume the window. This is the direct test of the
+    property, and a revert to counting raw lines fails it here rather than
+    somewhere subtle.
+  */
+  const sample = [
+    'const res = await fetch("/api/thing", { method: "POST" });',
+    // What `blankComments` leaves behind where a postmortem was.
+    ...Array(40).fill(""),
+    'toast("Done.", "success");',
+  ];
+  const last = sample.length - 1;
+  ok(/\bfetch\(/.test(codeWindow(sample, last, 30)),
+    "prose between a request and its claim does not consume the window",
+    "counted in raw lines, 49 lines of postmortem hid the full wipe from the check written to hold it");
+  ok(!/\bfetch\(/.test(sample.slice(Math.max(0, last - 30), last + 1).join("\n")),
+    "and the raw-line window it replaced could not see past that prose",
+    "without this the first assertion passes under both windows and proves nothing");
+
+  /*
+    And the coverage, stated as the difference the repair makes rather than as
+    a number typed here. Widening the slack instead — "a request within 60
+    lines must be examined" — was the first attempt and it was wrong: at 60 a
+    claim borrows the `fetch` belonging to an unrelated function further up
+    the file, which is the over-reach the 30-line bound was chosen to avoid.
+
+    So the two windows are run against each other on the real tree. Counting
+    code must examine strictly more claims than counting lines, and it does:
+    eight against five, the three being the thank-you, the delete and the
+    wipe. A revert to raw lines makes the two equal and fails here.
+  */
+  const rawExamined = [];
+  for (const file of walk(path.join(ROOT, "src"))) {
+    const code = blankComments(fs.readFileSync(file, "utf8")).split("\n");
+    code.forEach((line, i) => {
+      if (!/"success"/.test(line)) return;
+      if (!/toast\(/.test(code.slice(Math.max(0, i - 6), i + 1).join("\n"))) return;
+      if (!/\bfetch\(/.test(code.slice(Math.max(0, i - 30), i + 1).join("\n"))) return;
+      rawExamined.push(`${path.relative(ROOT, file)}:${i + 1}`);
+    });
+  }
+  ok(examined.length > rawExamined.length,
+    "and counting code rather than prose examines claims that counting lines skipped",
+    `code window ${examined.length}, raw window ${rawExamined.length} — skipped: ${
+      examined.filter((e) => !rawExamined.includes(e)).join(", ") || "none"
+    }`);
 
   /*
     And the sharpest instance, asserted by name, because a heuristic above
