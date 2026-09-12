@@ -29,7 +29,7 @@ const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/vent/chairs.ts");
 const { selectMemory, MEMORY_TURNS } = await app("src/lib/vent/memory.ts");
 const { checkMessage, economyFact, weatherFact, keeperIntention, keeperReflection, roleForSeat,
-        ALONE_LINE, ALONE_DOOR } =
+        ALONE_LINE, ALONE_DOOR, NO_KEEPER_TOOL } =
   await app("src/lib/circles/rules.ts");
 const { PRESENCE_WINDOW_MS, TYPING_WINDOW_MS, isPresent, isTyping, presenceOf, shouldTouch } =
   await app("src/lib/circles/presence.ts");
@@ -3593,6 +3593,23 @@ check("32 Every circle tag exists everywhere a circle tag is read", () => {
   */
   ok(!("grief" in REAL_WORLD_TACTIC),
     "grief is a room people choose, not a coping tool the app assigns");
+
+  /*
+    And grief is the *only* one, which naming it cannot say.
+
+    The assertion above is about grief. An eleventh topic added without a hold
+    reads exactly like grief's considered exclusion and passes it — "not on the
+    list" and "decided against" looking identical, which is the thing this
+    repository keeps writing down. `NO_KEEPER_TOOL` in `rules.ts` is 0012's
+    decision as a value rather than as a migration comment, and the set of
+    topics with no tool has to equal it in both directions: a topic that
+    quietly lost its hold fails, and a name that no longer describes one fails
+    too.
+  */
+  const toolless = [...uiTags].filter((t) => !(t in REAL_WORLD_TACTIC)).sort();
+  is(toolless.join(","), [...NO_KEEPER_TOOL].sort().join(","),
+    "and it is the only room that opens without one",
+    `no tool: [${toolless.join(" ")}] · declared: [${[...NO_KEEPER_TOOL].join(" ")}]`);
   is(keeperIntention("grief", null).includes("Today we hold somebody who is gone."), true,
     "the grief room opens by saying it");
 });
@@ -5329,6 +5346,59 @@ if (BASE) {
       is(res.status, expected, `${what} is refused once the circle is over`);
     }
   });
+
+  await checkAsync("134 Two people who came for the same room get the same room", async () => {
+    /*
+      Of the first sixteen circles, fourteen had exactly one person in them and
+      nobody has ever spoken in one. `POST /api/circles` created a room
+      unconditionally, so two people arriving minutes apart for the same
+      pressure each got their own empty room — and the Keeper needs
+      `members.length > 1` to say a word, so neither room ever started.
+
+      Six seats and eight users cannot afford a product that competes with
+      itself. Proved live rather than asserted statically, because the whole
+      claim is about what the second POST returns.
+    */
+    /*
+      Stated as a relationship, not as absolutes.
+
+      The first version asserted the first POST returned `joined: "new"` and
+      that the room then held exactly two seats. It passed on a fresh store and
+      failed on the next run: the live passes share a store, an earlier run had
+      left a `traffic` room open, and the "first" person joined *that*. Which
+      is this suite's oldest lesson arriving in a check written an hour ago —
+      it tested the shape its author was standing in, and the shape was "a
+      database nobody had used yet".
+
+      What the fix actually promises has nothing to do with who created what:
+      two people who ask for the same pressure end up in the same room. That
+      holds whatever was there before.
+    */
+    const tag = "traffic";
+    const a = `eval-${Date.now()}-open-a`;
+    const b = `eval-${Date.now()}-open-b`;
+
+    const first = await post("/api/circles", { anonId: a, tag, pressure: 70 }).then((r) => r.json());
+    ok(first.circle?.id, "the first person gets a room", JSON.stringify(first).slice(0, 90));
+
+    const second = await post("/api/circles", { anonId: b, tag, pressure: 55 }).then((r) => r.json());
+    is(second.circle?.id, first.circle.id,
+      "and the second person asking for the same pressure gets that same room",
+      "two empty rooms is how fourteen of the first sixteen circles held one person");
+    is(second.joined, "existing", "reported as a room they joined, not one they opened");
+    ok(second.role !== "keeper", "and they are not a second Keeper in it", second.role);
+
+    // Their own chair, not the room's — the Closing measures each person from
+    // where they sat down, which is the one number a joiner must not inherit.
+    const mine = await fetch(`${BASE}/api/circles/${first.circle.id}?anonId=${b}`).then((r) => r.json());
+    is(mine.pressureSeeded, 55, "carrying the pressure they arrived with");
+
+    const theirs = await fetch(`${BASE}/api/circles/${first.circle.id}?anonId=${a}`).then((r) => r.json());
+    ok(mine.seats >= 2 && theirs.seats === mine.seats,
+      "both of them are in it, and both see the same room",
+      `${a}: ${theirs.seats} seats · ${b}: ${mine.seats} seats`);
+  });
+
 }
 
 check("45 A reply is allowed to finish its sentence", () => {
@@ -15727,6 +15797,7 @@ check("132 The operating manual's counts are the code's counts", () => {
     "and the manual is now read as data rather than only quoted in comments",
     "every other mention of it in this suite is prose inside a comment");
 });
+
 
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");

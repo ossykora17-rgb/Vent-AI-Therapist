@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore } from "@/lib/store";
 import { classify, CRISIS_LINES, crisisReply } from "@/lib/vent/intent";
-import { CIRCLE_MINUTES, MAX_SEATS, roleForSeat } from "@/lib/circles/rules";
+import { CIRCLE_MINUTES, MAX_SEATS, phaseFor, roleForSeat } from "@/lib/circles/rules";
 import { sweepIfOver } from "@/lib/circles/sweep";
 import { withStore } from "@/lib/http/with-store";
 
@@ -156,8 +156,66 @@ async function handlePOST(request: Request) {
     );
   }
 
-  const now = new Date();
+  /*
+    THE ROOM THAT IS ALREADY OPEN, BEFORE OPENING A SECOND EMPTY ONE
+
+    Of the first sixteen circles, **fourteen had exactly one person in them**
+    and nobody has ever spoken in one. This route is why. It created a circle
+    unconditionally, so somebody opening a `family` room at 9pm sat alone, and
+    somebody wanting a family room at 9.05 tapped the same button and got a
+    *second* empty family room. Two people who came for the same thing, in the
+    same minute, in different rooms — and the Keeper needs `members.length > 1`
+    to say a single word, so neither room ever started.
+
+    Six seats and eight users is not a product that can afford to split its own
+    scarce people. This is the cheapest possible repair and it changes nothing
+    about the vision: same six seats, same forty-five minutes, same tag — it
+    only stops the product from competing with itself.
+
+    Narrow on purpose. Same tag (null matches null: an untagged room is still a
+    room). Seats free. And still early enough to be worth sitting down in,
+    which is read off the phase machine rather than a new number — `reflect`
+    and `close` are the last seven minutes, and joining a circle there buys
+    somebody a countdown instead of a conversation.
+
+    Falls through to creating on any doubt: no rooms, a full one, a seat that
+    lost its race. A person who asked for a circle always gets one.
+  */
+  let joinedExisting = false;
   let circle;
+  try {
+    const open = await store.listOpenCircles();
+    const mine = (open ?? []).find(
+      (c) =>
+        (c.tag ?? null) === (input.tag ?? null) &&
+        c.seats > 0 &&
+        c.seats < MAX_SEATS &&
+        c.creator_anon_id !== input.anonId &&
+        ["breathe", "intention", "shares"].includes(
+          phaseFor(new Date(c.ends_at).getTime() - Date.now()),
+        ),
+    );
+    if (mine) {
+      const took = await store.addMember({
+        circle_id: mine.id,
+        anon_id: input.anonId,
+        role: roleForSeat(mine.seats),
+        pressure_seeded: input.pressure != null ? Math.round(input.pressure) : null,
+      });
+      if (took) {
+        return NextResponse.json(
+          { circle: mine, role: roleForSeat(mine.seats), joined: "existing", storage: store.kind },
+          { status: 200, headers: { "cache-control": "no-store" } },
+        );
+      }
+    }
+  } catch (error) {
+    // A lookup that failed is not a reason to refuse somebody a circle. Open
+    // a new one, which is exactly what this route did before it could look.
+    console.warn("[circles] could not check for an open room", errorKind(error));
+  }
+
+  const now = new Date();
   try {
     // The one store method that throws rather than returning null. An insert
     // the database rejects was a 500 here; the caller's answer is the same as
@@ -192,7 +250,7 @@ async function handlePOST(request: Request) {
   }
 
   return NextResponse.json(
-    { circle, role: roleForSeat(0), storage: store.kind },
+    { circle, role: roleForSeat(0), joined: joinedExisting ? "existing" : "new", storage: store.kind },
     { status: 201, headers: { "cache-control": "no-store" } },
   );
 }

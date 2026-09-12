@@ -266,6 +266,25 @@ export const MYCELIUM = {
   ephemeral: "Wetin talk for here, dey die for here.",
 } as const;
 
+/**
+ * Circle topics that deliberately open without a tool.
+ *
+ * 0012's argument, moved out of a migration comment and into the code, because
+ * a decision only Postgres knows about is one nothing here can hold anybody to.
+ * Its words: *"A real-world tag selects a coping tool at weight 95 — 'one thing
+ * you can do inside the danfo', 'the one call you have been avoiding'. There is
+ * no such line for a burial, and writing one would be the same mistake this
+ * release exists to fix."*
+ *
+ * So `grief` has an opening and no tool, on purpose, and `keeperIntention`
+ * simply omits it. Named here because **"not on the list" and "decided
+ * against" look identical otherwise** — an eleventh topic added without a hold
+ * would read exactly like this one, and the check that guards holds iterates
+ * `REAL_WORLD_TACTIC`, so it cannot see a circle topic that is missing from it
+ * at all.
+ */
+export const NO_KEEPER_TOOL: readonly string[] = ["grief"];
+
 export function keeperIntention(tag: string | null, counted?: string | null): string {
   const opening = OPENING[tag ?? ""] ?? "Today we hold whatever is heaviest.";
 
