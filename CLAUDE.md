@@ -1482,3 +1482,57 @@ only some, and asking the narrower one first can only ever answer the wrong
 question. Statically, too, because `npm run gate` skips `live-verify` when
 nothing is serving on :3001 — the check that caught this does not run in the
 command this file tells you to trust.
+
+**And the anti-fragmentation fix could not see the room that was working.**
+Of the first sixteen circles, fourteen held exactly one person, because
+`POST /api/circles` created a room unconditionally — two people arriving
+minutes apart for the same pressure each got their own, and the Keeper needs
+`members.length > 1` to say a word, so neither room ever started. The repair
+steers the second person into the first one's room, and its predicate was
+`same tag && seats > 0 && seats < MAX_SEATS && creator !== me && early phase`.
+
+`addMember` answers false for two different events — **the room filled, and
+you are already in it** — and the second one fell straight through to opening
+an empty second room. Somebody closes the tab, comes back to the lobby, taps
+the same button. The first patch read the members back on a failed write and
+handed them their seat, which is correct and covers only the rooms that still
+have a free seat: the predicate never looks at a full one. So the fragmentation
+this whole block exists to stop survived in the exact case where the room was
+working — **six people in it**. A fix written from where its author was
+standing, which here was a room with space in it.
+
+`seatedIn(anonId)` is a store method rather than a widening of
+`listOpenCircles`, and the reason is the lobby: that route returns
+`listOpenCircles()` verbatim to the browser, so carrying members on it would
+publish every seated person's anon id to whoever loads the page — and an anon
+id here is not an identifier, it is the whole credential. Ids only, intersected
+in the route, which already owns the status and clock predicates.
+
+The seat is asked about **before** the tag matches, and that is a product
+decision rather than an optimisation: there is no leave path, so a seat is held
+for the full forty-five minutes whether or not anybody is looking at it.
+Holding two is worse than being sent to the wrong one, because `members.length
+> 1` is the Keeper's whole trigger and a phantom seat is a room the Keeper
+opens for nobody. The client is told — `joined: "seated"`, one line — because
+landing in a room you did not just ask for is otherwise a mystery, and the
+client reads the body rather than the status, which is the feedback bug's
+lesson applied in the file next door to it.
+
+**Found by the live check for the first fix failing on its second run**, and
+that is the only way it could have been found: the bug needs a full room, and
+the suite's first pass creates an empty one. The check then had to be repaired
+twice for the same reason it found the bug — it tested the shape its author was
+standing in, and the shape was "a database nobody had used yet". It picks a
+pressure with no room currently open for it rather than hardcoding one, and it
+ends the room it filled, because a check that takes a tag out of the pool on
+every run fails on its own leavings by the seventh.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

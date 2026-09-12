@@ -318,6 +318,20 @@ export interface Store {
    */
   listMembers(circleId: string): Promise<CircleMemberRow[]>;
   /**
+   * Which circles this person already holds a seat in. Ids only.
+   *
+   * Ids and nothing else on purpose. The one existing way to answer this was
+   * `listMembers` per circle, and the lobby route returns `listOpenCircles()`
+   * verbatim to the browser — so widening *that* to carry members would
+   * publish every seated person's anon id to anybody who loads the page, and
+   * an anon id here is not an identifier, it is the whole credential.
+   *
+   * Open-ness is not asked about, because this table does not know: the
+   * caller intersects with `listOpenCircles`, which already owns both the
+   * status and the clock predicate.
+   */
+  seatedIn(anonId: string): Promise<string[]>;
+  /**
    * Take a seat. **True only if a row was actually written.**
    *
    * It used to return `void`, and both implementations quietly declined a

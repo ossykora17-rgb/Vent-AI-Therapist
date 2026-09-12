@@ -183,8 +183,47 @@ async function handlePOST(request: Request) {
   */
   let circle;
   try {
-    const open = await store.listOpenCircles();
-    const mine = (open ?? []).find(
+    const open = (await store.listOpenCircles()) ?? [];
+
+    /*
+      THE SEAT THEY ARE ALREADY SITTING IN
+
+      Found by the live check for the block below failing on its second run.
+      `addMember` answers false for two different events — the room filled, and
+      you are already in it — and the find below only ever looked at rooms with
+      a *free* seat, so somebody already seated in a room that had since filled
+      up fell through and was handed a new empty one. The fragmentation this
+      whole block exists to stop, arriving in the one case where the room was
+      working: six people in it.
+
+      It is asked before the tag matches, because there is no leave path — a
+      seat is held for the full forty-five minutes whether or not anybody is
+      looking at it. Letting somebody hold two is worse than sending them to
+      the wrong one: `members.length > 1` is the Keeper's whole trigger, so a
+      phantom seat is a room the Keeper opens for nobody.
+
+      Ids only, intersected here. The lobby returns `listOpenCircles()`
+      verbatim to the browser, so the seat lookup could not be folded into it
+      without publishing every seated person's anon id to whoever loads the
+      page.
+    */
+    if (open.length > 0) {
+      const seated = new Set(await store.seatedIn(input.anonId));
+      const held = open.find((c) => seated.has(c.id));
+      if (held) {
+        const me = (await store.listMembers(held.id)).find((x) => x.anon_id === input.anonId);
+        if (me) {
+          return NextResponse.json(
+            // The role they hold, never one recomputed from a seat count that
+            // has moved since — they are already in the ring at a position.
+            { circle: held, role: me.role, joined: "seated", storage: store.kind },
+            { status: 200, headers: { "cache-control": "no-store" } },
+          );
+        }
+      }
+    }
+
+    const mine = open.find(
       (c) =>
         (c.tag ?? null) === (input.tag ?? null) &&
         c.seats > 0 &&
@@ -201,9 +240,25 @@ async function handlePOST(request: Request) {
         role: roleForSeat(mine.seats),
         pressure_seeded: input.pressure != null ? Math.round(input.pressure) : null,
       });
-      if (took) {
+      /*
+        `addMember` answers false for two different events — the room filled,
+        and you are already sitting in it. The seat check above handles the
+        ordinary version of the second; what is left here is the race, where a
+        second tab took this seat in the milliseconds between that read and
+        this write. Falling through would open the empty room this block
+        exists to prevent, so it is worth one lookup on a write that said no.
+      */
+      const already = took
+        ? null
+        : (await store.listMembers(mine.id)).find((x) => x.anon_id === input.anonId);
+      if (took || already) {
         return NextResponse.json(
-          { circle: mine, role: roleForSeat(mine.seats), joined: "existing", storage: store.kind },
+          {
+            circle: mine,
+            role: already?.role ?? roleForSeat(mine.seats),
+            joined: already ? "seated" : "existing",
+            storage: store.kind,
+          },
           { status: 200, headers: { "cache-control": "no-store" } },
         );
       }

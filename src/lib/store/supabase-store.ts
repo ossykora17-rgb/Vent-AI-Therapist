@@ -577,6 +577,14 @@ export class SupabaseStore implements Store {
     return (data ?? []) as unknown as CircleMemberRow[];
   }
 
+  async seatedIn(anonId: string): Promise<string[]> {
+    const data = ok("seatedIn", await this.db
+      .from("circle_members")
+      .select("circle_id")
+      .eq("anon_id", anonId));
+    return ((data ?? []) as unknown as Array<{ circle_id: string }>).map((r) => r.circle_id);
+  }
+
   /**
    * Take a seat, and prove it.
    *

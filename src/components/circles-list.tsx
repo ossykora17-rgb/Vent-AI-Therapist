@@ -118,6 +118,18 @@ export function CirclesList() {
         toast(d.message ?? "Couldn't open the circle.", "error");
         return;
       }
+      /*
+        The one case where the room they land in is not the room they asked
+        for. A seat is held for the full forty-five minutes and there is no
+        leave path, so somebody who already has one is sent back to it rather
+        than given a second — which is right, and silent would be mysterious
+        if the tag they just picked was a different one.
+
+        Read off the body rather than the status: both answers are 200, and
+        "it read the status and never read the body" is the shape of the
+        feedback bug this file's sibling already paid for.
+      */
+      if (d.joined === "seated") toast("You already have a room open. Here it is.", "info");
       router.push(`/circles/${d.circle.id}`);
     } catch {
       toast("Network dipped.", "error");

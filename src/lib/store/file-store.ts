@@ -456,6 +456,12 @@ export class FileStore implements Store {
       .sort((a, b) => a.joined_at.localeCompare(b.joined_at) || a.id.localeCompare(b.id));
   }
 
+  async seatedIn(anonId: string): Promise<string[]> {
+    return this.read()
+      .circleMembers.filter((m) => m.anon_id === anonId)
+      .map((m) => m.circle_id);
+  }
+
   async addMember(
     m: Omit<CircleMemberRow, "id" | "joined_at" | "last_seen_at" | "typing_until">,
   ): Promise<boolean> {

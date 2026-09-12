@@ -29,7 +29,7 @@ const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/vent/chairs.ts");
 const { selectMemory, MEMORY_TURNS } = await app("src/lib/vent/memory.ts");
 const { checkMessage, economyFact, weatherFact, keeperIntention, keeperReflection, roleForSeat,
-        ALONE_LINE, ALONE_DOOR, NO_KEEPER_TOOL } =
+        ALONE_LINE, ALONE_DOOR, NO_KEEPER_TOOL, MAX_SEATS } =
   await app("src/lib/circles/rules.ts");
 const { PRESENCE_WINDOW_MS, TYPING_WINDOW_MS, isPresent, isTyping, presenceOf, shouldTouch } =
   await app("src/lib/circles/presence.ts");
@@ -5374,7 +5374,29 @@ if (BASE) {
       two people who ask for the same pressure end up in the same room. That
       holds whatever was there before.
     */
-    const tag = "traffic";
+    /*
+      The tag is chosen, not hardcoded, and that is the second repair to this
+      check rather than a flourish.
+
+      With `traffic` written in, the run order decided the answer: the live
+      passes share a store, so `a` could join a five-seat room left by an
+      earlier run, fill it, and `b` would correctly be steered somewhere else —
+      a red check over working code. Picking a pressure nobody currently has a
+      room open for makes `a` the room's first occupant every time, which is
+      the only precondition any of the assertions below actually need.
+
+      It fails rather than skips if every pressure is busy. A check that
+      quietly stops checking is the failure this suite exists to stop.
+    */
+    const lobby = await fetch(`${BASE}/api/circles`).then((r) => r.json());
+    const busy = new Set((lobby.circles ?? []).map((c) => c.tag));
+    // Read off the product's own list, minus the one check 20 is holding: it
+    // opens a `family` room above and needs to be its only occupant, which is
+    // the same steering this check is about, pointed the other way.
+    const tag = REAL_WORLD_TAGS.filter((t) => t !== "family").find((t) => !busy.has(t));
+    ok(tag, "a pressure with no room open for it, so the first person here opens one",
+      `open: ${[...busy].join(", ") || "none"}`);
+
     const a = `eval-${Date.now()}-open-a`;
     const b = `eval-${Date.now()}-open-b`;
 
@@ -5397,6 +5419,60 @@ if (BASE) {
     ok(mine.seats >= 2 && theirs.seats === mine.seats,
       "both of them are in it, and both see the same room",
       `${a}: ${theirs.seats} seats · ${b}: ${mine.seats} seats`);
+
+    /*
+      And the person who is already sitting in it.
+
+      `addMember` answers false for two different events — the room is full,
+      and you are already in it — and the steering only ever looked at rooms
+      with a *free* seat, so somebody already seated in a room that had since
+      filled fell through and was handed a new empty one. The fragmentation
+      this whole block exists to stop, arriving in the one case where the room
+      was working: six people in it. Found by this check failing on its second
+      run, which is the only way it could have been found.
+
+      Asked twice, because the two paths are different code: a room with a
+      free seat answers from the seat lookup, a full one has nothing else to
+      answer from.
+    */
+    const again = await post("/api/circles", { anonId: b, tag, pressure: 55 }).then((r) => r.json());
+    is(again.circle?.id, second.circle.id,
+      "somebody already seated is sent back to their seat, not given an empty room",
+      "the edge case that re-opens the bug this check is about");
+    is(again.joined, "seated", "and told so, because it may not be the room they just asked for");
+    is(again.role, second.role, "with the role they already hold, not one recomputed");
+
+    // Fill it, so the seat they hold is in a room with nothing free in it.
+    const rest = [];
+    for (let i = 0; i < MAX_SEATS - 2; i++) {
+      const who = `eval-${Date.now()}-fill-${i}`;
+      rest.push(who);
+      await post(`/api/circles/${second.circle.id}`, { anonId: who, consent: true, pressure: 50 });
+    }
+    const full = await fetch(`${BASE}/api/circles/${second.circle.id}?anonId=${b}`).then((r) => r.json());
+    is(full.seats, MAX_SEATS, "the room is full", `filled with ${rest.length} more`);
+
+    const stillMine = await post("/api/circles", { anonId: b, tag, pressure: 55 }).then((r) => r.json());
+    is(stillMine.circle?.id, second.circle.id,
+      "and a full room is still their room, not a reason to open an empty one",
+      "a free seat was the only thing the steering could see, and a working room has none");
+    is(stillMine.joined, "seated", "reported the same way whether or not it has room left");
+
+    /*
+      And put the pressure back.
+
+      The room this check builds is full and open for forty-five minutes, so
+      leaving it there takes a tag out of the pool above — seven runs and the
+      check can no longer find a clean one and fails on its own leavings. `a`
+      created it, so `a` is the Keeper and can end it early, which is the same
+      door a real Keeper uses.
+
+      Not asserted as a teardown that has to work: the close is the subject of
+      check 95 and is proved there. What matters here is that this check stops
+      making the lobby worse every time it runs.
+    */
+    await fetch(`${BASE}/api/circles/${second.circle.id}?anonId=${a}`, { method: "DELETE" })
+      .catch(() => {});
   });
 
 }
