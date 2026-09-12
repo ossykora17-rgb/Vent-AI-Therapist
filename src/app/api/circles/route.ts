@@ -54,11 +54,12 @@ const createSchema = z.object({
 const SWEEP_BATCH = 5;
 
 /** Open circles, with seat counts. No content, ever — just the shape. */
-async function handleGET() {
+async function handleGET(request: Request) {
   const store = getStore();
   if (!store) {
     return NextResponse.json({ circles: [], persisting: false, storage: "none" });
   }
+  const anonId = new URL(request.url).searchParams.get("anonId") ?? "";
 
   /*
     The circles nobody is asking about, which is all of the ones that matter.
@@ -114,9 +115,41 @@ async function handleGET() {
     console.error("[circles] lobby sweep failed", errorKind(error));
   }
 
+  const circles = await store.listOpenCircles();
+
+  /*
+    Which one of these is yours.
+
+    A seat is held for the full forty-five minutes and there is no leave path,
+    so somebody who closed the tab has a room and no way to find it — every
+    card on this screen reads "Take a seat →", including the one they are
+    already sitting in. The route now sends them back to it rather than
+    opening an empty second room, which is the right answer to the wrong
+    question: the screen should not have offered.
+
+    Your own id, or nothing. Nobody learns where anybody else is sitting, and
+    somebody holding another person's anon id already has the transcript, so
+    this adds no reach to a credential that is lost. Ids only, never the
+    members of a room: `listOpenCircles` is returned to the browser verbatim
+    and an anon id in it would be published to whoever loads the page.
+
+    Never fails the lobby. Not knowing which room is yours is a worse screen;
+    a lobby that 500s is no screen at all.
+  */
+  let mine: string | null = null;
+  if (anonId) {
+    try {
+      const seated = new Set(await store.seatedIn(anonId));
+      mine = circles.find((c) => seated.has(c.id))?.id ?? null;
+    } catch (error) {
+      console.warn("[circles] could not read which room is theirs", errorKind(error));
+    }
+  }
+
   return NextResponse.json(
     {
-      circles: await store.listOpenCircles(),
+      circles,
+      mine,
       maxSeats: MAX_SEATS,
       persisting: true,
       storage: store.kind,

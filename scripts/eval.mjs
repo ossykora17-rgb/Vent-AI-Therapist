@@ -5347,7 +5347,7 @@ if (BASE) {
     }
   });
 
-  await checkAsync("134 Two people who came for the same room get the same room", async () => {
+  await checkAsync("134 Two people who came for the same room get it, and know which one is theirs", async () => {
     /*
       Of the first sixteen circles, fourteen had exactly one person in them and
       nobody has ever spoken in one. `POST /api/circles` created a room
@@ -5457,6 +5457,27 @@ if (BASE) {
       "and a full room is still their room, not a reason to open an empty one",
       "a free seat was the only thing the steering could see, and a working room has none");
     is(stillMine.joined, "seated", "reported the same way whether or not it has room left");
+
+    /*
+      And the lobby has to say which one is theirs.
+
+      The route sending somebody back to their seat is the right answer to a
+      question the screen should not have asked: every card read "Take a seat
+      →", including the one they were already sitting in, so a person who
+      closed the tab had a room and no way to recognise it. Their own id
+      only — the lobby payload is returned to the browser verbatim and has
+      never carried anybody's anon id.
+    */
+    const withMe = await fetch(`${BASE}/api/circles?anonId=${b}`).then((r) => r.json());
+    is(withMe.mine, second.circle.id, "the lobby names the room they are sitting in");
+    const stranger = await fetch(`${BASE}/api/circles?anonId=eval-${Date.now()}-nobody`)
+      .then((r) => r.json());
+    is(stranger.mine, null, "and tells somebody with no seat that they have none");
+    const anonymous = await fetch(`${BASE}/api/circles`).then((r) => r.json());
+    ok(!anonymous.mine, "asking without an id learns nothing about anybody");
+    ok(JSON.stringify(anonymous.circles ?? []).indexOf(b) === -1,
+      "and no anon id is published to whoever loads the page",
+      "the lobby is the one circle payload a stranger can fetch");
 
     /*
       And put the pressure back.
@@ -11793,6 +11814,40 @@ check("101 The room does not promise that somebody is coming", () => {
   // to, applied to the one string we wrote for this moment.
   is(bannedPhrase(ALONE_LINE), null, "and it is in the office voice");
   is(genericTask(ALONE_LINE), null, "handing over nothing to do");
+
+  /*
+    THE SAME RULE ONE SCREEN EARLIER
+
+    A sentence that is false about the person reading it, which is what this
+    check is for. Every card in the lobby said "Take a seat →", including the
+    one they were already sitting in — and the room you are already in is the
+    one most likely to be *full*, six people being a working circle, so the
+    fallback read "Room is full" at somebody who had a seat in it.
+
+    Underneath it was a control that could not do what it said. A seat is held
+    for the full forty-five minutes and there is no leave path, so "Open a
+    different circle" sends somebody back to the room they are in. The room
+    never offers a door that opens onto a refusal, and the honest version of
+    that button is its absence.
+
+    Asserted by *order*, not by presence: both branches would exist and read
+    correctly if the seat were asked about second, and the answer would still
+    be wrong for exactly the rooms that matter. True-for-you before
+    true-for-anybody is the same ordering check 95 enforces on the handlers.
+  */
+  const lobby = strip(fs.readFileSync(path.join(ROOT, "src/components/circles-list.tsx"), "utf8"));
+  ok(/\bd\.mine\b/.test(lobby),
+    "the lobby reads which room is theirs off the body",
+    "the status says a lobby was returned, never whose seat is in it");
+  const label = lobby.slice(lobby.indexOf("Take a seat") - 400, lobby.indexOf("Take a seat") + 40);
+  const seatFirst = label.indexOf("=== mine");
+  const fullFirst = label.indexOf("seats === 6");
+  ok(seatFirst >= 0 && fullFirst >= 0 && seatFirst < fullFirst,
+    "and asks whether the seat is theirs before it counts the seats",
+    `mine at ${seatFirst}, full at ${fullFirst} — "Room is full" is true of a stranger and false of the person in it`);
+  ok(/!mine\s*&&[\s\S]{0,400}?Open a different circle/.test(lobby),
+    "and never offers to open a different circle to somebody who cannot",
+    "the route sends them back to their seat, which makes this a control that does not do what it says");
 });
 
 check("102 The turn's verdict is computed, never asked for", () => {

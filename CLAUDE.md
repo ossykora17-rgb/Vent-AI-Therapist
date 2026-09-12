@@ -1527,6 +1527,30 @@ pressure with no room currently open for it rather than hardcoding one, and it
 ends the room it filled, because a check that takes a tag out of the pool on
 every run fails on its own leavings by the seventh.
 
+**And the route was the right answer to a question the screen should not have
+asked.** Every card in the lobby read *"Take a seat →"* — including the one they
+were already sitting in — and the room you are already in is the one most likely
+to be **full**, six people being a working circle, so the fallback read *"Room is
+full"* at somebody who had a seat in it. Underneath sat *"Open a different
+circle"*, which a person holding a seat cannot do: there is no leave path, so the
+route sends them back. A control that does not do what it says, under two labels
+that are true of a stranger and false of the reader. The honest version of that
+button is its absence.
+
+`GET /api/circles` answers `mine` — your own seat or nothing, from your own id,
+computed with the same `seatedIn` the route uses. Nobody learns where anybody
+else is sitting, and somebody holding another person's anon id already has the
+transcript, so it adds no reach to a credential that is lost. The list itself
+still carries no anon id, because the lobby payload is the one circle response a
+stranger can fetch.
+
+The order is the assertion, not the presence: both branches read correctly with
+the seat asked second, and the answer would still be wrong for exactly the rooms
+that matter. **True for you before true for anybody** — the same ordering rule
+check 95 enforces on the handlers, one screen earlier. Check 101 holds it,
+because a sentence that is false about the person reading it is what check 101
+is for.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

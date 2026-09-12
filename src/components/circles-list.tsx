@@ -47,6 +47,15 @@ export function CirclesList() {
   const [loading, setLoading] = React.useState(true);
   const [persisting, setPersisting] = React.useState(true);
   const [creating, setCreating] = React.useState(false);
+  /**
+   * The circle they already hold a seat in, if any.
+   *
+   * Not a convenience. A seat is held for the full forty-five minutes and
+   * there is no leave path, so somebody who closed the tab has a room and no
+   * way to recognise it — every card on this screen read "Take a seat →",
+   * including theirs.
+   */
+  const [mine, setMine] = React.useState<string | null>(null);
   const [tag, setTag] = React.useState<string>("economy");
   const [chair, setChair] = React.useState<string>("tight_edge");
   const [busy, setBusy] = React.useState(false);
@@ -81,8 +90,13 @@ export function CirclesList() {
 
   const load = React.useCallback(async () => {
     try {
-      const d = await fetch("/api/circles").then((r) => r.json());
+      // Their own id, so the server can say which of these rooms is theirs.
+      // It answers about that id and no other, so nobody learns where anybody
+      // else is sitting.
+      const d = await fetch(`/api/circles?anonId=${encodeURIComponent(anonId())}`)
+        .then((r) => r.json());
       setCircles(d.circles ?? []);
+      setMine(typeof d.mine === "string" ? d.mine : null);
       setPersisting(d.persisting !== false);
     } catch {
       setPersisting(false);
@@ -370,8 +384,11 @@ export function CirclesList() {
           place, so it gets the thread that means place and time, and its own
           name at the size a name deserves.
         */}
+        {/* Their room first. It is the only row on this screen they are
+            already committed to, and hunting for it in creation order is the
+            problem the mark is here to solve. */}
         <ol className="thread mt-5 space-y-7">
-          {circles.map((c) => {
+          {[...circles].sort((a, b) => Number(b.id === mine) - Number(a.id === mine)).map((c) => {
             const mins = now === 0
               ? null
               : Math.max(0, Math.round((new Date(c.ends_at).getTime() - now) / 60000));
@@ -464,8 +481,20 @@ export function CirclesList() {
                     a link is a broken control — and this is the whole card's
                     job, not a corner of it.
                   */}
+                  {/*
+                    "Room is full" was true of a stranger and false of the
+                    person sitting in it, and the room you are already in is
+                    the one most likely to be full — six people is a working
+                    circle. So the seat is asked about before the seat count,
+                    the same order the route now uses: true-for-you outranks
+                    true-for-anybody.
+                  */}
                   <p className="mt-3 border-t border-line/10 pt-3 text-body font-medium">
-                    {c.seats === 6 ? "Room is full" : "Take a seat →"}
+                    {c.id === mine
+                      ? "You have a seat in this one →"
+                      : c.seats === 6
+                        ? "Room is full"
+                        : "Take a seat →"}
                   </p>
                 </Link>
               </li>
@@ -473,7 +502,17 @@ export function CirclesList() {
           })}
         </ol>
 
-        {persisting && circles.length > 0 && !creating && (
+        {/*
+          Not offered to somebody who already has a room.
+
+          There is no leave path, so a person holding a seat cannot open a
+          different circle — the route sends them back to the one they are in,
+          which is the correct answer and makes this a control that does not
+          do what it says. The room never offers a door that opens onto a
+          refusal, and the honest version of this button is its absence: the
+          card above it now says where their seat is.
+        */}
+        {persisting && circles.length > 0 && !creating && !mine && (
           <button
             type="button"
             onClick={() => setCreating(true)}
