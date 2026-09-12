@@ -89,6 +89,10 @@ export function CircleRoom({ id }: { id: string }) {
   const [consented, setConsented] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [notFound, setNotFound] = React.useState(false);
+  /** The room answered something that is not a room — a store that is absent
+   *  or refusing. Distinct from `notFound`: that circle is gone for good, this
+   *  one may be there and unreachable, and the two deserve different sentences. */
+  const [unreachable, setUnreachable] = React.useState(false);
   const [chair, setChair] = React.useState<string>("sunk");
   const [reflecting, setReflecting] = React.useState(false);
   const [mood, setMood] = React.useState<number | null>(null);
@@ -116,7 +120,25 @@ export function CircleRoom({ id }: { id: string }) {
     const typing = draftRef.current.trim().length > 0 ? "&typing=1" : "";
     const r = await fetch(`/api/circles/${id}?anonId=${encodeURIComponent(me)}${typing}`);
     if (r.status === 404) { setNotFound(true); return; }
+    /*
+      A refusal is not a room.
+
+      Every other status fell straight into `const d: RoomState = await
+      r.json()` and `setState(d)` — so a 503 from a store that is absent or
+      refusing became a room object whose every field was `undefined`, and the
+      screen drew the whole agreement over it with a gold "Take a seat" on the
+      bottom. That is the door onto a refusal again, in the two shapes where
+      the door cannot open at all, reached by anybody holding a circle link
+      while the database is down. `seats`, `maxSeats` and `joined` were all
+      absent, so the fullness flag read false and the offer rendered.
+
+      The last good room is kept rather than overwritten, because this runs
+      every four seconds and one blip must not empty a live circle somebody is
+      sitting in. The sentence below is only for having never had one.
+    */
+    if (!r.ok) { setUnreachable(true); return; }
     const d: RoomState = await r.json();
+    setUnreachable(false);
     setState(d);
     if (d.joined) {
       const m = await fetch(`/api/circles/${id}/messages?anonId=${encodeURIComponent(me)}`);
@@ -236,6 +258,35 @@ export function CircleRoom({ id }: { id: string }) {
         <p className="mt-2 text-body text-ash">The words are already gone. That&apos;s the deal.</p>
         <Link href="/circles" className="mt-6 flex min-h-[48px] items-center rounded-card bg-gold px-6 text-body font-semibold text-on-gold">
           See open circles
+        </Link>
+      </main>
+    );
+  }
+
+  /*
+    A room that cannot be reached, which is not a room that has closed.
+
+    "That circle has closed. The words are already gone." is true of a 404 and
+    false here — the room may be sitting there with five people in it while the
+    database is refusing us. Saying the words are gone would be inventing a
+    deletion, which is the one claim this product must never make loosely.
+
+    Only when there has never been a room to show: a blip on the four-second
+    poll keeps the last good one, upstairs in `load`.
+
+    The private session is the door that is actually open. It answers with no
+    store at all — the live checks prove it in both of the shapes that land
+    here — only without keeping anything.
+  */
+  if (unreachable && !state) {
+    return (
+      <main id="main" className="flex min-h-dvh flex-col items-center justify-center px-4 text-center">
+        <p className="font-display text-heading font-bold">Can&apos;t reach this room.</p>
+        <p className="mt-2 max-w-[40ch] text-body text-ash">
+          Not closed — we just can&apos;t see it from here. Try again in a minute.
+        </p>
+        <Link href="/chat" className="mt-6 flex min-h-[48px] items-center rounded-card bg-gold px-6 text-body font-semibold text-on-gold">
+          Come in and talk instead
         </Link>
       </main>
     );

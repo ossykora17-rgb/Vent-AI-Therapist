@@ -11989,6 +11989,42 @@ check("101 The room does not promise that somebody is coming", () => {
   ok(shut >= 0 && shut < open && /\/circles/.test(roomSrc.slice(shut, open)),
     "and the branch that refuses points at the lobby, which can still open one",
     "naming what is shut without naming what is open is the bug with better manners");
+
+  /*
+    AND A REFUSAL IS NOT A ROOM
+
+    The same door, in the two shapes where it cannot open at all. `load` read
+    `const d: RoomState = await r.json()` on every status but 404 — so a 503
+    from a store that is absent or refusing became a room object with every
+    field `undefined`, the fullness flag read false over it, and the screen
+    drew the agreement and the gold button. Reachable by anybody holding a
+    circle link while the database is down, which is a real production shape
+    and one this suite runs twice.
+
+    Asserted as a named instance rather than swept, and the reason is worth
+    stating: a sweep for that annotated cast finds **one** site in the whole
+    tree — the one being fixed — which is a check whose entire sample is its
+    own bug, the mistake this file records making with `catch` blocks.
+
+    What does generalise is the second assertion. "That circle has closed. The
+    words are already gone." is true of a 404 and false of an unreachable room,
+    which may be sitting there with five people in it. Never claim a deletion
+    nobody observed.
+  */
+  const guard = roomSrc.indexOf("if (!r.ok)");
+  const cast = roomSrc.indexOf(": RoomState = await");
+  ok(guard >= 0 && cast >= 0 && guard < cast,
+    "a response that is not a room never becomes one",
+    "every field undefined is a room with seats it cannot count and a seat it offers anyway");
+
+  // Matched without the apostrophe: JSX writes it as `&apos;`, so both the
+  // straight and the curly form miss. The first attempt tried the curly one.
+  const gone = roomSrc.indexOf("reach this room");
+  ok(gone >= 0, "and being unable to reach a room has its own sentence");
+  const said = roomSrc.slice(gone, gone + 400);
+  ok(!/\bgone\b|already deleted|has closed/.test(said),
+    "which does not tell them their words were deleted",
+    "the room may be sitting there with five people in it — a deletion nobody watched is not a thing to announce");
 });
 
 check("102 The turn's verdict is computed, never asked for", () => {

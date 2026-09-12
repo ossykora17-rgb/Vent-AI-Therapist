@@ -1596,6 +1596,24 @@ Check 101 holds the branch and check 134 holds the payload it branches on,
 because a correct branch over an absent field renders nothing and looks
 identical from the static side.
 
+**And the same door in the two shapes where it cannot open at all.** `load` read
+`const d: RoomState = await r.json()` on every status but 404, so a **503** from
+a store that is absent or refusing became a room object with every field
+`undefined` — the fullness flag read false over it and the screen drew the
+agreement and the gold button. Reachable by anybody holding a circle link while
+the database is down, which is a real production shape and one the live pass
+runs twice. A refusal is not a room; the last good one is kept instead, because
+this runs every four seconds and one blip must not empty a circle somebody is
+sitting in.
+
+It is asserted as a **named instance**, and the reason belongs here rather than
+in the check: a sweep for that annotated cast finds **one** site in the whole
+tree, the one being fixed — the `catch`-block mistake again, where the check's
+entire sample is its own bug. What generalises is the sentence, not the cast:
+*"That circle has closed. The words are already gone."* is true of a 404 and
+false of a room that is merely unreachable, which may be sitting there with five
+people in it. **Never announce a deletion nobody watched.**
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
