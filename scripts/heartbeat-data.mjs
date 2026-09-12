@@ -299,6 +299,37 @@ if (newVents.length) {
 }
 
 /*
+  A silence that is the sink, not the rooms.
+
+  `keeper_losing` above scores a tag by the mean drop across its circles, and
+  it reads `circle_close` signals — which `logPreference` writes **only where a
+  data directory is real**. Its own header is honest about that and says why:
+  "serverless disks are thrown away, so writing here in production would
+  collect training data that is guaranteed to be lost."
+
+  Honest in the module, and invisible here. Zero closes in this report reads
+  exactly like a week of circles where nothing went wrong, and on the
+  deployment people actually use it means the seal recorded nothing anywhere —
+  no mood, no carry, no drop. The whole efficacy loop for circles is empty by
+  construction rather than by outcome, which is the same shape as the anchor
+  that could never be set, and CLAUDE.md already spends a paragraph on that one.
+
+  It is not repaired here, because the repair is a retention decision: keeping
+  a circle's closing reading past the circle's life is a new thing this product
+  would hold about somebody, on a front page that promises one tap deletes
+  everything. That is read by a person. What this line does is stop the
+  emptiness from looking like a result.
+
+  Printed whenever there are circles and no closes, which is the only shape
+  where the difference matters.
+*/
+if (newCircles.length > 0 && closes.length === 0) {
+  console.log(
+    "closes        0 — the sink is local-only (rlhf/log.ts), so this is silence about the sink, not about the rooms",
+  );
+}
+
+/*
   Nothing to *report* is not nothing to *check*, and this exit did both.
 
   `npm run gate` is the only opinion that counts about whether a change is

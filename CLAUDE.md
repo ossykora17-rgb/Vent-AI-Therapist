@@ -1614,6 +1614,32 @@ entire sample is its own bug. What generalises is the sentence, not the cast:
 false of a room that is merely unreachable, which may be sitting there with five
 people in it. **Never announce a deletion nobody watched.**
 
+**And the circle's whole efficacy loop is empty in production, by construction
+rather than by outcome.** The seal — mood, the word carried, the word dropped,
+the drop in points — goes to `logPreference`, and `logPreference` opens with
+`if (!LOCAL) return Promise.resolve()`. That is deliberate and its header says
+why: *"serverless disks are thrown away, so writing here in production would
+collect training data that is guaranteed to be lost."* Honest in the module.
+The vent rating survives because `/api/feedback` also calls
+`store.insertFeedback`; the circle close calls nothing else, so on the
+deployment people actually use it records **nothing, anywhere**.
+
+The heartbeat is where that became a false reading. `keeper_losing` scores a tag
+by the mean drop across its circles and reads exactly that signal, so zero
+closes in a report is indistinguishable from a week of circles where nothing
+went wrong. Same shape as the anchor that could never be set, which this file
+already spends a paragraph on: **unreachable rather than merely empty.** The
+heartbeat now says so whenever it sees circles and no closes — the emptiness
+stops looking like a result.
+
+Not repaired here, and the reason is not effort. Keeping a circle's closing
+reading past the circle's life is a **new thing this product would hold about
+somebody**, on a front page that promises one tap deletes everything, and it
+would need a table, a destruction path in `closeCircle` or `deleteAll`, an
+exemption from the backup, and a line in the privacy page. That is a retention
+decision, and this file's own test says a retention decision is read by a
+person. The finding is the deliverable; the schema is not.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
