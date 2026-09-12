@@ -31,6 +31,7 @@
 set -euo pipefail
 
 PORT=3001
+DB_PORT=54321
 LOG="${RUNNER_TEMP:-/tmp}/live-checks-server.log"
 
 if curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1; then
@@ -131,3 +132,110 @@ if ! curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1; then
 fi
 
 node scripts/no-store-verify.mjs "http://localhost:$PORT"
+
+# ── third pass: a store that is there and says no ───────────────────────────
+#
+# The two passes above are the two shapes this repository already knew about:
+# a store that works, and no store at all. CLAUDE.md names the third in the
+# section about the `?carve=1` button — "no suite here has ever run a store
+# that exists and fails" — and lists what it cost: `FORGET_FAILED` was
+# unreachable code, and the two shapes where the delete button lied are the two
+# a *first* Supabase deployment passes through, `42501` before the GRANTs land
+# and `42703` before 0011 does.
+#
+# `hasStore` is `supabaseUrl && supabaseServiceRoleKey` and the URL check
+# accepts `http:`, so pointing the app at `broken-store.mjs` gives it a real
+# `SupabaseStore` making real requests to a database that refuses all of them.
+# Nothing inside the product is stubbed: the bugs this finds live in the seam
+# between a store call and the handler around it, and a fake below the adapter
+# would test neither side of it.
+#
+# It found three on its first run — `/api/feedback` and `/api/profile` both
+# 500ing with an empty body, and `/api/heartbeat` publishing Postgres's own
+# message and hint on a route with no token.
+kill -- -"$SERVER" 2>/dev/null || kill "$SERVER" 2>/dev/null || true
+for _ in $(seq 1 30); do
+  curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1 || break
+  sleep 1
+done
+if curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1; then
+  echo "the unconfigured server would not let go of :$PORT — refusing to test against it."
+  exit 1
+fi
+
+node scripts/broken-store.mjs --port "$DB_PORT" >"$LOG.brokendb" 2>&1 &
+DB=$!
+
+# A fake service-role key, because `hasStore` only asks whether one is set.
+# Nothing here reaches Supabase: the URL is the stub on loopback.
+setsid env -u VENT_LOCAL_STORE NODE_ENV=production \
+  NEXT_PUBLIC_SUPABASE_URL="http://127.0.0.1:$DB_PORT" \
+  SUPABASE_SERVICE_ROLE_KEY="eyJfake.service.role" \
+  VENT_EXTERNAL_FIXTURE=scripts/fixtures/external \
+  npx next start -p "$PORT" >"$LOG.failing" 2>&1 &
+SERVER=$!
+
+for _ in $(seq 1 30); do
+  curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1 && break
+  sleep 1
+done
+
+# `/api/health` answers `degraded` in this shape and `curl -sf` fails on 4xx/5xx
+# but not on a 200 with a bad body — so ask for the status line instead of
+# treating "did it 200" as "is it up". A probe that cannot see the answer it is
+# looking for is this repository's most-recorded mistake.
+if [ "$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$PORT/api/health")" = "000" ]; then
+  echo "the failing-store server never came up:"
+  tail -30 "$LOG.failing"
+  exit 1
+fi
+
+node scripts/failing-store-verify.mjs "http://localhost:$PORT" || { kill "$DB" 2>/dev/null; exit 1; }
+
+# ── fourth pass: reads succeed, writes are refused ──────────────────────────
+#
+# GRANT SELECT without GRANT UPDATE. An ordinary half-applied migration, and
+# the only shape that can reach the bug the third pass was named after: with
+# everything refused a route dies at `findUserId` and never calls `setCarve`
+# at all, so its failure path — the one store method that reports by returning
+# false rather than throwing — stayed unreachable even here.
+#
+# `FORGET_FAILED`, "Could not clear that. It is still here.", was dead code for
+# the whole life of the product. This pass is the proof that it is not.
+kill "$DB" 2>/dev/null || true
+kill -- -"$SERVER" 2>/dev/null || kill "$SERVER" 2>/dev/null || true
+for _ in $(seq 1 30); do
+  curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1 || break
+  sleep 1
+done
+if curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1; then
+  echo "the failing-store server would not let go of :$PORT — refusing to test against it."
+  exit 1
+fi
+
+node scripts/broken-store.mjs --port "$DB_PORT" --code 42703 \
+  --fail-methods PATCH,POST,PUT,DELETE >"$LOG.halfschema" 2>&1 &
+DB=$!
+
+setsid env -u VENT_LOCAL_STORE NODE_ENV=production \
+  NEXT_PUBLIC_SUPABASE_URL="http://127.0.0.1:$DB_PORT" \
+  SUPABASE_SERVICE_ROLE_KEY="eyJfake.service.role" \
+  VENT_EXTERNAL_FIXTURE=scripts/fixtures/external \
+  npx next start -p "$PORT" >"$LOG.halfschema.app" 2>&1 &
+SERVER=$!
+
+for _ in $(seq 1 30); do
+  curl -sf -m 2 "http://localhost:$PORT/api/health" >/dev/null 2>&1 && break
+  sleep 1
+done
+
+if [ "$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$PORT/api/health")" = "000" ]; then
+  echo "the half-applied-schema server never came up:"
+  tail -30 "$LOG.halfschema.app"
+  exit 1
+fi
+
+node scripts/failing-store-verify.mjs "http://localhost:$PORT" writes-only
+RC=$?
+kill "$DB" 2>/dev/null || true
+exit $RC

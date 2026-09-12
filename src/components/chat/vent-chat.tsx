@@ -229,6 +229,7 @@ export function VentChat() {
   const [answering, setAnswering] = React.useState<BreakingOffer | null>(null);
   const [shut, setShut] = React.useState(false);
   const [opening, setOpening] = React.useState<{
+    chair: string | null;
     object: string | null;
     carrying: string | null;
     putDown: string | null;
@@ -293,7 +294,22 @@ export function VentChat() {
       wrong as a stale exchange rate: better to know nothing than to state
       something that has quietly stopped being true.
     */
-    setOpening({ object: r.object, carrying: r.carry, putDown: r.drop });
+    /*
+      The chair travels too, and it is the field this repair missed the first
+      time.
+
+      The comment above records `object`, `carry` and `drop` falling out of
+      scope and being rescued. The chair was not rescued with them, because it
+      looked handled — `r.tension` is derived from it two lines up, so the
+      *number* survived and the *choice* did not.
+
+      Production says what that cost: `vents.chair_picked` is null on all 186
+      rows, so the chain this product calls chair → tension → drop has only
+      ever recorded the middle term. The training pipeline's `[CHAIR:x]` tag
+      has never once fired, and nothing can ask whether people who sit on the
+      tight edge drop further than people half off the seat.
+    */
+    setOpening({ chair: r.chair, object: r.object, carrying: r.carry, putDown: r.drop });
 
     requestAnimationFrame(() => inputRef.current?.focus());
   }
@@ -373,6 +389,7 @@ export function VentChat() {
           pressure: pressureSet ? pressure : null,
           bodyTapped: body,
           mood,
+          chairPicked: opening?.chair ?? null,
           openingObject: opening?.object ?? null,
           openingCarrying: opening?.carrying ?? null,
           openingPutDown: opening?.putDown ?? null,
@@ -753,7 +770,21 @@ export function VentChat() {
         setGated(true);
         setLines((l) => [
           ...l,
-          { id: nextId.current++, speaker: "vent", text: CRISIS_RESPONSE, crisis: true },
+          /*
+            What the server sent, not our own copy of it.
+
+            This imported `CRISIS_RESPONSE` and rendered that, ignoring the
+            `reply` already in `data` — a second copy of the most important
+            sentence in the product, and the copy the screen actually read. So
+            when the server learned to answer a Pidgin crisis in Pidgin, this
+            line would have gone on printing the English one, and every check
+            on the server side would have stayed green.
+
+            The import survives as the fallback and only as the fallback: if a
+            crisis response ever arrives without a reply, English is better
+            than a blank line on this turn.
+          */
+          { id: nextId.current++, speaker: "vent", text: data.reply ?? CRISIS_RESPONSE, crisis: true },
         ]);
         return;
       }
@@ -892,10 +923,34 @@ export function VentChat() {
         */}
         {(memoryCount > 0 || persisted === false) && (
           <div className="mx-auto flex max-w-[640px] flex-wrap items-center gap-x-2 px-4 pb-3">
+            {/*
+              A plural of a thing there is only ever one of.
+
+              This said "carves", and a carve is `vent_users.carve` — one text
+              column, one per person, `getCarve(userId): Promise<string | null>`,
+              rendered on the Memory page as a single sentence. There has never
+              been a second one and there is no shape in which there could be.
+              So "Remembers · 4 earlier carves" was a count of four of something
+              the store can hold one of.
+
+              What it actually counts is right, and that is what made it hard to
+              see: `memoryUsed` is `history.length`, and `history` is
+              `selectMemory(recent, MEMORY_TURNS)` — their own vents, capped at
+              six, exactly the turns that went into this prompt. Honest number,
+              borrowed noun. Nothing was wrong upstream of the last two words.
+
+              The cost is not pedantry. This line is the one place the room says
+              what it holds about somebody, and it sits two lines above "Not
+              saved — this session only" — a sentence the comment block above
+              defends at length for being scrupulously true. Somebody who reads
+              "4 earlier carves" and taps through to Memory finds one sentence
+              or none, and the two screens disagree about the same word. That is
+              the two-copies bug with the arity wrong as well as the text.
+            */}
             {memoryCount > 0 && (
               <p className="label-mono">
                 Remembers · {memoryCount} earlier{" "}
-                {memoryCount === 1 ? "carve" : "carves"}
+                {memoryCount === 1 ? "vent" : "vents"}
               </p>
             )}
             {persisted === false && (

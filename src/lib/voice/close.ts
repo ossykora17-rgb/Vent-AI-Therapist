@@ -1,4 +1,5 @@
 import "server-only";
+import { errorKind } from "@/lib/errors";
 import { isLivekitConfigured, env } from "@/lib/env";
 import { roomNameFor } from "./livekit";
 
@@ -100,7 +101,7 @@ export async function closeVoiceRoom(circleId: string): Promise<void> {
     if (status === 404) {
       console.info("[voice] no room to close — this circle was text only");
     } else {
-      console.error("[voice] could not close the voice room", error);
+      console.error("[voice] could not close the voice room", errorKind(error));
     }
   }
 }

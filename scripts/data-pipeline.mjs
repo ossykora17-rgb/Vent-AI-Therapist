@@ -28,7 +28,8 @@ import { app, ROOT } from "./app-imports.mjs";
 const { classify } = await app("src/lib/vent/intent.ts");
 const { buildFlavour } = await app("src/lib/flavour/profile.ts");
 const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
-const { checkMessage } = await app("src/lib/circles/rules.ts");
+const { gradeReply } = await app("src/lib/vent/quality.ts");
+const { endsMidSentence, modelFailureReply, MODEL_STATUSES } = await app("src/lib/vent/model.ts");
 
 const DATA_DIR = path.resolve(ROOT, process.env.VENT_DATA_DIR || ".data");
 const OUT_DIR = path.resolve(ROOT, process.env.VENT_OUT_DIR || "data");
@@ -137,6 +138,18 @@ function extract(db) {
         memory_used: memory.length,
         created_at: v.created_at,
         raw: v.user_message,
+        language: v.language === "pidgin" ? "pidgin" : "en",
+        /*
+          Everything this person has actually written, so the graders that
+          need evidence get it.
+
+          `invented` and `diagnosis` both skip themselves without it — and a
+          grader that skips itself in the one place a bad reply becomes
+          permanent is the worst place for it to be silent. Same construction
+          the live route uses: their whole side of the conversation, not just
+          this turn.
+        */
+        said: [...memory.map((m) => m.user_message), v.user_message].join("\n"),
       });
 
       if ((v.intent_type ?? c.intent) === "vent") priorVents.push(v);
@@ -146,26 +159,105 @@ function extract(db) {
 }
 
 // ── quality heuristics ─────────────────────────────────────────────────────
-const PLACEHOLDER = /running without my model key|network dipped on my side/i;
+/*
+  Every sentence the product says when the model did not answer.
 
-/** Each returns a reason to drop, or null to keep. Order is cheapest-first. */
+  This was `/running without my model key|network dipped on my side/i` — two
+  phrases, hand-typed, against a `modelFailureReply` that produces seven. It
+  caught the network one and missed the one that actually happens: "Too many
+  at once on my side", the upstream 429, which is stored seven times in
+  production with a real tactic and `intent_type: vent` and would have been
+  trained on as if a person had been answered.
+
+  Derived now, by asking the function what it can say for every status it
+  knows. Exact match rather than a regex, because these are authored constants
+  and the route stores them verbatim — a substring rule over somebody's real
+  words is how a filter starts eating replies it should keep.
+*/
+const FAILURE_REPLIES = new Set(MODEL_STATUSES.map((s) => modelFailureReply(s)));
+
+/** The no-key fallback is built from the person's own turn, so it stays a phrase. */
+const PLACEHOLDER = /running without my model key/i;
+
+/*
+  THE GRADERS RUN HERE TOO, AND THIS IS WHERE THEY MATTER MOST
+
+  This filter list had six entries and none of them was `gradeReply` — the
+  product's own fifteen-grader reply module, which is deterministic, free, and
+  already imported by the failsafe, the eval suite and the nightly audit.
+  Every surface that reads a reply asked it except the one that turns replies
+  into training targets.
+
+  A bad reply reaches one person on one night. A bad *training example*
+  teaches the model to produce that reply for everybody, permanently, and the
+  fix cannot be a prompt change afterwards. Of 178 real replies: 16 end
+  mid-sentence, 5 name a condition the person never used, 9 are in the wrong
+  language, 42 break the sentence cap. Every one of them was eligible for the
+  training set.
+
+  `gives_advice` used to be `checkMessage(completion, "share")` — the
+  *circles* governance rule applied to private-session replies. `quality.ts`
+  records making exactly this mistake and undoing it: "it used to import the
+  circles cross-talk rule too, and 'that one no be your fault' — correct in a
+  private session, blaming in a room of six — was being graded by a rule from
+  the wrong room." The lesson reached `quality.ts` and not the pipeline, which
+  is this repository's most-recorded shape. `gradeReply` covers advice
+  properly, through the same `containsAdvice`, without the crosstalk rules and
+  the one-line share cap that belong to a room of six.
+
+  Fatal and major drop; minor does not. That is what the severities already
+  mean — fatal blocks a release, major is a regression, minor is drift — and
+  `length` is the only minor here. A four-sentence reply is worth keeping and
+  worth counting.
+*/
+
+/**
+ * Each returns a reason to drop, `true` to drop under its own name, or a
+ * falsy value to keep. Order is cheapest-first, and the graders come last
+ * because they are the only entry that does real work.
+ */
 const FILTERS = [
   ["not_a_vent", (r) => r.intent !== "vent"],
   ["too_short", (r) => norm(r.raw).length < 5],
   ["no_completion", (r) => r.completion.trim().length === 0],
   ["fallback_text", (r) => PLACEHOLDER.test(r.completion)],
+  ["model_failed", (r) => FAILURE_REPLIES.has(r.completion.trim())],
   ["no_tactic", (r) => !r.tactic],
-  // The circle's own governance, reused as a quality filter. A reply that
-  // would be refused in a room is not a reply worth training on.
-  ["gives_advice", (r) => !checkMessage(r.completion, "share").ok],
+  /*
+    A fragment is never a training target, whatever cut it off.
+
+    The stored row has no provider left to ask, so this asks the half of
+    `wasCutOff` that reads the text — imported, not copied.
+  */
+  ["truncated", (r) => endsMidSentence(r.completion)],
+  [
+    "graded",
+    (r) => {
+      const bad = gradeReply(
+        { id: r.id, message: r.raw, intent: "vent", language: r.language, probes: "pipeline" },
+        r.completion,
+        { tokensSpent: true, said: r.said },
+      ).filter((f) => f.severity === "fatal" || f.severity === "major");
+      // Named by the grader that caught it. "graded: 9" would say the filter
+      // works; "diagnosis: 5 · language: 9" says what the product is doing.
+      return bad.length ? bad[0].grader : false;
+    },
+  ],
 ];
 
 function filter(records) {
   const dropped = {};
   const kept = [];
   for (const r of records) {
-    const hit = FILTERS.find(([, f]) => f(r));
-    if (hit) dropped[hit[0]] = (dropped[hit[0]] ?? 0) + 1;
+    let reason = null;
+    for (const [name, f] of FILTERS) {
+      const hit = f(r);
+      if (hit) {
+        reason = typeof hit === "string" ? hit : name;
+        break;
+      }
+    }
+    if (reason) dropped[reason] = (dropped[reason] ?? 0) + 1;
     else kept.push(r);
   }
   return { kept, dropped };
@@ -265,8 +357,22 @@ console.log(`\nMIND WEAVE — data pipeline\n${"─".repeat(58)}`);
 console.log(`source        ${path.relative(ROOT, DATA_DIR)}/vent.json`);
 console.log(`extracted     ${raw.length} rows from ${new Set(raw.map((r) => r.user)).size} people`);
 
+/*
+  Every reason that fired, not every reason that was declared.
+
+  This printed one line per entry in FILTERS, which was complete while every
+  filter dropped under its own name. The graders drop under the *grader's*
+  name — `diagnosis`, `language`, `advice` — so six rows went missing from a
+  tally that still added up to a number, in the report whose whole job is
+  saying what the training set is made of. Found by check 10's row count,
+  which is the assertion that reconciles the two.
+
+  Declared-and-never-fired still prints, because a filter silently doing
+  nothing is the thing worth seeing.
+*/
 console.log(`\nquality filters`);
-for (const [name] of FILTERS) {
+const declared = FILTERS.map(([name]) => name);
+for (const name of [...declared, ...Object.keys(dropped).filter((k) => !declared.includes(k))]) {
   console.log(`  ${String(dropped[name] ?? 0).padStart(4)}  dropped: ${name}`);
 }
 console.log(`  ${String(exact).padStart(4)}  dropped: exact duplicate`);

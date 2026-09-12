@@ -1,8 +1,9 @@
+import { errorKind } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore } from "@/lib/store";
-import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
-import { CIRCLE_MINUTES, MAX_SEATS, roleForSeat } from "@/lib/circles/rules";
+import { classify, CRISIS_LINES, crisisReply } from "@/lib/vent/intent";
+import { CIRCLE_MINUTES, MAX_SEATS, phaseFor, roleForSeat } from "@/lib/circles/rules";
 import { sweepIfOver } from "@/lib/circles/sweep";
 import { withStore } from "@/lib/http/with-store";
 
@@ -53,11 +54,12 @@ const createSchema = z.object({
 const SWEEP_BATCH = 5;
 
 /** Open circles, with seat counts. No content, ever — just the shape. */
-async function handleGET() {
+async function handleGET(request: Request) {
   const store = getStore();
   if (!store) {
     return NextResponse.json({ circles: [], persisting: false, storage: "none" });
   }
+  const anonId = new URL(request.url).searchParams.get("anonId") ?? "";
 
   /*
     The circles nobody is asking about, which is all of the ones that matter.
@@ -110,12 +112,44 @@ async function handleGET() {
     const stale = await store.expiredUnclosedCircles(SWEEP_BATCH);
     await Promise.allSettled(stale.map((c) => sweepIfOver(store, c)));
   } catch (error) {
-    console.error("[circles] lobby sweep failed", error);
+    console.error("[circles] lobby sweep failed", errorKind(error));
+  }
+
+  const circles = await store.listOpenCircles();
+
+  /*
+    Which one of these is yours.
+
+    A seat is held for the full forty-five minutes and there is no leave path,
+    so somebody who closed the tab has a room and no way to find it — every
+    card on this screen reads "Take a seat →", including the one they are
+    already sitting in. The route now sends them back to it rather than
+    opening an empty second room, which is the right answer to the wrong
+    question: the screen should not have offered.
+
+    Your own id, or nothing. Nobody learns where anybody else is sitting, and
+    somebody holding another person's anon id already has the transcript, so
+    this adds no reach to a credential that is lost. Ids only, never the
+    members of a room: `listOpenCircles` is returned to the browser verbatim
+    and an anon id in it would be published to whoever loads the page.
+
+    Never fails the lobby. Not knowing which room is yours is a worse screen;
+    a lobby that 500s is no screen at all.
+  */
+  let mine: string | null = null;
+  if (anonId) {
+    try {
+      const seated = new Set(await store.seatedIn(anonId));
+      mine = circles.find((c) => seated.has(c.id))?.id ?? null;
+    } catch (error) {
+      console.warn("[circles] could not read which room is theirs", errorKind(error));
+    }
   }
 
   return NextResponse.json(
     {
-      circles: await store.listOpenCircles(),
+      circles,
+      mine,
       maxSeats: MAX_SEATS,
       persisting: true,
       storage: store.kind,
@@ -139,9 +173,10 @@ async function handlePOST(request: Request) {
   const input = parsed.data;
 
   // A circle cannot hold a crisis. Route to a person, not to five strangers.
-  if (input.intent && classify(input.intent).intent === "crisis") {
+  const seedIntent = input.intent ? classify(input.intent) : null;
+  if (seedIntent?.intent === "crisis") {
     return NextResponse.json(
-      { error: "crisis", reply: CRISIS_RESPONSE, crisis: { ...CRISIS_LINES, gated: true } },
+      { error: "crisis", reply: crisisReply(seedIntent.language), crisis: { ...CRISIS_LINES, gated: true } },
       { status: 409 },
     );
   }
@@ -154,8 +189,120 @@ async function handlePOST(request: Request) {
     );
   }
 
-  const now = new Date();
+  /*
+    THE ROOM THAT IS ALREADY OPEN, BEFORE OPENING A SECOND EMPTY ONE
+
+    Of the first sixteen circles, **fourteen had exactly one person in them**
+    and nobody has ever spoken in one. This route is why. It created a circle
+    unconditionally, so somebody opening a `family` room at 9pm sat alone, and
+    somebody wanting a family room at 9.05 tapped the same button and got a
+    *second* empty family room. Two people who came for the same thing, in the
+    same minute, in different rooms — and the Keeper needs `members.length > 1`
+    to say a single word, so neither room ever started.
+
+    Six seats and eight users is not a product that can afford to split its own
+    scarce people. This is the cheapest possible repair and it changes nothing
+    about the vision: same six seats, same forty-five minutes, same tag — it
+    only stops the product from competing with itself.
+
+    Narrow on purpose. Same tag (null matches null: an untagged room is still a
+    room). Seats free. And still early enough to be worth sitting down in,
+    which is read off the phase machine rather than a new number — `reflect`
+    and `close` are the last seven minutes, and joining a circle there buys
+    somebody a countdown instead of a conversation.
+
+    Falls through to creating on any doubt: no rooms, a full one, a seat that
+    lost its race. A person who asked for a circle always gets one.
+  */
   let circle;
+  try {
+    const open = (await store.listOpenCircles()) ?? [];
+
+    /*
+      THE SEAT THEY ARE ALREADY SITTING IN
+
+      Found by the live check for the block below failing on its second run.
+      `addMember` answers false for two different events — the room filled, and
+      you are already in it — and the find below only ever looked at rooms with
+      a *free* seat, so somebody already seated in a room that had since filled
+      up fell through and was handed a new empty one. The fragmentation this
+      whole block exists to stop, arriving in the one case where the room was
+      working: six people in it.
+
+      It is asked before the tag matches, because there is no leave path — a
+      seat is held for the full forty-five minutes whether or not anybody is
+      looking at it. Letting somebody hold two is worse than sending them to
+      the wrong one: `members.length > 1` is the Keeper's whole trigger, so a
+      phantom seat is a room the Keeper opens for nobody.
+
+      Ids only, intersected here. The lobby returns `listOpenCircles()`
+      verbatim to the browser, so the seat lookup could not be folded into it
+      without publishing every seated person's anon id to whoever loads the
+      page.
+    */
+    if (open.length > 0) {
+      const seated = new Set(await store.seatedIn(input.anonId));
+      const held = open.find((c) => seated.has(c.id));
+      if (held) {
+        const me = (await store.listMembers(held.id)).find((x) => x.anon_id === input.anonId);
+        if (me) {
+          return NextResponse.json(
+            // The role they hold, never one recomputed from a seat count that
+            // has moved since — they are already in the ring at a position.
+            { circle: held, role: me.role, joined: "seated", storage: store.kind },
+            { status: 200, headers: { "cache-control": "no-store" } },
+          );
+        }
+      }
+    }
+
+    const mine = open.find(
+      (c) =>
+        (c.tag ?? null) === (input.tag ?? null) &&
+        c.seats > 0 &&
+        c.seats < MAX_SEATS &&
+        c.creator_anon_id !== input.anonId &&
+        ["breathe", "intention", "shares"].includes(
+          phaseFor(new Date(c.ends_at).getTime() - Date.now()),
+        ),
+    );
+    if (mine) {
+      const took = await store.addMember({
+        circle_id: mine.id,
+        anon_id: input.anonId,
+        role: roleForSeat(mine.seats),
+        pressure_seeded: input.pressure != null ? Math.round(input.pressure) : null,
+      });
+      /*
+        `addMember` answers false for two different events — the room filled,
+        and you are already sitting in it. The seat check above handles the
+        ordinary version of the second; what is left here is the race, where a
+        second tab took this seat in the milliseconds between that read and
+        this write. Falling through would open the empty room this block
+        exists to prevent, so it is worth one lookup on a write that said no.
+      */
+      const already = took
+        ? null
+        : (await store.listMembers(mine.id)).find((x) => x.anon_id === input.anonId);
+      if (took || already) {
+        return NextResponse.json(
+          {
+            circle: mine,
+            role: already?.role ?? roleForSeat(mine.seats),
+            joined: already ? "seated" : "existing",
+            storage: store.kind,
+          },
+          { status: 200, headers: { "cache-control": "no-store" } },
+        );
+      }
+    }
+  } catch (error) {
+    // A lookup that failed is not a reason to refuse somebody a circle. Open
+    // a new one, which is exactly what this route did before it could look.
+    console.warn("[circles] could not check for an open room", errorKind(error));
+  }
+
+  const now = new Date();
   try {
     // The one store method that throws rather than returning null. An insert
     // the database rejects was a 500 here; the caller's answer is the same as
@@ -182,7 +329,7 @@ async function handlePOST(request: Request) {
     });
     if (!took) throw new Error("the creator's own seat did not land");
   } catch (error) {
-    console.error("[circles] could not open a circle", error);
+    console.error("[circles] could not open a circle", errorKind(error));
     return NextResponse.json(
       { error: "no_storage", message: NO_CIRCLES_HERE },
       { status: 503, headers: { "cache-control": "no-store" } },
@@ -190,7 +337,8 @@ async function handlePOST(request: Request) {
   }
 
   return NextResponse.json(
-    { circle, role: roleForSeat(0), storage: store.kind },
+    // Always "new" here: the existing-room path above returns on its own.
+    { circle, role: roleForSeat(0), joined: "new", storage: store.kind },
     { status: 201, headers: { "cache-control": "no-store" } },
   );
 }

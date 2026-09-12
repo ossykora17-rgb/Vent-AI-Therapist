@@ -270,6 +270,66 @@ console.log(`since         ${since}`);
 console.log(`new           ${newVents.length} vents · ${newCircles.length} circles · ${newSignals.length} signals`);
 
 /*
+  Whether the failsafe fired, and on what.
+
+  It inspects every model reply and regenerates it once if a grader trips. Its
+  only record used to be a `console.warn` on a plan that keeps stdout for one
+  hour, so the one question worth asking about it — has it ever fired? — had
+  no answer, and the nightly audit could not recover one: the audit grades the
+  reply that was *sent*, which after a successful retry is the good one. 0019
+  keeps grader names on the row, and this prints them.
+
+  A run of zeroes here across a week of real vents is the finding, not the
+  absence of one. It means the graders in `REJECT` never match anything a
+  model actually produces, and every rule they encode is decoration.
+
+  Names only. `rejected_by` carries no detail by construction — the details
+  quote the reply — so this line cannot leak one however it is read.
+*/
+const rejected = newVents.filter((v) => v.rejected_by);
+if (newVents.length) {
+  const byGrader = new Map();
+  for (const v of rejected) {
+    for (const g of String(v.rejected_by).split(" · ")) {
+      byGrader.set(g, (byGrader.get(g) ?? 0) + 1);
+    }
+  }
+  const tally = [...byGrader.entries()].sort((a, b) => b[1] - a[1]).map(([g, n]) => `${g} ${n}`);
+  console.log(`failsafe      ${rejected.length}/${newVents.length} rejected${tally.length ? ` — ${tally.join(" · ")}` : ""}`);
+}
+
+/*
+  A silence that is the sink, not the rooms.
+
+  `keeper_losing` above scores a tag by the mean drop across its circles, and
+  it reads `circle_close` signals — which `logPreference` writes **only where a
+  data directory is real**. Its own header is honest about that and says why:
+  "serverless disks are thrown away, so writing here in production would
+  collect training data that is guaranteed to be lost."
+
+  Honest in the module, and invisible here. Zero closes in this report reads
+  exactly like a week of circles where nothing went wrong, and on the
+  deployment people actually use it means the seal recorded nothing anywhere —
+  no mood, no carry, no drop. The whole efficacy loop for circles is empty by
+  construction rather than by outcome, which is the same shape as the anchor
+  that could never be set, and CLAUDE.md already spends a paragraph on that one.
+
+  It is not repaired here, because the repair is a retention decision: keeping
+  a circle's closing reading past the circle's life is a new thing this product
+  would hold about somebody, on a front page that promises one tap deletes
+  everything. That is read by a person. What this line does is stop the
+  emptiness from looking like a result.
+
+  Printed whenever there are circles and no closes, which is the only shape
+  where the difference matters.
+*/
+if (newCircles.length > 0 && closes.length === 0) {
+  console.log(
+    "closes        0 — the sink is local-only (rlhf/log.ts), so this is silence about the sink, not about the rooms",
+  );
+}
+
+/*
   Nothing to *report* is not nothing to *check*, and this exit did both.
 
   `npm run gate` is the only opinion that counts about whether a change is
@@ -372,7 +432,26 @@ if (GATE) {
     live: Boolean(live),
   };
 
-  console.log(`\n  gate ${gate.passed ? "PASSES — the diff may be merged" : "FAILS — do not merge; read the diff above"}`);
+  /*
+    What it passed, and what it did not look at.
+
+    This said "the diff may be merged", and CLAUDE.md calls this command "the
+    only opinion that counts about whether a change is safe". Both overstate
+    it. CI runs `lint`, `tsc --noEmit` and `build` as well, and a green gate
+    with a red CI is not hypothetical — it happened on the commit that added
+    this line, over a `let` that should have been a `const`.
+
+    The gate cannot run those three and should not try: its whole virtue is
+    zero dependencies, so a fresh `git worktree` runs it with no `npm
+    install`, and eslint, typescript and next are all installs. So the honest
+    repair is not to widen the gate. It is to stop the sentence claiming the
+    three steps it never took — the oldest rule here, applied to the line that
+    grants permission to merge.
+  */
+  console.log(`\n  gate ${gate.passed ? "PASSES — nothing here objects" : "FAILS — do not merge; read the diff above"}`);
+  if (gate.passed) {
+    console.log("       not run here: lint · tsc --noEmit · build — CI runs all three");
+  }
 }
 
 // ── record ─────────────────────────────────────────────────────────────────

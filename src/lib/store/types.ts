@@ -22,6 +22,15 @@ export interface VentRow {
   tactic_used: string | null;
   /** Which extraction question was asked. Mirrors tactic_used — see probes.ts. */
   probe_used: string | null;
+  /**
+   * Which graders rejected the first attempt, or null.
+   *
+   * Names only, never details — the details quote the reply, and a column
+   * outlives a log line. The failsafe's only other record is a `console.warn`
+   * on a plan that keeps stdout for one hour, so without this a failsafe that
+   * works and a failsafe that is dead code look identical.
+   */
+  rejected_by: string | null;
   intent_type: string | null;
   real_world_tag: string | null;
   real_date_used: string | null;
@@ -308,6 +317,20 @@ export interface Store {
    * depending on where the deployment keeps its rows.
    */
   listMembers(circleId: string): Promise<CircleMemberRow[]>;
+  /**
+   * Which circles this person already holds a seat in. Ids only.
+   *
+   * Ids and nothing else on purpose. The one existing way to answer this was
+   * `listMembers` per circle, and the lobby route returns `listOpenCircles()`
+   * verbatim to the browser — so widening *that* to carry members would
+   * publish every seated person's anon id to anybody who loads the page, and
+   * an anon id here is not an identifier, it is the whole credential.
+   *
+   * Open-ness is not asked about, because this table does not know: the
+   * caller intersects with `listOpenCircles`, which already owns both the
+   * status and the clock predicate.
+   */
+  seatedIn(anonId: string): Promise<string[]>;
   /**
    * Take a seat. **True only if a row was actually written.**
    *

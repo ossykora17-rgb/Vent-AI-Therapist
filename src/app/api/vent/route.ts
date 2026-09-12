@@ -1,18 +1,19 @@
+import { errorKind } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore, type Store, type VentRow } from "@/lib/store";
 import { isModelConfigured } from "@/lib/env";
 import { answerFactual, groundNow } from "@/lib/vent/grounding";
-import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
-import { CARRY_WORDS, OBJECT_IDS } from "@/lib/vent/chairs";
+import { classify, CRISIS_LINES, crisisReply } from "@/lib/vent/intent";
+import { CARRY_WORDS, OBJECT_IDS, tensionNow } from "@/lib/vent/chairs";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
 import { selectProbe } from "@/lib/vent/probes";
 import { blendEfficacy, getEfficacy, measurePersonalEfficacy } from "@/lib/vent/efficacy";
 import { findPattern, type Pattern } from "@/lib/vent/pattern";
 import { coverage, COVERAGE_FLOOR } from "@/lib/vent/scan";
-import { buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
+import { STABLE_PREFIX, buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
 import { research } from "@/lib/vent/research";
-import { inspectReply } from "@/lib/vent/failsafe";
+import { chooseReply, inspectReply } from "@/lib/vent/failsafe";
 import { allianceLine, openingLine, shouldSayAlliance } from "@/lib/vent/intake";
 import { MEMORY_TURNS, memoryFetchSize, selectMemory } from "@/lib/vent/memory";
 import { noModelKeyReply } from "@/lib/vent/fallback";
@@ -180,17 +181,17 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
         });
         if (userId) {
           saved = await tryPersist(
-            store, userId, input, classification, CRISIS_RESPONSE, null, null, grounding.iso, true,
+            store, userId, input, classification, crisisReply(classification.language), null, null, grounding.iso, true,
           );
         }
       } catch (error) {
-        console.error("[vent] store unreachable on the crisis path", error);
+        console.error("[vent] store unreachable on the crisis path", errorKind(error));
       }
     }
     return NextResponse.json(
       {
         intent: "crisis",
-        reply: CRISIS_RESPONSE,
+        reply: crisisReply(classification.language),
         crisis: { ...CRISIS_LINES, gated: true },
         /*
           The turn that most needs a risk level was the one without one.
@@ -305,7 +306,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
             edge
               ? {
                   error: "rate_limited",
-                  reply: CRISIS_RESPONSE,
+                  reply: crisisReply(classification.language),
                   crisis: { ...CRISIS_LINES, gated: false },
                 }
               : {
@@ -333,7 +334,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
           .filter((t): t is string => Boolean(t));
       }
     } catch (error) {
-      console.error("[vent] store unreachable — continuing without it", error);
+      console.error("[vent] store unreachable — continuing without it", errorKind(error));
       userId = null;
       history = [];
       recentTactics = [];
@@ -495,6 +496,13 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
   let reply: string;
   let tokensSpent = false;
   let answeredBy: string | null = null;
+  /*
+    Null on every path that never reached a model, which is most of them:
+    crisis, factual, greeting and meta are answered locally and for free, and
+    there is no reply of ours to inspect. Null means "not inspected", not
+    "clean" — the two are distinguishable because `tokensSpent` says which.
+  */
+  let rejectedBy: string | null = null;
   let keyless = false;
 
   if (!isModelConfigured) {
@@ -537,6 +545,11 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
       ];
       const answered = await generateReply({
         system: systemPrompt,
+        // What `buildSystemPrompt` guarantees is at the front of what it just
+        // returned. Passed rather than recomputed inside the adapter, so a
+        // provider that cannot use it ignores a field instead of importing the
+        // prompt builder.
+        cachePrefix: STABLE_PREFIX,
         maxTokens: MAX_TOKENS,
         // Cheap for the ordinary 80%, everything for the edge. Decided by a
         // regex pass over a message that is already classified — this product
@@ -584,12 +597,39 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
       */
       const said = [...history.map((h) => h.user_message), input.message].join("\n");
       const verdictOnReply = inspectReply(asCase, reply, said);
+      /*
+        Kept for the row, because the log line does not survive the night.
+
+        This runs on a Hobby plan, which keeps runtime logs for one hour. The
+        `console.warn` below is the failsafe's only other record, so without
+        this the question "has the failsafe ever fired in production" has no
+        answer at all — and the nightly audit cannot recover it, because the
+        audit grades the reply that was *sent*, which after a successful retry
+        is the good one. A failsafe that works and a failsafe that is dead code
+        look identical from every surface this repository has.
+
+        Grader names, never details. Same rule as the log line and stricter for
+        the same reason: a column outlives a log.
+
+        Set before the clock is consulted, so the row also records the state
+        nothing else can see — rejected, and shipped anyway because there was
+        not enough time left to afford a second call.
+      */
+      rejectedBy = verdictOnReply.reject;
       const leftOnTheClock = maxDuration * 1000 - (Date.now() - startedAt);
       if (verdictOnReply.reject && leftOnTheClock > RETRY_DEADLINE_MS) {
         console.warn("[vent] rejected own reply:", verdictOnReply.reject);
         try {
           const again = await generateReply({
+            /*
+              The correction is appended, so the prefix survives it — and this
+              is the call that benefits most. A retry happens seconds after the
+              call that wrote the cache entry, on the same constitution, so the
+              second billed call of a rejected turn pays the discounted rate
+              for the ~1,574 tokens the first one just paid full price for.
+            */
             system: `${systemPrompt}\n\n${verdictOnReply.correction}`,
+            cachePrefix: STABLE_PREFIX,
             maxTokens: MAX_TOKENS,
             depth: verdict.depth,
             deadlineMs: RETRY_DEADLINE_MS,
@@ -604,10 +644,29 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
             */
             messages: modelMessages,
           });
-          reply = inspectReply(asCase, again.text, said).reject
-            ? tactic.hold ?? reply
-            : again.text;
-          answeredBy = again.provider;
+          /*
+            Best attempt wins, and the authored line is the floor rather than
+            the default.
+
+            This was `secondVerdict.reject ? tactic.hold : again.text`, which
+            was right while every rejection meant the reply was harmful. It
+            stopped being right when `language` joined the retry tier: a retry
+            that comes back in English again is not harmful, and swapping it
+            for an authored English hold trades an engaged reply for a bland
+            one and calls it a repair. `chooseReply` holds that decision,
+            beside the tiers it depends on, so the two cannot drift.
+          */
+          const attempts = [
+            { text: again.text, verdict: inspectReply(asCase, again.text, said) },
+            { text: reply, verdict: verdictOnReply },
+          ];
+          const chosen = chooseReply(attempts, tactic.hold ?? null);
+          if (chosen) {
+            reply = chosen.text;
+            // Only the retry changes who answered. The hold is ours, and the
+            // first attempt is already attributed.
+            if (chosen.from === 0) answeredBy = again.provider;
+          }
         } catch {
           // The retry is a second opinion on our own output. Unreachable means
           // keep what we have rather than leave somebody with nothing.
@@ -650,7 +709,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
 
   const saved =
     store && userId
-      ? await tryPersist(store, userId, input, classification, reply, tactic.id, probe?.id ?? null, grounding.iso)
+      ? await tryPersist(store, userId, input, classification, reply, tactic.id, probe?.id ?? null, grounding.iso, false, rejectedBy)
       : false;
 
   /*
@@ -1010,7 +1069,7 @@ async function tryPersist(...args: Parameters<typeof persist>): Promise<boolean>
     await persist(...args);
     return true;
   } catch (error) {
-    console.error("[vent] store write failed", error);
+    console.error("[vent] store write failed", errorKind(error));
     return false;
   }
 }
@@ -1025,6 +1084,12 @@ async function persist(
   probeId: string | null,
   isoDate: string,
   safetyFlagged = false,
+  /*
+    Which graders rejected the first attempt, or null on every path that never
+    reached a model. Trailing and defaulted, because only the vent path has an
+    answer — the free paths write no reply of ours to inspect.
+  */
+  rejectedBy: string | null = null,
 ) {
   await store.insertVent({
     user_id: userId,
@@ -1040,6 +1105,7 @@ async function persist(
     pressure_value: input.pressure ?? null,
     tactic_used: tacticId,
     probe_used: probeId,
+    rejected_by: rejectedBy,
     intent_type: classification.intent,
     real_world_tag: classification.realWorldTag,
     real_date_used: isoDate,
@@ -1095,10 +1161,24 @@ async function handlePATCH(request: Request) {
     );
   }
 
-  // Mood 1–10 becomes tension 0–100, inverted — feeling better is less
-  // tension. The same arithmetic the circle close uses, so the two surfaces
-  // cannot disagree about what a 7 means.
-  const tensionAfter = Math.round((10 - parsed.data.mood) * 10);
+  /*
+    Mood 1–10 becomes tension 0–100, inverted — feeling better is less
+    tension. The same arithmetic the circle close uses, so the two surfaces
+    cannot disagree about what a 7 means.
+
+    That sentence was true and the code did not make it true: it read
+    `Math.round((10 - mood) * 10)` while the circle close called
+    `tensionNow(mood)`. Two copies agreeing by luck, under a comment
+    guaranteeing they could not disagree — which is the same shape as
+    `wasAuthored`'s "closed set" and the operator vocabulary "kept in step by
+    intent rather than by import", both of which had already drifted when
+    somebody finally looked.
+
+    No divergence today: zod pins mood to an integer 1–10, so the missing
+    clamp in the copy could never bite. It is the guarantee that was
+    imaginary, not the arithmetic.
+  */
+  const tensionAfter = tensionNow(parsed.data.mood);
   const anchored = await store.anchorLatestVent(userId, parsed.data.mood, tensionAfter);
 
   return NextResponse.json(
@@ -1218,7 +1298,7 @@ export const POST = withStore(async (request: Request) => {
           event instead, where the client reads it exactly as it reads every
           other `done`.
         */
-        console.error("[vent] stream failed", error);
+        console.error("[vent] stream failed", errorKind(error));
         send("done", {
           status: 500,
           body: {

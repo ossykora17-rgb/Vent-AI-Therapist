@@ -37,13 +37,33 @@ export function ServiceWorkerRegistrar() {
         with nothing said about them. They keep, and they retry on the next
         drain, but the person is owed the count.
       */
+      /*
+        And the case where *none* of them landed is the one worth saying most.
+
+        This was `if (sent > 0)`. The comment above is about not letting
+        somebody read "3 sent up" while two sat on the device — the partial
+        case, correctly fixed. The total failure was left silent: a rate limit
+        on the first vent, or a 200 the route marked `persisted: false`, and
+        the drain reports nothing at all.
+
+        That is the worst of the four states. Somebody wrote with no signal,
+        came back online expecting the room to have caught up, and the product
+        said nothing while their words sat on the device. Half a repair, and
+        the half it skipped is the half where the person is owed a sentence.
+
+        Silence stays correct in exactly one state: nothing queued, nothing
+        sent, nothing to say.
+      */
       const left = readQueue().length;
-      if (sent > 0) {
+      if (sent > 0 || left > 0) {
+        const waiting = `${left} still waiting.`;
         toast(
-          left > 0
-            ? `Back online — ${sent} sent up, ${left} still waiting.`
-            : `Back online — ${sent} saved ${sent === 1 ? "vent" : "vents"} sent up.`,
-          left > 0 ? "info" : "success",
+          sent === 0
+            ? `Back online — nothing went up yet. ${waiting}`
+            : left > 0
+              ? `Back online — ${sent} sent up, ${waiting}`
+              : `Back online — ${sent} saved ${sent === 1 ? "vent" : "vents"} sent up.`,
+          sent > 0 && left === 0 ? "success" : "info",
         );
       }
     }

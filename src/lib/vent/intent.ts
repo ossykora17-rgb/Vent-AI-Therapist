@@ -88,6 +88,53 @@ const CRISIS = [
   // something ordinary.
   /\bwant to disappear\b(?!\s+(from|off|out of|into)\b)/,
 
+  /*
+    ── passive: the conditional, which is how it is usually first said ──────
+
+    Every pattern above this block needs a first-person present desire — "I
+    want", "I don't want", "I wish I was". Passive ideation is more often
+    hypothetical than declarative, and the router caught none of that shape:
+
+      "If I disappeared tomorrow"              → vent
+      "what if I just disappeared"             → vent
+      "sometimes I think about disappearing"   → vent
+      "nobody would miss me if I was gone"     → vent
+      "I wish I could just not wake up"        → vent
+      "if i no dey again, e go better"         → vent
+
+    Every one of those is a positive item on the C-SSRS's first category —
+    wish to be dead — and the last one is the Pidgin form, which is the gap
+    this file already learned once with "i wan die". The section above says
+    "a router that waits for 'kill myself' is waiting for the version many
+    people never write down", and then waited for a version many people never
+    write down either.
+
+    Found by a person reading a product screenshot, not by anything here.
+
+    THE EXCLUSIONS ARE THE WORK
+
+    Each pattern carries the same `(?:for|from|off|to)` guard the disappear
+    line already had, because the words are ordinary the moment a destination
+    follows them: "disappeared for a week", "gone from that team", "think
+    about disappearing from that WhatsApp group". The `nobody` pattern
+    requires an absence clause within the same sentence, so "nobody would
+    notice if I changed my hair" is untouched.
+
+    AND ONE THAT IS DELIBERATELY NOT HERE
+
+    Bare "if I died". "If I died my laptop password is in the drawer" is a
+    practical sentence people write, and gating it would be the group-chat
+    false positive again. It is the most arguable omission in this list — the
+    clinical reading of somebody unprompted putting their affairs in order is
+    not nothing — and it is left out rather than left undecided. "What if I
+    just died" is a different sentence and is covered below.
+  */
+  /\bif i (?:disappeared|vanished|was gone|were gone|wasn'?t here|was not here|wasn'?t around)\b(?!\s+(?:for|from|off|to)\b)/,
+  /\bwhat if i (?:just )?(?:disappeared|vanished|wasn'?t here|stopped existing|died)\b(?!\s+(?:for|from|off|to)\b)/,
+  /\bthink(?:ing)? about (?:just )?(?:disappearing|vanishing|not existing|not being here)\b(?!\s+(?:for|from|off|to)\b)/,
+  /\bwish i could (?:just )?(?:not wake up|never wake up|stop existing|disappear|sleep forever|not be here|not exist)\b/,
+  /\b(?:nobody|no one|no-one)\b[^.?!]{0,44}\bif i (?:was|were|wasn'?t|weren'?t|disappeared|vanished|died|left)\b/,
+
   // ── Pidgin ───────────────────────────────────────────────────────────────
   //
   // "i wan die" is the sentence this list existed for and did not have.
@@ -99,6 +146,17 @@ const CRISIS = [
   /\bi wan comot for this world\b/,
   /\btire for this life\b/,
   /\bi no fit continue this life\b/,
+  /*
+    The conditional, in Pidgin. Same gap as the English block above and the
+    one that would be missed longest, because this is the register somebody
+    reaches for when they are not ready to say it plainly.
+
+    "if i no dey" needs its guard as much as the English does — "if i no dey
+    for work tomorrow, who go cover me?" is a rota question.
+  */
+  /\bif i no dey\b(?!\s+(?:for|house|work|here)\b)/,
+  /\be go better if i no dey\b/,
+  /\bnobody go miss me\b/,
 ];
 
 const FACTUAL = [
@@ -210,6 +268,57 @@ const REAL_WORLD: Array<[Exclude<RealWorldTag, null>, RegExp]> = [
 ];
 
 /**
+ * The tags, as a value, so the database's CHECK can be held to them.
+ *
+ * `vents.real_world_tag` carries `check (real_world_tag = any (array[...]))` —
+ * nine strings hand-written into SQL from the table above. They agree today.
+ * The same arrangement on `vent_feedback` did not: production grew a `UNIQUE
+ * (user_id)` that no migration declares, and a person's second rating became a
+ * 500. An enum wider than its constraint is a write that fails in a shape
+ * nothing tests.
+ *
+ * Read off the table rather than typed again beside it — a second list here
+ * would be the drift this exists to catch.
+ */
+export const REAL_WORLD_TAGS = REAL_WORLD.map(([tag]) => tag);
+
+/**
+ * The words a circle on this pressure will actually repeat.
+ *
+ * The Keeper's thirty-eight-minute reflection counts repeated words across
+ * what the room said. Its word list was eighteen entries — `chest`, `throat`,
+ * `tired`, `shame` — body and affect, and **not one word from any of the nine
+ * pressures a circle is convened around**. So a money circle could not hear
+ * *money*, a japa circle could not hear *visa*, and the Keeper's one real move
+ * fell through to "N people spoke" every time. Measured over three-share
+ * circles built from real sentences this router itself tagged: it named a
+ * pattern in **0** of them.
+ *
+ * Derived here rather than listed there, because the table above already *is*
+ * the vocabulary — the words that identify a pressure are the words a room on
+ * that pressure repeats — and because a tenth pressure must not need somebody
+ * to remember a second list. This is the same argument `REAL_WORLD_TAGS`
+ * makes one line up.
+ *
+ * `(?:…)\w*` extends a prefix alternative to the whole word, so `\b(relocat)`
+ * counts *relocating* and *relocated* as the words people typed rather than as
+ * a stem nobody wrote. Literal alternatives already end at `\b` and are
+ * unaffected.
+ */
+/*
+  Takes a string rather than `RealWorldTag`, deliberately. `circles.tag` is
+  `string | null` on the row — the database holds it to the nine with a CHECK,
+  the TypeScript does not — and a cast here would assert a guarantee neither
+  side actually makes. A tag this table does not know returns null and the
+  Keeper simply hears no theme words, which is the correct degradation and the
+  same one an untagged circle gets.
+*/
+export function themePattern(tag: string | null | undefined): RegExp | null {
+  const found = REAL_WORLD.find(([t]) => t === tag);
+  return found ? new RegExp(`(?:${found[1].source})\\w*`, "gi") : null;
+}
+
+/**
  * Pidgin, and the two words that are also ordinary English.
  *
  * "AI too dey zuga with some of those weird speakings." A real person, about
@@ -234,14 +343,87 @@ const REAL_WORLD: Array<[Exclude<RealWorldTag, null>, RegExp]> = [
  * no fit breathe" is Pidgin and "I don't fit in" is not, and the difference is
  * the word in front.
  */
-const PIDGIN_STRONG = [
-  /\bdey\b/, /\bwetin\b/, /\babeg\b/, /\bna\b/, /\boga\b/, /\bpikin\b/,
-  /\bwahala\b/, /\bshege\b/, /\bhow far\b/, /\bmake e\b/, /\bno be\b/,
-  /\bgo dey\b/, /\bsabi\b/,
+/**
+ * Grammar: what makes a sentence Pidgin rather than decorated with it.
+ *
+ * `dey` as progressive and copula, `na` as focus, `wey` as relativiser, `no
+ * be` as negative copula, `make i` as subjunctive, `don` as perfective, `e
+ * go` as future. A sentence carrying these is built in Pidgin. A sentence
+ * carrying none of them is not, whatever vocabulary it borrows.
+ *
+ * `don` has a negative lookahead because it is spelled like the first three
+ * letters of the commonest contraction in English, and `\bdon\b` matches
+ * inside "don't" — the boundary holds against an apostrophe. That cost seven
+ * of fourteen false hits before it was found.
+ */
+export const PIDGIN_GRAMMAR = [
+  /\bdey\b/, /\bna\b/, /\bwey\b/, /\bno be\b/, /\bbe say\b/, /\bgo dey\b/,
+  /*
+    `make I`, `make we`, `make e`, `make dem` — and deliberately not
+    `make you`.
+
+    Pidgin's subjunctive covers the whole paradigm, and "make you no worry" is
+    perfectly good Pidgin. But "make you" is also ordinary English — "what
+    make you think", "to make you feel" — and it was the single commonest hit
+    in the corpus: 12 of 30 matches across 166 English replies, more than
+    `dey`. Second person is the one cell of the paradigm that collides, and
+    including it turned a grammar test into a coin flip.
+
+    Same shape as `\bfit\b`, which decided the router's language until it was
+    cut down to constructions. Third time this list has had to give up a word
+    that is Pidgin *and* English, and the rule each time is the same: a marker
+    earns its place by what it excludes.
+  */
+  /\bmake (i|we|e|dem)\b/, /\be go\b/, /\bdon\b(?!['‘’])/, /\bwetin\b/,
   // The constructions, not the bare words. "I no fit" and "belle dey pain me"
   // are Pidgin; "a good fit" and "the belle of the ball" are not.
   /\b(no|go|fit) fit\b/, /\bfit (do|talk|carry|hold)\b/, /\bbelle (dey|de)\b/,
+
+  /*
+    THE VOLITIONAL, AND THE CRISIS SENTENCES THAT NEEDED IT
+
+    `wan` was missing, and the cost was specific rather than general. The crisis
+    list twenty lines up is proud of "i wan die" — "the sentence this list
+    existed for and did not have" — so the *router* has read it as a crisis for
+    a while. This list decides the *language*, and it read it as English. Two
+    detectors, disagreeing about the most important turn in the product, which
+    is the same shape as the router and the grader disagreeing about Pidgin
+    before `quality.ts` imported these lists.
+
+    It only surfaced when the crisis reply became a function of the language.
+    Before that nothing consumed the answer on this path, so the two could
+    disagree for ever and no surface would say a word.
+
+    Measured before adding, on 310 English strings this product says or has
+    been said to: `wan`, `comot` and the `e go` family hit zero. `\bwan\b` does
+    not reach "want" or "wanna" — the boundary stops both — and the English
+    adjective ("a wan smile") is not a word anybody types into this box.
+
+    `nobody go miss me` needed the subject list widened past `e`. Bare `go` is
+    hopeless — "go to work", "I go to the office" — so it stays a construction:
+    a Pidgin or impersonal subject in front of it.
+  */
+  /\bwan\b/, /\bno wan\b/, /\bcomot\b/,
+  /\b(?:dem|una|nobody|person|dis) go\b/,
 ];
+
+/**
+ * Vocabulary: words Nigerian English borrows freely.
+ *
+ * "The wahala at work is too much" is an English sentence. So is "abeg, not
+ * today." These are register, not a language switch — which is exactly why
+ * they are separated from the grammar above rather than listed beside it.
+ *
+ * They still decide *routing*, because somebody who writes "wahala" to this
+ * room is telling you something about how they want to be met. They do not,
+ * on their own, make a *reply* Pidgin — see `quality.ts`.
+ */
+export const PIDGIN_LEXICAL = [
+  /\babeg\b/, /\boga\b/, /\bpikin\b/, /\bwahala\b/, /\bshege\b/,
+  /\bhow far\b/, /\bsabi\b/, /\bkuku\b/, /\bsha\b/,
+];
+
+const PIDGIN_STRONG = [...PIDGIN_GRAMMAR, ...PIDGIN_LEXICAL];
 
 /**
  * Also English, and therefore never enough on their own.
@@ -336,6 +518,45 @@ export function classify(message: string): Classification {
 
 export const CRISIS_RESPONSE =
   "I'm really concerned about you. You deserve support right now, from a person, not a screen. You are not alone.";
+
+/**
+ * The same three things, in the language half this list is written for.
+ *
+ * The router speaks Pidgin on this path and is proud of it — "i wan die is the
+ * sentence this list existed for and did not have" is written twenty lines up,
+ * and the conditional block added "if i no dey again, e go better" beneath it.
+ * The reply did not. So somebody who reached the most important turn in this
+ * product by writing Pidgin was answered in English.
+ *
+ * That is the rule this repository spends more words on than any other,
+ * arriving on the one turn where it costs most. `quality.ts` grades a reply
+ * answered in the wrong language as `major` and buys a retry for it; the crisis
+ * path never calls a model, so no grader was ever going to see this one.
+ *
+ * Three moves, in the same order as the English, because each is doing a job:
+ * name the concern, say plainly that what they need is a person rather than
+ * this screen, and end on the one sentence that is true and is not a promise.
+ *
+ * NEEDS A PIDGIN SPEAKER'S EYES. This is the highest-stakes sentence in the
+ * product and it was written by somebody who does not speak the language. The
+ * grammar is right — `dey`, `na`, `no be`, `no dey` — and whether it *lands* is
+ * not something any check here can answer.
+ */
+export const CRISIS_RESPONSE_PIDGIN =
+  "I dey really worry for you. Wetin you need right now na person, no be screen. You no dey alone.";
+
+/**
+ * The crisis reply, in the register they wrote in.
+ *
+ * A function rather than two exported constants, because five surfaces render
+ * this and the branch belongs in one of them. The client used to import
+ * `CRISIS_RESPONSE` and render that instead of the `reply` the server had
+ * already sent it — a second copy of the most important sentence here, and the
+ * copy the screen actually read.
+ */
+export function crisisReply(language: Classification["language"]): string {
+  return language === "pidgin" ? CRISIS_RESPONSE_PIDGIN : CRISIS_RESPONSE;
+}
 
 /**
  * The one place these digits exist.

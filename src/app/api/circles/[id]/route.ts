@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore } from "@/lib/store";
-import { classify, CRISIS_LINES, CRISIS_RESPONSE } from "@/lib/vent/intent";
+import { classify, CRISIS_LINES, crisisReply } from "@/lib/vent/intent";
 import { tensionDrop, tensionNow } from "@/lib/vent/chairs";
 import { logPreference } from "@/lib/rlhf/log";
 import { presenceOf, shouldTouch } from "@/lib/circles/presence";
@@ -120,8 +120,20 @@ async function handleGET(request: Request, { params }: Params) {
     if (phase === "reflect" || phase === "close") {
       const spokeReflection = said.some((m) => m.anon_id === KEEPER_REFLECT);
       if (!spokeReflection) {
+        /*
+          The identities travel, and so does the room's own subject.
+
+          This was `.map((m) => m.content)` — which stripped who said what one
+          line before a sentence that counts people, and left the Keeper unable
+          to hear the pressure the circle was convened around. Both halves of
+          its thirty-eight-minute line were reading a shape it had not been
+          given.
+        */
         const reflection = keeperReflection(
-          said.filter((m) => m.kind === "share").map((m) => m.content),
+          said
+            .filter((m) => m.kind === "share")
+            .map((m) => ({ anonId: m.anon_id, content: m.content })),
+          circle.tag,
         );
         if (reflection) {
           await store.addCircleMessage({
@@ -191,9 +203,10 @@ async function handlePOST(request: Request, { params }: Params) {
   }
   const { anonId, intent, pressure } = parsed.data;
 
-  if (intent && classify(intent).intent === "crisis") {
+  const seedIntent = intent ? classify(intent) : null;
+  if (seedIntent?.intent === "crisis") {
     return NextResponse.json(
-      { error: "crisis", reply: CRISIS_RESPONSE, crisis: { ...CRISIS_LINES, gated: true } },
+      { error: "crisis", reply: crisisReply(seedIntent.language), crisis: { ...CRISIS_LINES, gated: true } },
       { status: 409 },
     );
   }
@@ -281,21 +294,49 @@ async function handlePATCH(request: Request, { params }: Params) {
   const store = getStore();
   if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
 
+  /*
+    Over first, membership second. The DELETE handler below already does this
+    and says why — "a closed circle answers 404 from the room and 410 from
+    every other surface" — and this handler was the copy that did not.
+
+    Reversed, it answered **403 not_a_member** to somebody sealing a circle
+    that had ended. That is the refusal this whole file is a monument to: it
+    is a false sentence. They *were* a member; the room is over. And it only
+    became reachable when `closeCircle` started deleting the seats, so the
+    ordering bug was invisible for as long as the row it depended on outlived
+    the promise made about it — one defect hiding another.
+
+    True for everybody is the right order: "this room is over" is true of any
+    caller, and "you are not a member" is true only of some. Checking the
+    narrower one first can only ever answer the wrong question.
+
+    And the same argument one rung further out. A circle that never existed
+    fell past `circle &&` into the seat check and answered **403 not_a_member**
+    — "you are not a member" about a room nobody is a member of, which is the
+    bug the DELETE handler's own comment forty lines down records as fixed, in
+    the same file, for itself. Seven of the eight handlers addressed by id
+    already answered 404 here; this was the eighth, and it is the one whose
+    ordering was corrected an hour ago without the guard above it being
+    noticed. "Does this room exist" is true of every caller too, and it is
+    truer first.
+  */
+  const circle = await store.getCircle(id);
+  if (!circle) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (await sweepIfOver(store, circle)) {
+    return NextResponse.json({ error: "closed" }, { status: 410 });
+  }
+
   const members = await store.listMembers(id);
   const me = members.find((m) => m.anon_id === anonId);
   if (!me) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
 
-  const circle = await store.getCircle(id);
-  if (circle && (await sweepIfOver(store, circle))) {
-    return NextResponse.json({ error: "closed" }, { status: 410 });
-  }
   const before = me.pressure_seeded;
 
   await logPreference({
     kind: "circle_close",
     anon_id: anonId,
     circle_id: id,
-    tag: circle?.tag ?? null,
+    tag: circle.tag,
     rating: mood,
     tension_before: before,
     tension_after: tensionNow(mood),

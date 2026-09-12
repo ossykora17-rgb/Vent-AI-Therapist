@@ -1,0 +1,41 @@
+-- 0019 — which graders rejected the first attempt, mirroring tactic_used.
+--
+-- The failsafe inspects every model reply and regenerates it once if a grader
+-- fires. It has three tiers now, one of them fatal and clinical, and there has
+-- never been any way to answer the only question that matters about it:
+--
+--   has it ever fired in production?
+--
+-- Its whole record was `console.warn("[vent] rejected own reply:", ...)`. This
+-- project runs on a Hobby plan, which keeps runtime logs for **one hour**. So
+-- the diagnostic is erased before anybody could read it, and the nightly audit
+-- cannot recover it: the audit grades the reply that was *sent*, which on a
+-- successful retry is the good one. A failsafe that works and a failsafe that
+-- is dead code look identical from every surface this repository has.
+--
+-- CLAUDE.md's oldest recorded bug is a green light over a broken road. This is
+-- the version with no light at all.
+--
+-- WHAT GOES IN IT
+--
+-- Grader names, joined, or null. Never a detail. `Verdict.reject` was changed
+-- in the same commit as this migration to carry names only, for the same
+-- reason: the details quote the reply, and `recites` in particular quotes the
+-- person's own words handed back to them. A column outlives a log line, so the
+-- rule is stricter here, not looser.
+--
+-- Closed vocabulary, and check 104 keeps it closed: every value is a grader
+-- `quality.ts` can emit, and each of those is classified as rejected, retried,
+-- noted or unreachable.
+--
+-- A row where this is set and `ai_reply` still breaks the same rule is the
+-- interesting one — it means the retry failed, or the clock ran out before a
+-- retry could be afforded. Neither of those is visible today.
+--
+-- Nullable, no default, no backfill. Every row written before this migration
+-- was inspected by an earlier failsafe or by none, and a default would invent
+-- a verdict for turns that already happened.
+
+alter table public.vents add column if not exists rejected_by text;
+
+notify pgrst, 'reload schema';

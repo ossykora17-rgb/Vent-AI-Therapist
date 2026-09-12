@@ -57,26 +57,95 @@ export const MAX_TOKENS = 600;
  * thought that happened to end at the edge; that one ships. Anything else is
  * the model being interrupted, and a fragment in front of somebody having a
  * bad day is worse than saying plainly that we could not answer.
+ *
+ * THE CEILING IS NOT THE ONLY WAY A REPLY GETS CUT OFF
+ *
+ * This took the ceiling as a *boolean* and returned false the moment it was
+ * unset, so it only ever caught one cause. Production found the others: 16 of
+ * 178 real replies end mid-sentence, averaging 229 characters against 309 for
+ * the rest, the shortest of them 16 characters. `MAX_TOKENS` is 600. None of
+ * those are ceiling hits.
+ *
+ * They are interrupted streams. `readSse` loops until `done` and returns what
+ * it has — so a connection that drops, a deadline that fires mid-stream, or a
+ * provider that closes early without ever sending a `finish_reason` all
+ * produce a partial with `finishReason: undefined`, which the old signature
+ * read as "not the ceiling, therefore fine".
+ *
+ * So the question is no longer "did it hit the ceiling" but "did it say it had
+ * finished". Absence is not reassurance: a complete OpenAI-style stream ends
+ * with `finish_reason: "stop"`, and a complete Anthropic one with
+ * `stop_reason: "end_turn"`. Nothing there means nothing finished.
+ *
+ * The text test still guards the other side, and it is what keeps this from
+ * over-firing: a reply that ends on a full stop ships whatever the provider
+ * did or did not say about it. Both halves have to be wrong.
+ *
+ * The reply that sent somebody back here the second time was 121 characters
+ * and ended on "First you". The first one ended on "If you".
  */
-export function wasCutOff(text: string, hitCeiling: boolean): boolean {
-  if (!hitCeiling) return false;
+
+/** What a provider says when it stopped because it was done. */
+const FINISHED = new Set(["stop", "end_turn", "stop_sequence"]);
+
+/**
+ * Does this text stop without finishing a sentence?
+ *
+ * Exported because the training pipeline needs the same question and must not
+ * own a second copy of the answer. It reads stored rows, where there is no
+ * provider left to ask why it stopped — but a reply that ends mid-clause is
+ * not a training target whatever the reason was, and a model taught on
+ * fragments learns to produce them.
+ */
+export function endsMidSentence(text: string): boolean {
   return !/[.!?…]["')\]]?$/.test(text.trim());
 }
 
-export type ModelStatus =
-  | "ok"
-  | "not_configured"
-  | "unauthorized"
-  | "model_not_found"
-  | "rate_limited"
-  | "insufficient_credit"
-  | "upstream_down"
-  | "timeout"
-  | "unreachable";
+export function wasCutOff(text: string, stopReason: string | null | undefined): boolean {
+  if (!endsMidSentence(text)) return false;
+  return !FINISHED.has(String(stopReason));
+}
+
+/**
+ * Every way a model call can end, as a value rather than only a type.
+ *
+ * The union was type-only, so nothing outside TypeScript could enumerate it —
+ * and the training pipeline, which has to recognise a failure message and
+ * refuse to train on it, was left hand-listing two of the seven sentences
+ * `modelFailureReply` can produce. It caught "network dipped on my side" and
+ * missed "Too many at once on my side", which is the one that actually
+ * happens: seven rows of it in production, all with a real tactic and
+ * `intent_type: vent`, all eligible as training targets.
+ *
+ * The type is derived from the list rather than the list from the type, so
+ * there is one place to add a status and no way to add it in only one.
+ */
+export const MODEL_STATUSES = [
+  "ok",
+  "not_configured",
+  "unauthorized",
+  "model_not_found",
+  "rate_limited",
+  "insufficient_credit",
+  "upstream_down",
+  "timeout",
+  "unreachable",
+] as const;
+
+export type ModelStatus = (typeof MODEL_STATUSES)[number];
 
 export interface ModelVerdict {
   status: ModelStatus;
-  /** The upstream message, truncated. The fastest route to the real cause. */
+  /**
+   * The shape of the failure — an HTTP status and an error kind, never text.
+   *
+   * This said "the upstream message, truncated" and did exactly that, which is
+   * how an arbitrary provider's response body ended up on a screen in front of
+   * somebody having a bad day: `/api/vent` returns it in the 503 and
+   * `vent-chat.tsx` prints it under the reply. `status` above carries the
+   * actual diagnosis; this says whether it was a 400 or a 502, which is the
+   * part a status name cannot.
+   */
   detail: string | null;
   /** Only set when something is wrong. Never the key — only its shape. */
   keyShape?: KeyShape;
@@ -110,12 +179,39 @@ export function anthropicKeyShape(): KeyShape {
  * "unreachable".
  */
 export function classifyModelError(error: unknown): ModelVerdict {
-  const e = error as { status?: number; message?: string; name?: string };
-  const message = typeof e?.message === "string" ? e.message : "";
-  // A thrown value with no message at all left `detail: null`, which is how
-  // "unreachable" became a bucket with nothing in it — the same crime as
-  // "Network dipped on my side". Always carry something back.
-  const detail = message ? message.slice(0, 300) : (e?.name ?? String(error)).slice(0, 300);
+  const e = error as { status?: number; message?: string; name?: string; body?: string };
+  /*
+    Read here, and it stops here.
+
+    The provider's own text is the whole diagnosis for billing — "credit
+    balance is too low" is a 400 that no status code distinguishes from a bad
+    request — so the branches below have to see it. `body` is where a
+    `ProviderError` now puts it; an SDK throw still carries it on `message`,
+    which is why both are read.
+  */
+  const said = `${typeof e?.message === "string" ? e.message : ""} ${e?.body ?? ""}`;
+
+  /*
+    And `detail` is what leaves this function, so `detail` is derived.
+
+    It used to be `said.slice(0, 300)` — the provider's response body, verbatim.
+    `/api/vent` returns it in the 503 and `vent-chat.tsx` prints it under the
+    reply, so a person having a bad day was shown 300 characters of an
+    arbitrary upstream error, from a request that had just carried their vent,
+    their notes and their carve. It went to stdout too, where a hosted runtime
+    keeps it for as long as it keeps stdout.
+
+    The comment on that line was about a real problem — "unreachable" was a
+    bucket with nothing in it, and days were lost reading "Network dipped" as a
+    network problem. It still is a real problem, so this is not `null`. It is
+    the two things the stdout rule allows and a person can be shown: an HTTP
+    status and the error's kind. `status` above it already carries the actual
+    diagnosis in every branch — `insufficient_credit` is not a guess, it is
+    what was matched.
+  */
+  const detail = [e?.status, e?.name ?? (e ? undefined : String(error))]
+    .filter((p) => p !== undefined && p !== null && p !== "")
+    .join(" · ") || "no status, no name";
 
   // AbortSignal.timeout throws a TimeoutError with no HTTP status, so it fell
   // to the default and was reported as unreachable. A clock and a network are
@@ -127,13 +223,13 @@ export function classifyModelError(error: unknown): ModelVerdict {
   // Billing arrives as a 400 invalid_request_error and says so in words. It
   // is not a bad request, not a network fault, and no code change fixes it —
   // and it is invisible to a metadata read, which is how it hid for a week.
-  if (/credit balance|purchase credits|plans & billing/i.test(message)) {
+  if (/credit balance|purchase credits|plans & billing/i.test(said)) {
     return { status: "insufficient_credit", detail };
   }
 
   // A rejected model id arrives as 404 on some paths and 400 on others; the
   // message names the model either way.
-  if (e?.status === 404 || (e?.status === 400 && /model/i.test(message))) {
+  if (e?.status === 404 || (e?.status === 400 && /model/i.test(said))) {
     return { status: "model_not_found", detail };
   }
   if (e?.status === 401 || e?.status === 403) return { status: "unauthorized", detail };
@@ -183,6 +279,29 @@ export async function probeModel(): Promise<ModelVerdict> {
  * key or a missing model is not transient, and inviting a retry that cannot
  * succeed is a promise the code cannot keep.
  */
+/**
+ * Did *we* write this, because the model did not answer?
+ *
+ * `wasAuthored` in `tactics.ts` asks the same question about the tactic
+ * holds, and its comment calls the authored replies "a closed set". They are
+ * a closed set; that was not all of it. The seven sentences below are ours
+ * too, and nothing could recognise them — so the nightly audit graded a
+ * rate-limit message as if a model had produced it, and `flatReplies` scored
+ * it 4 (no question mark, none of their words) which is high enough to spend
+ * the one paid call of the night asking a model why it was flat.
+ *
+ * Not folded into `wasAuthored`, and that is deliberate rather than untidy:
+ * `tactics.ts` is reached from `circles/rules.ts`, which `circle-room.tsx`
+ * imports, and this file is `server-only`. Putting the union there would move
+ * a server import into the client bundle. The composition lives at the two
+ * call sites that need it, both of them server-side.
+ */
+export function isFailureReply(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const t = text.trim();
+  return MODEL_STATUSES.some((s) => modelFailureReply(s) === t);
+}
+
 export function modelFailureReply(status: ModelStatus): string {
   switch (status) {
     case "rate_limited":

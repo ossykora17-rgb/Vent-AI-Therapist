@@ -1,4 +1,5 @@
 import "server-only";
+import { errorKind } from "@/lib/errors";
 import { TABLE_CONTRACT } from "./contract";
 import type { Note } from "@/lib/vent/notes";
 import type { StoredNote } from "./file-store";
@@ -19,7 +20,7 @@ import { BREAKING_CAP, HELD_CAP } from "./types";
 const FULL_SELECT = [
   "id", "user_id", "user_message", "ai_reply", "mood_score",
   "tension_before", "tension_after", "language", "duality_value",
-  "pressure_value", "chair_picked", "tactic_used", "probe_used", "intent_type",
+  "pressure_value", "chair_picked", "tactic_used", "probe_used", "rejected_by", "intent_type",
   "real_world_tag", "real_date_used", "body_tapped", "safety_flagged",
   "created_at",
 ].join(",");
@@ -188,13 +189,13 @@ export class SupabaseStore implements Store {
       if (error) {
         // 42703 is the column not existing yet — 0011 pending, which is a
         // normal state and not a fault. The room opens knowing nothing.
-        console.warn("[store] getCarve", error.code, error.message);
+        console.warn("[store] getCarve", error.code);
         return null;
       }
       // Whitespace is not a carve. Normalised here so no caller has to.
       return (data as { carve?: string | null } | null)?.carve?.trim() || null;
     } catch (e) {
-      console.warn("[store] getCarve threw", e);
+      console.warn("[store] getCarve threw", errorKind(e));
       return null;
     }
   }
@@ -216,12 +217,12 @@ export class SupabaseStore implements Store {
         .eq("id", userId)
         .maybeSingle();
       if (error) {
-        console.warn("[store] getHeld", error.code, error.message);
+        console.warn("[store] getHeld", error.code);
         return [];
       }
       return Array.isArray(data?.held) ? (data.held as HeldNote[]) : [];
     } catch (e) {
-      console.warn("[store] getHeld threw", e);
+      console.warn("[store] getHeld threw", errorKind(e));
       return [];
     }
   }
@@ -252,12 +253,12 @@ export class SupabaseStore implements Store {
         .eq("id", userId)
         .select("id");
       if (error) {
-        console.warn("[store] addHeld", error.code, error.message);
+        console.warn("[store] addHeld", error.code);
         return false;
       }
       return (data?.length ?? 0) > 0;
     } catch (e) {
-      console.warn("[store] addHeld threw", e);
+      console.warn("[store] addHeld threw", errorKind(e));
       return false;
     }
   }
@@ -289,13 +290,13 @@ export class SupabaseStore implements Store {
       if (error) {
         // 42703 is 0015 pending, which is a normal state on a deployment
         // mid-migration and not a fault. It is still not an empty list.
-        console.warn("[store] getBreaking", error.code, error.message);
+        console.warn("[store] getBreaking", error.code);
         return null;
       }
       if (!data) return null;
       return Array.isArray(data.breaking) ? (data.breaking as BreakingAnswer[]) : [];
     } catch (e) {
-      console.warn("[store] getBreaking threw", e);
+      console.warn("[store] getBreaking threw", errorKind(e));
       return null;
     }
   }
@@ -332,12 +333,12 @@ export class SupabaseStore implements Store {
         .eq("id", userId)
         .select("id");
       if (error) {
-        console.warn("[store] addBreaking", error.code, error.message);
+        console.warn("[store] addBreaking", error.code);
         return false;
       }
       return (data?.length ?? 0) > 0;
     } catch (e) {
-      console.warn("[store] addBreaking threw", e);
+      console.warn("[store] addBreaking threw", errorKind(e));
       return false;
     }
   }
@@ -370,12 +371,12 @@ export class SupabaseStore implements Store {
         .eq("id", userId)
         .select("id");
       if (error) {
-        console.warn("[store] setCarve", error.code, error.message);
+        console.warn("[store] setCarve", error.code);
         return false;
       }
       return (data?.length ?? 0) > 0;
     } catch (e) {
-      console.warn("[store] setCarve threw", e);
+      console.warn("[store] setCarve threw", errorKind(e));
       return false;
     }
   }
@@ -526,6 +527,33 @@ export class SupabaseStore implements Store {
     */
     done("closeCircle:transcript",
       await this.db.from("circle_messages").delete().eq("circle_id", id));
+    /*
+      And the seats, which outlived every promise made about them.
+
+      `circle_members` is keyed by `anon_id` — a bare text column, no foreign
+      key to `vent_users` — and holds the role, the join time, `last_seen_at`,
+      and `pressure_seeded`: a 0–100 reading of how bad it was when they sat
+      down. Nothing deleted these rows. Not the close, which took the words and
+      left the seats. Not `deleteAll`, which cannot reach them: it works in
+      `userId` space and these are keyed by anon id. There is no leave path.
+
+      The front page says **"one tap deletes everything, for good"**, and it
+      links to `/history` where that tap lives. It was true of every vent, note,
+      carve, held note and breaking answer, and false of this.
+
+      Here rather than in `deleteAll`, and that is not convenience. `seat` is
+      not a column — `voice/route.ts` computes `seat: index + 1` from the
+      member list's order, and `personaFor` keys the voice mask to the seat. So
+      removing one row from a *live* circle renumbers everybody after it and
+      changes which masked voice belongs to whom, mid-session, invisibly to
+      every test that can run here. The room is over at this point; the seats
+      mean nothing and no read of a closed circle's members exists.
+
+      Before the status flag, for the same reason the transcript is: a delete
+      that fails leaves the circle open and the next sweep retries it.
+    */
+    done("closeCircle:seats",
+      await this.db.from("circle_members").delete().eq("circle_id", id));
     done("closeCircle", await this.db.from("circles").update({ status: "closed" }).eq("id", id));
   }
 
@@ -547,6 +575,14 @@ export class SupabaseStore implements Store {
       .order("joined_at", { ascending: true })
       .order("id", { ascending: true }));
     return (data ?? []) as unknown as CircleMemberRow[];
+  }
+
+  async seatedIn(anonId: string): Promise<string[]> {
+    const data = ok("seatedIn", await this.db
+      .from("circle_members")
+      .select("circle_id")
+      .eq("anon_id", anonId));
+    return ((data ?? []) as unknown as Array<{ circle_id: string }>).map((r) => r.circle_id);
   }
 
   /**

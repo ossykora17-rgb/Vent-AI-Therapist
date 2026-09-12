@@ -66,16 +66,38 @@ export function CircleRoom({ id }: { id: string }) {
   const [messages, setMessages] = React.useState<Msg[]>([]);
   const [draft, setDraft] = React.useState("");
   const [ruleError, setRuleError] = React.useState<string | null>(null);
-  const [crisis, setCrisis] = React.useState(false);
+  /*
+    The sentence the server computed, not a copy of it.
+
+    This was a boolean. Both branches below did `setCrisis(true)` and dropped
+    `d.reply` — the language-aware line `crisisReply(said.language)` had just
+    produced — and the block rendered an English sentence written into this
+    component. So a Pidgin speaker in crisis in a circle got English, with
+    every server-side assertion green.
+
+    That is the second seam of the crisis bug CLAUDE.md records for the private
+    path, alive one surface over, after the repair: the client imported the
+    constant and rendered that instead of what the server sent. Third
+    mechanism — the fix reached the copy in front of it and not the one beside
+    it.
+
+    Null when the server sent no sentence: the block still opens, because the
+    numbers are the part somebody can act on, and an absent line is better than
+    one this file invented in the wrong language.
+  */
+  const [crisis, setCrisis] = React.useState<{ reply: string | null } | null>(null);
   const [consented, setConsented] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [notFound, setNotFound] = React.useState(false);
+  /** The room answered something that is not a room — a store that is absent
+   *  or refusing. Distinct from `notFound`: that circle is gone for good, this
+   *  one may be there and unreachable, and the two deserve different sentences. */
+  const [unreachable, setUnreachable] = React.useState(false);
   const [chair, setChair] = React.useState<string>("sunk");
   const [reflecting, setReflecting] = React.useState(false);
   const [mood, setMood] = React.useState<number | null>(null);
   const [carry, setCarry] = React.useState<string | null>(null);
   const [dropped, setDropped] = React.useState<string | null>(null);
-  const [quote, setQuote] = React.useState<{ text: string; author: string } | null>(null);
   /* Which seats are speaking, from the voice room, for the ring to draw. */
   const [speakingSeats, setSpeakingSeats] = React.useState<number[]>([]);
   const endRef = React.useRef<HTMLDivElement>(null);
@@ -98,7 +120,25 @@ export function CircleRoom({ id }: { id: string }) {
     const typing = draftRef.current.trim().length > 0 ? "&typing=1" : "";
     const r = await fetch(`/api/circles/${id}?anonId=${encodeURIComponent(me)}${typing}`);
     if (r.status === 404) { setNotFound(true); return; }
+    /*
+      A refusal is not a room.
+
+      Every other status fell straight into `const d: RoomState = await
+      r.json()` and `setState(d)` — so a 503 from a store that is absent or
+      refusing became a room object whose every field was `undefined`, and the
+      screen drew the whole agreement over it with a gold "Take a seat" on the
+      bottom. That is the door onto a refusal again, in the two shapes where
+      the door cannot open at all, reached by anybody holding a circle link
+      while the database is down. `seats`, `maxSeats` and `joined` were all
+      absent, so the fullness flag read false and the offer rendered.
+
+      The last good room is kept rather than overwritten, because this runs
+      every four seconds and one blip must not empty a live circle somebody is
+      sitting in. The sentence below is only for having never had one.
+    */
+    if (!r.ok) { setUnreachable(true); return; }
     const d: RoomState = await r.json();
+    setUnreachable(false);
     setState(d);
     if (d.joined) {
       const m = await fetch(`/api/circles/${id}/messages?anonId=${encodeURIComponent(me)}`);
@@ -116,21 +156,6 @@ export function CircleRoom({ id }: { id: string }) {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length]);
 
-  /**
-   * One Stoic line, fetched once, and only at the door. A quote in the middle
-   * of a vent is the wellness reflex this product exists to avoid; next to
-   * "what do you carry" it rhymes with the tactic library's own move. If the
-   * fetch fails there is simply no quote — never a stock one.
-   */
-  React.useEffect(() => {
-    if (state?.phase !== "close" || quote) return;
-    let live = true;
-    void fetch("/api/external/quote/context")
-      .then((r) => r.json())
-      .then((d) => { if (live && d.available) setQuote({ text: d.text, author: d.author }); })
-      .catch(() => {});
-    return () => { live = false; };
-  }, [state?.phase, quote]);
 
   async function join() {
     setBusy(true);
@@ -145,7 +170,10 @@ export function CircleRoom({ id }: { id: string }) {
         }),
       });
       const d = await r.json();
-      if (r.status === 409 && d.error === "crisis") { setCrisis(true); return; }
+      if (r.status === 409 && d.error === "crisis") {
+        setCrisis({ reply: typeof d.reply === "string" && d.reply.trim() ? d.reply : null });
+        return;
+      }
       if (!r.ok) { toast(d.error === "full" ? "That circle is full." : "Couldn't take a seat.", "error"); return; }
       await load();
     } finally {
@@ -204,7 +232,10 @@ export function CircleRoom({ id }: { id: string }) {
         body: JSON.stringify({ anonId: me, content, kind }),
       });
       const d = await r.json();
-      if (r.status === 409 && d.error === "crisis") { setCrisis(true); return; }
+      if (r.status === 409 && d.error === "crisis") {
+        setCrisis({ reply: typeof d.reply === "string" && d.reply.trim() ? d.reply : null });
+        return;
+      }
       // A rule refusal and a Guardian refusal read the same to a person: the
       // line does not go in, and here is why, in words they can act on.
       if (r.status === 422 && (d.error === "rule" || d.error === "guardian")) {
@@ -232,7 +263,39 @@ export function CircleRoom({ id }: { id: string }) {
     );
   }
 
+  /*
+    A room that cannot be reached, which is not a room that has closed.
+
+    "That circle has closed. The words are already gone." is true of a 404 and
+    false here — the room may be sitting there with five people in it while the
+    database is refusing us. Saying the words are gone would be inventing a
+    deletion, which is the one claim this product must never make loosely.
+
+    Only when there has never been a room to show: a blip on the four-second
+    poll keeps the last good one, upstairs in `load`.
+
+    The private session is the door that is actually open. It answers with no
+    store at all — the live checks prove it in both of the shapes that land
+    here — only without keeping anything.
+  */
+  if (unreachable && !state) {
+    return (
+      <main id="main" className="flex min-h-dvh flex-col items-center justify-center px-4 text-center">
+        <p className="font-display text-heading font-bold">Can&apos;t reach this room.</p>
+        <p className="mt-2 max-w-[40ch] text-body text-ash">
+          Not closed — we just can&apos;t see it from here. Try again in a minute.
+        </p>
+        <Link href="/chat" className="mt-6 flex min-h-[48px] items-center rounded-card bg-gold px-6 text-body font-semibold text-on-gold">
+          Come in and talk instead
+        </Link>
+      </main>
+    );
+  }
+
   const mins = state ? Math.max(0, Math.round(state.msRemaining / 60000)) : 0;
+  /* Read once, so the agreement and the refusal cannot both render and cannot
+     both disappear. See the comment beside the two branches. */
+  const roomIsFull = Boolean(state && state.seats >= state.maxSeats);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -295,10 +358,9 @@ export function CircleRoom({ id }: { id: string }) {
         {crisis && (
           <div className="glass mb-4 border-gold/60 p-4">
             <p className="label-mono mb-2">This isn&apos;t the room for that</p>
-            <p className="text-body leading-[1.6]">
-              I&apos;m really concerned about you. A circle can&apos;t hold this —
-              you need a person, now.
-            </p>
+            {crisis.reply && (
+              <p className="text-body leading-[1.6]">{crisis.reply}</p>
+            )}
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <a href={`tel:${CRISIS_TEL}`} className="flex min-h-[44px] flex-1 items-center justify-center rounded-card bg-gold px-4 text-body font-semibold text-on-gold">
                 Call {CRISIS_LINES.nigeria}
@@ -313,7 +375,55 @@ export function CircleRoom({ id }: { id: string }) {
           </div>
         )}
 
-        {state && !state.joined && (
+        {/*
+          A door onto a 409.
+
+          This block rendered for anybody not in the room, whatever its seat
+          count — the whole agreement, the chair question, the consent box and
+          a full-width gold "Take a seat" — on a circle with six people in it.
+          Ticking all of it answers 409 and toasts "That circle is full."
+
+          Every fact needed to know that arrived in the same payload the button
+          was drawn from: `seats` and `maxSeats`. This repository already
+          records the identical bug one screen out, in the lobby, where a gold
+          "Open a circle" sat above a plate explaining four hundred pixels
+          lower that circles could not open. The room never offers a door that
+          opens onto a refusal.
+
+          The lobby is the door that is open, and it is more open than it was:
+          the route steers somebody asking for this pressure into a room with
+          space, or opens them one. So this names what is shut and points at
+          that, rather than apologising.
+        */}
+        {/*
+          One flag and its negation, never `>=` and `<` of the same pair.
+
+          `6 >= undefined` and `6 < undefined` are **both false**, so a payload
+          that lost `maxSeats` — a version skew, a route edited in a hurry —
+          would make both branches vanish and leave somebody not in the room
+          looking at nothing at all, with no way in and no sentence saying why.
+          A flag falls back to offering the seat instead, and a 409 they can
+          read beats a blank space.
+
+          Written the wrong way first, in the check-the-other-shape file.
+        */}
+        {state && !state.joined && roomIsFull && (
+          <div className="glass p-5">
+            <p className="font-display text-heading leading-[1.3]">This one filled up.</p>
+            <p className="mt-3 max-w-[46ch] text-body leading-[1.7] text-ash">
+              Six seats, and they are taken. Nothing said in here is readable
+              from outside it, so there is nothing to wait around for.
+            </p>
+            <Link
+              href="/circles"
+              className="mt-4 inline-flex min-h-[44px] items-center text-body font-semibold text-ink underline underline-offset-4"
+            >
+              Find a room with space →
+            </Link>
+          </div>
+        )}
+
+        {state && !state.joined && !roomIsFull && (
           <div className="glass p-5">
             <p className="label-mono mb-3">Before you sit</p>
             <ul className="space-y-2 text-body leading-[1.6]">
@@ -637,14 +747,6 @@ export function CircleRoom({ id }: { id: string }) {
                           You carry {carry ?? "what you came with"}. You drop{" "}
                           {dropped}. The words in this room go with it.
                         </p>
-                        {quote && (
-                          <figure className="mt-4 border-l-2 border-line/20 pl-3">
-                            <blockquote className="text-body italic leading-[1.6] text-ash">
-                              {quote.text}
-                            </blockquote>
-                            <figcaption className="label-mono mt-1">{quote.author}</figcaption>
-                          </figure>
-                        )}
                       </>
                     )}
                   </>

@@ -1,4 +1,4 @@
--- Mind Weave VENT — 18 migrations, in order.
+-- Mind Weave VENT — 20 migrations, in order.
 -- Paste the whole thing into the Supabase SQL editor and run once.
 -- Safe to re-run: every statement is IF NOT EXISTS / OR REPLACE.
 
@@ -1224,8 +1224,37 @@ begin;
 
 -- The function first: it reads `memories`, and dropping the table under a
 -- function that references it leaves a broken object behind.
-drop function if exists public.match_memories(uuid, vector, int, float);
-drop function if exists public.match_memories(uuid, vector, integer, double precision);
+--
+-- BY NAME, NOT BY SIGNATURE, AND THAT IS THE WHOLE POINT
+--
+-- This used to name two four-argument signatures — the shape 0006 created.
+-- 0014 then rewrote `match_memories` to harden it and left a **three**-
+-- argument function behind, so both drops here matched nothing. `drop function
+-- if exists` on a signature that does not exist succeeds and does nothing,
+-- silently, which is the quietest failure available in a migration.
+--
+-- Verified against the live database rather than reasoned about: production
+-- carries `match_memories(p_user_id uuid, p_embedding vector, p_limit
+-- integer)`. Neither line below would have touched it, so this migration —
+-- had it been applied — would have dropped `memories` out from under a
+-- surviving function and left exactly the broken object the comment above
+-- says it is avoiding.
+--
+-- Dropped by name instead. There is one `match_memories` and there has only
+-- ever been one; naming its arguments buys nothing here and is the reason
+-- this did not work.
+do $$
+declare fn record;
+begin
+  for fn in
+    select p.oid::regprocedure as sig
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname = 'match_memories'
+  loop
+    execute format('drop function if exists %s', fn.sig);
+  end loop;
+end $$;
 
 -- `cascade` takes the RLS policies, the indexes and the foreign keys with the
 -- table. Named explicitly rather than relying on it for the function above,
@@ -1350,4 +1379,136 @@ notify pgrst, 'reload schema';
 alter table public.vents add column if not exists probe_used text;
 
 notify pgrst, 'reload schema';
+
+-- ------------------------------------------------------------------------
+-- 0019_rejected_by.sql
+-- ------------------------------------------------------------------------
+
+-- 0019 — which graders rejected the first attempt, mirroring tactic_used.
+--
+-- The failsafe inspects every model reply and regenerates it once if a grader
+-- fires. It has three tiers now, one of them fatal and clinical, and there has
+-- never been any way to answer the only question that matters about it:
+--
+--   has it ever fired in production?
+--
+-- Its whole record was `console.warn("[vent] rejected own reply:", ...)`. This
+-- project runs on a Hobby plan, which keeps runtime logs for **one hour**. So
+-- the diagnostic is erased before anybody could read it, and the nightly audit
+-- cannot recover it: the audit grades the reply that was *sent*, which on a
+-- successful retry is the good one. A failsafe that works and a failsafe that
+-- is dead code look identical from every surface this repository has.
+--
+-- CLAUDE.md's oldest recorded bug is a green light over a broken road. This is
+-- the version with no light at all.
+--
+-- WHAT GOES IN IT
+--
+-- Grader names, joined, or null. Never a detail. `Verdict.reject` was changed
+-- in the same commit as this migration to carry names only, for the same
+-- reason: the details quote the reply, and `recites` in particular quotes the
+-- person's own words handed back to them. A column outlives a log line, so the
+-- rule is stricter here, not looser.
+--
+-- Closed vocabulary, and check 104 keeps it closed: every value is a grader
+-- `quality.ts` can emit, and each of those is classified as rejected, retried,
+-- noted or unreachable.
+--
+-- A row where this is set and `ai_reply` still breaks the same rule is the
+-- interesting one — it means the retry failed, or the clock ran out before a
+-- retry could be afforded. Neither of those is visible today.
+--
+-- Nullable, no default, no backfill. Every row written before this migration
+-- was inspected by an earlier failsafe or by none, and a default would invent
+-- a verdict for turns that already happened.
+
+alter table public.vents add column if not exists rejected_by text;
+
+notify pgrst, 'reload schema';
+
+-- ------------------------------------------------------------------------
+-- 0020_feedback_not_once_ever.sql
+-- ------------------------------------------------------------------------
+
+-- 0020 — a person may rate more than one reply.
+--
+-- WHAT IS WRONG
+--
+-- Production carries `vent_feedback_user_id_key UNIQUE (user_id)`. No migration
+-- in this repository declares it. `0002_truth_anchor.sql` creates the table
+-- with a plain `user_id uuid references public.vent_users(id)` and no
+-- uniqueness at all — but it creates it with `create table if not exists`,
+-- which does exactly nothing to a table that is already there in a different
+-- shape. So the repo's definition has never applied to the database it is
+-- supposed to describe, and the name Postgres generated —
+-- `<table>_<column>_key` — is the fingerprint of a `unique` written directly on
+-- the column by something that is no longer in this history.
+--
+-- WHAT IT COSTS
+--
+-- `/api/feedback` allows five ratings an hour: `FEEDBACK_PER_HOUR = 5`, checked
+-- against `countFeedbackSince` one line before the insert. The database allows
+-- one, for ever. So a person's *second* rating raises 23505 and is dropped —
+-- the route's stated policy and the database's actual one disagree by a factor
+-- of five an hour against one for all time.
+--
+-- Until recently that surfaced as a 500. It is now caught and honestly reported
+-- as `persisted: false`, which is better and is not a fix: the rating is still
+-- gone. `feedback/route.ts` carries the reason it matters — "silently losing
+-- them corrupts the one place the product learns what is losing" — and the
+-- preference log downstream of it is the input to `npm run rlhf`. Every DPO
+-- pair this product has ever built came from first ratings only, and nothing
+-- said so.
+--
+-- WHY IT DROPS BY LOOKUP AND NOT BY NAME
+--
+-- 0016's lesson, which cost a debugging session: `drop ... if exists` matches
+-- nothing and says nothing when the thing moved. `vent_feedback_user_id_key` is
+-- an auto-generated name, and an auto-generated name is a guess about what some
+-- earlier tool happened to call it. So this finds any UNIQUE constraint whose
+-- columns are exactly `(user_id)` on this table and drops that, whatever it is
+-- called — and raises a notice either way, because a migration that did nothing
+-- and a migration that worked must not look identical.
+--
+-- The index is not collateral. `0007_rls_performance.sql` already creates
+-- `vent_feedback_user_idx` on `(user_id) where user_id is not null`, so the
+-- foreign key stays indexed after the unique index goes with its constraint.
+--
+-- Idempotent, and a no-op on any database built from these migrations — which
+-- is every fresh deployment. It is written for the one that was not.
+
+do $$
+declare
+  con_name text;
+  dropped  int := 0;
+begin
+  for con_name in
+    select c.conname
+    from pg_constraint c
+    join pg_class t on t.oid = c.conrelid
+    join pg_namespace n on n.oid = t.relnamespace
+    where n.nspname = 'public'
+      and t.relname = 'vent_feedback'
+      and c.contype = 'u'
+      -- Exactly one column, and that column is user_id. A composite unique
+      -- that happens to include user_id is a different decision and is left
+      -- alone: this drops the rule "one row per user", not any rule mentioning
+      -- the column.
+      and c.conkey = array[
+        (select a.attnum
+           from pg_attribute a
+          where a.attrelid = t.oid
+            and a.attname = 'user_id'
+            and not a.attisdropped)
+      ]
+  loop
+    execute format('alter table public.vent_feedback drop constraint %I', con_name);
+    dropped := dropped + 1;
+    raise notice '0020: dropped % from vent_feedback — a person may rate more than one reply', con_name;
+  end loop;
+
+  if dropped = 0 then
+    raise notice '0020: no single-column unique on vent_feedback.user_id — nothing to do';
+  end if;
+end $$;
 

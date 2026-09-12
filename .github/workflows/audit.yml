@@ -54,6 +54,24 @@ jobs:
           if [ -z "$TOKEN" ] || [ -z "$BASE" ]; then
             echo "no export token configured — nothing to read tonight."
             echo "skip=1" >> "$GITHUB_OUTPUT"
+            # Says so where somebody looks, for the same reason as backup.yml.
+            #
+            # The comment above is right that a red cross trains people to
+            # ignore red crosses. What it left behind is fifteen consecutive
+            # green ticks, ten seconds each, none of which read a single
+            # production reply. The audit is the only surface that grades what
+            # real people received, and its whole run history says it worked.
+            {
+              echo "### No audit ran"
+              echo
+              MISSING=""
+              [ -z "$TOKEN" ] && MISSING="\`VENT_BACKUP_TOKEN\`"
+              [ -z "$BASE" ] && MISSING="$MISSING \`VENT_BASE_URL\`"
+              echo "Not set on this repository:$MISSING — so nothing was read and nothing was graded."
+              echo
+              echo "This job is the only thing that grades the replies real people actually received."
+              echo "Until both secrets exist it reports success every night without reading anything."
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           curl -sf -H "authorization: Bearer $TOKEN" \

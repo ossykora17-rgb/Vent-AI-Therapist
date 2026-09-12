@@ -34,6 +34,13 @@
  * environment, NODE_ENV=production.
  */
 
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+/** The repo root, so the page walk works from any working directory. */
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
 const BASE = (process.argv[2] || "").replace(/\/$/, "");
 if (!BASE.startsWith("http")) {
   console.error("Usage: node scripts/no-store-verify.mjs http://localhost:3001");
@@ -59,7 +66,7 @@ const post = (path, body) =>
  * next to the list.
  */
 const OPERATOR_WORDS =
-  /\bSupabase\b|\bnpm run\b|LIVEKIT_|ANTHROPIC_|NEXT_PUBLIC_|SERVICE_ROLE|\.env\b|\benv var|\blocalhost\b|\bthis deployment\b|\bthis instance\b/i;
+  /\bSupabase\b|\bnpm run\b|LIVEKIT_|ANTHROPIC_|NEXT_PUBLIC_|SERVICE_ROLE|\.env\b|\benv var|\blocalhost\b|\bthis deployment\b|\bthis instance\b|\bnot configured on\b/i;
 
 async function main() {
   console.log(`Verifying the unconfigured shape at ${BASE}\nanonId: ${ANON}\n`);
@@ -104,13 +111,43 @@ async function main() {
   */
   const LEGAL = /^\/(privacy|terms)$/;
   const JARGON_ONLY = /\bnpm run\b|LIVEKIT_|ANTHROPIC_|NEXT_PUBLIC_|SERVICE_ROLE|\.env\b|\benv var|\blocalhost\b|\bthis deployment\b|\bthis instance\b/i;
-  const pages = ["/", "/chat", "/circles", "/history", "/memory", "/privacy", "/terms"];
+  /*
+    Read off the filesystem, not typed out.
+
+    The list here was `["/", "/chat", "/circles", "/history", "/memory",
+    "/privacy", "/terms"]` — seven of the eight pages that exist. The missing
+    one was `/circles/[id]`: the room itself, where the transcript, the voice
+    controls and the Keeper's lines are, and the page that displays the very
+    refusal that was leaking three environment variable names one route over.
+
+    Same class as the hand-written route list next door, found by asking the
+    same question one file along. A list of pages does not survive the next
+    page.
+  */
+  const pages = [];
+  const walkPages = (dir, route) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) walkPages(path.join(dir, entry.name), `${route}/${entry.name}`);
+      else if (entry.name === "page.tsx") pages.push(route === "" ? "/" : route);
+    }
+  };
+  walkPages(path.join(ROOT, "src/app"), "");
+  pages.sort();
+
   const bad = [];
   const leaks = [];
   for (const p of pages) {
-    const r = await fetch(`${BASE}${p}`);
+    /*
+      A dynamic page is probed with an id that is not there, and a room that
+      is not there is allowed to answer 404. What it is never allowed to do is
+      throw — that is what a 5xx on this page would mean, and it is the whole
+      question this pass asks.
+    */
+    const dynamic = p.includes("[");
+    const url = p.replace(/\[[^\]]+\]/g, "does-not-exist");
+    const r = await fetch(`${BASE}${url}`);
     const html = await r.text();
-    if (r.status !== 200) bad.push(`${p}=${r.status}`);
+    if (dynamic ? r.status >= 500 : r.status !== 200) bad.push(`${p}=${r.status}`);
     // Strip the Next.js payload: it carries source paths and build ids that
     // are not sentences and never reach a screen.
     const visible = html
@@ -274,6 +311,70 @@ async function main() {
       ndel.status === 200 && ndelBody.deleted === true && ndelBody.persisted === false,
     `list=${nres.status}/${notes.notes?.length} persisted=${notes.persisted} · ` +
       `del=${ndel.status} deleted=${JSON.stringify(ndelBody.deleted)}`);
+
+  /*
+    14 and 15 — the export in this shape, and the route that was in neither.
+
+    `/api/profile` was covered by nothing at all. It is where onboarding
+    writes the chair, and the reason `vent_users.chair_picked` is set for one
+    person of eight. With no store it must answer without claiming to have
+    kept anything.
+
+    `/api/export` was already checked by live-verify — *with* a store. That is
+    the whole point of two passes: the same route answers differently when
+    nothing is configured, and the unconfigured answer is the one nobody was
+    looking at. It must refuse rather than hand back an empty backup that
+    looks like a complete one, because `complete: true` over zero rows is the
+    artifact that looks exactly like a good one until the day it is needed.
+  */
+  const xres = await fetch(`${BASE}/api/export`, {
+    headers: { authorization: "Bearer whatever-there-is-no-token-here" },
+  });
+  let xbody = {};
+  try { xbody = await xres.json(); } catch { /* a body is optional on a refusal */ }
+  record(14, "The backup refuses rather than exporting nothing",
+    xres.status !== 200 && xbody.complete !== true,
+    `${xres.status} · complete=${xbody.complete ?? "absent"}`);
+
+  const pres = await post("/api/profile", { anonId: ANON, chairPicked: "tight_edge", onboardingDone: true });
+  let pbody = {};
+  try { pbody = await pres.json(); } catch { /* same */ }
+  record(15, "Onboarding never claims a chair was kept",
+    pres.status < 500 && pbody.persisted !== true && pbody.saved !== true,
+    `${pres.status} · persisted=${pbody.persisted ?? "absent"}`);
+
+  /*
+    16 — the circle sub-routes, which neither pass had ever touched.
+
+    Both passes reached `/api/circles/does-not-exist` and stopped there, so
+    the transcript surface and the two voice routes were verified by nothing.
+    The transcript is the one that matters: "close means close" says a circle
+    that is over answers 404 from the room and 410 from every other surface,
+    and **never an empty list**, because `{messages: []}` still tells a caller
+    the room is there.
+
+    Statuses are asserted as a class rather than pinned, because pinning one
+    is how an author with LiveKit keys writes a suite that disagrees with CI —
+    the voice routes answer 501 before they touch the store when there are no
+    keys, and 404 when there are.
+  */
+  const sub = await Promise.all([
+    ["messages", fetch(`${BASE}/api/circles/does-not-exist/messages`)],
+    ["voice", post("/api/circles/does-not-exist/voice", { anonId: ANON })],
+    ["mute", post("/api/circles/does-not-exist/voice/mute", { anonId: ANON, identity: "seat-1" })],
+  ].map(async ([name, p]) => {
+    const res = await p;
+    const text = await res.text();
+    return { name, status: res.status, text };
+  }));
+
+  const refused = sub.every((s) => s.status >= 400);
+  const emptyList = sub.some((s) => s.name === "messages" && /"messages"\s*:\s*\[\s*\]/.test(s.text));
+  const subLeaks = sub.some((s) => /supabase|livekit|env\b|NEXT_PUBLIC/i.test(s.text));
+  record(16, "A room that is not there is not an empty room",
+    refused && !emptyList && !subLeaks,
+    sub.map((s) => `${s.name}=${s.status}`).join(" · ") +
+      `${emptyList ? " · LEAKED AN EMPTY LIST" : ""}${subLeaks ? " · LEAKED CONFIG" : ""}`);
 
   const mark = (p) => (p === true ? "PASS" : "FAIL");
   console.log("\n| # | Check | Result | Detail |");

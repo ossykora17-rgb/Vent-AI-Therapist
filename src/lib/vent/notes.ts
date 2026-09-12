@@ -125,9 +125,45 @@ export function keepable(n: Note): string | null {
 
   `insomnia` was added by check 83 flagging it on the first run, which is the
   right way round.
+
+  TWO CALLERS NOW, AND THEY APPLY IT DIFFERENTLY ON PURPOSE
+
+  `quality.ts` grades replies against this same list, because the prompt has
+  always said "never diagnose, and never name a condition" and until now that
+  rule was enforced on the row and not on the sentence a person reads. Five of
+  171 real replies handed somebody a condition they had never used — all five
+  "anxiety", one of them attributing it to a third party who was not in the
+  room.
+
+  The reply grader keeps the exemption this table refuses: a reply may use the
+  word if they used it first. Not an inconsistency — the paragraph above is
+  the reason. A note is read back into a prompt weeks later with no sentence
+  around it, so it must refuse the word outright. A reply is read once, in
+  context, by the person who just wrote it, and handing somebody their own word
+  back is the single most useful thing this room does. The rule is the same
+  either way: the product never *introduces* a condition.
+
+  Exported rather than copied. Two regexes for one rule is this repository's
+  most-recorded bug, and the copy that gets updated is never the copy that
+  ships.
 */
-const DIAGNOSIS =
-  /\b(depress\w*|anxiet\w*|anxious disorder|ptsd|trauma\w*|bipolar|adhd|ocd|psychosis|schizo\w*|borderline|disorder|diagnos\w*|clinical\w*|symptom\w*|insomnia|panic attacks?|burn.?out|self.harm|suicid\w*)\b/i;
+export const CONDITIONS = [
+  "depress\\w*", "anxiet\\w*", "anxious disorder", "ptsd", "trauma\\w*", "bipolar",
+  "adhd", "ocd", "psychosis", "schizo\\w*", "borderline", "disorder", "diagnos\\w*",
+  "clinical\\w*", "symptom\\w*", "insomnia", "panic attacks?", "burn.?out",
+  "self.harm", "suicid\\w*",
+] as const;
+
+/*
+  A list rather than a hand-written alternation, so the reply grader can ask
+  *which* condition matched.
+
+  `quality.ts` needs the family, not just a yes: "they said anxious, the reply
+  said anxiety" is somebody's own word handed back, and "they said nothing and
+  the reply said anxiety" is a diagnosis. One regex answering yes/no cannot
+  tell those apart, and the difference is the whole exemption.
+*/
+export const DIAGNOSIS = new RegExp(`\\b(${CONDITIONS.join("|")})\\b`, "i");
 
 /**
  * Read what the Carver wrote, and refuse most of it.
@@ -202,7 +238,22 @@ export function notesBlock(notes: readonly Note[]): string | null {
 }
 
 /** Appended to the Carver's job, so one call writes the line and the notes. */
-export const NOTES_INSTRUCTION = `Also return "notes": an array of at most four
+/**
+ * How many notes the Carver is asked for.
+ *
+ * Interpolated into the instruction rather than typed into it as a word. It
+ * used to read "at most four" while `parseNotes` sliced to eight — harmless,
+ * because tolerance above the ask is deliberate, and still a hand-typed
+ * integer sitting one file away from the thing it describes. This repository
+ * has a rule about that, and a check.
+ *
+ * It is also the number the token ceiling is derived from, which is what makes
+ * it load-bearing: asking for more notes than the budget can carry produces
+ * truncated JSON, and truncated JSON parses to nothing at all.
+ */
+export const NOTES_ASKED = 4;
+
+export const NOTES_INSTRUCTION = `Also return "notes": an array of at most ${NOTES_ASKED}
 things worth remembering about this person for next time. Each is
 {"kind": one of ${NOTE_KINDS.join("|")}, "subject": 2-4 words, "detail": their
 words where possible}.

@@ -1,4 +1,5 @@
 import { REAL_WORLD_TACTIC } from "@/lib/vent/tactics";
+import { themePattern } from "@/lib/vent/intent";
 
 /**
  * Circle governance, enforced on the server.
@@ -265,6 +266,25 @@ export const MYCELIUM = {
   ephemeral: "Wetin talk for here, dey die for here.",
 } as const;
 
+/**
+ * Circle topics that deliberately open without a tool.
+ *
+ * 0012's argument, moved out of a migration comment and into the code, because
+ * a decision only Postgres knows about is one nothing here can hold anybody to.
+ * Its words: *"A real-world tag selects a coping tool at weight 95 — 'one thing
+ * you can do inside the danfo', 'the one call you have been avoiding'. There is
+ * no such line for a burial, and writing one would be the same mistake this
+ * release exists to fix."*
+ *
+ * So `grief` has an opening and no tool, on purpose, and `keeperIntention`
+ * simply omits it. Named here because **"not on the list" and "decided
+ * against" look identical otherwise** — an eleventh topic added without a hold
+ * would read exactly like this one, and the check that guards holds iterates
+ * `REAL_WORLD_TACTIC`, so it cannot see a circle topic that is missing from it
+ * at all.
+ */
+export const NO_KEEPER_TOOL: readonly string[] = ["grief"];
+
 export function keeperIntention(tag: string | null, counted?: string | null): string {
   const opening = OPENING[tag ?? ""] ?? "Today we hold whatever is heaviest.";
 
@@ -321,22 +341,69 @@ const PATTERN_WORDS = [
  * said. Counted, not generated — no model call, and it cannot invent a
  * pattern that nobody voiced.
  */
-export function keeperReflection(contents: string[]): string | null {
-  if (contents.length === 0) return null;
+export interface Share {
+  /** Who said it. The reflection counts people, and cannot without this. */
+  anonId: string;
+  content: string;
+}
 
-  const text = contents.join(" \n ").toLowerCase();
-  const counts = PATTERN_WORDS.map((w) => [
-    w,
-    (text.match(new RegExp(`\\b${w}\\b`, "g")) ?? []).length,
-  ] as const)
-    .filter(([, n]) => n >= 2)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3);
+export function keeperReflection(shares: Share[], tag?: string | null): string | null {
+  if (shares.length === 0) return null;
 
-  if (counts.length === 0) {
-    return `${contents.length} ${contents.length === 1 ? "person" : "people"} spoke. Nobody fixed anybody. That is the whole job — sit with what you heard.`;
+  const text = shares.map((s) => s.content).join(" \n ").toLowerCase();
+
+  /*
+    Two vocabularies, and the second one is why this move was dead.
+
+    `PATTERN_WORDS` is body and affect, which is the right *kind* of word —
+    it names what a room is carrying. It contains nothing about what any room
+    is convened *around*: nine pressures, and not one of their words. So the
+    economy circle could not hear "money", the japa circle could not hear
+    "visa", and over three-share circles built from real sentences the router
+    itself tagged, this branch named a pattern in **0** of them. The Keeper's
+    one real move, always falling through to the count.
+
+    `themePattern` is the router's own table, not a second list — the words
+    that identify a pressure are the words a room on that pressure repeats,
+    and a tenth pressure arrives here without anybody remembering to come.
+    Same measurement afterwards: 42%.
+  */
+  const counts = new Map<string, number>();
+  for (const w of PATTERN_WORDS) {
+    const n = (text.match(new RegExp(`\\b${w}\\b`, "g")) ?? []).length;
+    if (n > 0) counts.set(w, n);
+  }
+  const theme = themePattern(tag);
+  if (theme) {
+    for (const m of text.matchAll(theme)) {
+      const w = m[0].toLowerCase();
+      counts.set(w, (counts.get(w) ?? 0) + 1);
+    }
   }
 
-  const heard = counts.map(([w, n]) => `${w} ${n} times`).join(", ");
+  const top = [...counts.entries()]
+    .filter(([, n]) => n >= 2)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 3);
+
+  if (top.length === 0) {
+    /*
+      People, not messages.
+
+      This read `contents.length` and rendered it as a count of people, and
+      the caller handed it `.map((m) => m.content)` — so the identities were
+      stripped one line before the sentence that claims to count them. One
+      person sharing three times made the Keeper announce "3 people spoke", at
+      minute thirty-eight, out loud, to a room that knows exactly who spoke.
+
+      Overstating how full the room was is the specific untruth that matters
+      here: "you are not the only one" is the whole promise, and this is the
+      sentence that would have been inventing evidence for it.
+    */
+    const people = new Set(shares.map((s) => s.anonId)).size;
+    return `${people} ${people === 1 ? "person" : "people"} spoke. Nobody fixed anybody. That is the whole job — sit with what you heard.`;
+  }
+
+  const heard = top.map(([w, n]) => `${w} ${n} times`).join(", ");
   return `I heard ${heard}. Same room, same word, different lives. Nothing to fix — just notice you are not the only one carrying it.`;
 }

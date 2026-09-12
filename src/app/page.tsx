@@ -173,7 +173,13 @@ export default async function LandingPage() {
           It is the thing that decides whether somebody types the true sentence
           or a safer one, so it does not belong in a footer. Every clause is
           something the code actually does — no account exists to make, the id
-          is generated on the device, and /memory deletes everything.
+          is generated on the device, and /history deletes everything.
+
+          This said "/memory deletes everything", contradicting the comment
+          twenty lines down that exists to say it is /history. The link was
+          fixed and the sentence justifying the link was not, which is this
+          repository's third mechanism: a fix that reached the copy in front of
+          it and not the one beside it.
         */}
         {/*
           No label over this one.

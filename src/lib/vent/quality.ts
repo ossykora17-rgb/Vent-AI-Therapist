@@ -1,6 +1,8 @@
 import { containsAdvice } from "@/lib/circles/rules";
 import { askedForSkill, BANNED_PHRASES, FILE_LANGUAGE, genericTask, REPLY_SENTENCE_CAP } from "./voice";
 import { coverage, COVERAGE_FLOOR } from "./scan";
+import { CONDITIONS } from "./notes";
+import { PIDGIN_GRAMMAR, PIDGIN_LEXICAL } from "./intent";
 
 /**
  * What a reply has to be, checked without asking a second model.
@@ -119,10 +121,127 @@ const INVENTED_PERSON =
 const INVENTED_SUM =
   /(?:₦|\bNGN\s*)\s?\d[\d,.]*\s*(?:k|m|million|thousand)?\b|\b\d[\d,.]*\s*(?:naira|dollars?|usd|pounds)\b/i;
 
-/** Pidgin markers, for the mixing check. Not a language detector. */
-const PIDGIN = /\b(dey|na|abeg|wetin|don|no be|sabi|wahala|oga|make i|e go|kuku|sha)\b/i;
-/** Unambiguously-English function words that a Pidgin reply should not lean on. */
-const ENGLISH = /\b(the|and|that|with|from|about|because|would|there)\b/i;
+/**
+ * One anchored pattern per condition family, built once.
+ *
+ * Compiled at module load rather than inside the grader: this runs on every
+ * model reply and again on every retry, and twenty `new RegExp` per call is
+ * twenty allocations to answer a question whose answer never changes.
+ */
+const CONDITION_PATTERNS = CONDITIONS.map((f) => new RegExp(`\\b(?:${f})\\b`, "i"));
+
+/**
+ * Process words, which are not condition names.
+ *
+ * `CONDITIONS` covers what somebody *has* and is fatal, because a label for
+ * your condition is not something you can un-hear. This covers what a theory
+ * *calls* the thing that is happening — a different offence with a different
+ * cost. Nobody is harmed by the word "dysregulation"; they simply do not know
+ * what was said to them, which in a product for somebody at 2am is its own
+ * kind of failure.
+ *
+ * EVERY ENTRY EARNED ITS PLACE BY WHAT IT EXCLUDES
+ *
+ * Checked against all 165 strings this product can author — zero hits — and
+ * three candidates were cut for colliding with ordinary speech, which is this
+ * repository's most-repeated lesson after `make you`, `fit`, `belle` and
+ * `\bdon\b`:
+ *
+ *   conditioning   "the air conditioning for the office" — in Lagos, of all
+ *                  the words to ban
+ *   projection     an ordinary noun: a forecast, a projection for the quarter
+ *   displacement   an ordinary noun, and a real thing that happens to families
+ *
+ * A word that is jargon *and* ordinary English is not on this list. The list
+ * is allowed to grow only in the direction of words that are neither.
+ *
+ * Exported because two surfaces need it and must not hold two copies. On a
+ * *reply* the rule is "not bare" — `unpacked()` lets a term through when the
+ * sentence explains it, because naming a mechanism and then saying it plainly
+ * is the best move in the library. On text *we* author — a tactic instruction,
+ * a hold — the rule is stricter and simpler: never, because an instruction
+ * containing the short abstract noun is teaching the model to reach for it.
+ */
+export const JARGON: readonly RegExp[] = [
+  /\binternali[sz]ed?\b/i, /\binternali[sz]ation\b/i, /\binstrumentali[sz]ation\b/i,
+  /\bdepersonali[sz]ation\b/i, /\bderealisation\b/i, /\bdysregulat\w+\b/i,
+  /\bmaladaptive\b/i, /\bcognitive distortion\b/i, /\bcore belief\b/i,
+  /\bschema\b/i, /\battachment style\b/i, /\binner child\b/i,
+  /\bself.actuali[sz]ation\b/i, /\bcatastrophi[sz]ing\b/i, /\brumination\b/i,
+  /\bemotional labou?r\b/i, /\bnervous system response\b/i, /\btrauma response\b/i,
+  /\bcoping mechanism\b/i, /\bdefen[cs]e mechanism\b/i, /\bsomati[sz]ation\b/i,
+  /\baffect regulation\b/i, /\bself.effica?cy\b/i, /\blocus of control\b/i,
+  /\breinforcement loop\b/i, /\bexecutive function\b/i, /\blearned helplessness\b/i,
+  /\bcognitive load\b/i,
+];
+
+/** The sentence a match landed in, so "same sentence" means what it says. */
+function sentenceAround(text: string, at: number): string {
+  const start = Math.max(
+    text.lastIndexOf(".", at), text.lastIndexOf("!", at), text.lastIndexOf("?", at),
+    text.lastIndexOf("\n", at),
+  );
+  const rest = text.slice(at);
+  const endRel = rest.search(/[.!?\n]/);
+  return text.slice(start + 1, endRel === -1 ? text.length : at + endRel + 1).trim();
+}
+
+/**
+ * Was the term unpacked where it was used?
+ *
+ * Generous on purpose, and the generosity is the design rather than a
+ * compromise. This decides whether a billed retry is spent, and the move it is
+ * protecting — name the mechanism, then say it plainly — is the most valuable
+ * one in the room. A grader that refuses "that's what people call a core
+ * belief, a rule you learned so early it feels like a fact" teaches the model
+ * to stop naming mechanisms, which is the opposite of what this is for.
+ *
+ * So it asks for two cheap things: a connector that introduces an explanation,
+ * and enough words after it to be one. Six, because "— a learned rule" is a
+ * label and "a rule you learned so early it feels like a fact" is a sentence.
+ */
+function unpacked(sentence: string, term: string): boolean {
+  const after = sentence.slice(sentence.toLowerCase().indexOf(term.toLowerCase()) + term.length);
+  if (!/[—–:,-]|\bwhich means\b|\bthat is\b|\bi\.e\.\b|\bmeaning\b|\bwhen\b|\bso\b/i.test(after)) return false;
+  return after.split(/\s+/).filter(Boolean).length >= 6;
+}
+
+/**
+ * How many *distinct* pieces of Pidgin grammar a reply is built on.
+ *
+ * Grammar, not vocabulary, and the distinction is the whole rule.
+ *
+ * Naija Pidgin is an English-lexifier creole. Its function words *are*
+ * English words — "the", "and", "that", "because" appear in fluent Pidgin
+ * constantly — so counting them tells you nothing about what language a
+ * sentence is in. What tells you is the structure: `dey` for the progressive
+ * and the copula, `na` for focus, `wey` for the relative clause, `no be` for
+ * the negative copula, `make I` for the subjunctive, `don` for the
+ * perfective.
+ *
+ * Borrowed nouns sit on the other side of that line and are counted
+ * separately. "The wahala at work is too much" is an English sentence with a
+ * Nigerian word in it, and treating it as Pidgin would be the room deciding
+ * somebody's register from a single borrowing.
+ *
+ * The lists live in `intent.ts` and are imported, never copied. There used to
+ * be two — the router's, hardened once already, and a cruder one here — and
+ * neither was a superset of the other, so the classifier and the grader
+ * disagreed about the most important question this product asks. The grader
+ * is the one that now spends a billed retry on the answer.
+ */
+function pidginGrammar(text: string): number {
+  return new Set(
+    PIDGIN_GRAMMAR.map((re) => text.match(new RegExp(re.source, "gi")))
+      .filter(Boolean)
+      .flatMap((m) => m!.map((x) => x.toLowerCase().replace(/\s+/g, " "))),
+  ).size;
+}
+
+/** Whether the reply borrows a Nigerian word without being built in Pidgin. */
+function pidginVocabulary(text: string): boolean {
+  return PIDGIN_LEXICAL.some((re) => new RegExp(re.source, "i").test(text));
+}
 
 const sentences = (s: string) =>
   s.split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean).length;
@@ -285,6 +404,99 @@ export function gradeReply(
     if (sum && !source.replace(/[,.\s]/g, "").includes(sum[0].replace(/[^\d]/g, ""))) {
       add("invented", "fatal", `a figure nobody gave you: "${sum[0]}"`);
     }
+
+    /*
+      A condition they never named.
+
+      Every screen on this product says it is not therapy, the prompt says
+      "never diagnose, and never name a condition", and `keepable()` in
+      `notes.ts` refuses to write one into a row. None of that was ever checked
+      on the sentence a person actually reads. Fourteen graders and not one of
+      them asked.
+
+      Production, all 171 real vents: eight replies name a clinical condition
+      and five of the eight name one the person had never used. All five are
+      "anxiety". The worst reads "carrying your parents' marriage anxiety" —
+      the room diagnosing two people who are not in it, to somebody who had
+      said nothing of the kind.
+
+      Fatal, and in the failsafe's rejection set, for the reason `notes.ts`
+      gives about rows and which is stronger about sentences: a name for your
+      condition is not something you can un-hear, and this room is not
+      qualified to hand one out. An authored line is better than a diagnosis.
+
+      The exemption is their own word, and it is why this lives inside the
+      `said` block — with no evidence the check cannot tell "you called it
+      anxiety" from "this is anxiety", so it does not run at all rather than
+      guess. Fail open on the second opinion; the crisis path and the
+      no-advice rules are the ones that always run.
+
+      `DIAGNOSIS` is imported, never copied. `notes.ts` refuses the word
+      outright because a row outlives the sentence around it; a reply may hand
+      back a word they chose. Same rule from both ends: the product never
+      introduces a condition.
+
+      Matched per family, not once over the whole list. A single yes/no would
+      let a reply say "bipolar" to somebody who happened to write "burnout" —
+      the same offence wearing a different label, exempted because the person
+      had used *some* clinical word once.
+
+      The families are the ones in the table, and the table is deliberately
+      narrower than the vocabulary. "anxious" is not in it and "anxiet\w*" is,
+      so a reply that answers "I'm anxious about rent" with "that anxiety"
+      fires — correctly. Their word was anxious. Anxiety is a noun the room
+      added, and adding it is the entire thing this grader exists to stop.
+    */
+    for (const pattern of CONDITION_PATTERNS) {
+      const named = reply.match(pattern);
+      if (named && !pattern.test(source)) {
+        add("diagnosis", "fatal", `named a condition they never used: "${named[0]}"`);
+        break;
+      }
+    }
+  }
+
+  /*
+    ── did they understand it ─────────────────────────────────────────────
+
+    A reply can be correct, kind, on-tactic, in the right language, and mean
+    nothing to the person reading it.
+
+    Naming the *mechanism* is the most valuable move this room makes —
+    "you were taught you matter only when you work, so when you can't work you
+    feel you don't matter" is worth more than any amount of reflection. And it
+    is exactly the move that goes wrong in one specific way: the mechanism has
+    a name in the literature, the name is shorter than the explanation, and a
+    model reaches for it. "You are experiencing internalized
+    instrumentalization" is the same insight with the person removed from it.
+
+    So this grades comprehension, which nothing here did. Fourteen graders and
+    not one asked whether the sentence lands on somebody having a bad day at
+    2am in Lagos.
+
+    NOT A BAN — THE RULE IS "UNLESS YOU UNPACK IT IN THE SAME SENTENCE"
+
+    That distinction is the whole design. A reply that says "that's what people
+    call a core belief — a rule you learned so early it feels like a fact" has
+    done the work, and a grader that refuses it would teach the room to avoid
+    naming mechanisms at all, which is the opposite of the point. The offence
+    is the *bare* term, and `unpacked()` is deliberately generous: it errs
+    toward passing, because this severity costs a billed retry and a false
+    reject here would delete the best move in the library.
+  */
+  if (meta.said) {
+    const jargonSource = meta.said.toLowerCase();
+    for (const term of JARGON) {
+      const hit = reply.match(term);
+      if (!hit) continue;
+      // Their word handed back is not jargon — the same exemption `diagnosis`
+      // makes, for the same reason. If they said "core belief", the room may.
+      if (term.test(jargonSource)) continue;
+      const sentence = sentenceAround(reply, hit.index ?? 0);
+      if (unpacked(sentence, hit[0])) continue;
+      add("jargon", "major", `a word that explains nothing: "${hit[0]}"`);
+      break;
+    }
   }
 
   // ── did it answer what was said ──────────────────────────────────────────
@@ -304,12 +516,50 @@ export function gradeReply(
     The prompt asked for three to four sentences and this complained at six —
     a two-sentence gap where the reply was long by the contract and fine by
     the grader, which is how a reply gets to be a paragraph without anything
-    objecting. `REPLY_SENTENCE_CAP` is now the only number, and it is 3.
+    objecting. `REPLY_SENTENCE_CAP` is the only number, wherever it currently
+    sits — the prompt, the failsafe's retry line and this check all import it,
+    so none of them can disagree about what the office asks for.
   */
   if (n > REPLY_SENTENCE_CAP) {
     add("length", "minor", `${n} sentences — the office says ${REPLY_SENTENCE_CAP}`);
   }
   if (reply.length > 700) add("length", "minor", `${reply.length} chars is a paragraph, not a reply`);
+
+  /*
+    THE ROOM IS NOT IN IT WITH THEM.
+
+    First-person plural is the room joining somebody inside their own problem
+    — "we can look at that", "let's see", "our next step". Differentiation is
+    the whole posture this product is built on: close without fusing, care
+    without carrying. There is one person here and a machine, and a plural
+    pronoun quietly asserts a second party who will not be there at 3am.
+
+    **`make we` is exempt, and that is not a softening of the rule.** It is
+    Pidgin's hortative — `PIDGIN_GRAMMAR` carries `make I / we / e / dem` on
+    purpose, and this file's own corpus uses it: *"Make we leave the why
+    tonight."* Banning it would force stilted Pidgin on somebody who wrote in
+    Pidgin, which is the register-decline failure CLAUDE.md spends more words
+    on than anything else. Sixth time a marker has had to give up a word that
+    is one thing in English and another in Naija, after `make you`, `fit`,
+    `belle`, `\bdon\b` and `conditioning`.
+
+    Private room only, by construction rather than by a flag: `quality.ts`
+    grades replies the model wrote here, and the circles rulebook is
+    `checkMessage(x, "share")` — a different function on a different surface.
+    The Keeper's own refusal is "We no dey fix here. We dey witness", and it
+    must stay that way. A circle really does have six people in it.
+
+    `major`, not a retry: it drops the row from SFT so the habit is never
+    trained in, and the heartbeat counts it — but nothing here has measured
+    how often a model actually produces it, and tuning a new grader into a
+    billed retry on a sample of zero is what `earned_worth` looks like before
+    it ships. Promote it when there is a number.
+  */
+  const withoutHortative = reply.replace(/\bmake\s+(?:i|we|e|dem)\b/gi, " ");
+  const fused = withoutHortative.match(/\b(?:we|us|our|ours|ourselves)\b|\blet['’]s\b/i);
+  if (fused) {
+    add("fused", "major", `the room put itself in the room: "${fused[0]}"`);
+  }
 
   /*
     THE TWO GRADERS THAT DID NOT SURVIVE THEIR OWN CORPUS.
@@ -341,17 +591,105 @@ export function gradeReply(
 
     Left as a comment rather than deleted because the next person will have the
     same good idea.
+
+    THIRD AND FOURTH, FROM A PRESENCE SPEC, DEAD THE SAME WAY.
+
+    "Never stack questions" and "no 'we'" — both deterministic, both genuinely
+    ungraded, and both measured against the same seventy-two before a line was
+    written. They fail identically to the two above.
+
+      `/\?[^?]*\?/` flagged **3 of 72**, every one correct. "What happens at
+      the point where you stop? Same point every time?" is a narrowing
+      follow-up, not a second demand, and the Pidgin example offers a *menu* —
+      "Weight? Sharp? E dey move?" — which is one act of attention wearing
+      four question marks. The spec's rule assumes turn-taking. This product
+      answers once per turn, so the follow-up is the space-leaving.
+
+      Bare `let's` flagged **2 of 72**, both correct, and both the good use:
+      "Let's see if they were three things or one thing three times" is an
+      invitation to look, which is the whole function. `make you` again — the
+      commonest hit is the ordinary one.
+
+    Narrowed to the room actually carrying the load — `we'll get through`,
+    `we're in this together`, `our journey` — it flags **0 of 72 and 0 of 897**.
+    A regex that matches nothing is not coverage, and shipping one would have
+    put a green check over a rule nothing enforces.
+
+    The 897 are local eval rows, not production, so a zero there is weak. The
+    seventy-two are the instrument, and they killed all three.
+
+    What survives from that spec needs no code: its sentence cap is already
+    `REPLY_SENTENCE_CAP`, its "no neuroscience explanations" is already in
+    `JARGON`, its no-advice and no-fabrication rules are `advice`,
+    `generic_task` and `invented`, and its safety clause is the crisis path
+    that never reaches a model. The remainder — emotional accuracy, presence,
+    present-moment grounding — is what CLAUDE.md means by a person in a real
+    room, and no fifth attempt will change that.
   */
 
-  // Never mix the two in one reply. Only checked on Pidgin cases: an English
-  // reply legitimately contains no Pidgin, but a Pidgin reply leaning on
-  // English function words is the mixing the voice forbids.
+  /*
+    Answer in the language they wrote in. Both directions, and it used to be
+    one.
+
+    "Only checked on Pidgin cases: an English reply legitimately contains no
+    Pidgin, but a Pidgin reply leaning on English function words is the mixing
+    the voice forbids." That sentence is true and it is about *mixing*, which
+    is a different offence from *switching* — and the `if` it justified closed
+    the door on both. Production found the other side: three English messages
+    answered in Pidgin, one of them six markers deep — "That phrase dey hide
+    many tins, but it sound like you dey ask why things no dey go as planned".
+
+    That direction is the worse of the two for comprehension. A Pidgin speaker
+    answered in English can read the reply; they are being refused their
+    register, which is the offence above. Somebody who wrote in English may
+    simply not read Pidgin — and English is itself a chosen register here, the
+    distanced one, often picked precisely because the material is hard to say
+    close up. Answering it in Pidgin is the same refusal, aimed at somebody
+    less able to absorb it.
+
+    Two *distinct* pieces of grammar, not one, and not two uses of one. One
+    marker is a borrowing or a coincidence; two is a sentence built in the
+    other language. Measured: of 166 English turns, three replies carry a
+    single marker and four carry two or more, and the four are the ones a
+    person would call Pidgin.
+
+    THE MIXING MINOR IS GONE, AND IT WAS MEASURING FLUENCY
+
+    There used to be a third branch here: a Pidgin reply carrying four or more
+    of `the|and|that|with|from|about|because|would|there` was flagged as
+    "carrying a lot of English scaffolding".
+
+    Every one of those words is ordinary Naija Pidgin. It is an
+    English-lexifier creole; its function words *are* English words. So the
+    rule fired on exactly the replies that got Pidgin right — four of the six
+    successful Pidgin turns in production, including "You dey demand say I
+    'holla you first' because silence dey hurt you", which is fluent and
+    correct and was being recorded as a defect.
+
+    A rule that flags two thirds of the good work is not a strict rule, it is
+    a broken one, and it was quietly poisoning the only tally that says
+    whether the room speaks Pidgin properly. Deleted rather than tuned: there
+    is no threshold of English function words that means anything here.
+
+    What it was reaching for — a reply that is English wearing one borrowed
+    word — is caught by the branch above, because a borrowed noun contributes
+    no grammar. That case is named separately in the detail, since "answered
+    in English" and "answered in English with a Nigerian word in it" are the
+    same offence and different things to go and read.
+  */
+  const grammar = pidginGrammar(reply);
   if (c.language === "pidgin") {
-    if (!PIDGIN.test(reply)) {
-      add("language", "major", "answered a Pidgin message in English");
-    } else if ((reply.match(new RegExp(ENGLISH, "gi")) ?? []).length >= 4) {
-      add("language", "minor", "Pidgin reply carrying a lot of English scaffolding");
+    if (grammar === 0) {
+      add(
+        "language",
+        "major",
+        pidginVocabulary(reply)
+          ? "answered a Pidgin message in English with a borrowed word in it"
+          : "answered a Pidgin message in English",
+      );
     }
+  } else if (grammar >= 2) {
+    add("language", "major", "answered an English message in Pidgin");
   }
 
   return out;

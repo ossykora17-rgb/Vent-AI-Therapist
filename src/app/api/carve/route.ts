@@ -1,3 +1,4 @@
+import { errorKind } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore } from "@/lib/store";
@@ -6,6 +7,7 @@ import { withStore } from "@/lib/http/with-store";
 import { generateReply } from "@/lib/vent/providers";
 import {
   CARVE_FLOOR,
+  CARVE_MAX_TOKENS,
   CARVE_MAX_WORDS,
   CARVER_SYSTEM,
   carvePrompt,
@@ -134,9 +136,17 @@ async function handlePOST(req: Request) {
   try {
     const answered = await generateReply({
       system: CARVER_SYSTEM,
-      // Eight words out. The ceiling is small because the job is small, and a
-      // model given room to explain itself will write a case note instead.
-      maxTokens: 120,
+      /*
+        Sized against what the Carver is asked for, not against the carve
+        alone. It was 120 under a comment reading "Eight words out. The
+        ceiling is small because the job is small" — true of the job before
+        notes joined the same call, and never revisited after.
+
+        The whole response is one JSON object, so a reply cut off mid-notes
+        loses the carve as well: JSON.parse throws and parseCarve returns
+        null. See CARVE_MAX_TOKENS.
+      */
+      maxTokens: CARVE_MAX_TOKENS,
       deadlineMs: CARVE_DEADLINE_MS,
       messages: [{ role: "user", content: carvePrompt(messages, earlier) }],
     });
@@ -146,7 +156,7 @@ async function handlePOST(req: Request) {
   } catch (error) {
     // A provider outage at the end of a session is not something the person
     // needs to hear about. They already got their reply and their drop.
-    console.warn("[carve] model call failed", error);
+    console.warn("[carve] model call failed", errorKind(error));
     return NextResponse.json({ carved: false, reason: "model_unavailable" });
   }
 
@@ -167,7 +177,7 @@ async function handlePOST(req: Request) {
   try {
     noted = notes.length > 0 ? await store.saveNotes(userId, notes) : 0;
   } catch (error) {
-    console.warn("[carve] notes did not land", error);
+    console.warn("[carve] notes did not land", errorKind(error));
   }
   return NextResponse.json({
     carved: kept,

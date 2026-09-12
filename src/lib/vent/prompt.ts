@@ -8,6 +8,7 @@ import { objectLabel, objectReads } from "./chairs";
 import type { Pattern } from "./pattern";
 import { scan, scanBlock } from "./scan";
 import { aimedAtTheMachine, type Classification } from "./intent";
+import { isFailureReply } from "./model";
 import type { Tactic, TacticContext } from "./tactics";
 import { OCCUPATION_PRESSURE } from "@/lib/flavour/profile";
 import type { FlavourProfile } from "@/lib/flavour/types";
@@ -150,7 +151,17 @@ export function memoryBlock(rows: MemoryRow[]): string {
   */
   const RELIEF_FLOOR = 10;
   const top = rows
-    .filter((r) => r.ai_reply && r.tension_before != null && r.tension_after != null)
+    /*
+      Never a sentence we wrote when the model did not answer.
+
+      This picks the reply that moved somebody furthest and shows it to the
+      model as the shape that lands for this person. A rate-limit message is
+      eligible on the numbers — the tension can drop for reasons that have
+      nothing to do with the reply — and it would be presented as exemplary,
+      to the one place in the prompt that says "this worked".
+    */
+    .filter((r) => r.ai_reply && !isFailureReply(r.ai_reply) &&
+      r.tension_before != null && r.tension_after != null)
     .map((r) => ({ r, relief: (r.tension_before as number) - (r.tension_after as number) }))
     .filter(({ relief }) => relief >= RELIEF_FLOOR)
     .sort((a, b) => b.relief - a.relief)[0];
@@ -213,9 +224,9 @@ HOW YOU SPEAK
   Nothing for them to *do* unless they asked, and never a task that would fit
   anybody. The question closes it, and it must cost something — not
   answerable by understanding harder.
-- Answer in the language they wrote in, never mixed, and never perform an
-  accent they did not use first. Terse gets terse, heat gets heat: calm at
-  anger reads as management.
+- Answer in the register they used.
+  Never perform an accent they did not use. Terse gets terse, heat gets
+  heat: calm at anger reads as management.
 - If they are performing, say so: "That na TED talk. Who you dey perform for?"
   If they are dodging: "That na excuse. Talk true."
 
@@ -630,6 +641,76 @@ export interface BuildPromptArgs {
   probe?: Probe | null;
 }
 
+/**
+ * Join prompt sections with exactly one blank line between them.
+ *
+ * This existed as `.filter(Boolean).join("\n")` with `""` entries written
+ * between the sections in the array — which read like blank-line separators
+ * and were removed by the `filter` before the join ever saw them. So the
+ * separator every section actually got was whatever its own text happened to
+ * end with. Blocks whose template literal closed on a newline got a blank
+ * line; blocks that closed on a full stop did not. Measured on a real prompt:
+ * seven of twelve section headings had a blank line above them and five sat
+ * directly on the last sentence of the section before, including `THE OFFICE`
+ * landing on "...is the reason people quit."
+ *
+ * Nothing was broken by that and nothing here claims the model was confused by
+ * it — that is the "read by a person, in a real room" question and no gate can
+ * ask it. What can be said is narrower and still worth fixing: the code stated
+ * an intention it did not carry out, in the file that decides what every reply
+ * is made of, and the delimiter between two sections was decided by a trailing
+ * newline nobody was looking at.
+ *
+ * `trimEnd` before the filter, so a block that is only whitespace drops out
+ * rather than becoming a third blank line.
+ */
+export function sections(parts: ReadonlyArray<string | null | false | undefined>): string {
+  return parts
+    .filter((p): p is string => Boolean(p))
+    .map((p) => p.trimEnd())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+/**
+ * The head of every system prompt, byte for byte, for everybody.
+ *
+ * This is the cache key in all but name. A prefix-caching provider matches on
+ * a literal prefix and charges the discounted rate for the part that matched,
+ * so what this constant is worth is decided entirely by whether it is
+ * *identical* — not whether it is early, and not whether it is large.
+ *
+ * Two properties make it so, and both are asserted rather than asserted-about:
+ *
+ * - `VOICE` contains no interpolation at all, and `OFFICE_RULES` interpolates
+ *   only `REPLY_SENTENCE_CAP`, a module constant. Nothing per-user, per-turn,
+ *   per-day or per-deployment reaches either one.
+ * - It is built by the same expression the prompt is built from, and check 114
+ *   asserts `buildSystemPrompt(...).startsWith(STABLE_PREFIX)` over varied
+ *   inputs, times and people. Derive the prefix or the prefix is the bug: a
+ *   hand-copied constitution here would drift from the real one silently, and
+ *   the failure mode of that is a cache that never hits and never says so.
+ *
+ * ~1,574 tokens. That clears the 1,024-token minimum for `claude-sonnet-5`,
+ * which is what `MODEL.anthropic` is. It does **not** clear the 2,048-token
+ * minimum on Haiku — so a switch to Haiku silently turns this off rather than
+ * breaking it, which is the right failure but an invisible one; check 114
+ * records the number so the next person changing models can see what they are
+ * standing on.
+ *
+ * Only the Anthropic adapter consumes it today, because it is the only
+ * provider in the chain with an explicit breakpoint. The reordering it needed
+ * benefits every provider with an implicit prefix cache regardless.
+ *
+ * Built with `sections()`, the same function the builder uses, because the two
+ * have to agree byte for byte and there is no surface anywhere that would
+ * notice if they stopped. The first version of this constant used
+ * `join("\n")` where the builder used `.filter(Boolean).join("\n")` — one
+ * byte, and it matched nothing at all. Same expression or the constant is a
+ * decoration.
+ */
+export const STABLE_PREFIX = sections([VOICE, OFFICE_RULES]);
+
 export function buildSystemPrompt({
   grounding,
   classification,
@@ -664,24 +745,47 @@ export function buildSystemPrompt({
     .filter(Boolean)
     .join("\n");
 
-  return [
-    groundingBlock(grounding),
-    "",
+  return sections([
+    /*
+      The constitution first, byte for byte, on every call this product makes.
+
+      It used to be third, behind `groundingBlock`, and that ordering made the
+      prompt uncacheable by construction — not expensively cached, *impossible*
+      to cache. Every prefix-caching provider matches on a literal prefix, and
+      grounding's first four lines carry `Current time` to the minute and `ISO`
+      to the millisecond. So the longest prefix any two requests in this
+      product's history have shared is about twenty-five tokens, from anybody,
+      ever. Roughly 1,574 tokens of constitution sat immediately behind a
+      timestamp and were re-read, and re-billed, on every single turn.
+
+      Moving it is the whole change: `STABLE_PREFIX` below is now byte-identical
+      across users, sessions, days and deployments, and check 114 asserts that
+      against varied inputs rather than trusting this comment.
+
+      Grounding is not deleted, it is moved — down beside `WHAT YOU KNOW RIGHT
+      NOW`, which is where the rest of this turn's volatile facts already live.
+      The date-answering job it was written for does not depend on being first:
+      `answerFactual` handles "what day is it" locally, before a model is
+      called at all, and the block here is the backstop for a date mentioned in
+      passing rather than the mechanism.
+
+      What cannot be verified from here: whether the model reads the clock as
+      well from two-thirds down as it did from the top. No gate can ask that —
+      it is the "read by a person, in a real room" case CLAUDE.md names. What
+      *is* asserted is that the block is still present, still complete, and
+      still above the output contract.
+    */
     VOICE,
-    "",
     // The office contract — shape, memory, and the reflect-to-ask ratio —
     // written once in voice.ts so the grader and the build check read the
     // same words this prompt is assembled from.
     OFFICE_RULES,
-    "",
     arcBlock(turnsToday),
-    "",
     // The clause list goes in *before* the tactic. The move is what to do
     // once you have read them; this is the reading, and putting it after
     // would be handing over an instruction about a message the model has not
     // been made to look at yet.
     message ? scanBlock(scan(message)) : null,
-    "",
     // The three rules, then the three things they govern — and only when at
     // least one of them was actually assembled. A rule about context that is
     // not present is pure weight, and this prompt is already ~3,100 tokens.
@@ -697,36 +801,26 @@ export function buildSystemPrompt({
     ].some(Boolean)
       ? CONTEXT_RULES
       : null,
-    "",
     // The thread first: it is the only block that is a live question rather
     // than a description, and rule 2 says the context aims the one question.
     threadBlock(openThread(memory)),
-    "",
     carveBlock(carve),
-    "",
     patternBlock(pattern),
-    "",
     openingBlock(opening),
-    "",
     flavourBlock(flavour),
-    "",
     // Before the tactic, because it is background the tactic is chosen
     // against — and after the context rules, because "use it only if it fits
     // what they said" is the same instruction rule 3 gives everything else.
     researchBlock(technique),
-    "",
     // What the room got wrong before. Renders nothing until an audit has
     // proposed something and the gate has accepted it, so a deployment that
     // has never run one carries not a token for this.
     learnedBlock(learned),
-    "",
     // Before the tactic, with the other assembled context, and governed by the
     // same three rules — name the thing, never the file, and their sentence
     // outranks all of it.
     notesBlock(notes),
-    "",
     `THIS TURN — the move to make (your own voice, never quoted):\n${withoutExample(tactic.instruction)}`,
-    "",
     /*
       The two halves of the contract, each with a source at last.
 
@@ -741,16 +835,34 @@ export function buildSystemPrompt({
       optional decoration.
     */
     probeBlock(probe),
-    "",
+    // The clock, with the rest of what is only true right now. Everything from
+    // here down varies per turn, which is exactly why the constitution is not
+    // down here with it.
+    groundingBlock(grounding),
     state && `WHAT YOU KNOW RIGHT NOW\n${state}`,
-    "",
     memoryBlock(memory),
-    "",
-    `Reply in ${classification.language === "pidgin" ? "Pidgin" : "English"}. ${REPLY_SENTENCE_CAP} sentences maximum, and one question.`,
+    /*
+      The last instruction before the output rule, and the one that decides
+      the language in practice — so it says what Pidgin *is* rather than
+      naming it and hoping.
+
+      "Reply in Pidgin" was already here and already correct, and six of the
+      twelve real Pidgin turns came back in English anyway. A bare language
+      name leaves the model to decide what counts, and English is always the
+      safe answer to that question. Naming the grammar removes the ambiguity:
+      `dey`, `na`, `wey`, `no be` are what make a sentence Pidgin, and they
+      are also exactly what the grader counts, so the instruction and the
+      check now describe the same thing.
+
+      This cannot be verified from inside the repository — no gate can tell
+      whether an instruction lands. What can be verified is that the failsafe
+      catches it when it does not, and that is check 104's job.
+    */
+    classification.language === "pidgin"
+      ? `Reply in Pidgin grammar (dey, na, wey, no be) — not English with a Nigerian word in it; the English words inside Pidgin are correct. ${REPLY_SENTENCE_CAP} sentences maximum, and one question.`
+      : `Reply in English. ${REPLY_SENTENCE_CAP} sentences maximum, and one question.`,
     "Output only the words you would say to them. No preamble, no labels, no\nrestating the move, no headings. Start with the first thing you would say.",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ]);
 }
 
 /** Greetings and meta replies are written locally — no tokens spent. */

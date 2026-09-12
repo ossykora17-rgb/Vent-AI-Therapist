@@ -265,30 +265,3 @@ export async function jobsContext(): Promise<CacheEntry<Job[]> | null> {
     return rows.length ? rows : null;
   });
 }
-
-// ── 3. One quote, Stoic, and only at the door ──────────────────────────────
-
-export interface Quote {
-  text: string;
-  author: string;
-}
-
-/**
- * Stoicism only, and the Closing only. A quote in the middle of a vent is the
- * wellness-app reflex this product exists to avoid — somebody says their
- * mother rang three times and a screen answers with a philosopher. At the
- * door, on the way out, holding one line about what is yours to control, it
- * rhymes with "one thing you can control today, down to ten naira".
- */
-export async function stoicQuote(): Promise<CacheEntry<Quote> | null> {
-  return cached<Quote>("quote", DAY, "stoic-quotes.com", async () => {
-    const recorded = fixture<Quote>("quote");
-    if (recorded) return recorded;
-
-    const data = await getJson<{ text?: string; author?: string }>(
-      "https://stoic-quotes.com/api/quote",
-    );
-    if (!data?.text) return null;
-    return { text: String(data.text), author: String(data.author ?? "Unknown") };
-  });
-}

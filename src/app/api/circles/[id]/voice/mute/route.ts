@@ -122,11 +122,32 @@ async function handlePOST(request: Request, { params }: Params) {
       { headers: { "cache-control": "no-store" } },
     );
   } catch (error) {
-    // Say what failed. A Keeper who pressed mute and saw nothing happen needs
-    // to know whether the room ignored them or the SFU did.
-    const message = error instanceof Error ? error.message : String(error);
+    /*
+      Say what failed, and not in the SFU's words.
+
+      The intent below was right and is kept: a Keeper who pressed mute and saw
+      nothing happen needs to know whether the room ignored them or the voice
+      server did, and 502 with this sentence says the second. What was wrong was
+      the mechanism — the raw `Error.message` was interpolated into a `message`
+      field, and every component in this product prints `message` verbatim to a
+      person. That is how three environment variable names reached somebody
+      tapping the microphone one route over.
+
+      A LiveKit error is worse than a hostname here. `mutePublishedTrack` is
+      called with the room name and an identity, and its failures quote them —
+      the room name is derived from the circle id and the identity is a seat.
+      A circle's whole promise is that the room is sealed; the error path was
+      the one surface that would read part of it back.
+
+      The kind is logged instead, per the rule that stdout gets names and never
+      contents.
+    */
+    console.warn("[mute] upstream refused:", error instanceof Error ? error.constructor.name : typeof error);
     return NextResponse.json(
-      { error: "upstream", message: `The voice server did not accept that: ${message}` },
+      {
+        error: "upstream",
+        message: "The voice server didn't take that. The room heard you — try again in a moment.",
+      },
       { status: 502 },
     );
   }

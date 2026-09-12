@@ -27,9 +27,9 @@ const { buildFlavour } = await app("src/lib/flavour/profile.ts");
 const { flavourBlock, openingBlock, carveBlock, memoryBlock } = await app("src/lib/vent/prompt.ts");
 const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/vent/chairs.ts");
-const { selectMemory } = await app("src/lib/vent/memory.ts");
+const { selectMemory, MEMORY_TURNS } = await app("src/lib/vent/memory.ts");
 const { checkMessage, economyFact, weatherFact, keeperIntention, keeperReflection, roleForSeat,
-        ALONE_LINE, ALONE_DOOR } =
+        ALONE_LINE, ALONE_DOOR, NO_KEEPER_TOOL, MAX_SEATS } =
   await app("src/lib/circles/rules.ts");
 const { PRESENCE_WINDOW_MS, TYPING_WINDOW_MS, isPresent, isTyping, presenceOf, shouldTouch } =
   await app("src/lib/circles/presence.ts");
@@ -41,7 +41,16 @@ const { BANNED_PHRASES, FILE_LANGUAGE, bannedPhrase, REPLY_SENTENCE_CAP, NO_MEMO
         GENERIC_TASKS, genericTask, askedForSkill } =
   await app("src/lib/vent/voice.ts");
 const { openThread, threadBlock } = await app("src/lib/vent/prompt.ts");
-const { aimedAtTheMachine } = await app("src/lib/vent/intent.ts");
+const { aimedAtTheMachine, PIDGIN_GRAMMAR, PIDGIN_LEXICAL, REAL_WORLD_TAGS, themePattern } = await app("src/lib/vent/intent.ts");
+
+/**
+ * The operator's vocabulary, in one place, because two files enforce it.
+ *
+ * `scripts/no-store-verify.mjs` has zero dependencies by design and cannot
+ * import from here, so check 111 asserts its literal matches this string
+ * instead. Intent is not a mechanism.
+ */
+const FORBIDDEN_SOURCE = String.raw`\bSupabase\b|\bnpm run\b|LIVEKIT_|ANTHROPIC_|NEXT_PUBLIC_|SERVICE_ROLE|\.env\b|\benv var|\blocalhost\b|\bthis deployment\b|\bthis instance\b|\bnot configured on\b`;
 const { localReply } = await app("src/lib/vent/prompt.ts");
 const { parseTechnique, researchBlock, QUERIES, ALLOWED } =
   await app("src/lib/vent/research.ts");
@@ -49,27 +58,108 @@ const { knownProblems, flatReplies, parseProposals, auditPrompt } =
   await app("src/lib/vent/audit.ts");
 const { echoesThem } = await app("src/lib/vent/echo.ts");
 const { wasAuthored, inTheLoop } = await app("src/lib/vent/tactics.ts");
-const { inspectReply } = await app("src/lib/vent/failsafe.ts");
+const { inspectReply, chooseReply, REJECT, RETRY_ONLY, NOTED, UNREACHABLE } =
+  await app("src/lib/vent/failsafe.ts");
 const { assessTurn } = await app("src/lib/vent/assess.ts");
-const { gradeReply } = await app("src/lib/vent/quality.ts");
+const { gradeReply, JARGON } = await app("src/lib/vent/quality.ts");
 const { openingLine, allianceLine, shouldSayAlliance, ALLIANCE_AT } =
   await app("src/lib/vent/intake.ts");
 const { withoutExample, recentOpenings } = await app("src/lib/vent/prompt.ts");
 const { PROBES, selectProbe, probeBlock, isBroad } = await app("src/lib/vent/probes.ts");
-const { parseNotes, keepable, notesBlock, NOTE_KINDS, MAX_IN_PROMPT, MAX_SUBJECT, MAX_DETAIL } =
+const { parseNotes, keepable, notesBlock, NOTE_KINDS, MAX_IN_PROMPT, MAX_SUBJECT, MAX_DETAIL, CONDITIONS,
+        NOTES_ASKED, NOTES_INSTRUCTION } =
   await app("src/lib/vent/notes.ts");
 const { acceptable, prune, learnedBlock, MAX_LEARNED, MAX_RULE_CHARS, LEARNED_RULES } =
   await app("src/lib/vent/learned.ts");
-const { RPC_CONTRACT } = await app("src/lib/store/contract.ts");
+const { RPC_CONTRACT, TABLE_CONTRACT } = await app("src/lib/store/contract.ts");
+const { HELD_CAP, BREAKING_CAP } = await app("src/lib/store/types.ts");
 const { measurePersonalEfficacy, blendEfficacy, PERSONAL_SPAN } =
   await app("src/lib/vent/efficacy.ts");
 const { REFERRALS, STALE_AFTER_DAYS, HANDOFF_FLOOR, activeReferrals, pastWhatThisHolds, handoffLine } =
   await app("src/lib/vent/referrals.ts");
-const { allProviders, configuredProviders, openAiCompatible, thinksFirst } =
+const { allProviders, configuredProviders, openAiCompatible, thinksFirst, systemBlocks, MIN_CACHEABLE_CHARS } =
   await app("src/lib/vent/providers.ts");
-const { wasCutOff, MAX_TOKENS } = await app("src/lib/vent/model.ts");
+const { errorKind } = await app("src/lib/errors.ts");
+const { wasCutOff, MAX_TOKENS, MODEL_STATUSES, modelFailureReply, classifyModelError } =
+  await app("src/lib/vent/model.ts");
 
 const BASE = (process.argv[2] || "").replace(/\/$/, "");
+
+/*
+  "0 tokens · 0 model calls" was typed, not measured.
+
+  The assertion count in the footer is computed. The two numbers beside it were
+  string literals, and they are the numbers this whole repository's credit
+  argument rests on — CLAUDE.md says the suite, both pipelines and the heartbeat
+  make "**zero** model calls by construction", and quotes that line as the
+  reason a change needing one is a change that is wrong.
+
+  Nothing enforced it. "By construction" was an argument about how the checks
+  are written, and the suite imports the real product: `research.ts` is loaded
+  at the top of this file, and `research()` makes a paid Anthropic web search.
+  A check that called it — or `generateReply`, or `embed` — would spend real
+  money on every gate run and print `0 model calls` underneath, in the exact
+  shape this repository calls "the interface reported an intention instead of
+  an outcome".
+
+  So it is counted. Anything leaving this process that is not the live server
+  under test is recorded, printed, and fails the run. `BASE` is the one allowed
+  destination: it is argv[2], the URL `live-checks.sh` passes, and every fetch
+  the suite makes on purpose goes there.
+
+  Two limits, stated rather than papered over. A provider SDK that does not go
+  through `globalThis.fetch` would not be seen — the ones here do. And a
+  subprocess (`execFileSync`) has its own `fetch`, so the pipelines and the
+  heartbeat are outside this count; their own claims are their own.
+*/
+/**
+ * Whether a URL leaving this process is somebody's bill rather than the server
+ * under test.
+ *
+ * A named function, and check 131 asserts *this* one, because the first version
+ * inlined the rule in the meter and re-implemented it in the check. A mutation
+ * then rewrote the meter so an empty `BASE` — the ordinary gate run — whitelists
+ * the entire internet, and the check passed: it was grading its own copy. That
+ * is this repository's oldest rule, broken inside the check written to stop a
+ * typed number.
+ *
+ * **Loopback is not spend, and CI is what taught that.** The first version
+ * allowed only `BASE`, went green locally, and failed the gate with
+ * `1 OUTBOUND CALL — http://127.0.0.1:9/twirp/livekit.RoomService/DeleteRoom`.
+ * That call is real and deliberate: `heartbeat.yml` sets
+ * `LIVEKIT_URL: ws://127.0.0.1:9` with dummy credentials, so the voice routes
+ * take their *configured* branch against the discard port — the "verify both
+ * deployment shapes" discipline, working exactly as intended. It never leaves
+ * the machine and costs nothing, so it is not what this meter is for.
+ *
+ * The trade is stated rather than hidden: a check talking to a model server on
+ * localhost would not be counted. The class being guarded is money leaving the
+ * account, and nothing on loopback can do that.
+ *
+ * Worth knowing anyway, since nothing else records it: the suite does issue a
+ * genuine `DeleteRoom` while exercising the circle close. Harmless against port
+ * 9. If `LIVEKIT_URL` in CI ever pointed at a real SFU, the suite would be
+ * sending destructive calls to it.
+ */
+export const countsAsSpend = (url, base) =>
+  !(base && url.startsWith(base)) &&
+  !/^[a-z][a-z0-9+.-]*:\/\/(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(url);
+
+const outbound = [];
+{
+  const realFetch = globalThis.fetch;
+  const counted = function (input, init) {
+    const url = String(
+      typeof input === "string" ? input
+        : input instanceof URL ? input.href
+          : (input && input.url) ?? input,
+    );
+    if (countsAsSpend(url, BASE)) outbound.push(url.replace(/[?#].*$/, "").slice(0, 90));
+    return realFetch.call(this, input, init);
+  };
+  counted.metered = true;
+  globalThis.fetch = counted;
+}
 
 // ── harness ────────────────────────────────────────────────────────────────
 const results = [];
@@ -147,6 +237,42 @@ function ok(cond, what, detail = "") {
   if (!cond) current.failed.push(`${what}${detail ? ` — ${detail}` : ""}`);
   return cond;
 }
+
+// What a comment is. One answer, because there were four.
+//
+// Line comments rather than a block, and not by preference: this doc has to
+// quote the patterns it is replacing, several of which end in a star and a
+// slash, and `^\s*//` closes a block comment from inside the sentence
+// describing it. The first two drafts of this paragraph broke the file.
+//
+// This helper was written out by hand **fourteen times**, identically, inside
+// fourteen different checks, and its line-comment half appeared in four forms
+// across the suite (delimiters omitted, for the reason above):
+//
+//     //[^\n]*           x53  strips trailing notes — and truncates URLs
+//     ^\s*//[^\n]*$       x4  URL-safe — and misses every trailing note
+//     ^[ \t]*//.*$         x3  the same
+//     //.*$                x1  truncates URLs
+//
+// Neither rule is a superset of the other, which is this repository's
+// most-repeated finding wearing the suite's own clothes: the common one
+// over-matches, the safe one under-matches, and 54 of 61 uses were the
+// over-matching kind.
+//
+// The over-match is the dangerous half, for the reason CLAUDE.md records about
+// `\bdon\b`: not a regex that matches nothing, but one that matches too much,
+// in the one place where matching too much means the check never fires.
+// `const ENDPOINT = "https://…"` becomes `const ENDPOINT = "https: ` and the
+// rest of that line is gone, so an assertion whose span crosses a URL is
+// reading a truncated file and cannot say so.
+//
+// The rule holding all six cases is that a comment's slashes open a line or
+// follow whitespace. A URL's follow a colon; a protocol-relative one follows a
+// quote. Asserted in both directions by check 128 rather than argued for here,
+// because this is the fourth opinion the file has held on the question and the
+// previous three all looked reasonable in review.
+const strip = (s) =>
+  s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
 const base = {
   intent: "vent",
@@ -354,17 +480,79 @@ check("9  Circle governance protects people without breaking a promise", () => {
   ok(!checkMessage("x".repeat(200), "witness").ok, "a reflection stays one line");
 
   // Counted, never generated: a word nobody said cannot appear.
+  const share = (anonId, content) => ({ anonId, content });
   const reflection = keeperReflection([
-    "my chest is tight when i think about it",
-    "tight all week, chest again",
-    "i feel small",
+    share("a", "my chest is tight when i think about it"),
+    share("b", "tight all week, chest again"),
+    share("c", "i feel small"),
   ]);
   ok(/chest 2 times/.test(reflection), "it counts what the room actually said", reflection);
   ok(!/small/.test(reflection), "a word said once is not a pattern", reflection);
   ok(!/shame/.test(reflection), "and a word nobody said never appears");
 
-  const quiet = keeperReflection(["today was hard", "mine too"]);
+  const quiet = keeperReflection([share("a", "today was hard"), share("b", "mine too")]);
   ok(/2 people spoke/.test(quiet), "no pattern still says something true", quiet);
+
+  /*
+    PEOPLE, NOT MESSAGES
+
+    That sentence counted `contents.length` — the shares — and rendered it as
+    people, and the route handed it `.map((m) => m.content)`, so the identities
+    were stripped one line before the claim that counts them. One person
+    sharing three times made the Keeper announce "3 people spoke" at minute
+    thirty-eight, out loud, to a room that knows exactly who spoke.
+
+    The old assertion above is the shape its author was standing in: two
+    messages from two people, where the two numbers agree. It passed for years
+    and could not see this.
+  */
+  const oneVoice = keeperReflection([
+    share("a", "work is hard"),
+    share("a", "really hard"),
+    share("a", "so hard"),
+  ]);
+  ok(/\b1 person spoke/.test(oneVoice),
+    "one person sharing three times is one person",
+    `${oneVoice} — "you are not the only one" is the promise; overstating the room invents evidence for it`);
+
+  /*
+    AND THE MOVE ITSELF WAS DEAD
+
+    `PATTERN_WORDS` is eighteen words of body and affect and contains nothing
+    from any of the nine pressures a circle is convened around. Measured over
+    three-share circles built from real sentences the router itself tagged, the
+    pattern branch named a word in **0** of them — the Keeper's one real move,
+    always falling through to the count.
+
+    `themePattern` is the router's own table rather than a second list, so the
+    economy circle can hear money and a tenth pressure arrives here without
+    anybody remembering to come back.
+  */
+  const money = [
+    share("a", "the price of everything"),
+    share("b", "petrol price again"),
+    share("c", "i am broke"),
+  ];
+  ok(/I heard/.test(keeperReflection(money, "economy")),
+    "a money circle can hear its own subject",
+    keeperReflection(money, "economy"));
+  ok(/people spoke/.test(keeperReflection(money)),
+    "and the same shares in an untagged circle fall back rather than guess",
+    "a theme this table does not know must hear no theme words, not the wrong ones");
+
+  /*
+    Derived, and asserted as derived: every tag the router can assign yields a
+    pattern. A tenth pressure fails here on the day it is added without one,
+    which is the same guarantee the opening line already has one check below.
+  */
+  for (const tag of REAL_WORLD_TAGS) {
+    ok(themePattern(tag) instanceof RegExp,
+      `the ${tag} circle has words of its own to hear`,
+      "a pressure the Keeper is deaf to is a reflection that can only ever count");
+  }
+  ok(themePattern("not_a_tag") === null && themePattern(null) === null,
+    "and an unknown tag is silence rather than a wrong theme",
+    "silence beats a guess, in the one sentence the Keeper reads aloud");
 
   // Single source of truth: the room opens with the tactic library's phrasing.
   for (const tag of Object.keys(REAL_WORLD_TACTIC)) {
@@ -419,13 +607,43 @@ check("10 The pipelines filter, dedup, reweight and score preferences", () => {
   is(num("not_a_vent"), 3, "a greeting, a date question and a crisis are not training data");
   is(num("too_short"), 1, "'ok' is not a vent");
   is(num("fallback_text"), 1, "the key-less apology never becomes a completion");
-  is(num("gives_advice"), 1, "a reply that gives advice is refused by the circle's own rule");
+  /*
+    And the rate limit, which is the failure that actually happens. The
+    fixture row is a real Pidgin vent whose reply is the upstream 429, so the
+    only reason it can drop is this filter — production has seven of these,
+    each with a tactic and each eligible for the training set until now.
+  */
+  is(num("model_failed"), 1, "a busy upstream is not a reply worth training on");
+  /*
+    Named by the grader now, not by the filter.
+
+    `gives_advice` was `checkMessage(completion, "share")` — the circles
+    rulebook applied to private replies, which `quality.ts` records undoing
+    for itself and the pipeline never heard about. `gradeReply` catches the
+    same row through the same `containsAdvice`, without the crosstalk rules
+    and the one-line share cap that belong to a room of six.
+  */
+  is(num("advice"), 1, "a reply that fixes instead of understanding is not training data");
+
+  /*
+    And five of the seventeen fixture rows are a Pidgin vent answered in
+    English — the exact failure production showed on half of its Pidgin turns.
+
+    The reference corpus was demonstrating the bug and feeding those pairs in
+    as exemplary. Asserted rather than quietly absorbed, because the number is
+    a statement about the fixture and somebody should decide to fix it: the
+    replies need writing in Pidgin by someone who speaks it, which is not a
+    job for a gate.
+  */
+  is(num("language"), 5, "a Pidgin vent answered in English never becomes a training pair");
   is(num("exact duplicate"), 1, "the exact repeat goes");
   is(num("near duplicate"), 1, "and the one-word-different repeat goes");
 
   const sft = fs.readFileSync(path.join(out, "sft.jsonl"), "utf8").trim().split("\n").filter(Boolean);
   const ev = fs.readFileSync(path.join(out, "eval.jsonl"), "utf8").trim().split("\n").filter(Boolean);
-  is(sft.length + ev.length, 9, "nine rows survive");
+  is(sft.length + ev.length, 4,
+    "four rows survive everything",
+    "nine before the graders ran — five of the nine were the language mismatches above");
 
   const rows = [...sft, ...ev].map((l) => JSON.parse(l));
   const w = (d) => rows.find((r) => r.domain === d)?.weight ?? 0;
@@ -789,7 +1007,7 @@ await checkAsync("15a The selector learns from outcomes, and refuses thin eviden
 });
 
 // ── 15b. the arc — a session has a shape, and an uncounted one has none ────
-const { arcBlock, buildSystemPrompt } = await app("src/lib/vent/prompt.ts");
+const { arcBlock, buildSystemPrompt, STABLE_PREFIX, sections } = await app("src/lib/vent/prompt.ts");
 
 check("15b The reply knows where in the session it is, or says nothing", () => {
   // The rule this shares with the exchange rate and the flavour floor: a
@@ -1039,7 +1257,7 @@ check("15e The voice mask shifts far enough to break recognition", () => {
   const mask = fs
     .readFileSync(path.join(ROOT, "src/lib/voice/mask.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^[ \t]*\/\/.*$/gm, "");
+    .replace(/(^|[ \t])\/\/.*$/gm, "$1");
 
   ok(/disableNormalization: true/.test(mask),
     "the sweep runs on an un-normalized wave, not a browser's idea of ±1");
@@ -1449,7 +1667,7 @@ check("15j The authored corpus holds the scan to what it claims", () => {
 });
 
 // ── 15k. the Carver, and the campfire that costs nothing ──────────────────
-const { CARVER_SYSTEM, parseCarve, worthCarving, CARVE_FLOOR, CARVE_MAX_WORDS } =
+const { CARVER_SYSTEM, parseCarve, worthCarving, CARVE_FLOOR, CARVE_MAX_WORDS, CARVE_MAX_TOKENS } =
   await app("src/lib/vent/carve.ts");
 const { MYCELIUM, containsAdvice } = await app("src/lib/circles/rules.ts");
 
@@ -1706,6 +1924,39 @@ check("16 The store asks PostgREST for something it can parse", () => {
         : `first differs at line ${at + 1}: ${JSON.stringify(a[at] ?? "").slice(0, 60)}`,
     );
   }
+
+  /*
+    And the select list asks for every column the contract knows about.
+
+    Check 16 exists because a select list joined with ", " made every read of
+    `vents` ask for a column named " user_id", and memory across turns
+    returned nothing in production for months. That is the *malformed* case.
+    The *incomplete* case is quieter and has the same ending: a migration adds
+    a column, the contract learns it, `FULL_SELECT` does not, and every read
+    silently comes back without it — through a caller sitting in a try/catch
+    that degrades without saying anything.
+
+    Not hypothetical. 0019 added `rejected_by` and it had to be typed into
+    both by hand; nothing here would have noticed one of them missing.
+
+    Both directions, because a column selected and not in the contract is the
+    other half of the same drift — `/api/health` would never probe it.
+  */
+  const selectList = store.match(/const FULL_SELECT = \[([\s\S]*?)\]\.join/)?.[1] ?? "";
+  const selected = [...selectList.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+  const declared = TABLE_CONTRACT.vents.split(",");
+  ok(selected.length > 15, `the select list is readable (${selected.length} columns)`,
+    "a sweep that finds nothing passes loudest");
+
+  const unread = declared.filter((c) => !selected.includes(c));
+  is(unread.join(", "), "",
+    `every column the contract declares is selected${unread.length ? ` — ${unread.join(", ")}` : ""}`,
+    "a column the store never asks for is a column the product silently does not have");
+
+  const unknown = selected.filter((c) => !declared.includes(c));
+  is(unknown.join(", "), "",
+    `and every column selected is one the contract knows${unknown.length ? ` — ${unknown.join(", ")}` : ""}`,
+    "/api/health probes the contract, so a column missing from it is never checked against the live schema");
 });
 
 // ── 17. the number somebody calls in the worst hour of their life ─────────
@@ -1714,7 +1965,7 @@ check("16 The store asks PostgREST for something it can parse", () => {
 // description, a `tel:` href and a client-side fallback. Change it once and
 // eight surfaces keep quietly dialling the old one — the exact shape
 // `CLAUDE.md` names for chair tensions, wearing the highest stakes here.
-const { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL, CRISIS_RESPONSE } =
+const { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL, CRISIS_RESPONSE, CRISIS_RESPONSE_PIDGIN, crisisReply } =
   await app("src/lib/vent/intent.ts");
 
 check("17 The crisis number exists once, and every surface reads that one", () => {
@@ -1755,6 +2006,43 @@ check("17 The crisis number exists once, and every surface reads that one", () =
     .filter((f) => fs.readFileSync(f, "utf8").includes("CRISIS_LINES"))
     .map((f) => path.relative(ROOT, f));
   ok(shown.length >= 6, "at least six surfaces import it", `${shown.length}: ${shown.join(", ")}`);
+
+  /*
+    AND NO SURFACE WRITES SOMEBODY ELSE'S NUMBER
+
+    This check's title says "every surface", and the foreign-hotline guard lived
+    in check 24 — the *prompt budget* check — reading the assembled system
+    prompt and nothing else. The crisis path never uses the system prompt: it
+    returns `crisisReply()` before a model is called. So the one place a US
+    hotline would actually reach a person sat outside the only thing scanned.
+
+    Found by mutation, not by reading. `988` was written into `CRISIS_RESPONSE`
+    itself and then onto the crisis screen, and the suite stayed green both
+    times. Check 102's comment says "check 17 fails the build if any surface
+    writes a crisis number out by hand" — a guarantee that did not exist, in a
+    comment one file away from the check it describes.
+
+    It exists now, and it lives here, where its own title already promised it
+    and where somebody looking for it would look.
+
+    Zero occurrences tree-wide today, so the pattern can stay strict: `999` and
+    `911` are ordinary integers in other contexts, and if one ever appears
+    legitimately it should be named as an exemption rather than the guard being
+    loosened.
+  */
+  const FOREIGN_LINES = /\b(988|911|999|116 123|1-?800-?273-?8255)\b/;
+  const everySource = walk(path.join(ROOT, "src"));
+  ok(everySource.length > 50,
+    `every source file is read off the filesystem (${everySource.length})`,
+    "a hand-written list of surfaces is the bug this repository has five times over");
+  const foreign = everySource
+    .map((f) => [path.relative(ROOT, f), fs.readFileSync(f, "utf8").match(FOREIGN_LINES)])
+    .filter(([, m]) => m)
+    .map(([rel, m]) => `${rel}: ${m[0]}`);
+  is(foreign.length, 0,
+    "and none of them hands out a crisis number from another country",
+    foreign.join(" · ") ||
+      "a US hotline is a busy tone from Lagos, handed over at the worst possible moment");
 });
 
 // ── 18. what a screenshot found and no unit test could ────────────────────
@@ -1793,8 +2081,12 @@ check("18 Nothing pinned to the bottom lands on the crisis line", () => {
   // A bottom-anchored fixed overlay, minus the full-screen ones: a modal
   // backdrop covering everything is a different thing from a notification
   // that quietly parks on top of a phone number for four seconds.
+  const components = walkTsx(path.join(ROOT, "src/components"));
+  ok(components.length >= 10,
+    `there are components to scan (${components.length})`,
+    "a sweep over no files finds no offenders and reports that as a pass");
   const offenders = [];
-  for (const file of walkTsx(path.join(ROOT, "src/components"))) {
+  for (const file of components) {
     const src = fs.readFileSync(file, "utf8");
     for (const cls of src.match(/className=\{?"[^"]*"/g) ?? []) {
       if (!/\bfixed\b/.test(cls) || /\binset-0\b/.test(cls)) continue;
@@ -1861,7 +2153,7 @@ check("18 Nothing pinned to the bottom lands on the crisis line", () => {
   // anybody noticed. That is exactly the kind of defect that never gets
   // reported by the people it fails.
   const labelled = [];
-  for (const file of walkTsx(path.join(ROOT, "src/components"))) {
+  for (const file of components) {
     const src = fs.readFileSync(file, "utf8");
     /*
       Where the opening tag actually ends, counted rather than matched.
@@ -2500,6 +2792,7 @@ check("24 The system prompt has a budget, and every block earns its place", () =
   ok(!FOREIGN_LINES.test(heaviest),
     "the prompt hands out no crisis number from another country",
     "crisis routing is local and imported — a US hotline is a busy tone from Lagos");
+
   ok(!/\b(you are|i am) (a|the) (licensed )?(therapist|psychologist|counsell?or|shrink)\b/i.test(heaviest),
     "and never tells the model it is a therapist",
     "banned in four states, regulated in four more, and untrue in all of them");
@@ -2514,7 +2807,7 @@ check("24 The system prompt has a budget, and every block earns its place", () =
     unclear priority, and it spends attention the person's message needs.
   */
   const src = fs.readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8");
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[ \t])\/\/.*$/gm, "$1");
   ok(/const CONTEXT_RULES = /.test(code), "the shared rules exist");
   is((code.match(/Do not say it back|Never say it back|NEVER THE FILE/g) ?? []).length, 1,
     "and the do-not-recite rule is stated exactly once in the whole prompt");
@@ -2707,6 +3000,42 @@ check("26 Crisis is caught in the words people use, and not in the ones they don
     "i no wan dey alive again, i don tire for this life",
     "make i die",
     "i wan comot for this world",
+
+    /*
+      THE CONDITIONAL, WHICH THE ROUTER MISSED ENTIRELY
+
+      Every pattern above needs a first-person present desire — "I want", "I
+      don't want", "I wish I was". Passive ideation is more often hypothetical
+      than declarative, and none of this shape was caught:
+
+        "If I disappeared tomorrow"            → vent
+        "what if I just disappeared"           → vent
+        "sometimes I think about disappearing" → vent
+        "nobody would miss me if I was gone"   → vent
+        "I wish I could just not wake up"      → vent
+        "if i no dey again, e go better"       → vent
+
+      Each is a positive item on the C-SSRS's first category, wish to be dead.
+      The section above this list already says "a router that waits for 'kill
+      myself' is waiting for the version many people never write down" — and
+      then waited for a version many people never write down either.
+
+      Found by a person reading a product screenshot. Nothing here could see
+      it, because everything here tested the shape its author had in mind.
+    */
+    "if i disappeared tomorrow",
+    "if i disappeared tomorrow nobody would notice",
+    "what if i just disappeared",
+    "sometimes i think about disappearing",
+    "i wish i could just not wake up",
+    "i wish i could stop existing",
+    "if i was gone nobody would even notice",
+    "nobody would miss me if i was gone",
+    "what if i wasn't here anymore",
+    // Pidgin, and the one that would have been missed longest — this is the
+    // register somebody reaches for when they are not ready to say it plainly.
+    "if i no dey again, e go better",
+    "nobody go miss me",
   ];
   for (const m of MUST) {
     is(intent(m), "crisis", `caught: "${m.slice(0, 52)}"`);
@@ -2724,6 +3053,34 @@ check("26 Crisis is caught in the words people use, and not in the ones they don
     "i want to disappear from that group chat",
     "no point, nothing go change",
     "i be failure",
+
+    /*
+      AND THE PROBES THAT SHAPED THE CONDITIONAL PATTERNS
+
+      Every one of these was a real false positive during drafting, and each
+      is why a guard exists. The words are ordinary the moment a destination
+      follows them, which is the same lesson `want to disappear` already
+      carried: a router that over-fires locks somebody out of the room for
+      saying something entirely normal.
+    */
+    "if i disappeared for a week nobody would even notice i was on leave",
+    "what if i just disappeared from twitter for a month",
+    "nobody would notice if i changed my hair",
+    "nobody would care if i moved desks",
+    "i think about disappearing from that whatsapp group every day",
+    "if i was gone from that team the project would still ship",
+    "i wish i could sleep in tomorrow",
+    "if i no dey for work tomorrow, who go cover me?",
+    "she said nobody would miss the meeting",
+    /*
+      The most arguable line in the whole list, and it is left out on purpose
+      rather than left undecided. "If I died" appears in ordinary practical
+      speech — passwords, insurance, wills — and gating it would be the
+      group-chat false positive again. The clinical reading of somebody
+      unprompted putting their affairs in order is not nothing, which is why
+      this is written down here instead of being silently absent.
+    */
+    "if i died my laptop password is in the drawer",
   ];
   for (const m of MUST_NOT) {
     ok(intent(m) !== "crisis", `not gated: "${m.slice(0, 52)}"`, intent(m));
@@ -2921,7 +3278,7 @@ check("29 The rate limiter knows who it is refusing", () => {
   const route = fs
     .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^[ \t]*\/\/.*$/gm, "");
+    .replace(/(^|[ \t])\/\/.*$/gm, "$1");
 
   // Order is the whole fix: the router has to run before the limiter.
   const depthAt = route.indexOf("depthFor({");
@@ -2958,8 +3315,21 @@ check("29 The rate limiter knows who it is refusing", () => {
 
   // And the refusal at the edge is not a closed door.
   const refusal = route.slice(limitAt, limitAt + 700);
-  ok(/reply: CRISIS_RESPONSE/.test(refusal),
+  /*
+    The crisis reply, in whichever language they wrote in.
+
+    This read `/reply: CRISIS_RESPONSE/` and failed the moment that constant
+    became a function of the language — pinning the implementation rather than
+    the behaviour, which is check 74's lesson arriving somewhere else. What it
+    is actually about is that a rate-limited person at the edge gets a human
+    and a number instead of a countdown, and `crisisReply` returns exactly that
+    in either register.
+  */
+  ok(/reply: crisisReply\(/.test(refusal),
     "somebody refused at the edge is handed a human, not a countdown");
+  ok(!/reply: CRISIS_RESPONSE\b/.test(refusal),
+    "and in the language they wrote in, not always English",
+    "the router speaks Pidgin on this path and the reply did not");
   ok(/Small small/.test(refusal),
     "and an ordinary pause keeps its own voice, which reads like a pause");
   ok(/gated: false/.test(refusal),
@@ -2973,7 +3343,11 @@ check("29 The rate limiter knows who it is refusing", () => {
       return /\.tsx?$/.test(e.name) ? [full] : [];
     });
   const PAYWALL = /out of (tokens|credits)|upgrade to continue|limit reached|you have used your|as an AI\b/i;
-  const offenders = walk(path.join(ROOT, "src"))
+  const sources = walk(path.join(ROOT, "src"));
+  ok(sources.length >= 20,
+    `there are sources to scan (${sources.length})`,
+    "a sweep over no files finds no offenders and reports that as a pass");
+  const offenders = sources
     // Two files name these phrases in order to forbid them: the grader and the
     // table it now imports from.
     .filter((f) => !/lib\/vent\/(quality|voice)\.ts$/.test(f))
@@ -3227,6 +3601,23 @@ check("32 Every circle tag exists everywhere a circle tag is read", () => {
   */
   ok(!("grief" in REAL_WORLD_TACTIC),
     "grief is a room people choose, not a coping tool the app assigns");
+
+  /*
+    And grief is the *only* one, which naming it cannot say.
+
+    The assertion above is about grief. An eleventh topic added without a hold
+    reads exactly like grief's considered exclusion and passes it — "not on the
+    list" and "decided against" looking identical, which is the thing this
+    repository keeps writing down. `NO_KEEPER_TOOL` in `rules.ts` is 0012's
+    decision as a value rather than as a migration comment, and the set of
+    topics with no tool has to equal it in both directions: a topic that
+    quietly lost its hold fails, and a name that no longer describes one fails
+    too.
+  */
+  const toolless = [...uiTags].filter((t) => !(t in REAL_WORLD_TACTIC)).sort();
+  is(toolless.join(","), [...NO_KEEPER_TOOL].sort().join(","),
+    "and it is the only room that opens without one",
+    `no tool: [${toolless.join(" ")}] · declared: [${[...NO_KEEPER_TOOL].join(" ")}]`);
   is(keeperIntention("grief", null).includes("Today we hold somebody who is gone."), true,
     "the grief room opens by saying it");
 });
@@ -4051,7 +4442,7 @@ check("40 Weather is measured, and the rest of the news is not invented", () => 
   for (const f of surfaces) {
     const t = fs.readFileSync(path.join(ROOT, f), "utf8");
     // Comments explaining the refusal are the point; a fetch is not.
-    const code = t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    const code = t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[ \t])\/\/.*$/gm, "$1");
     const hit = code.match(NEWS);
     ok(!hit, `${f} does not bring a war into somebody's bad hour`, hit?.[0]);
   }
@@ -4765,7 +5156,7 @@ check("37 Every utility written actually compiles to something", () => {
 // message — two of them to map a sentence to a body part and to parse affect,
 // both of which are already regex and a table — and nothing in the repo could
 // have failed it. Now something can.
-const { PIPELINE, FREE_STAGES, MAX_COMPLETIONS_PER_MESSAGE, describePipeline } =
+const { PIPELINE, FREE_STAGES, MAX_COMPLETIONS_PER_MESSAGE, UNPAID_COSTS, describePipeline } =
   await app("src/lib/vent/orchestrator.ts");
 
 check("19 A vent costs one model call, and the free stages stay free", () => {
@@ -4962,7 +5353,200 @@ if (BASE) {
     for (const [what, res, expected = 410] of closed) {
       is(res.status, expected, `${what} is refused once the circle is over`);
     }
+
+    /*
+      And a room that never existed at all.
+
+      The seal guarded its sweep with `circle && …`, so a bad id fell past it
+      into the seat check and answered 403 not_a_member — "you are not a
+      member" about a room nobody is a member of. Seven of the eight handlers
+      addressed by an id already answered 404; this was the eighth, and the one
+      whose ordering had just been corrected.
+
+      The static half is check 95, over every handler. This is the answer a
+      caller actually gets, because the same argument read correctly in that
+      handler's own comment while the line above it did the opposite.
+    */
+    const ghost = "00000000-0000-4000-8000-000000000000";
+    const never = [
+      ["sealing", await post(`/api/circles/${ghost}`, { anonId: two, mood: 8 }, "PATCH")],
+      ["taking a seat", await post(`/api/circles/${ghost}`, { anonId: two, consent: true, pressure: 50 })],
+      ["reading the transcript", await fetch(`${BASE}/api/circles/${ghost}/messages?anonId=${two}`)],
+    ];
+    for (const [what, res] of never) {
+      is(res.status, 404, `${what} in a room that never existed is 404, not 403`,
+        "a refusal about somebody's seat, in a room nobody has a seat in, is a false sentence");
+    }
   });
+
+  await checkAsync("134 Two people who came for the same room get it, and know which one is theirs", async () => {
+    /*
+      Of the first sixteen circles, fourteen had exactly one person in them and
+      nobody has ever spoken in one. `POST /api/circles` created a room
+      unconditionally, so two people arriving minutes apart for the same
+      pressure each got their own empty room — and the Keeper needs
+      `members.length > 1` to say a word, so neither room ever started.
+
+      Six seats and eight users cannot afford a product that competes with
+      itself. Proved live rather than asserted statically, because the whole
+      claim is about what the second POST returns.
+    */
+    /*
+      Stated as a relationship, not as absolutes.
+
+      The first version asserted the first POST returned `joined: "new"` and
+      that the room then held exactly two seats. It passed on a fresh store and
+      failed on the next run: the live passes share a store, an earlier run had
+      left a `traffic` room open, and the "first" person joined *that*. Which
+      is this suite's oldest lesson arriving in a check written an hour ago —
+      it tested the shape its author was standing in, and the shape was "a
+      database nobody had used yet".
+
+      What the fix actually promises has nothing to do with who created what:
+      two people who ask for the same pressure end up in the same room. That
+      holds whatever was there before.
+    */
+    /*
+      The tag is chosen, not hardcoded, and that is the second repair to this
+      check rather than a flourish.
+
+      With `traffic` written in, the run order decided the answer: the live
+      passes share a store, so `a` could join a five-seat room left by an
+      earlier run, fill it, and `b` would correctly be steered somewhere else —
+      a red check over working code. Picking a pressure nobody currently has a
+      room open for makes `a` the room's first occupant every time, which is
+      the only precondition any of the assertions below actually need.
+
+      It fails rather than skips if every pressure is busy. A check that
+      quietly stops checking is the failure this suite exists to stop.
+    */
+    const lobby = await fetch(`${BASE}/api/circles`).then((r) => r.json());
+    const busy = new Set((lobby.circles ?? []).map((c) => c.tag));
+    // Read off the product's own list, minus the one check 20 is holding: it
+    // opens a `family` room above and needs to be its only occupant, which is
+    // the same steering this check is about, pointed the other way.
+    const tag = REAL_WORLD_TAGS.filter((t) => t !== "family").find((t) => !busy.has(t));
+    ok(tag, "a pressure with no room open for it, so the first person here opens one",
+      `open: ${[...busy].join(", ") || "none"}`);
+
+    const a = `eval-${Date.now()}-open-a`;
+    const b = `eval-${Date.now()}-open-b`;
+
+    const first = await post("/api/circles", { anonId: a, tag, pressure: 70 }).then((r) => r.json());
+    ok(first.circle?.id, "the first person gets a room", JSON.stringify(first).slice(0, 90));
+
+    const second = await post("/api/circles", { anonId: b, tag, pressure: 55 }).then((r) => r.json());
+    is(second.circle?.id, first.circle.id,
+      "and the second person asking for the same pressure gets that same room",
+      "two empty rooms is how fourteen of the first sixteen circles held one person");
+    is(second.joined, "existing", "reported as a room they joined, not one they opened");
+    ok(second.role !== "keeper", "and they are not a second Keeper in it", second.role);
+
+    // Their own chair, not the room's — the Closing measures each person from
+    // where they sat down, which is the one number a joiner must not inherit.
+    const mine = await fetch(`${BASE}/api/circles/${first.circle.id}?anonId=${b}`).then((r) => r.json());
+    is(mine.pressureSeeded, 55, "carrying the pressure they arrived with");
+
+    const theirs = await fetch(`${BASE}/api/circles/${first.circle.id}?anonId=${a}`).then((r) => r.json());
+    ok(mine.seats >= 2 && theirs.seats === mine.seats,
+      "both of them are in it, and both see the same room",
+      `${a}: ${theirs.seats} seats · ${b}: ${mine.seats} seats`);
+
+    /*
+      And the person who is already sitting in it.
+
+      `addMember` answers false for two different events — the room is full,
+      and you are already in it — and the steering only ever looked at rooms
+      with a *free* seat, so somebody already seated in a room that had since
+      filled fell through and was handed a new empty one. The fragmentation
+      this whole block exists to stop, arriving in the one case where the room
+      was working: six people in it. Found by this check failing on its second
+      run, which is the only way it could have been found.
+
+      Asked twice, because the two paths are different code: a room with a
+      free seat answers from the seat lookup, a full one has nothing else to
+      answer from.
+    */
+    const again = await post("/api/circles", { anonId: b, tag, pressure: 55 }).then((r) => r.json());
+    is(again.circle?.id, second.circle.id,
+      "somebody already seated is sent back to their seat, not given an empty room",
+      "the edge case that re-opens the bug this check is about");
+    is(again.joined, "seated", "and told so, because it may not be the room they just asked for");
+    is(again.role, second.role, "with the role they already hold, not one recomputed");
+
+    // Fill it, so the seat they hold is in a room with nothing free in it.
+    const rest = [];
+    for (let i = 0; i < MAX_SEATS - 2; i++) {
+      const who = `eval-${Date.now()}-fill-${i}`;
+      rest.push(who);
+      await post(`/api/circles/${second.circle.id}`, { anonId: who, consent: true, pressure: 50 });
+    }
+    const full = await fetch(`${BASE}/api/circles/${second.circle.id}?anonId=${b}`).then((r) => r.json());
+    is(full.seats, MAX_SEATS, "the room is full", `filled with ${rest.length} more`);
+
+    /*
+      And a stranger arriving at it is told, in the payload the seat button is
+      drawn from.
+
+      The room rendered the whole agreement and a gold "Take a seat" to anybody
+      not in it, whatever the seat count — six people in the room, work through
+      all of it, 409. The branch is check 101's; this is the half that proves
+      the facts it branches on actually arrive, because a correct branch over
+      an absent field renders nothing at all.
+    */
+    const outside = await fetch(
+      `${BASE}/api/circles/${second.circle.id}?anonId=eval-${Date.now()}-outside`,
+    ).then((r) => r.json());
+    is(outside.joined, false, "somebody who is not in it is told so");
+    is(outside.seats, MAX_SEATS, "and given the seat count the refusal is read from");
+    is(outside.maxSeats, MAX_SEATS,
+      "and the ceiling to compare it against",
+      "a branch on `seats >= maxSeats` with maxSeats absent renders neither half");
+
+    const stillMine = await post("/api/circles", { anonId: b, tag, pressure: 55 }).then((r) => r.json());
+    is(stillMine.circle?.id, second.circle.id,
+      "and a full room is still their room, not a reason to open an empty one",
+      "a free seat was the only thing the steering could see, and a working room has none");
+    is(stillMine.joined, "seated", "reported the same way whether or not it has room left");
+
+    /*
+      And the lobby has to say which one is theirs.
+
+      The route sending somebody back to their seat is the right answer to a
+      question the screen should not have asked: every card read "Take a seat
+      →", including the one they were already sitting in, so a person who
+      closed the tab had a room and no way to recognise it. Their own id
+      only — the lobby payload is returned to the browser verbatim and has
+      never carried anybody's anon id.
+    */
+    const withMe = await fetch(`${BASE}/api/circles?anonId=${b}`).then((r) => r.json());
+    is(withMe.mine, second.circle.id, "the lobby names the room they are sitting in");
+    const stranger = await fetch(`${BASE}/api/circles?anonId=eval-${Date.now()}-nobody`)
+      .then((r) => r.json());
+    is(stranger.mine, null, "and tells somebody with no seat that they have none");
+    const anonymous = await fetch(`${BASE}/api/circles`).then((r) => r.json());
+    ok(!anonymous.mine, "asking without an id learns nothing about anybody");
+    ok(JSON.stringify(anonymous.circles ?? []).indexOf(b) === -1,
+      "and no anon id is published to whoever loads the page",
+      "the lobby is the one circle payload a stranger can fetch");
+
+    /*
+      And put the pressure back.
+
+      The room this check builds is full and open for forty-five minutes, so
+      leaving it there takes a tag out of the pool above — seven runs and the
+      check can no longer find a clean one and fails on its own leavings. `a`
+      created it, so `a` is the Keeper and can end it early, which is the same
+      door a real Keeper uses.
+
+      Not asserted as a teardown that has to work: the close is the subject of
+      check 95 and is proved there. What matters here is that this check stops
+      making the lobby worse every time it runs.
+    */
+    await fetch(`${BASE}/api/circles/${second.circle.id}?anonId=${a}`, { method: "DELETE" })
+      .catch(() => {});
+  });
+
 }
 
 check("45 A reply is allowed to finish its sentence", () => {
@@ -5021,7 +5605,7 @@ check("45 A reply is allowed to finish its sentence", () => {
   const call = anthropic
     .slice(anthropic.indexOf("async send("), anthropic.indexOf("const text"))
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   /*
     Thinking must be stated, not left to the default.
@@ -5106,12 +5690,70 @@ check("45 A reply is allowed to finish its sentence", () => {
     so it is refused. Keeping it here by name means the rule is tested
     against the sentence that caused it.
   */
-  ok(wasCutOff("Tired. Na", true),
+  ok(wasCutOff("Tired. Na", "length"),
     "the original truncated reply is refused, not published");
-  ok(wasCutOff("Na wa. That one heavy.", true) === false,
+  ok(wasCutOff("Na wa. That one heavy.", "length") === false,
     "a short reply that does land on a full stop still ships");
-  ok(wasCutOff("...before planning the next play. If you", false) === false,
-    "a reply that never hit the ceiling is never second-guessed");
+
+  /*
+    THE ASSERTION THAT USED TO SIT HERE DEFENDED THE BUG
+
+    It read:
+
+      ok(wasCutOff("...before planning the next play. If you", false) === false,
+        "a reply that never hit the ceiling is never second-guessed");
+
+    — the exact fragment from this check's own postmortem, asserted to ship,
+    on the grounds that the ceiling flag was unset. The rule it encoded was
+    "truncation only counts when it comes from the budget", and that is the
+    assumption the whole bug lived inside.
+
+    A second person hit it. 121 characters, ending on "First you", stored in
+    the database that way and shown on a phone. `MAX_TOKENS` is 600, so it was
+    nowhere near the ceiling: `readSse` loops until `done` and returns what it
+    has, so a dropped connection or a deadline firing mid-stream yields a
+    partial with no `finish_reason` at all — which the old signature read as
+    reassurance.
+
+    Production rate: 16 of 178 real replies end mid-sentence, averaging 229
+    characters against 309 for the rest. The question is not "did it hit the
+    ceiling" but "did it say it had finished".
+  */
+  ok(wasCutOff("...before planning the next play. If you", undefined),
+    "a stream that never said it finished is a stream that did not",
+    "absence of a finish reason is not reassurance — it is the interrupted case");
+  ok(wasCutOff("...you dodge feeling like a son who just lost his dad. First you", undefined),
+    "the reply that came back a second time is refused too",
+    "121 chars against a 600-token ceiling — never the budget, always the stream");
+  ok(wasCutOff("Where did the weight land? Not how the day was.", undefined) === false,
+    "a complete sentence ships even when the provider said nothing",
+    "both halves have to be wrong, or this over-fires on every quiet stream");
+  ok(wasCutOff("Na wa. E heavy.", "stop") === false,
+    "and a provider that says it stopped is believed");
+  ok(wasCutOff("that one na wahala", "stop") === false,
+    "including when the text ends without punctuation",
+    "the text test is what keeps this from refusing good replies, not the only test");
+  ok(wasCutOff("I hear you and the thing is", "end_turn") === false,
+    "end_turn counts as finished, because Anthropic says it that way",
+    "one vocabulary per provider, and the set is where they meet");
+
+  /*
+    And every adapter hands over what the provider actually said.
+
+    Found by a mutation that nothing caught: replacing the streamed argument
+    with `finishReason ?? "stop"` passes every assertion above, because those
+    test the rule and this tests the wiring. A guard reached through a
+    coercion is a guard with the interesting case removed — which is the shape
+    the old `finishReason === "length"` had, one layer down.
+  */
+  const args = [...src.matchAll(/wasCutOff\(\s*[\w.]+\s*,\s*([^)]*)\)/g)].map((m) => m[1].trim());
+  is(args.length, 2, `both adapters ask the shared rule (${args.length})`,
+    "a sweep that finds nothing passes loudest");
+  for (const arg of args) {
+    ok(/^[\w.]+$/.test(arg),
+      `the stop reason reaches it unmodified: ${arg}`,
+      "?? or === here decides the answer before the rule sees it, which is the bug this whole check exists for");
+  }
   ok(wasCutOff("Where did the weight land?", true) === false,
     "a question mark ends a sentence too");
   ok(wasCutOff('He said "the rent is due."', true) === false,
@@ -5150,7 +5792,7 @@ check("46 The always-visible line says it is an AI, and says it once", () => {
     about learning it, and this one still did it. A prose explanation of a rule
     is not the rule. Scan what runs.
   */
-  const home = raw.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const home = raw.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   // The disclosure itself, in the one place it lives.
   ok(/\bAI\b/.test(home), "the shared disclaimer says it is an AI");
@@ -5173,7 +5815,11 @@ check("46 The always-visible line says it is an AI, and says it once", () => {
     });
 
   const TERMS = path.join(ROOT, "src/app/terms/page.tsx");
-  const offenders = walk(path.join(ROOT, "src"))
+  const sources = walk(path.join(ROOT, "src"));
+  ok(sources.length >= 20,
+    `there are sources to scan (${sources.length})`,
+    "a sweep over no files finds no offenders and reports that as a pass");
+  const offenders = sources
     .filter((f) => f !== path.join(ROOT, HOME) && f !== TERMS)
     .filter((f) => /not a licensed therapist/i.test(fs.readFileSync(f, "utf8")))
     .map((f) => path.relative(ROOT, f));
@@ -5292,10 +5938,65 @@ check("48 No screen says it happened without reading the answer", () => {
       return /\.tsx$/.test(e.name) ? [full] : [];
     });
 
+  /*
+    THE WINDOW COUNTED COMMENTS, IN THE REPOSITORY THAT WRITES THEM
+
+    This scanned 30 raw lines back for the request a claim reports on. Three
+    of the eight claims standing downstream of one were further away than
+    that and were skipped entirely — `if (!fetch) return` reads a documented
+    call site as "nothing was asked":
+
+      "Thank you. Na so we dey improve."   52 lines up · 22 lines of code
+      "Deleted."                           36 lines up · 20 lines of code
+      "All cleared. Fresh start."          73 lines up · 24 lines of code
+
+    Every one is comfortably inside 30 lines of *code*. What pushed them out
+    was prose — and at `history-list.tsx:330`, 49 of those 73 lines are the
+    comment explaining the anon-id bug, the explanation that makes the wipe
+    trustworthy. The better the postmortem, the blinder the check that
+    depends on it. The first of the three is the sharpest: it is the
+    thank-you whose postmortem this check was written from, and this check
+    has never once looked at it. Only check 74, by name, ever did — and
+    CLAUDE.md's rule is that an instance is not a class.
+
+    Its own closing note saw the symptom without the cause: "the sharpest
+    instance, asserted by name, because a heuristic above should never be the
+    only thing holding the worst case." The heuristic was not weak on the
+    wipe. It could not see the wipe.
+
+    So the window is measured in code. Comments are blanked rather than
+    deleted so line numbers still name the real file, which is the same trick
+    check 103 needed for the same reason: read what somebody typed, never the
+    prose beside it. The furthest request among all twelve sites is 24 code
+    lines, so 30 keeps its headroom and its original intent — near enough not
+    to borrow another function's check.
+  */
+  /*
+    Blanking rather than removing, so line numbers still name the real file —
+    and the same rule about what a comment is that `strip` uses at the top,
+    because the anchored form this held first missed every trailing note and
+    left its prose in the text being scanned. A `// data.saved` sitting at the
+    end of a line would have satisfied the read test below on its own.
+  */
+  const blankComments = (text) =>
+    text
+      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, (m, lead) => lead + " ".repeat(m.length - lead.length));
+
+  /** The last `n` lines of actual code at or above `i`, prose skipped. */
+  const codeWindow = (code, i, n) => {
+    const out = [];
+    for (let j = i; j >= 0 && out.length < n; j--) {
+      if (code[j].trim().length > 0) out.push(code[j]);
+    }
+    return out.reverse().join("\n");
+  };
+
   const offenders = [];
+  const examined = [];
   for (const file of walk(path.join(ROOT, "src"))) {
-    const lines = fs.readFileSync(file, "utf8").split("\n");
-    lines.forEach((line, i) => {
+    const code = blankComments(fs.readFileSync(file, "utf8")).split("\n");
+    code.forEach((line, i) => {
       /*
         Anchored on the severity, not on `toast(`.
 
@@ -5304,21 +6005,39 @@ check("48 No screen says it happened without reading the answer", () => {
         single bug CLAUDE.md calls the sharpest this product ever shipped.
         That one is correct today, and the check written to protect it was
         walking straight past it.
+
+        Read off the blanked copy, so a `"success"` written inside a comment
+        is not scanned as a claim somebody is shown.
       */
       if (!/"success"/.test(line)) return;
       // Confirm it is a toast and not some other "success" string.
-      const near = lines.slice(Math.max(0, i - 6), i + 1).join("\n");
+      const near = codeWindow(code, i, 7);
       if (!/toast\(/.test(near)) return;
 
       // The claim's neighbourhood: far enough back to hold the request it
       // is reporting on, near enough not to borrow another function's check.
-      const from = Math.max(0, i - 30);
-      const before = lines.slice(from, i + 1).join("\n");
+      const before = codeWindow(code, i, 30);
       if (!/\bfetch\(/.test(before)) return; // nothing was asked; nothing to read
+      /*
+        READING THE STATUS IS THE HALF-MEASURE, NOT THE ANSWER
+
+        `/\.ok\b/` and `/\bstatus\b/` used to be sufficient here — and the
+        postmortem this check was written from says, in CLAUDE.md, of the
+        feedback bug: "It read the status and never read the body: one of the
+        two doors closed, and the other left open under a note explaining why
+        the door mattered." `POST /api/feedback` answers **200** with
+        `persisted: false` when there is no store. So `res.ok` is exactly the
+        pattern that shipped, and this check accepted it.
+
+        Dropping it is free, measured rather than assumed: of the eight claims
+        standing downstream of a request, **zero** are saved only by the
+        status. Every one reads a body field or picks its sentence from the
+        answer. `persisted` joins the field list in the same breath, because
+        it is what the feedback client correctly reads and leaving it out
+        would fail the one site that learned this lesson first.
+      */
       const read =
-        /\.ok\b/.test(before) ||
-        /\bstatus\b/.test(before) ||
-        /\b(body|data|d)\??\.(deleted|saved|anchored|ok)\b/.test(before) ||
+        /\b(body|data|d|res)\??\.(deleted|saved|anchored|persisted)\b/.test(before) ||
         /*
           A toast whose message is chosen by a ternary has read something to
           choose with. `seal(w).then((sealed) => toast(sealed ? … : …))` is
@@ -5328,12 +6047,71 @@ check("48 No screen says it happened without reading the answer", () => {
       if (!read) {
         offenders.push(`${path.relative(ROOT, file)}:${i + 1}`);
       }
+      examined.push(`${path.relative(ROOT, file)}:${i + 1}`);
     });
   }
 
   is(offenders.length, 0,
     "every success message downstream of a request has read the response",
     offenders.join(", "));
+
+  /*
+    AND THE WINDOW ITSELF, BECAUSE EVERY SITE IS CORRECT TODAY
+
+    The three claims this check could not previously see all turned out to
+    read their answer properly. So narrowing the window back to raw lines
+    breaks nothing, fails nothing, and silently un-covers the thank-you, the
+    delete and the full wipe — the check would pass by not looking, which is
+    the failure CLAUDE.md opens with about `heartbeat-data.mjs`.
+
+    Two assertions, because the two halves fail differently.
+
+    The mechanism, on a synthetic case: forty lines of prose between a request
+    and its claim must not consume the window. This is the direct test of the
+    property, and a revert to counting raw lines fails it here rather than
+    somewhere subtle.
+  */
+  const sample = [
+    'const res = await fetch("/api/thing", { method: "POST" });',
+    // What `blankComments` leaves behind where a postmortem was.
+    ...Array(40).fill(""),
+    'toast("Done.", "success");',
+  ];
+  const last = sample.length - 1;
+  ok(/\bfetch\(/.test(codeWindow(sample, last, 30)),
+    "prose between a request and its claim does not consume the window",
+    "counted in raw lines, 49 lines of postmortem hid the full wipe from the check written to hold it");
+  ok(!/\bfetch\(/.test(sample.slice(Math.max(0, last - 30), last + 1).join("\n")),
+    "and the raw-line window it replaced could not see past that prose",
+    "without this the first assertion passes under both windows and proves nothing");
+
+  /*
+    And the coverage, stated as the difference the repair makes rather than as
+    a number typed here. Widening the slack instead — "a request within 60
+    lines must be examined" — was the first attempt and it was wrong: at 60 a
+    claim borrows the `fetch` belonging to an unrelated function further up
+    the file, which is the over-reach the 30-line bound was chosen to avoid.
+
+    So the two windows are run against each other on the real tree. Counting
+    code must examine strictly more claims than counting lines, and it does:
+    eight against five, the three being the thank-you, the delete and the
+    wipe. A revert to raw lines makes the two equal and fails here.
+  */
+  const rawExamined = [];
+  for (const file of walk(path.join(ROOT, "src"))) {
+    const code = blankComments(fs.readFileSync(file, "utf8")).split("\n");
+    code.forEach((line, i) => {
+      if (!/"success"/.test(line)) return;
+      if (!/toast\(/.test(code.slice(Math.max(0, i - 6), i + 1).join("\n"))) return;
+      if (!/\bfetch\(/.test(code.slice(Math.max(0, i - 30), i + 1).join("\n"))) return;
+      rawExamined.push(`${path.relative(ROOT, file)}:${i + 1}`);
+    });
+  }
+  ok(examined.length > rawExamined.length,
+    "and counting code rather than prose examines claims that counting lines skipped",
+    `code window ${examined.length}, raw window ${rawExamined.length} — skipped: ${
+      examined.filter((e) => !rawExamined.includes(e)).join(", ") || "none"
+    }`);
 
   /*
     And the sharpest instance, asserted by name, because a heuristic above
@@ -5360,7 +6138,7 @@ check("48 No screen says it happened without reading the answer", () => {
     // because the comment explaining why `persisted` must be read contains
     // the word "persisted". Fourth time in this file. Scan what runs.
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   const flush = anon.slice(anon.indexOf("export async function flushQueue"));
   const drain = flush.slice(0, flush.indexOf("return sent"));
   ok(/persisted/.test(drain),
@@ -5414,7 +6192,7 @@ check("49 The health probe asks as the identity that does the work", () => {
     identity that does the work" and "I could not ask".
   */
   const src = fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8");
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   ok(!/createAdminClient\(\)\s*\?\?/.test(code),
     "the admin client has no fallback",
@@ -5451,7 +6229,7 @@ check("49 The health probe asks as the identity that does the work", () => {
   const storeSrc = fs
     .readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   const called = [...storeSrc.matchAll(/\.rpc\(\s*"([a-z_]+)"/g)].map((m) => m[1]);
   const covered = Object.keys(RPC_CONTRACT);
 
@@ -5576,7 +6354,7 @@ check("51 Closing a circle destroys the words before it claims to be closed", ()
     .readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8")
     // Code only — the comment above the statements names both of them.
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   const fn = store.slice(store.indexOf("async closeCircle"));
   const body = fn.slice(0, fn.indexOf("\n  }"));
@@ -5596,7 +6374,7 @@ check("51 Closing a circle destroys the words before it claims to be closed", ()
   const sweep = fs
     .readFileSync(path.join(ROOT, "src/lib/circles/sweep.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/status === "closed"\)\s*return true/.test(sweep),
     "and a circle already closed is not swept twice",
     "this early return is why the delete has to come first");
@@ -5810,7 +6588,6 @@ await checkAsync("55 What was streamed is a preview; what was committed is the a
   const providers = fs.readFileSync(path.join(ROOT, "src/lib/vent/providers.ts"), "utf8");
   const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
   const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 
   // ── the chain ────────────────────────────────────────────────────────────
   /*
@@ -6153,7 +6930,6 @@ check("56 The room only says it remembers when it can produce the thing", () => 
   */
   const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
   const carveRoute = fs.readFileSync(path.join(ROOT, "src/app/api/carve/route.ts"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
   const client = strip(chat);
 
   /*
@@ -6281,7 +7057,6 @@ check("57 An absent record is not a failed deletion", () => {
   const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
   const history = fs.readFileSync(path.join(ROOT, "src/components/history-list.tsx"), "utf8");
   const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 
   // ── the route says which of the two it is ────────────────────────────────
   const del = strip(route).slice(strip(route).indexOf("async function handleDELETE"));
@@ -6358,7 +7133,7 @@ check("58 The light that says words are being saved is wired to a write", () => 
     *about the operation it claims to describe*. The third clause is this one.
   */
   const src = fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8");
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   ok(!/persisting:\s*Boolean\(store\)\s*,/.test(code),
     "`persisting` is not the existence of a store object",
@@ -6670,7 +7445,6 @@ await checkAsync("61 A circle nobody is asking about still gets closed", async (
   const sweep = fs.readFileSync(path.join(ROOT, "src/lib/circles/sweep.ts"), "utf8");
   const lobby = fs.readFileSync(path.join(ROOT, "src/app/api/circles/route.ts"), "utf8");
   const types = fs.readFileSync(path.join(ROOT, "src/lib/store/types.ts"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 
   /*
     Somebody has to be able to ask for the rows nobody is asking for. Without
@@ -6890,7 +7664,6 @@ check("62 A third party being down cannot hold a page open", () => {
   */
   const close = fs.readFileSync(path.join(ROOT, "src/lib/voice/close.ts"), "utf8");
   const lobby = fs.readFileSync(path.join(ROOT, "src/app/api/circles/route.ts"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 
   const body = strip(close).slice(strip(close).indexOf("export async function closeVoiceRoom"));
   ok(/Promise\.race\(|AbortSignal|signal:/.test(body),
@@ -6958,7 +7731,6 @@ check("63 The arrival reading is a reading, or it is nothing", () => {
   */
   const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
   const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
   const client = strip(chat);
 
   /*
@@ -7074,7 +7846,7 @@ check("64 No route gives up before the work it does is allowed to finish", () =>
     if (!callsModel) continue;
     checked += 1;
 
-    const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
     const declared = /export const maxDuration = (\d+)/.exec(code);
     const name = path.relative(path.join(ROOT, "src/app"), file);
     ok(declared,
@@ -7135,7 +7907,7 @@ check("65 The backup copies what can be lost and nothing that was promised destr
     Neither failure shows up in an artifact that looks fine.
   */
   const src = fs.readFileSync(path.join(ROOT, "src/app/api/export/route.ts"), "utf8");
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   // ── shut without a secret ────────────────────────────────────────────────
   /*
@@ -7223,7 +7995,6 @@ check("66 A fix that stops the damage still has to answer for the damage done", 
   */
   const eff = fs.readFileSync(path.join(ROOT, "src/lib/vent/efficacy.ts"), "utf8");
   const pipe = fs.readFileSync(path.join(ROOT, "scripts/rlhf-pipeline.mjs"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 
   ok(/PRE_FIX_DEFAULT\s*=\s*50/.test(strip(eff)),
     "the value that means 'never answered' is named where the arithmetic is",
@@ -7324,7 +8095,7 @@ check("67 A silent microphone is never published as a masked one", () => {
   */
   const mask = fs.readFileSync(path.join(ROOT, "src/lib/voice/mask.ts"), "utf8");
   const voice = fs.readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8");
-  const code = mask.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const code = mask.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   ok(/state === "suspended"/.test(code) && /\.resume\(/.test(code),
     "a suspended context is resumed rather than wired up silently",
@@ -7387,7 +8158,6 @@ check("68 A room does not tell you the same thing twice", () => {
   */
   const room = fs.readFileSync(path.join(ROOT, "src/components/circle-room.tsx"), "utf8");
   const voice = fs.readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8");
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 
   /*
     The transcript placeholder is guarded on somebody else being present. It
@@ -7427,7 +8197,7 @@ check("68 A room does not tell you the same thing twice", () => {
         const text = fs
           .readFileSync(full, "utf8")
           .replace(/\/\*[\s\S]*?\*\//g, " ")
-          .replace(/\/\/[^\n]*/g, " ");
+          .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
         spoken.push(...(text.match(/first one here/g) ?? []));
       }
     }
@@ -7530,7 +8300,7 @@ check("69 A security header does not silently disable the feature it guards", ()
     insecure context — and one sentence covering all of them is how the real
     cause here stayed invisible.
   */
-  const code = voice.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const code = voice.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   for (const n of ["NotAllowedError", "NotFoundError", "NotReadableError", "SecurityError"]) {
     ok(code.includes(n), `${n} is told apart from the others`);
   }
@@ -7562,7 +8332,7 @@ check("70 A mute you performed is not a mute somebody did to you", () => {
     between them.
   */
   const src = fs.readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8");
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   ok(/ownMutesRef/.test(code),
     "the component tracks which mutes are its own",
@@ -7789,11 +8559,13 @@ check("72 The lights go down in both themes", () => {
   // Nothing paints its own. Two scrims at two alphas were two people guessing
   // at one gesture, and only one of them can be corrected in one place.
   const strays = [];
+  let scanned = 0;
   const walk = (dir) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, e.name);
       if (e.isDirectory()) walk(full);
       else if (e.name.endsWith(".tsx")) {
+        scanned++;
         const src = fs.readFileSync(full, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
         for (const m of src.matchAll(/className=(?:"|\{")([^"]*inset-0[^"]*)"/g)) {
           if (/\bbg-(ink|paper|card)\b|\bbg-(ink|paper|card)\//.test(m[1])) {
@@ -7804,6 +8576,7 @@ check("72 The lights go down in both themes", () => {
     }
   };
   walk(path.join(ROOT, "src"));
+  ok(scanned >= 10, `there are components to scan (${scanned})`, "a sweep over no files finds no offenders and reports that as a pass");
   is(strays.length, 0,
     `every full-bleed overlay uses it${strays.length ? ` (${strays.join("; ")})` : ""}`,
     "a hand-rolled scrim is a second answer to a question that has one");
@@ -7961,8 +8734,27 @@ check("74 Nothing thanks you for something it dropped", () => {
   const route = fs.readFileSync(path.join(ROOT, "src/app/api/feedback/route.ts"), "utf8");
   ok(/persisted:\s*false/.test(route),
     "the feedback route can answer 200 having written nothing");
-  ok(/persisted:\s*true/.test(route),
-    "and says so the other way when it has");
+  /*
+    Reachable, not literal — and the difference is the whole rule.
+
+    This read `/persisted:\s*true/`, which was exactly right while the route
+    ended in `NextResponse.json({ persisted: true, ... })`. Then the write
+    learned to fail: production carries a UNIQUE constraint on
+    `vent_feedback.user_id` that no migration here declares, so a person's
+    second rating raises 23505 against a rate limiter in the same handler that
+    allows five an hour.
+
+    The fix reports what happened — `persisted` is set after the insert
+    returns — and this assertion failed on it, because the literal it was
+    looking for is the thing that had to go. An assertion pinning the shape of
+    the old implementation blocks the new one; check 45 hit the same wall
+    today and the answer is the same. Assert that success is *reachable*, and
+    let check 104 assert it is never hardcoded. Together they say: the route
+    can report a kept rating, and only by having kept one.
+  */
+  ok(/persisted = true;/.test(route),
+    "and can still say so when the write landed",
+    "a route that can only report failure is the same bug facing the other way");
 
   const fab = fs.readFileSync(path.join(ROOT, "src/components/feedback-fab.tsx"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ");
@@ -7996,7 +8788,15 @@ check("75 No sentence a person reads is about our deployment", () => {
     token-gated export exist to be read by whoever deploys this, and telling
     *them* to set LIVEKIT_API_KEY is the whole point.
   */
-  const FORBIDDEN = /\bSupabase\b|\bnpm run\b|LIVEKIT_|ANTHROPIC_|NEXT_PUBLIC_|SERVICE_ROLE|\.env\b|\benv var|\blocalhost\b|\bthis deployment\b|\bthis instance\b|\bnot configured on\b/;
+  /*
+    Case-insensitive, which it was not.
+
+    `\bSupabase\b` without the flag matches the capitalised form only, so a
+    route saying "supabase" in lower case walked past the one check written
+    to stop it. The unconfigured pass had the flag and this did not, which is
+    the drift the two copies were always going to produce.
+  */
+  const FORBIDDEN = new RegExp(FORBIDDEN_SOURCE, "i");
   const OPERATOR = ["health", "heartbeat", "export"];
 
   const files = [];
@@ -8020,7 +8820,7 @@ check("75 No sentence a person reads is about our deployment", () => {
       .readFileSync(f, "utf8")
       // Comments explain the strings they are about, by quoting them.
       .replace(/\/\*[\s\S]*?\*\//g, " ")
-      .replace(/\/\/[^\n]*/g, " ")
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ")
       // A class list is a string with spaces in it and nobody reads it.
       .replace(/className=(?:"[^"]*"|\{`[^`]*`\})/g, " ");
 
@@ -8148,7 +8948,7 @@ check("76 The office has one voice, and nothing we wrote breaks it", () => {
     const src = fs
       .readFileSync(f, "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, " ")
-      .replace(/\/\/[^\n]*/g, " ")
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ")
       .replace(/className=(?:"[^"]*"|\{`[^`]*`\})/g, " ");
     const prose = [
       ...[...src.matchAll(/"([^"\n]*\s[^"\n]*)"|'([^'\n]*\s[^'\n]*)'/g)].map((m) => m[1] ?? m[2] ?? ""),
@@ -8189,6 +8989,55 @@ check("76 The office has one voice, and nothing we wrote breaks it", () => {
   ok(!/[Tt]hree to four sentences/.test(prompt),
     "and no longer carries its own sentence count",
     `REPLY_SENTENCE_CAP is ${REPLY_SENTENCE_CAP}`);
+
+  /*
+    NOT ITS VALUE — ITS SINGLENESS.
+
+    Moving the cap from 3 to 4 left the suite green, which is correct and was
+    worth checking: the value is a product decision, and a check asserting
+    `=== 4` would go red the day somebody legitimately picks 5. That is check
+    126's lesson — naming the number turns a rule about the contract into an
+    assertion about today's contract.
+
+    What was actually at risk is the thing this repository calls "a number is
+    a sentence": three files state the cap to the model — the prompt's two
+    language branches, the failsafe's retry line and `OFFICE_RULES` — and
+    every one of them interpolates the constant today. Spell one of them as a
+    word and the grader and the prompt disagree about what the office asks
+    for, silently, in the direction that ships longer replies.
+
+    Comments blanked rather than stripped, because `voice.ts` carries a
+    postmortem that opens "Three sentences, and the person had just said..."
+    and that prose is not an instruction to anybody.
+  */
+  const spellsACount = [];
+  let capFilesRead = 0;
+  for (const f of ["prompt.ts", "voice.ts", "failsafe.ts"]) {
+    capFilesRead++;
+    const src = fs.readFileSync(path.join(ROOT, "src/lib/vent", f), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, (m) => m.replace(/[^\n]/g, " "));
+    /*
+      A *ceiling*, not any mention of a number near the word.
+
+      The first version flagged `voice.ts`'s own prompt line — "the right
+      reply is one sentence, sometimes it is only the question" — which is a
+      floor and the correct advice, and is the same argument the constant's
+      doc comment makes. `make you` again: the commonest hit was the ordinary
+      use. What competes with the constant is a stated maximum.
+    */
+    const CEILING =
+      /\b(?:one|two|three|four|five|six|\d+)\s+(?:short\s+)?sentences?\s*,?\s*(?:maximum|max\b)|\bat most\s+(?:one|two|three|four|five|six|\d+)\s+(?:short\s+)?sentences?\b|\bno more than\s+(?:one|two|three|four|five|six|\d+)\s+(?:short\s+)?sentences?\b/gi;
+    for (const m of src.matchAll(CEILING)) {
+      spellsACount.push(`${f}: ${m[0]}`);
+    }
+  }
+  // The floor this file's last commit was about, on the sweep written after
+  // it: an empty file list reports no offenders and reports that as a pass.
+  is(capFilesRead, 3, `and there are files to read (${capFilesRead})`);
+  is(spellsACount.join(" | "), "",
+    "and no file states a sentence count the constant does not supply",
+    "the prompt and the grader disagreeing about the cap is invisible and ships longer replies");
   /*
     "Ask one question that digs" was a numbered step in a three-step template,
     and the template was half the reason replies read as scripted. What has to
@@ -8580,7 +9429,7 @@ check("80 Six seats means six, in the store that can race", () => {
     fs
       .readFileSync(path.join(ROOT, rel), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, " ")
-      .replace(/^\s*\/\/[^\n]*$/gm, " ");
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   const types = read("src/lib/store/types.ts");
   const supa = read("src/lib/store/supabase-store.ts");
   const file = read("src/lib/store/file-store.ts");
@@ -8703,7 +9552,7 @@ check("81 A sentence a person reads lives in one file", () => {
     const src = fs
       .readFileSync(f, "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, " ")
-      .replace(/^\s*\/\/[^\n]*$/gm, " ")
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ")
       .replace(/className=(?:"[^"]*"|\{`[^`]*`\})/g, " ");
     const prose = [
       ...[...src.matchAll(/"([^"\n]{25,})"/g)].map((m) => m[1]),
@@ -8855,6 +9704,68 @@ check("82 The room reads its own reply before anybody else does", () => {
     "exactly one retry, never a loop",
     "a reply that keeps failing must end at an authored line, not at the rate limit");
   ok(/tactic\.hold/.test(block), "and a retry that also fails falls back to the authored line");
+
+  /*
+    AND THE ROOM DOES NOT PUT ITSELF IN THE ROOM
+
+    First-person plural is the room joining somebody inside their own problem.
+    There is one person here and a machine; "we can look at that" asserts a
+    second party who will not be there at 3am. Differentiation is the posture
+    the whole product is built on — close without fusing, care without
+    carrying — and nothing had ever graded it.
+
+    The exemption is the work, as always. `make we` is Pidgin's hortative and
+    `PIDGIN_GRAMMAR` carries `make I / we / e / dem` deliberately; banning it
+    would force stilted Pidgin on somebody who wrote in Pidgin, which is the
+    register-decline failure this repository spends more words on than
+    anything else. Sixth word to be given up for meaning one thing in English
+    and another in Naija, after `make you`, `fit`, `belle`, `\bdon\b` and
+    `conditioning`.
+  */
+  const vent = { id: "f", message: "i am tired of all of it", intent: "vent", language: "en", probes: "" };
+  const fusedOn = (reply) =>
+    gradeReply(vent, reply, { said: "i am tired of all of it" }).some((f) => f.grader === "fused");
+
+  for (const bad of [
+    "We can look at that together.",
+    "Let's take one piece of it.",
+    "That is our next move.",
+    "It left us both somewhere strange.",
+  ]) {
+    ok(fusedOn(bad), `the room is not in it with them: ${JSON.stringify(bad)}`);
+  }
+  for (const fine of [
+    "You are tired of all of it, and that is the whole sentence.",
+    "Make we leave the why tonight.",
+    "That's what people call a core belief — a rule you learned so early it feels like a fact.",
+  ]) {
+    ok(!fusedOn(fine), `and it does not fire on ${JSON.stringify(fine)}`,
+      "the Pidgin hortative is grammar, not a pronoun the room chose");
+  }
+
+  /*
+    Over the corpus, because a grader that flags hand-written replies is the
+    grader that is wrong — the rule `scripts/quality.mjs` opens with, and the
+    one that killed "ask one question" and "use their own words back".
+  */
+  const authored = fs
+    .readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+    .trim().split("\n").map((l) => JSON.parse(l));
+  ok(authored.length >= 60, `there is a corpus to grade (${authored.length})`,
+    "a sweep over no replies finds no offenders and reports that as a pass");
+  const flagged = authored.filter((r) => fusedOn(r.full_integration || ""));
+  is(flagged.length, 0,
+    "and no authored reply trips it",
+    flagged.map((r) => (r.full_integration || "").slice(0, 60)).join(" | "));
+
+  /*
+    Private room only, and it has to stay that way. The circles rulebook is a
+    different function on a different surface, and the Keeper's own refusal is
+    "We no dey fix here. We dey witness" — a circle really does have six
+    people in it.
+  */
+  is(checkMessage("We no dey fix here. We dey witness.", "share").ok, true,
+    "the Keeper may still say we, because a circle has six people in it");
 });
 
 check("83 The office keeps what they said, and never a diagnosis", () => {
@@ -9320,7 +10231,7 @@ check("86 Nobody is handed a task that would fit anybody", () => {
     const src = fs
       .readFileSync(f, "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, " ")
-      .replace(/\/\/[^\n]*/g, " ")
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ")
       .replace(/className=(?:"[^"]*"|\{`[^`]*`\})/g, " ");
     const prose = [
       ...[...src.matchAll(/"([^"\n]*\s[^"\n]*)"|'([^'\n]*\s[^'\n]*)'/g)].map((m) => m[1] ?? m[2] ?? ""),
@@ -9350,7 +10261,7 @@ check("86 Nobody is handed a task that would fit anybody", () => {
   const promptSrc = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   const speaks = slice(promptSrc, "HOW YOU SPEAK", 700);
   ok(speaks.length > 400, "the block is found and read whole",
     "a marker that lands in a comment slices 700 characters of prose about the code");
@@ -9476,7 +10387,7 @@ check("87 A deletion is reported by what the store answered", () => {
   const route = fs
     .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   const forget = slice(route, "if (forgetCarve)", 700);
   ok(forget.length > 200, "the carve-deletion branch is found",
@@ -9522,7 +10433,7 @@ check("87 A deletion is reported by what the store answered", () => {
   const bare = (p) => fs
     .readFileSync(path.join(ROOT, p), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   const supa = bare("src/lib/store/supabase-store.ts");
   const file = bare("src/lib/store/file-store.ts");
   for (const [name, src] of [["supabase", supa], ["file", file]]) {
@@ -9566,7 +10477,7 @@ check("87 A deletion is reported by what the store answered", () => {
         const src = fs
           .readFileSync(full, "utf8")
           .replace(/\/\*[\s\S]*?\*\//g, " ")
-          .replace(/\/\/[^\n]*/g, " ");
+          .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
         for (const m of BOOLEAN_METHODS) {
           // A call whose line starts with `await` and assigns to nothing.
           const re = new RegExp(`(^|[;{}]\\s*)await\\s+\\w+\\.${m}\\(`, "m");
@@ -9694,7 +10605,7 @@ check("88 The room asks one question, chosen against their words", () => {
   const promptSrc = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/probeBlock\(probe\)/.test(promptSrc), "the prompt renders it");
   ok(promptSrc.indexOf("probeBlock(probe)") > promptSrc.indexOf("THIS TURN"),
     "immediately after the move",
@@ -9728,7 +10639,7 @@ check("88 The room asks one question, chosen against their words", () => {
   const route = fs
     .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/selectProbe\(input\.message, recentProbes\)/.test(route),
     "the route selects against what was already asked");
   ok(/probe_used:\s*probeId/.test(route), "and records which one it asked");
@@ -9839,7 +10750,7 @@ check("89 The room never invents a person or a figure", () => {
   const route = fs
     .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/history\.map\(\(h\) => h\.user_message\)/.test(route),
     "every earlier message is part of the evidence",
     "this turn alone makes every cross-session recall look invented");
@@ -10122,7 +11033,7 @@ check("92 When the thinking is the problem, the question is not about the thing"
   const src = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/probes.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/inTheLoop\(message\) \? PROBES\.filter\(\(p\) => p\.process\)/.test(src),
     "the content questions are removed from the pool, not outranked",
     "on turn two a weight has already been beaten by the rotation");
@@ -10186,7 +11097,7 @@ check("93 What it worked out about you is on the page, with a button", () => {
     somebody correct a wrong note.
   */
   const route = fs.readFileSync(path.join(ROOT, "src/app/api/notes/route.ts"), "utf8");
-  const bare = route.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const bare = route.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/export const GET/.test(bare), "there is a way to read them");
   ok(/export const DELETE/.test(bare), "and a way to take one back");
   ok(/store\.deleteNote\(userId, id\)/.test(bare),
@@ -10210,7 +11121,7 @@ check("93 What it worked out about you is on the page, with a button", () => {
     const src = fs
       .readFileSync(path.join(ROOT, "src/lib/store", file), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, " ")
-      .replace(/\/\/[^\n]*/g, " ");
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
     ok(/async deleteNote\(/.test(src), `${name} store implements it`);
     /*
       The method, and only the method.
@@ -10413,7 +11324,6 @@ check("95 Every door onto a circle asks whether it is over", () => {
   */
   // Comments stripped before any of this is read: three checks in a row have
   // now asserted about a note explaining the code instead of the code.
-  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
   const dir = path.join(ROOT, "src/app/api/circles");
   const files = [];
   const walk = (d) => {
@@ -10469,6 +11379,111 @@ check("95 Every door onto a circle asks whether it is over", () => {
   ok(/status: 404/.test(body) && body.indexOf("not_found") < body.indexOf("not_keeper"),
     "and a circle that never existed answers 404, not 403",
     "listMembers on a bad id returns nothing, so the Keeper check fired first and told them the wrong thing");
+
+  /*
+    AND THE SAME ORDER IN EVERY HANDLER, NOT JUST THE ONE THAT WAS FIXED
+
+    The three assertions above are about DELETE, and they are right about
+    DELETE. The seal handler in the same file had the identical bug and none
+    of them reached it: it answered **403 not_a_member** to somebody sealing a
+    circle that had already ended, because it looked up the seat before asking
+    whether the room was still there.
+
+    It stayed invisible for as long as `closeCircle` left the seats behind —
+    the row it depended on was the row that should not have existed, so one
+    defect was holding the other's symptom down. Fixing the deletion made a
+    live check go red, which is how it surfaced at all.
+
+    So the rule is swept over every handler in the file rather than written
+    out a second time: if a handler asks whether the circle is over *and*
+    refuses somebody by their seat, the question comes first. "This room is
+    over" is true of every caller; "you are not a member" is true of only
+    some, and answering the narrower one first can only answer the wrong
+    question.
+  */
+  const bodies = del.split(/(?=async function handle[A-Z]+)/).filter((h) => /^async function handle/.test(h));
+  ok(bodies.length >= 3,
+    "the file still splits into handlers",
+    `found ${bodies.length} — a sweep over nothing reports green over everything`);
+
+  const wrongOrder = [];
+  for (const h of bodies) {
+    const name = h.match(/async function (handle[A-Z]+)/)?.[1] ?? "?";
+    const over = h.indexOf("sweepIfOver");
+    const seat = Math.min(
+      ...["not_a_member", "not_keeper"].map((r) => {
+        const at = h.indexOf(r);
+        return at < 0 ? Infinity : at;
+      }),
+    );
+    if (over >= 0 && seat !== Infinity && over > seat) wrongOrder.push(name);
+  }
+  is(wrongOrder.length, 0,
+    "and every handler asks whether the room is over before it checks a seat",
+    wrongOrder.join(", ")
+      || "a refusal naming somebody's seat, about a room that has ended, is a false sentence");
+
+  /*
+    AND ONE RUNG FURTHER OUT: A ROOM THAT NEVER EXISTED
+
+    The same argument, and the same handler got it wrong again. The seal
+    guarded its sweep with `circle && …`, so a circle that does not exist fell
+    straight past it into the seat check and answered **403 not_a_member** —
+    "you are not a member" about a room nobody is a member of. That is the bug
+    the DELETE assertions above record as fixed, in the same file, for DELETE,
+    and the seal is the handler whose sweep ordering was corrected an hour
+    earlier without anybody looking at the line above it.
+
+    Not a rule invented to make this sweep go green: **seven of the eight
+    handlers addressed by an id already answered 404 here.** It is written down
+    as what the file already does, so the eighth stops being the exception.
+
+    Over every route under `[id]`, not just this file — the messages, voice and
+    mute handlers all refuse by seat too, and a hand-kept list of the ones that
+    matter is the shape this repository keeps finding holes in.
+  */
+  const byId = files.filter((f) => path.relative(ROOT, f).includes("[id]"));
+  const noNotFound = [];
+  const lateNotFound = [];
+  let refusing = 0;
+  for (const f of byId) {
+    const src = strip(fs.readFileSync(f, "utf8"));
+    const where = path.basename(path.dirname(f));
+    const found = [...src.matchAll(/async function (handle[A-Z]+)\b/g)];
+    for (let i = 0; i < found.length; i++) {
+      const h = src.slice(found[i].index, i + 1 < found.length ? found[i + 1].index : src.length);
+      const seat = Math.min(
+        ...["not_a_member", "not_keeper"].map((r) => {
+          const at = h.indexOf(r);
+          return at < 0 ? Infinity : at;
+        }),
+      );
+      // Only handlers that refuse somebody personally. A handler with no seat
+      // refusal has nothing to get in the wrong order.
+      if (seat === Infinity) continue;
+      refusing++;
+      const gone = h.indexOf("not_found");
+      if (gone < 0) noNotFound.push(`${where}/${found[i][1]}`);
+      else if (gone > seat) lateNotFound.push(`${where}/${found[i][1]}`);
+    }
+  }
+  /*
+    The floor, because the first version of this sweep did not have one and a
+    mutation pointing it at `[nope]` walked straight through green — the
+    failure the assertion twenty lines above ("a sweep that walks nothing
+    passes loudest") was written about, reproduced in the check written under
+    it an hour later. Both halves report nothing when the sweep finds nothing,
+    which is indistinguishable from both halves being satisfied.
+  */
+  ok(refusing >= 6,
+    `and there are handlers that refuse by seat to check (${refusing})`,
+    "two empty lists are what a sweep over no files reports, and it reports them as a pass");
+  is(noNotFound.join(", "), "",
+    "every handler that refuses somebody by their seat first says whether the room exists",
+    "`listMembers` on an id that is not there returns an empty list, so the seat check answers about a room that never was");
+  is(lateNotFound.join(", "), "",
+    "and says it first",
+    "a 404 written below a 403 is a 404 that never runs");
 });
 
 check("96 A definer function never takes the caller's word for who they are", () => {
@@ -10665,7 +11680,7 @@ check("97 It answers in the language they wrote in", () => {
   const src = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/intent.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/any\(PIDGIN_STRONG, m\)/.test(src),
     "only the unambiguous markers decide the language");
   ok(!/any\(PIDGIN_AMBIGUOUS/.test(src),
@@ -10680,14 +11695,58 @@ check("97 It answers in the language they wrote in", () => {
     suite that a probe has read past the thing it was asserting about. The
     declaration ends at `];`; read to there.
   */
-  const from = src.indexOf("const PIDGIN_STRONG");
-  const strong = src.slice(from, src.indexOf("];", from));
-  ok(strong.length > 100 && !strong.includes("PIDGIN_AMBIGUOUS"),
-    `the strong list is what was read (${strong.length} chars)`,
-    "a slice that reaches the next declaration asserts about the next declaration");
-  ok(!/\/\\bfit\\b\/|\/\\bbelle\\b\//.test(strong),
+  /*
+    Read off the exported arrays, not out of the file.
+
+    This used to slice the source between `const PIDGIN_STRONG` and its `];`,
+    which was the careful version of a fixed-width slice and still a claim
+    about how the declaration is *written*. The moment the list became a
+    composition of two exported halves — grammar and vocabulary, so the reply
+    graders can tell a Pidgin sentence from an English one wearing a borrowed
+    word — the slice read 59 characters and the check failed on correct code.
+    Fifth time in this suite that a probe has read past its subject.
+
+    The patterns themselves are the thing being asserted, so assert those.
+  */
+  const strong = [...PIDGIN_GRAMMAR, ...PIDGIN_LEXICAL].map(String);
+  ok(strong.length > 15, `the deciding markers are readable (${strong.length})`,
+    "a sweep that finds nothing passes loudest");
+  ok(!strong.includes("/\\bfit\\b/") && !strong.includes("/\\bbelle\\b/"),
     "neither bare word is in the deciding list",
     "putting it back is the bug, and it is one character of diff");
+  ok(strong.some((p) => p.includes("fit ")) && strong.some((p) => p.includes("belle (")),
+    "and both survive as constructions",
+    "`I no fit` is Pidgin; `a good fit` is not, and the difference is the next word");
+
+  /*
+    The two halves are disjoint, because the whole point is telling them
+    apart. A marker in both lists makes the grader's question meaningless.
+  */
+  const grammar = new Set(PIDGIN_GRAMMAR.map(String));
+  const overlap = PIDGIN_LEXICAL.map(String).filter((p) => grammar.has(p));
+  is(overlap.join(", "), "",
+    `no marker is both grammar and vocabulary${overlap.length ? ` — ${overlap.join(", ")}` : ""}`,
+    "the split is the rule; an entry on both sides is a rule that decides nothing");
+
+  /*
+    `make you` is not in the subjunctive, and the corpus is why.
+
+    Pidgin's subjunctive runs the whole paradigm and "make you no worry" is
+    good Pidgin. But "make you" is also ordinary English — "what make you
+    think", "to make you feel" — and it was the commonest marker in the
+    corpus by a distance: 12 of 30 hits across 166 English replies, ahead of
+    `dey`. Second person is the one cell that collides, and including it
+    turned a grammar test into a coin flip.
+
+    Third time this list has given up a word that is Pidgin *and* English,
+    after `fit` and `belle`. A marker earns its place by what it excludes.
+  */
+  is(classify("what make you think that is the problem").language, "en",
+    "'make you' does not make a sentence Pidgin",
+    "removing it took the single-marker English replies from 14 to 3");
+  is(classify("make i tell you wetin happen").language, "pidgin",
+    "and the rest of the paradigm still does",
+    "make I, make we, make e, make dem — every cell but the one that collides");
 });
 
 check("98 The gate cannot pass by not running", () => {
@@ -10715,7 +11774,7 @@ check("98 The gate cannot pass by not running", () => {
     execution falls through to the gate.
   */
   const src = fs.readFileSync(path.join(ROOT, "scripts/heartbeat-data.mjs"), "utf8");
-  const bare = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const bare = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
 
   const exits = [...bare.matchAll(/process\.exit\(0\)/g)];
   ok(exits.length > 0, `there are success exits to check (${exits.length})`);
@@ -10826,7 +11885,7 @@ check("99 One masked voice per seat, never one key for everybody", () => {
   const src = fs
     .readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/maskMicrophone\(mic, personaFor\(grant\.identity\)/.test(src),
     "the room masks by the seat the server assigned",
     "a constant here is the global key again, and it is one word of diff");
@@ -10913,7 +11972,7 @@ check("100 A note that was refused says so", () => {
   const src = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/carve.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/read\.dropped/.test(src), "the carve path reads what was refused");
   ok(!/parseNotes\(notes\)\.keep/.test(src),
     "and no longer takes only the survivors",
@@ -10974,7 +12033,7 @@ check("101 The room does not promise that somebody is coming", () => {
   const room = fs
     .readFileSync(path.join(ROOT, "src/components/circle-room.tsx"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/\{ALONE_LINE\}/.test(room) && /\{ALONE_DOOR\}/.test(room),
     "the room renders both, imported rather than retyped");
   const alone = room.slice(room.indexOf("state.seats < 2"));
@@ -10986,6 +12045,112 @@ check("101 The room does not promise that somebody is coming", () => {
   // to, applied to the one string we wrote for this moment.
   is(bannedPhrase(ALONE_LINE), null, "and it is in the office voice");
   is(genericTask(ALONE_LINE), null, "handing over nothing to do");
+
+  /*
+    THE SAME RULE ONE SCREEN EARLIER
+
+    A sentence that is false about the person reading it, which is what this
+    check is for. Every card in the lobby said "Take a seat →", including the
+    one they were already sitting in — and the room you are already in is the
+    one most likely to be *full*, six people being a working circle, so the
+    fallback read "Room is full" at somebody who had a seat in it.
+
+    Underneath it was a control that could not do what it said. A seat is held
+    for the full forty-five minutes and there is no leave path, so "Open a
+    different circle" sends somebody back to the room they are in. The room
+    never offers a door that opens onto a refusal, and the honest version of
+    that button is its absence.
+
+    Asserted by *order*, not by presence: both branches would exist and read
+    correctly if the seat were asked about second, and the answer would still
+    be wrong for exactly the rooms that matter. True-for-you before
+    true-for-anybody is the same ordering check 95 enforces on the handlers.
+  */
+  const lobby = strip(fs.readFileSync(path.join(ROOT, "src/components/circles-list.tsx"), "utf8"));
+  ok(/\bd\.mine\b/.test(lobby),
+    "the lobby reads which room is theirs off the body",
+    "the status says a lobby was returned, never whose seat is in it");
+  const label = lobby.slice(lobby.indexOf("Take a seat") - 400, lobby.indexOf("Take a seat") + 40);
+  const seatFirst = label.indexOf("=== mine");
+  const fullFirst = label.indexOf("seats === 6");
+  ok(seatFirst >= 0 && fullFirst >= 0 && seatFirst < fullFirst,
+    "and asks whether the seat is theirs before it counts the seats",
+    `mine at ${seatFirst}, full at ${fullFirst} — "Room is full" is true of a stranger and false of the person in it`);
+  ok(/!mine\s*&&[\s\S]{0,400}?Open a different circle/.test(lobby),
+    "and never offers to open a different circle to somebody who cannot",
+    "the route sends them back to their seat, which makes this a control that does not do what it says");
+
+  /*
+    AND THE SAME DOOR ONE SCREEN IN
+
+    The room rendered the whole agreement — the rules, the chair question, the
+    consent box and a full-width gold "Take a seat" — to anybody not in it,
+    whatever its seat count. On a circle with six people in it, working through
+    all of that answers **409** and toasts "That circle is full."
+
+    Every fact needed to know that arrived in the payload the button was drawn
+    from: `seats` and `maxSeats`. Same bug as the lobby's gold "Open a circle"
+    over a plate explaining four hundred pixels lower that circles could not
+    open, one screen further in, and still live after that one was repaired.
+
+    Asserted as **one flag and its negation**, which is not a style note:
+    `6 >= undefined` and `6 < undefined` are both false, so writing the pair as
+    two comparisons makes a payload that lost `maxSeats` render neither branch
+    — somebody outside the room looking at nothing at all, with no way in and
+    no sentence saying why. A flag falls back to offering the seat, and a 409
+    they can read beats a blank space. It was written the wrong way first.
+  */
+  const roomSrc = strip(fs.readFileSync(path.join(ROOT, "src/components/circle-room.tsx"), "utf8"));
+  ok(/const roomIsFull = /.test(roomSrc),
+    "the room reads its own fullness once");
+  const shut = roomSrc.indexOf("!state.joined && roomIsFull");
+  const open = roomSrc.indexOf("!state.joined && !roomIsFull");
+  ok(shut >= 0 && open >= 0,
+    "and the refusal and the offer are that flag and its negation",
+    "two comparisons of the same pair both go false on a payload missing maxSeats, and render nothing");
+  const seat = roomSrc.indexOf("Take a seat");
+  ok(open >= 0 && seat > open,
+    "the seat is only offered where there is one",
+    "a gold button, a consent box and a chair question, answered 409");
+  ok(shut >= 0 && shut < open && /\/circles/.test(roomSrc.slice(shut, open)),
+    "and the branch that refuses points at the lobby, which can still open one",
+    "naming what is shut without naming what is open is the bug with better manners");
+
+  /*
+    AND A REFUSAL IS NOT A ROOM
+
+    The same door, in the two shapes where it cannot open at all. `load` read
+    `const d: RoomState = await r.json()` on every status but 404 — so a 503
+    from a store that is absent or refusing became a room object with every
+    field `undefined`, the fullness flag read false over it, and the screen
+    drew the agreement and the gold button. Reachable by anybody holding a
+    circle link while the database is down, which is a real production shape
+    and one this suite runs twice.
+
+    Asserted as a named instance rather than swept, and the reason is worth
+    stating: a sweep for that annotated cast finds **one** site in the whole
+    tree — the one being fixed — which is a check whose entire sample is its
+    own bug, the mistake this file records making with `catch` blocks.
+
+    What does generalise is the second assertion. "That circle has closed. The
+    words are already gone." is true of a 404 and false of an unreachable room,
+    which may be sitting there with five people in it. Never claim a deletion
+    nobody observed.
+  */
+  const guard = roomSrc.indexOf("if (!r.ok)");
+  const cast = roomSrc.indexOf(": RoomState = await");
+  ok(guard >= 0 && cast >= 0 && guard < cast,
+    "a response that is not a room never becomes one",
+    "every field undefined is a room with seats it cannot count and a seat it offers anyway");
+
+  // Matched without the apostrophe: JSX writes it as `&apos;`, so both the
+  // straight and the curly form miss. The first attempt tried the curly one.
+  const gone = roomSrc.indexOf("reach this room");
+  ok(gone >= 0, "and being unable to reach a room has its own sentence");
+  const said = roomSrc.slice(gone, gone + 400);
+  ok(!/\bgone\b|already deleted|has closed/.test(said),
+    "which does not tell them their words were deleted",
+    "the room may be sitting there with five people in it — a deletion nobody watched is not a thing to announce");
 });
 
 check("102 The turn's verdict is computed, never asked for", () => {
@@ -11114,7 +12279,7 @@ check("102 The turn's verdict is computed, never asked for", () => {
   const shape = fs
     .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   /*
     Scoped to actual responses, not to every object that names an intent.
 
@@ -11191,7 +12356,7 @@ check("102 The turn's verdict is computed, never asked for", () => {
   const src = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/assess.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(!/generateReply|providers|max_?[Tt]okens/.test(src),
     "the assessment spends nothing",
     "a second call to describe the first is the credit policy broken for a label");
@@ -11199,7 +12364,7 @@ check("102 The turn's verdict is computed, never asked for", () => {
   const prompt = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(!/<risk_level>|<reasoning_summary>|<handoff_flag>|<next_skill>/.test(prompt),
     "and the model is never asked to emit the schema",
     "tags in the output are output tokens, a parse that can fail, and a rating the message can argue with");
@@ -11210,7 +12375,7 @@ check("102 The turn's verdict is computed, never asked for", () => {
   const route = fs
     .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/assessment: assessTurn\(\{/.test(route), "the turn carries it");
   ok(route.indexOf("assessTurn({") > route.indexOf("const classification"),
     "computed from what the router already decided");
@@ -11219,10 +12384,22 @@ check("102 The turn's verdict is computed, never asked for", () => {
     AND THE NUMBER THE SPEC NAMES IS NOT OURS
 
     The spec says to route people to 988. This product is Nigerian, its crisis
-    lines are 0806 210 6493 and 199, and check 17 fails the build if any
-    surface writes a crisis number out by hand. A US hotline handed to somebody
-    in Lagos is not a safety feature; it is a disconnected number at the worst
-    possible moment.
+    lines are 0806 210 6493 and 199. A US hotline handed to somebody in Lagos is
+    not a safety feature; it is a disconnected number at the worst possible
+    moment.
+
+    This sentence used to end "and check 17 fails the build if any surface
+    writes a crisis number out by hand", which was not true. Check 17 swept for
+    *our* number and the foreign-line guard sat in check 24, reading the
+    assembled system prompt alone — and the crisis path never uses the system
+    prompt. Writing `988` into `CRISIS_RESPONSE` itself, and onto the crisis
+    screen, left the suite green.
+
+    It is true now: the sweep moved to check 17, over every file under `src`.
+    Left as a note rather than deleted, because a comment asserting a guarantee
+    that does not exist is the more dangerous half of this bug — the guard was
+    documented as covering everything in two places for as long as it covered
+    one.
   */
   ok(!/\b988\b/.test(prompt) && !/\b988\b/.test(src) && !/\b988\b/.test(route),
     "no foreign hotline reached the crisis path",
@@ -11276,7 +12453,7 @@ check("103 Nothing a person wrote reaches a log line", () => {
         const src = fs
           .readFileSync(full, "utf8")
           .replace(/\/\*[\s\S]*?\*\//g, " ")
-          .replace(/\/\/[^\n]*/g, " ");
+          .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
         /*
           The call's own arguments, by balancing parentheses — the same reader
           check 102 needed. A line-based match reads whatever happens to sit
@@ -11318,11 +12495,3747 @@ check("103 Nothing a person wrote reaches a log line", () => {
   const carve = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/carve.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
   ok(/console\.warn\(`\[carve\] notes refused/.test(carve),
     "the empty-notes question is still answerable",
     "a rule that silences the diagnostic trades one blind subsystem for another");
 });
+
+check("104 A grader the live path can see is a decision somebody made", () => {
+  /*
+    `quality.ts` knows fourteen things that can be wrong with a reply. The live
+    failsafe ran seven of them and threw the rest away, and only one sentence
+    of comment said so:
+
+      "Coverage, length and language mixing are deliberately *not* grounds for
+      a retry ... a reply one sentence over the cap is worth a note and not a
+      second billed call."
+
+    One economics argument, made about length, carrying two other graders on
+    the strength of sitting beside them in a list. It is right about length.
+    Production says how wrong it was about language: of 171 real vents, six
+    were written in Pidgin, classified `pidgin` by the router, prompted with
+    "Reply in Pidgin" — and answered in English. The instruction lands and the
+    model steps over it, which is the one failure a prompt cannot fix from
+    inside itself.
+
+    Two assertions here, and the first is the one that generalises.
+
+    A hand-written list of seven strings cannot say whether the eighth grader
+    was considered and rejected or simply never noticed — an absent name and a
+    declined name look identical, and the default is silence. So every label
+    `quality.ts` can emit must appear in exactly one of four sets: rejected,
+    retried, noted-and-not-acted-on, or unreachable on this path. Adding a
+    grader tomorrow fails the build until somebody says which it is. Check 95
+    learned this about routes; it is the same lesson about verdicts.
+
+    The rest is behaviour, because a set membership is not a decision until
+    something reads it.
+  */
+  const quality = strip(fs.readFileSync(path.join(ROOT, "src/lib/vent/quality.ts"), "utf8"));
+  const emitted = [...quality.matchAll(/\badd\(\s*"([a-z_]+)"/g)].map((m) => m[1]);
+  const graders = [...new Set(emitted)].sort();
+
+  ok(graders.length > 10, `quality.ts emits graders to classify (${graders.length})`,
+    "a sweep that finds nothing passes loudest — check 103 is here for the same reason");
+
+  const sets = { REJECT, RETRY_ONLY, NOTED, UNREACHABLE };
+  for (const g of graders) {
+    const homes = Object.entries(sets).filter(([, s]) => s.has(g)).map(([k]) => k);
+    is(homes.join("+"), homes[0] ?? "",
+      `${g} is classified exactly once${homes.length === 1 ? "" : ` — found in [${homes.join(", ")}]`}`,
+      "an unclassified grader is a decision nobody made");
+    ok(homes.length === 1, `${g} has a home`,
+      "rejected, retried, noted or unreachable — silence is not one of the four");
+  }
+  const classified = new Set(Object.values(sets).flatMap((s) => [...s]));
+  const orphans = [...classified].filter((g) => !graders.includes(g));
+  is(orphans.join(", "), "",
+    `no set names a grader quality.ts cannot emit${orphans.length ? ` — ${orphans.join(", ")}` : ""}`,
+    "a classification for a grader that no longer exists is a rule guarding nothing");
+
+  // ── the language tier, which is why this check exists ────────────────────
+  const pidginCase = {
+    id: "t", message: "money don finish before month end",
+    intent: "vent", language: "pidgin", probes: "check 104",
+  };
+  const inEnglish = inspectReply(pidginCase, "That sounds heavy. What part of it is sitting with you most right now?");
+  ok(/language/.test(inEnglish.reject ?? ""),
+    "a Pidgin message answered in English is rejected",
+    "the router got it right and the model answered in English anyway, on half of every Pidgin turn");
+  is(inEnglish.authoredIsBetter, false,
+    "and the authored line does not take over from it",
+    "the hold is English too, and generic on top — that is not a repair");
+  ok(/Pidgin/.test(inEnglish.correction ?? ""),
+    "the retry is told which register to use",
+    "a correction that repeats the ignored instruction is the same request in the same voice");
+
+  /*
+    The other half of the same grader, which must NOT cost a call.
+
+    Pidgin borrows English function words by construction, so the minor
+    "carrying a lot of English scaffolding" describes most real Pidgin. Billing
+    the product for speaking Pidgin correctly would be a worse bug than the one
+    above.
+  */
+  /*
+    FLUENT PIDGIN USES ENGLISH WORDS, AND THAT IS NOT A DEFECT
+
+    There used to be a minor here: a Pidgin reply carrying four or more of
+    `the|and|that|with|from|about|because|would|there` was flagged as "English
+    scaffolding". Every one of those is ordinary Naija Pidgin — it is an
+    English-lexifier creole, its function words *are* English words — so the
+    rule fired on four of the six replies that got Pidgin right in production.
+
+    This is one of them, near enough verbatim. It is fluent, correct, and was
+    being recorded as a defect by the only tally that says whether the room
+    speaks Pidgin properly.
+  */
+  const fluent = inspectReply(pidginCase,
+    "You dey demand say I holla you first because silence dey hurt you and you want me to carry the weight. Wetin dey under am?");
+  is(fluent.reject, null,
+    "fluent Pidgin that uses English function words is just Pidgin",
+    "a rule that flags two thirds of the good work is broken, not strict");
+
+  /*
+    And the case the deleted minor was actually reaching for: English wearing
+    a borrowed word. `wahala` is vocabulary, not grammar, so it contributes
+    nothing to whether the sentence is Pidgin — which is the whole reason the
+    two lists are separate.
+  */
+  const borrowed = inspectReply(pidginCase,
+    "That wahala is real, and it has been sitting on you a while. What part of it is heaviest?");
+  ok(/language/.test(borrowed.reject ?? ""),
+    "English with one Nigerian word in it is still English",
+    "a borrowed noun is register; grammar is the language");
+  ok(/borrowed word/.test(gradeReply(pidginCase,
+    "That wahala is real, and it has been sitting on you a while.",
+    { tokensSpent: true }).find((f) => f.grader === "language")?.detail ?? ""),
+    "and the detail says which of the two it was",
+    "'answered in English' and 'answered in English with a Nigerian word in it' are different things to go and read");
+
+  /*
+    The marker regex used to match the most common contraction in English.
+
+    `\bdon\b` matches inside "don't" — the boundary holds because an apostrophe
+    is not a word character — and that regex is the whole of the test for
+    "answered a Pidgin message in English". So any English reply containing
+    "don't" tested as Pidgin and escaped the grader, which is now a retry tier,
+    so it escaped the retry too. Seven of fourteen production hits were this.
+
+    Not a regex that matches nothing, this time. A regex that matches too much,
+    in the one place where matching too much means the check never fires.
+  */
+  const contraction = inspectReply(pidginCase,
+    "I don't think that is the whole of it. What part are you leaving out?");
+  ok(/language/.test(contraction.reject ?? ""),
+    "an English reply is still English when it contains the word don't",
+    "the perfective 'don' is spelled like the first three letters of don't, and \\b does not care");
+
+  /*
+    And the other direction, which the grader could not see at all.
+
+    "Only checked on Pidgin cases" was a true statement about *mixing* that
+    closed the door on *switching*. Production: three English messages answered
+    in Pidgin, one six markers deep. That direction is the worse of the two —
+    a Pidgin speaker can read an English reply, and somebody who wrote in
+    English may simply not read Pidgin.
+  */
+  const englishCase = { id: "t", message: "work is heavy", intent: "vent", language: "en", probes: "check 104" };
+  const inPidgin = inspectReply(englishCase,
+    "That phrase dey hide plenty things, but e sound like say the load no be small one.");
+  ok(/language/.test(inPidgin.reject ?? ""),
+    "an English message answered in Pidgin is rejected too",
+    "they chose that register, and it is not ours to change");
+  ok(/English/.test(inPidgin.correction ?? "") && !/answered in English/.test(inPidgin.correction ?? ""),
+    "and the correction points the way it actually went wrong",
+    "one line for both directions would be a confident instruction pointing backwards");
+
+  /*
+    Two *distinct* markers, not one, and not two uses of one.
+
+    Nigerian English borrows constantly. A threshold that fired on a single
+    borrowed word would bill the product for sounding Nigerian, and it would
+    fire on 14 of 159 real English turns instead of 3.
+  */
+  is(inspectReply(englishCase, "That wahala is real, and it has been sitting on you a while. What part is heaviest?").reject, null,
+    "one borrowed word in an English reply is register, not a language switch",
+    "a rule that punishes 'wahala' is a rule against this product's own voice");
+
+  /*
+    And one piece of grammar is not a switch either — usually because it is
+    their own word, handed back.
+
+    "You said it dey heavy" is an English sentence quoting a Pidgin one, which
+    is the single most useful move this room has. Three of 166 real English
+    replies carry exactly one marker and all three read as English; four carry
+    two or more and all four read as Pidgin. The threshold is where the
+    judgement is, not where it is convenient.
+  */
+  is(inspectReply(englishCase, "You said it dey heavy, and it has been for weeks now. What part is heaviest?").reject, null,
+    "one piece of grammar is a quotation, not a language switch",
+    "their word handed back is the move; punishing it would ban the product's best sentence");
+  is(inspectReply(englishCase, "Wahala. Wahala on top wahala, and it is not stopping. What part is heaviest?").reject, null,
+    "and the same word four times is still one borrowed word",
+    "distinct markers, because repetition is emphasis and a second marker is a second language");
+
+  const overCap = inspectReply(
+    { id: "t", message: "work is heavy", intent: "vent", language: "en", probes: "check 104" },
+    "That is a lot to carry. It has been going a while. The weight of it is plain. What is the hardest part of it?");
+  is(overCap.reject, null,
+    "four sentences is still a note, not a retry",
+    "the economics argument was always right about length — only language was smuggled in beside it");
+
+  const advising = inspectReply(
+    { id: "t", message: "work is heavy", intent: "vent", language: "en", probes: "check 104" },
+    "You should talk to somebody at work about it.");
+  is(advising.authoredIsBetter, true,
+    "advice still falls back to the authored line",
+    "harmful is a different tier from wrong-language, and the fallback is where the difference is spent");
+
+  // ── which attempt a person actually receives ─────────────────────────────
+  const clean = { reject: null, correction: null, authoredIsBetter: false };
+  const mild = { reject: "language: x", correction: "c", authoredIsBetter: false };
+  const severe = { reject: "advice: x", correction: "c", authoredIsBetter: true };
+  const A = (text, verdict) => ({ text, verdict });
+
+  is(chooseReply([A("retry", clean), A("first", mild)], "hold").text, "retry",
+    "a clean retry wins outright", "that is what the retry was bought for");
+  is(chooseReply([A("retry", mild), A("first", mild)], "hold").text, "retry",
+    "two mild attempts keep a model reply, never the hold",
+    "swapping an engaged English reply for a bland English one is not a repair");
+  is(chooseReply([A("retry", severe), A("first", mild)], "hold").text, "first",
+    "a harmful retry falls back to the mild first attempt, not to the hold",
+    "the authored line is the floor, not the default");
+  is(chooseReply([A("retry", severe), A("first", severe)], "hold").text, "hold",
+    "every attempt harmful means the authored line",
+    "unchanged from before the mild tier existed — this is the behaviour that must not regress");
+  is(chooseReply([A("retry", severe), A("first", severe)], "hold").from, null,
+    "and the hold is not attributed to a provider",
+    "nobody's model wrote it");
+  is(chooseReply([A("retry", severe), A("first", severe)], null).text, "retry",
+    "with no hold, the person still gets something",
+    "a person waiting on a reply that never arrives is worse than a reply with one bad sentence in it");
+  is(chooseReply([A("", clean), A("first", mild)], "hold").text, "first",
+    "an empty attempt is never chosen, whatever its verdict says",
+    "`empty` is a grader, but a blank string reaching this function must not win on a technicality");
+
+  /*
+    And the decision reaches the copy that ships.
+
+    Two correct halves facing each other across one line that ignored both is
+    this repository's sharpest recorded bug. `chooseReply` is only worth
+    anything if the route calls it.
+  */
+  const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
+  ok(/chooseReply\(/.test(route),
+    "the vent route makes the choice through chooseReply",
+    "the tiers and the fallback have to live in one place or they drift");
+
+  /*
+    And the field the route logs carries nothing but grader names.
+
+    `reject` used to be `${grader}: ${detail}` and the route logged it
+    verbatim. Details quote the reply — `recites` prints the sentence it read
+    back as a receipt, which on this product is usually the person's own words
+    handed to them, and `invented` prints the naira figure. The one diagnostic
+    that fires when a reply goes wrong was writing fragments of a private
+    conversation to a hosted runtime's stdout.
+
+    Check 103 could not see it: the argument was a variable, and that rule is
+    enforced on the literal. So this is asserted where the value is made,
+    against every grader that can reject, rather than at the call site.
+  */
+  const rejections = [
+    inspectReply(pidginCase, "That sounds heavy. What part of it is sitting with you most right now?"),
+    inspectReply(englishCase, "You should call your sister about the money you owe her, all ₦450,000 of it."),
+    // Carries a figure, so the detail this must not leak actually exists.
+    inspectReply(englishCase, "That ₦450,000 is a lot to be holding. What part of it is heaviest?",
+      "work is heavy and i am tired of it"),
+  ].map((v) => v.reject).filter(Boolean);
+  ok(rejections.length >= 2, `there are rejections to inspect (${rejections.length})`,
+    "a sweep that finds nothing passes loudest");
+  for (const r of rejections) {
+    ok(!/["'₦\d]/.test(r), `a rejection names graders and nothing else: ${r}`,
+      "stdout has no delete button, and a detail quotes the reply");
+    ok(r.split(" · ").every((g) => [...REJECT, ...RETRY_ONLY].includes(g)),
+      `every part of "${r}" is a grader name`,
+      "anything else in this string is something a person wrote");
+  }
+  ok(!/inspectReply\([^)]*\)\.reject\s*\n?\s*\?/.test(route),
+    "the old one-line ternary is gone",
+    "a leftover branch that ignores the tier is the same bug with a new tier on top");
+});
+
+check("105 The room does not hand you a condition", () => {
+  /*
+    Every screen on this product says it is not therapy. The prompt says
+    "never diagnose, and never name a condition". `keepable()` has refused to
+    write one into a row since the day notes existed, and check 83 asserts it.
+
+    Nothing had ever checked the sentence a person reads. Fourteen graders and
+    not one of them asked — the rule was enforced on the row and not on the
+    reply, which is this repository's most-recorded shape: a fix that reached
+    the copy in front of somebody and not the one that ships.
+
+    All 171 real vents: eight replies name a clinical condition, five of them
+    a condition the person had never used. Every one is "anxiety". The worst
+    reads "You are tired because carrying your parents' marriage anxiety is
+    exhausting work" — the room diagnosing two people who are not in it, to
+    somebody who had said nothing of the kind.
+  */
+  const c = { id: "t", message: "my parents call me every day", intent: "vent", language: "en", probes: "check 105" };
+  const said = "my parents call me every day and it is a lot to hold";
+
+  const handed = gradeReply(c,
+    "You are tired because carrying your parents' marriage anxiety is exhausting work. What does the call ask of you?",
+    { tokensSpent: true, said });
+  const dx = handed.filter((f) => f.grader === "diagnosis");
+  is(dx.length, 1, "a condition they never used is a finding",
+    "five of 171 real replies did this and nothing here could see it");
+  is(dx[0]?.severity, "fatal", "and it is fatal",
+    "a name for your condition is not something you can un-hear");
+
+  const verdict = inspectReply(c,
+    "You are tired because carrying your parents' marriage anxiety is exhausting work. What does the call ask of you?",
+    said);
+  ok(/diagnosis/.test(verdict.reject ?? ""), "the live path rejects it before anybody reads it",
+    "a grader that only runs in the nightly audit reads replies people already received");
+  is(verdict.authoredIsBetter, true, "and an authored line beats a label",
+    "this room has no licence, and saying less is the safe direction");
+  ok(!/anxiety/i.test(verdict.correction ?? ""), "the correction never repeats the word",
+    "quoting the label puts it back in the retry's context as something they said");
+
+  /*
+    The exemption, which is the whole reason this lives inside the `said`
+    block: their own word, handed back, is the single most useful move here.
+  */
+  const theirs = gradeReply(c, "The anxiety you named is sitting in your chest. What does it ask of you?",
+    { tokensSpent: true, said: "i have anxiety about the calls" });
+  is(theirs.filter((f) => f.grader === "diagnosis").length, 0,
+    "a word they used first is theirs to hear back",
+    "notes.ts refuses it outright because a row outlives its sentence; a reply is read in context");
+
+  is(gradeReply(c, "That anxiety is sitting in your chest.", { tokensSpent: true }).filter((f) => f.grader === "diagnosis").length, 0,
+    "with no evidence the check does not run at all",
+    "fail open on the second opinion — guessing here would flag the most valuable sentence a therapist has");
+
+  /*
+    Per family, not once over the list. A yes/no would exempt "bipolar" because
+    the person happened to write "burnout" — the same offence with a different
+    label on it.
+  */
+  const crossed = gradeReply(c, "That sounds like bipolar swings more than tiredness.",
+    { tokensSpent: true, said: "i think i have burnout from work" });
+  is(crossed.filter((f) => f.grader === "diagnosis").length, 1,
+    "one clinical word of theirs does not license a different one of ours",
+    "the exemption is their word, not their vocabulary");
+
+  /*
+    One table, one truth — asserted by behaviour rather than by grepping for
+    the import.
+
+    Every family in `notes.ts` must be live in the reply grader. A second copy
+    of this list in `quality.ts` would pass a text check and drift on the next
+    commit; this fails the moment the two disagree.
+  */
+  const probe = (family) => family.replace(/\\w\*/g, "").replace(/\?/g, "").replace(/\./g, " ");
+  ok(CONDITIONS.length > 15, `there are condition families to check (${CONDITIONS.length})`,
+    "a sweep that finds nothing passes loudest");
+  for (const family of CONDITIONS) {
+    const word = probe(family);
+    const found = gradeReply(c, `I think this is ${word} and it is heavy.`,
+      { tokensSpent: true, said: "work is heavy and i am tired" });
+    ok(found.some((f) => f.grader === "diagnosis"),
+      `"${word}" is refused in a reply`,
+      "the reply grader and keepable() read one list, or the copy that ships is the stale one");
+  }
+
+  /*
+    And the asymmetry is deliberate, so it is asserted rather than left to be
+    read as an inconsistency and "fixed".
+  */
+  const kept = keepable({ kind: "hard", subject: "the calls", detail: "anxiety about the calls" });
+  ok(kept !== null, "a note still refuses a condition even when they said it first",
+    "a note is read back into a prompt weeks later with no sentence around it");
+});
+
+check("106 Whether the failsafe fired is written down somewhere that lasts", () => {
+  /*
+    The failsafe now rejects on eight graders, one of them fatal and clinical.
+    Its entire record was:
+
+      console.warn("[vent] rejected own reply:", verdictOnReply.reject)
+
+    This project runs on a Hobby plan, which keeps runtime logs for **one
+    hour**. Checked, not assumed: a query for "[vent]" over thirty days of
+    production returns nothing, with the retention limit as the reason.
+
+    And the nightly audit cannot recover it. The audit grades the reply that
+    was *sent* — which after a successful retry is the good one. So a failsafe
+    that works and a failsafe that is dead code look identical from every
+    surface this repository has. CLAUDE.md's oldest recorded bug is a green
+    light over a broken road; this is the version with no light at all.
+
+    0019 keeps the grader names on the row. Three things have to hold, and each
+    one has broken somewhere in this repo's history.
+  */
+  const contract = TABLE_CONTRACT.vents.split(",");
+  ok(contract.includes("rejected_by"),
+    "the schema contract knows the column",
+    "/api/health probes the contract, and a column missing from it is a column nobody notices is absent");
+  ok(contract.every((col) => col === col.trim() && col.length > 0),
+    "and no column in the list carries a space",
+    "PostgREST takes a select list verbatim — this exact bug hid a broken memory read for months");
+
+  const migrations = fs.readdirSync(path.join(ROOT, "supabase/migrations"));
+  ok(migrations.some((f) => /rejected_by/.test(f)),
+    "a migration exists for it",
+    "a column in the contract with no migration fails every deployment that has not been hand-patched");
+
+  const store = strip(fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8"));
+  ok(/"rejected_by"/.test(store),
+    "the store reads it back",
+    "a column written and never selected is a column the audit and the heartbeat cannot see");
+
+  /*
+    And what goes in it is names, never details.
+
+    A column outlives a log line, so the rule that made `Verdict.reject` safe
+    matters more here, not less. Asserted against the value the route actually
+    writes rather than against the column's type.
+  */
+  const written = inspectReply(
+    { id: "t", message: "work is heavy", intent: "vent", language: "en", probes: "check 106" },
+    "That ₦450,000 is a lot to be holding. What part of it is heaviest?",
+    "work is heavy and i am tired of it").reject;
+  ok(written && !/[₦\d"']/.test(written),
+    `the stored value is grader names only: ${written}`,
+    "the details quote the reply, and a row has no delete button either");
+
+  const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
+  ok(/rejected_by:\s*rejectedBy/.test(route),
+    "the route writes it on the row",
+    "a column nothing writes to is a column that always answers null");
+  ok(route.indexOf("rejectedBy = verdictOnReply.reject") < route.indexOf("leftOnTheClock"),
+    "and it is set before the clock is consulted",
+    "rejected-and-shipped-anyway, because there was no time for a retry, is the state nothing else can see");
+
+  const heartbeat = strip(fs.readFileSync(path.join(ROOT, "scripts/heartbeat-data.mjs"), "utf8"));
+  ok(/\.filter\(\(v\) => v\.rejected_by\)/.test(heartbeat) && /console\.log\(`failsafe/.test(heartbeat),
+    "and the heartbeat reads it back out under its own heading",
+    "a record nobody reports is the same blind spot one table further along");
+});
+
+check("107 The Carver can return a note without destroying the carve", () => {
+  /*
+    Production, after a month: eight people, **two** carves, **zero** notes,
+    across 180 vents. The table exists, 0017 is applied, `keepable` is tested
+    by check 83, the refusal message by check 100, `/api/notes` shows them and
+    the button deletes them. Every part of the feature works except the part
+    that produces one.
+
+    Three independent causes, and each one alone is enough to guarantee zero
+    notes for ever. Nothing in 116 checks and 3,569 assertions saw any of them,
+    because no assertion had ever fed `parseCarve` a response with a note in
+    it — the unit tests test the parts, and the bug is in the seam.
+
+    1. THE OUTPUT CONTRACT DID NOT MENTION NOTES
+
+    `NOTES_INSTRUCTION` says `Also return "notes": ...` in the body of the job.
+    The final line said:
+
+      Output only JSON: {"carve": "your 8 words", "remembers": true}
+
+    "Output only JSON", followed by the exact shape, with no `notes` key — the
+    most literal instruction in the prompt, and the last thing the model reads.
+
+    2. THE PARSER COULD NOT READ PAST THE FIRST NESTED BRACE
+
+    `raw.match(/\{[\s\S]*?\}/)` is non-greedy: first `{` to the *first* `}`.
+    With `notes: []` that is the end of the object and everything works. With
+    one note in it, the first `}` closes the *note*, the captured text is
+    unbalanced, `JSON.parse` throws — and `parseCarve` returns null, so the
+    carve is discarded along with the notes.
+
+    That is the one that explains two carves out of eight. A session with
+    something worth remembering is exactly the session that produces a note,
+    and producing a note destroyed the carve.
+
+    3. THE CEILING WAS SIZED FOR THE OLD JOB
+
+    `maxTokens: 120`, under "the ceiling is small because the job is small" —
+    true before notes joined the same call. Same shape as this repo's sharpest
+    recorded bug, `max_tokens: 220`. And because the response is one JSON
+    object, truncation loses the carve too.
+  */
+  const note = { kind: "hard", subject: "the calls", detail: "said he calls every day" };
+  const full = JSON.stringify({
+    carve: "pops sick / fear of useless son", remembers: true, notes: [note],
+  });
+
+  const got = parseCarve(full);
+  ok(got !== null, "a response carrying a note still parses",
+    "the non-greedy match stopped at the brace that opens the note");
+  is(got?.carve, "pops sick / fear of useless son",
+    "and the carve survives it",
+    "two carves out of eight people — the sessions worth remembering were the ones that produced a note");
+  is(got?.notes.length, 1, "and the note comes back",
+    "zero notes across 180 vents, from a feature whose every other part works");
+
+  /*
+    A brace inside their own words must not end the object either — the same
+    mistake one level down, and a detail is the person's words verbatim.
+  */
+  const braced = parseCarve(JSON.stringify({
+    carve: "work heavy / no way out", remembers: true,
+    notes: [{ kind: "hard", subject: "the message", detail: "he typed } at me" }],
+  }));
+  is(braced?.notes[0]?.detail, "he typed } at me",
+    "a brace inside their words is their words",
+    "a string-blind scanner is the same bug wearing a smaller hat");
+
+  // Still refuses what it always refused.
+  is(parseCarve("no json here at all"), null, "prose alone is still nothing");
+  is(parseCarve('{"carve": "x", "remembers": false}'), null, "remembers false is still nothing");
+  is(parseCarve('{"carve": "one two three four five six seven eight nine", "remembers": true}'), null,
+    `over ${CARVE_MAX_WORDS} words is still a summary`);
+  is(parseCarve('{"carve": "a b", "remembers": true, "notes": [{"kind": "hard",'), null,
+    "a truncated object is null rather than a guess",
+    "which is what an undersized ceiling produces, and half a carve is worse than none");
+
+  /*
+    The contract the model is shown must name every field the parser reads.
+    Asserted against the parser's own requirements rather than a list, so a
+    fourth field added tomorrow has to appear in the prompt too.
+  */
+  const contract = CARVER_SYSTEM.slice(CARVER_SYSTEM.lastIndexOf("Output only JSON"));
+  ok(contract.length > 20, "the prompt ends with an output contract",
+    "a sweep that finds nothing passes loudest");
+  for (const field of ["carve", "remembers", "notes"]) {
+    ok(contract.includes(`"${field}"`),
+      `the contract names "${field}"`,
+      "the model emits the shape it is shown, not the shape described three paragraphs earlier");
+  }
+
+  /*
+    And the budget fits what the contract asks for.
+
+    Derived on both sides — this fails if NOTES_ASKED, MAX_SUBJECT or
+    MAX_DETAIL grows and the ceiling does not follow.
+  */
+  const floor = CARVE_MAX_WORDS * 6 + NOTES_ASKED * (MAX_SUBJECT + MAX_DETAIL);
+  ok(CARVE_MAX_TOKENS * 3 >= floor,
+    `the ceiling holds a full response (${CARVE_MAX_TOKENS} tokens ≈ ${CARVE_MAX_TOKENS * 3} chars, needs ${floor})`,
+    "one JSON object, so a response cut off mid-notes loses the carve as well");
+  ok(CARVE_MAX_TOKENS > 120,
+    `and it is no longer the ceiling written before notes existed (${CARVE_MAX_TOKENS})`,
+    "120 was correct for eight words and nothing else");
+
+  /*
+    The number in the instruction is derived, not typed.
+
+    It read "at most four" as a word while `parseNotes` sliced to eight. Not
+    harmful — tolerance above the ask is deliberate — and still a hand-typed
+    integer one file away from the thing it describes, which is the category
+    check 86 exists for.
+  */
+  ok(NOTES_INSTRUCTION.includes(`at most ${NOTES_ASKED}`),
+    "the instruction counts with the constant",
+    "a number is a sentence, and this one was typed out as a word");
+});
+
+check("108 A migration cannot drop a function that is not there", () => {
+  /*
+    `drop function if exists public.match_memories(uuid, vector, int, float)`
+    succeeds and does nothing when no function has that signature. Silently,
+    with no warning, and `if exists` is what makes it silent.
+
+    0016 named the four-argument shape 0006 created. 0014 then rewrote
+    `match_memories` to harden it and left a three-argument function behind, so
+    both of 0016's drop lines matched nothing — verified against production,
+    which carries `match_memories(p_user_id uuid, p_embedding vector, p_limit
+    integer)`. Applying 0016 as written would have dropped `memories` out from
+    under a surviving function and left exactly the broken object its own
+    comment says it is avoiding.
+
+    Comparing signatures here would mean normalising `int` against `integer`,
+    `float` against `double precision` and `vector` against
+    `extensions.vector` — which is where this kind of check gets brittle and
+    starts producing false confidence. So the rule is the simpler one, and it
+    is the actual lesson: drop by name.
+
+    This repository has no overloaded functions and no reason to want one. If
+    that ever changes, this check is the place to say so on purpose.
+  */
+  const dir = path.join(ROOT, "supabase/migrations");
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
+  ok(files.length > 15, `there are migrations to read (${files.length})`,
+    "a sweep that finds nothing passes loudest");
+
+  const offenders = [];
+  for (const file of files) {
+    const sql = fs
+      .readFileSync(path.join(dir, file), "utf8")
+      .replace(/^\s*--[^\n]*$/gm, " ");
+    for (const m of sql.matchAll(/drop\s+function\s+(?:if\s+exists\s+)?([\w.]+)\s*\(([^)]*)\)/gi)) {
+      if (m[2].trim()) offenders.push(`${file}: ${m[1]}(${m[2].trim()})`);
+    }
+  }
+  is(offenders.join(" | "), "",
+    `no migration drops a function by signature${offenders.length ? ` — ${offenders.join(" | ")}` : ""}`,
+    "a signature that does not match drops nothing and says nothing — drop by name, in a loop over pg_proc");
+
+  /*
+    And the one that taught this still does the job it was written for.
+    Asserted by behaviour of the text rather than by its absence: 0016 must
+    still remove `match_memories` somehow, or the check above would pass by
+    the migration simply giving up.
+  */
+  const drop = fs.readFileSync(path.join(dir, "0016_drop_account_surface.sql"), "utf8");
+  ok(/proname\s*=\s*'match_memories'/.test(drop) && /drop function if exists %s/.test(drop),
+    "0016 still drops match_memories, by name",
+    "passing this check by deleting the drop would be worse than the bug");
+});
+
+check("109 Nothing onboarding asks for is collected and then dropped", () => {
+  /*
+    Thirty seconds of the least-defended things anybody says here — which
+    chair, which object, what they are carrying, what they came to put down —
+    and the room has twice opened as though nobody had spoken.
+
+    `completeOnboarding` read `r.tension` and let the rest fall out of scope.
+    That was found and repaired for `object`, `carry` and `drop`, and the
+    comment recording the repair is still there and still reads as true. The
+    chair was not repaired with them, because it *looked* handled: `r.tension`
+    is derived from the chair two lines up, so the number survived and the
+    choice did not.
+
+    Production: `vents.chair_picked` null on all 186 rows, and
+    `vent_users.chair_picked` set for one person of eight. The chain this
+    product calls chair → tension → drop has only ever recorded the middle
+    term, and the training pipeline's `[CHAIR:x]` tag has never fired.
+
+    Half a repair is more dangerous than none, because the comment above it now
+    says the problem is handled. So this asserts the whole shape rather than
+    the field that was missed: every answer `OnboardingResult` carries has to
+    reach the vent, and a sixth question added tomorrow fails the build until
+    it does.
+  */
+  const onboarding = strip(fs.readFileSync(path.join(ROOT, "src/components/onboarding.tsx"), "utf8"));
+  const chat = strip(fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8"));
+
+  const shape = onboarding.match(/interface OnboardingResult \{([\s\S]*?)\n\}/);
+  ok(shape, "OnboardingResult still declares what onboarding collects",
+    "a sweep that finds nothing passes loudest");
+  const answers = [...(shape?.[1] ?? "").matchAll(/^\s*(\w+)\s*[?:]/gm)].map((m) => m[1]);
+  ok(answers.length >= 5, `there are onboarding answers to trace (${answers.join(", ")})`,
+    "five questions were asked; the count is the point");
+
+  /*
+    `tension` is the one answer that legitimately does not travel under its own
+    name — it is written to `tension_before` through the pressure control, and
+    check 84 covers that path. Named here so it is an exemption somebody chose
+    rather than a gap nobody noticed.
+  */
+  const carriedAsPressure = new Set(["tension"]);
+  const body = chat.slice(chat.indexOf("body: JSON.stringify({"), chat.indexOf("openingPutDown") + 60);
+  ok(/anonId/.test(body) && /message/.test(body), "the vent POST body was found",
+    "slicing to the wrong window is how three of this suite's checks read a comment instead of code");
+
+  const held = chat.match(/const \[opening, setOpening\] = React\.useState<\{([\s\S]*?)\}/);
+  for (const answer of answers) {
+    if (carriedAsPressure.has(answer)) continue;
+    ok(new RegExp(`r\\.${answer}\\b`).test(chat),
+      `${answer} is read off the onboarding result`,
+      "collected and discarded in the same breath is the bug this check exists for");
+  }
+  ok(/chair/.test(held?.[1] ?? ""), "the chair is held for the sitting",
+    "state rather than localStorage — a word tapped three weeks ago is not tonight's");
+  ok(/chairPicked:\s*opening\?\.chair/.test(body),
+    "and the chair reaches the vent row",
+    "chair_picked was null on all 186 production rows while the column, the route and the pipeline tag all existed");
+
+  /*
+    And the route still accepts it. A client that sends a field the schema
+    rejects fails the whole request, which is a worse outcome than the silence
+    this check exists to end.
+  */
+  const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
+  ok(/chairPicked:\s*z\.enum/.test(route), "the route's schema accepts it",
+    "zod strips nothing — an unexpected field is a 422 and no reply at all");
+});
+
+check("110 The road from production to training carries what is on it", () => {
+  /*
+    Three surfaces read real replies: the nightly audit, the SFT pipeline and
+    the RLHF pipeline. All three read a *file*, and the only thing that
+    produces that file for a Supabase deployment is `/api/export`.
+
+    Nothing had ever fed one to them.
+
+    `readRows` did `raw.vents ?? raw.rows ?? raw`. The export envelope is
+    `{complete, takenAt, commit, tables, excluded, truncated, errors, data}`
+    with the rows under `data.vents` — so both named branches missed, the
+    fallback returned the envelope object, and `[...all]` threw
+    `TypeError: all is not iterable`. The audit would have crashed the first
+    time it ever ran against production, and it has never run: fifteen green
+    nightly jobs, every one taking the "no token" branch.
+
+    A path written for a shape and never fed one, with a doc comment above it
+    reading "the export endpoint already produces it".
+
+    The envelope here is built from the route's own source rather than typed
+    out, so a field renamed there fails this instead of passing it.
+  */
+  const exportSrc = strip(fs.readFileSync(path.join(ROOT, "src/app/api/export/route.ts"), "utf8"));
+
+  // The *last* return, not the first. The route answers 501 and 401 above
+  // this, and `indexOf` found `{error, message}` — a slice landing on the
+  // wrong window, which is the mistake three other checks in this file record.
+  const returned = exportSrc.slice(exportSrc.lastIndexOf("return NextResponse.json("));
+  const keys = [...returned.slice(0, 700).matchAll(/^\s+(\w+)\s*[,:]/gm)].map((m) => m[1]);
+  ok(keys.includes("data") && keys.includes("complete"),
+    `the export envelope's fields are readable from the route (${keys.join(", ")})`,
+    "a sweep that finds nothing passes loudest");
+  ok(/data\[table\] = res\.data/.test(exportSrc),
+    "and the rows sit under data, keyed by table name",
+    "this is the fact readRows was wrong about");
+
+  const audit = strip(fs.readFileSync(path.join(ROOT, "scripts/audit.mjs"), "utf8"));
+  const reader = audit.slice(audit.indexOf("function readRows"), audit.indexOf("const all = readRows"));
+  ok(/raw\?\.data\?\.vents/.test(reader),
+    "the audit unwraps the envelope the export actually returns",
+    "raw.vents ?? raw.rows ?? raw returned the envelope, and spreading it threw");
+
+  /*
+    And it refuses a shape it cannot read instead of crashing four lines
+    later. `[...all]` on a plain object is a TypeError with no useful text,
+    inside a nightly job whose logs live for one hour.
+  */
+  ok(/Array\.isArray\(rows\)/.test(reader),
+    "and says so plainly when handed something else",
+    "a job that dies on a spread tells nobody which file was wrong");
+
+  /*
+    The same rows, through the same envelope, reach the graders — asserted by
+    running the real reader's logic over a real envelope shape rather than by
+    reading it.
+  */
+  const envelope = {
+    complete: true, takenAt: "2026-09-06T00:00:00Z", commit: "abc1234",
+    tables: { vents: 2 }, excluded: ["circle_messages"], truncated: [], errors: {},
+    data: { vents: [{ id: "a", user_message: "m", ai_reply: "r" }, { id: "b" }], vent_users: [] },
+  };
+  const unwrap = (raw) => raw?.data?.vents ?? raw?.vents ?? raw?.rows ?? raw;
+  is(unwrap(envelope).length, 2, "an export envelope yields its vents");
+  is(unwrap({ vents: [{ id: "a" }] }).length, 1, "a bare {vents} object still works");
+  is(unwrap([{ id: "a" }, { id: "b" }]).length, 2, "and so does a plain array");
+
+  /*
+    The training pipeline grades before it exports, which is the other half of
+    this road.
+
+    A bad reply reaches one person on one night. A bad training example
+    teaches the model to produce it for everybody. `gradeReply` is
+    deterministic and free and every other surface that reads a reply asks it;
+    the pipeline was the one that did not.
+  */
+  const pipeline = strip(fs.readFileSync(path.join(ROOT, "scripts/data-pipeline.mjs"), "utf8"));
+  ok(/gradeReply\(/.test(pipeline),
+    "the SFT pipeline runs the product's own graders",
+    "16 truncated, 5 diagnosing, 9 in the wrong language — all eligible for the training set");
+  ok(/endsMidSentence\(/.test(pipeline),
+    "and refuses a reply that stops mid-sentence",
+    "a model trained on fragments learns to produce them");
+  ok(!/checkMessage\(/.test(pipeline),
+    "and no longer grades private replies with the circles rulebook",
+    "quality.ts records undoing exactly this — the lesson reached it and not the pipeline");
+  ok(/severity === "fatal" \|\| f\.severity === "major"/.test(pipeline),
+    "fatal and major drop, minor does not",
+    "that is what the severities already mean, and length is the only minor here");
+
+  /*
+    A FALLBACK IS NOT A COMPLETION, AND THERE ARE SEVEN OF THEM
+
+    This file's own header promises that rule, and the filter enforcing it was
+    `/running without my model key|network dipped on my side/i` — two phrases,
+    hand-typed, against a `modelFailureReply` that produces seven sentences.
+
+    It caught the network one and missed the one that actually happens. "Too
+    many at once on my side" is the upstream 429, and production has seven
+    rows of it, each with a real tactic and `intent_type: vent`, each one
+    eligible as a training target. Trained on, it teaches the model to
+    apologise for being busy — which is the exact failure the header names.
+
+    Asserted over every status the union can hold, so a new failure message
+    cannot be added without this filter learning it. `ModelStatus` was a
+    type-only union until now; nothing outside TypeScript could enumerate it,
+    which is why the list next door was written by hand in the first place.
+  */
+  ok(MODEL_STATUSES.length > 5, `every model status is enumerable (${MODEL_STATUSES.length})`,
+    "a type-only union is a list nothing else can read");
+  const failures = MODEL_STATUSES.map((s) => modelFailureReply(s));
+  ok(/FAILURE_REPLIES/.test(pipeline) && /MODEL_STATUSES\.map/.test(pipeline),
+    "the pipeline derives the failure vocabulary rather than listing it",
+    "two of seven is what a hand-typed list of sentences decays to");
+  /*
+    Every status yields a distinct sentence, and every one of them is in the
+    set the pipeline filters on. `new Set` on the messages is smaller than the
+    status list on purpose — `unauthorized` and `model_not_found` share a
+    sentence, and `ok`/`not_configured`/`unreachable` fall to the default.
+  */
+  is(new Set(failures).size >= 5, true,
+    `the statuses produce distinct sentences (${new Set(failures).size})`,
+    "a vocabulary that collapses to one message is a filter that catches one message");
+  ok(failures.includes("Too many at once on my side. Give it a minute, then say that again."),
+    "including the rate limit, which is the one that was getting through",
+    "seven production rows, all with a tactic, all eligible for the training set");
+
+  /*
+    AND THE AUDIT DOES NOT GRADE OUR OWN APOLOGY
+
+    `wasAuthored` covers the tactic holds and calls them "a closed set". They
+    are closed; they were not all of it. A rate-limit message is ours too, and
+    nothing recognised it — so the nightly audit read one as a model reply and
+    `flatReplies` scored it 4 out of the weights below: no question mark (+2),
+    none of their words echoed (+2). That is high enough to be one of the ten
+    the audit spends its single paid call on.
+
+    Asserted through the real `flatReplies` rather than by reading the filter,
+    because the bug was never in what the filter says.
+  */
+  const busy = "Too many at once on my side. Give it a minute, then say that again.";
+  const rows = [
+    { user_message: "rent don pass me this month", ai_reply: busy, intent_type: "vent", mood_score: 2, created_at: "2026-09-01T00:00:00Z" },
+    { user_message: "work is heavy and nobody sees it", ai_reply: "That is a lot to carry alone.", intent_type: "vent", mood_score: 2, created_at: "2026-09-02T00:00:00Z" },
+  ];
+  const flat = flatReplies(rows, 10);
+  ok(!flat.some((r) => r.ai_reply === busy),
+    "a busy upstream is never a candidate for the audit's paid call",
+    "no question mark and none of their words scores it 4 — straight into the ten worst");
+  is(flat.length, 1, "and the real reply beside it still is",
+    "skipping our own text must not skip everything");
+
+  is(knownProblems(rows).some((n) => n.reply === busy), false,
+    "nor is it graded as though a model wrote it",
+    "grading our own apology produces a finding about ourselves");
+
+  /*
+    And the one line in the prompt that says "this worked" never says it about
+    a sentence we wrote when the model did not answer.
+
+    `memoryBlock` picks the reply that moved this person furthest and shows it
+    back as the shape that lands. Tension can fall for reasons that have
+    nothing to do with the reply, so a rate-limit message is eligible on the
+    numbers alone — and it would arrive in the prompt as exemplary.
+
+    The failure row is given the *larger* drop on purpose, so it wins unless
+    something excludes it.
+  */
+  const mem = (msg, reply, before, after, day) => ({
+    user_message: msg, ai_reply: reply, created_at: `2026-09-0${day}T00:00:00Z`,
+    body_tapped: null, chair_picked: null, mood_score: null,
+    tension_before: before, tension_after: after,
+  });
+  const landed = memoryBlock([
+    mem("rent don pass me", busy, 80, 30, 1),
+    mem("work is heavy and nobody sees it", "That is a lot to carry alone. What part is heaviest?", 60, 40, 2),
+  ]);
+  ok(!landed.includes(busy),
+    "the few-shot never holds up a failure message as the shape that worked",
+    "a 50-point drop next to a rate limit is a coincidence, and the prompt would read it as a lesson");
+  ok(/landed, −20/.test(landed),
+    "and it still holds up the real one beside it",
+    "excluding our own text must not empty the few-shot");
+
+  /*
+    ONE ARITHMETIC FOR WHAT A 7 MEANS
+
+    The anchor handler carried this comment:
+
+      "The same arithmetic the circle close uses, so the two surfaces cannot
+       disagree about what a 7 means."
+
+    directly above `Math.round((10 - mood) * 10)`, while the circle close
+    called `tensionNow(mood)`. Two copies agreeing by luck, under a sentence
+    guaranteeing they could not disagree — the third comment in this codebase
+    to promise that (`wasAuthored`'s "closed set", the operator vocabulary
+    "kept in step by intent"), and the other two had already drifted.
+
+    Nothing had diverged here: zod pins mood to an integer 1–10, so the copy's
+    missing clamp could never bite. It was the guarantee that was imaginary.
+
+    Asserted as "both surfaces call the function", because the values agreeing
+    is exactly what a duplicate does right up until it does not.
+  */
+  const anchor = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
+  const circle = strip(fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/route.ts"), "utf8"));
+  ok(/tensionNow\(parsed\.data\.mood\)/.test(anchor),
+    "the vent anchor asks chairs.ts what a mood is worth",
+    "a second copy of an arithmetic is a second answer waiting for a range change");
+  ok(/tensionNow\(mood\)/.test(circle),
+    "and so does the circle close",
+    "one of the two surfaces the comment promised could not disagree");
+  ok(!/\(10 - (parsed\.data\.)?mood\) \* 10/.test(anchor + circle),
+    "and neither keeps the arithmetic inline",
+    "putting it back is the drift, and it is one line of diff");
+
+  /*
+    A RATING THAT CANNOT BE STORED IS NOT A 500
+
+    `/api/feedback` awaited `insertFeedback` bare. `done()` throws, the
+    handler has no boundary and no wrapper, so any write error left the route
+    as a server error — skipping `logPreference` on the next line and giving
+    the client no body to read. The client's honest branch was added under a
+    comment about never thanking somebody for a rating that was dropped; it
+    had nothing to be honest with.
+
+    Production makes it live: `vent_feedback_user_id_key UNIQUE (user_id)`
+    exists on the database and in no migration here, so a person's *second*
+    rating raises 23505 — against a rate limiter in the same handler that
+    allows five an hour. Five an hour versus one for ever, surfacing as a 500.
+
+    The two writes are separate promises and are decoupled here: the table is
+    the record, the log is training data with no such constraint, and losing
+    the log because a row was rejected loses the one place this product learns
+    what is failing.
+  */
+  const feedback = strip(fs.readFileSync(path.join(ROOT, "src/app/api/feedback/route.ts"), "utf8"));
+  ok(/try \{\s*await store\.insertFeedback/.test(feedback),
+    "the feedback write cannot take the request down with it",
+    "a bare await on a throwing store call is a 500 where a body belongs");
+  ok(/\{ persisted, storage: store\.kind \}/.test(feedback),
+    "and the response reports what actually happened",
+    "`persisted: true` written before the write is the oldest bug in this file");
+  ok(!/persisted: true, storage/.test(feedback),
+    "never a hardcoded true beside the store's name",
+    "the client reads this field precisely so it can be false");
+
+  /*
+    Two guards, two properties, and the first draft of this asserted only one.
+
+    The insert's `catch` is what lets `logPreference` run at all after a
+    rejected row — that is the first assertion above. The log's *own* catch is
+    a different promise: a failure writing training data must not cost the
+    person the response to a rating that was kept. A mutation removing it
+    passed, because a `catch` between the two calls is satisfied by the
+    insert's.
+  */
+  ok(/try \{\s*await store\.insertFeedback/.test(feedback),
+    "a rejected row still lets the preference log run",
+    "the table and the log are different promises with different constraints");
+  ok(/try \{\s*await logPreference/.test(feedback),
+    "and a failed log never costs somebody the response to a kept rating",
+    "best-effort means best-effort in both directions");
+});
+
+check("111 Every route is verified by at least one live pass", () => {
+  /*
+    "A new route ships into neither live pass unless you put it there." That
+    rule is in CLAUDE.md, and it names `/api/notes` as the instance: the
+    surface whose entire job is showing somebody what a machine holds about
+    them, verified in zero of twenty-seven checks, by the person who wrote the
+    section of that file about exactly that.
+
+    `/api/notes` was fixed. The class was still open. Both passes name their
+    routes by hand, and comparing those names against the files on disk found
+    two more covered by nothing at all:
+
+      /api/export  — the nightly backup, and the audit's only source of
+                     production rows. The audit could not parse the shape it
+                     returns, which is a bug this pass would have caught the
+                     first time anybody looked.
+      /api/profile — where onboarding writes the chair, and the reason
+                     `vent_users.chair_picked` was set for one person of eight.
+
+    So this enumerates the routes off the filesystem, the way check 95
+    enumerates circle handlers, because a hand-written list of routes is the
+    thing that did not survive.
+  */
+  const apiDir = path.join(ROOT, "src/app/api");
+  const routes = [];
+  const walk = (dir, prefix) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const here = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(here, `${prefix}/${entry.name}`);
+      else if (entry.name === "route.ts") routes.push(prefix);
+    }
+  };
+  walk(apiDir, "/api");
+
+  ok(routes.length > 15, `there are routes to check (${routes.length})`,
+    "a sweep that finds nothing passes loudest");
+
+  const covered =
+    fs.readFileSync(path.join(ROOT, "scripts/live-verify.mjs"), "utf8") +
+    fs.readFileSync(path.join(ROOT, "scripts/no-store-verify.mjs"), "utf8");
+
+  /*
+    Named exemptions, each with the reason, because "not in the list" and
+    "decided against" look identical otherwise — the same argument the failsafe
+    tiers make about graders.
+
+    The `external/*` routes reach real third parties. Probing them in a pass
+    that runs on a laptop and in CI would either hit the network on every run
+    or assert against a stub, and neither says anything true about production.
+    They are covered instead by the four-window tests over `sources.ts`.
+
+    `heartbeat` is a scheduled job with no human on the other end of it.
+  */
+  const exempt = new Map([
+    ["/api/external/economy/context", "third party — covered over sources.ts"],
+    ["/api/external/guardian/score", "third party — covered over guardian.ts"],
+    ["/api/external/jobs/context", "third party — covered over sources.ts"],
+    ["/api/external/weather/context", "third party — covered over sources.ts"],
+    ["/api/heartbeat", "scheduled job, no human waiting on the response"],
+  ]);
+
+  /*
+    A dynamic segment is matched by shape, not by text.
+
+    `/api/circles/[id]/messages` is reached in the passes as
+    `${BASE}/api/circles/${id}/messages`, so the literal `[id]` appears
+    nowhere and a plain substring test calls a covered route uncovered. The
+    first version of this check did exactly that — a probe failing on correct
+    code, which is the mistake this suite has now recorded six times.
+  */
+  const named = (route) =>
+    new RegExp(route.replace(/\[[^\]]+\]/g, "[^/\\s\"'`)]+")).test(covered);
+  const missing = routes.filter((r) => !named(r) && !exempt.has(r));
+  is(missing.join(" | "), "",
+    `every route is named in a live pass${missing.length ? ` — ${missing.join(" | ")}` : ""}`,
+    "a route added on Tuesday is covered by nothing on Wednesday, and both passes still report green");
+
+  /*
+    And an exemption for a route that no longer exists is a rule guarding
+    nothing — the same sweep the grader classification gets.
+  */
+  const stale = [...exempt.keys()].filter((r) => !routes.includes(r));
+  is(stale.join(", "), "",
+    `no exemption names a route that is gone${stale.length ? ` — ${stale.join(", ")}` : ""}`,
+    "a list of excuses outliving its subject is how the next gap hides");
+
+  /*
+    The pages are derived too, and this is what stops somebody typing the list
+    back in.
+
+    It was `["/", "/chat", "/circles", "/history", "/memory", "/privacy",
+    "/terms"]` — seven of the eight that exist. The missing one was
+    `/circles/[id]`: the room itself, where the transcript and the voice
+    controls live, and the page that displays the refusal which was leaking
+    three environment variable names one route over.
+
+    Asserted as a derivation rather than as a set of names, because a set of
+    names is the thing that was wrong.
+  */
+  const noStore = fs.readFileSync(path.join(ROOT, "scripts/no-store-verify.mjs"), "utf8");
+  ok(/walkPages\(path\.join\(ROOT, "src\/app"\)/.test(noStore) && /page\.tsx/.test(noStore),
+    "the unconfigured pass finds its pages on disk",
+    "a hand-written page list does not survive the next page");
+  ok(!/const pages = \[\s*["'`]/.test(noStore),
+    "and does not carry a hand-written list beside the walk",
+    "two sources for one set is how the seven-of-eight happened");
+
+  /*
+    And the two copies of the operator's vocabulary are the same vocabulary.
+
+    `no-store-verify.mjs` has zero dependencies by design, so it cannot import
+    check 75's regex, and its own comment says the two are "kept in step by
+    intent rather than by import". They were not: this file's copy was missing
+    the `i` flag — so a route saying "supabase" in lower case passed the one
+    check written to catch it — and the pass was missing `not configured on`.
+
+    Intent is not a mechanism. This is.
+  */
+  const theirs = noStore.match(/const OPERATOR_WORDS =\s*\n\s*\/([\s\S]*?)\/i;/)?.[1];
+  ok(theirs, "the unconfigured pass declares its operator vocabulary",
+    "a sweep that finds nothing passes loudest");
+  is(theirs, FORBIDDEN_SOURCE,
+    "and it is the same vocabulary this suite enforces",
+    "two hand-kept copies of one rule is the bug this whole check is about");
+});
+
+check("112 What a closing circle destroys, a backup never keeps", () => {
+  /*
+    Confidentiality here is a deletion policy: a circle ends and its transcript
+    is destroyed, once, on the transition. A nightly backup is the exact
+    opposite of that — a durable off-site copy — so the one table the sweep
+    deletes has to be the one table the export refuses.
+
+    It is, and it is refused by a hand-written set of one:
+
+      const NEVER_EXPORT = new Set(["circle_messages"]);
+
+    That is the same shape as the route list and the page list, both of which
+    turned out to have holes, and this one guards a promise rather than a
+    status code. A second table joining the sweep — voice transcripts, a
+    reflections log — would be swept from the room and copied into the backup,
+    and nothing would say so.
+
+    So the rule is derived from the sweep rather than restated: whatever
+    `closeCircle` deletes, the export excludes. Add a table to one and the
+    build fails until it is named in the other.
+  */
+  const store = strip(fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8"));
+
+  const from = store.indexOf("async closeCircle");
+  ok(from > 0, "closeCircle is findable in the Supabase store",
+    "renamed? this check is scoped to the method that ends a room");
+  const body = store.slice(from, store.indexOf("\n  async ", from + 10));
+  const destroyed = [...body.matchAll(/\.from\("([a-z_]+)"\)\s*\.delete\(\)/g)].map((m) => m[1]);
+  ok(destroyed.length > 0, `closing a circle destroys something (${destroyed.join(", ")})`,
+    "a sweep that finds nothing passes loudest — and a close that deletes nothing is its own bug");
+
+  const exportSrc = strip(fs.readFileSync(path.join(ROOT, "src/app/api/export/route.ts"), "utf8"));
+  const never = exportSrc.match(/NEVER_EXPORT = new Set\(\[([^\]]*)\]\)/)?.[1] ?? "";
+  const excluded = [...never.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+
+  const leaked = destroyed.filter((t) => !excluded.includes(t));
+  is(leaked.join(", "), "",
+    `every table the sweep destroys is excluded from the backup${leaked.length ? ` — ${leaked.join(", ")}` : ""}`,
+    "a transcript deleted from the room and kept in an artifact is the promise broken in the quietest possible way");
+
+  /*
+    And nothing is excluded that the contract does not know about — a stale
+    exclusion reads as protection and protects nothing.
+  */
+  const stale = excluded.filter((t) => !Object.keys(TABLE_CONTRACT).includes(t));
+  is(stale.join(", "), "",
+    `no exclusion names a table that is gone${stale.length ? ` — ${stale.join(", ")}` : ""}`,
+    "the same sweep the route exemptions get");
+
+  /*
+    The export builds its table list by subtraction, so the exclusion has to
+    be applied where the list is made rather than checked afterwards.
+  */
+  ok(/Object\.keys\(FULL_CONTRACT\)\.filter\(\(t\) => !NEVER_EXPORT\.has\(t\)\)/.test(exportSrc),
+    "and the exclusion is applied where the table list is built",
+    "a filter applied after the read has already read it");
+});
+
+check("113 The database's limits and the code's are the same limits", () => {
+  /*
+    Every CHECK in the schema is a hand-written copy of something the code
+    already knows. `vent_notes.kind` restates `NOTE_KINDS`, the subject and
+    detail lengths restate `MAX_SUBJECT` and `MAX_DETAIL`,
+    `vents.real_world_tag` restates the router's own table. They agree today.
+
+    The same arrangement on `vent_feedback` did not agree. Production grew a
+    `UNIQUE (user_id)` that no migration in this repo declares, so a person's
+    second rating raised 23505 — against a rate limiter in the same handler
+    allowing five an hour — and because the write was unguarded it surfaced as
+    a 500 with no body for the client to read.
+
+    That one was found by looking. This is the class: an enum wider than its
+    constraint, or a length the code allows and the column refuses, is a write
+    that fails in a shape nothing here tests — no local run has a Postgres
+    behind it, so every one of these boundaries is unverified at runtime.
+
+    Read from the migrations, which are in the repo, so this needs no
+    credentials and runs in the same zero-dependency gate as everything else.
+  */
+  const dir = path.join(ROOT, "supabase/migrations");
+  const sql = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"))
+    .map((f) => fs.readFileSync(path.join(dir, f), "utf8"))
+    .join("\n")
+    .replace(/^\s*--[^\n]*$/gm, " ");
+
+  /*
+    Scoped to the table, by balancing the CREATE TABLE's own parentheses.
+
+    The first version searched the whole file for `check (kind in (…))` and
+    found `circle_messages.kind` — guardian, keeper_prompt, share, witness —
+    which is a different column with the same name. Sixth time in this suite a
+    probe has read the wrong window; the answer is the same every time, and it
+    is to stop matching text and start scoping structure.
+  */
+  const tableBlock = (name) => {
+    const at = sql.search(new RegExp(`create table[^;]*?public\\.${name}\\s*\\(`, "i"));
+    if (at === -1) return "";
+    const open = sql.indexOf("(", at);
+    let depth = 0;
+    for (let i = open; i < sql.length; i++) {
+      if (sql[i] === "(") depth++;
+      else if (sql[i] === ")" && --depth === 0) return sql.slice(open, i + 1);
+    }
+    return "";
+  };
+
+  /** The string list inside `check (<col> in (…))`, within one table. */
+  const allowed = (table, col) => {
+    const m = tableBlock(table).match(new RegExp(`check\\s*\\(\\s*${col}\\s+in\\s*\\(([^)]*)\\)`, "is"));
+    return m ? [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).sort() : null;
+  };
+
+  const kinds = allowed("vent_notes", "kind");
+  ok(kinds && kinds.length > 4, `the note kinds are declared in SQL (${kinds?.length ?? 0})`,
+    "a sweep that finds nothing passes loudest");
+  is((kinds ?? []).join(","), [...NOTE_KINDS].sort().join(","),
+    "the column accepts exactly the kinds the code can produce",
+    "a kind the code emits and the column refuses is a note silently lost on insert");
+
+  const tags = allowed("vents", "real_world_tag");
+  ok(tags && tags.length > 5, `the domain tags are declared in SQL (${tags?.length ?? 0})`,
+    "a sweep that finds nothing passes loudest");
+  is((tags ?? []).join(","), [...REAL_WORLD_TAGS].sort().join(","),
+    "and exactly the domain tags the router can attach",
+    "the router tags a vent, the insert carries it, and a tag outside the CHECK fails the whole write");
+
+  /*
+    The lengths, which are the other half of the same boundary. `keepable`
+    refuses a subject outside 2–24 and a detail outside 4–70; the column says
+    the same numbers in SQL, as `between`. If the code's ceiling ever rises
+    above the column's, the refusal moves from a named reason to a failed
+    insert.
+  */
+  const bound = (table, col) => {
+    const m = tableBlock(table).match(new RegExp(`length\\(${col}\\)\\s+between\\s+(\\d+)\\s+and\\s+(\\d+)`, "i"));
+    return m ? [Number(m[1]), Number(m[2])] : null;
+  };
+  const subject = bound("vent_notes", "subject");
+  const detail = bound("vent_notes", "detail");
+  ok(subject && detail, `both note lengths are declared in SQL (${JSON.stringify({ subject, detail })})`,
+    "a sweep that finds nothing passes loudest");
+  is(subject?.[1], MAX_SUBJECT, "the subject ceiling is one number, in two languages");
+  is(detail?.[1], MAX_DETAIL, "and so is the detail ceiling");
+
+  /*
+    And the one that is not enumerable from the repo, named rather than
+    omitted: `vent_feedback` has a UNIQUE on `user_id` in production that
+    appears in no migration. Nothing here can see it — this check reads the
+    repo, and the repo is the half that is right. What it can assert is that
+    the route no longer treats a rejected write as fatal, which is what turned
+    that drift into a 500.
+  */
+  /*
+    The two array caps, where the relationship is deliberately *not* equality.
+
+    `types.ts` states it: "The column constraint allows sixty. This is under it
+    on purpose: the constraint is a ceiling that stops a bug, and this is the
+    product decision." So `HELD_CAP` is 5 under a column ceiling of 20, and
+    `BREAKING_CAP` is under 60. Right, and unasserted — raise either code cap
+    past its column and every write above the ceiling starts failing, in the
+    one direction this suite cannot see because no local run has a Postgres.
+
+    `addHeld`'s own comment says a SQL cap was avoided so "the number would
+    live in two places and drift". There is a SQL cap; it is a different
+    number doing a different job. The invariant is not that they match — it is
+    that the product's number stays under the schema's.
+  */
+  const arrayCeiling = (col) => {
+    const m = sql.match(new RegExp(`jsonb_array_length\\(${col}\\)\\s*<=\\s*(\\d+)`, "i"));
+    return m ? Number(m[1]) : null;
+  };
+  for (const [name, code, col] of [["held", HELD_CAP, "held"], ["breaking", BREAKING_CAP, "breaking"]]) {
+    const ceiling = arrayCeiling(col);
+    ok(ceiling !== null, `${name} has a column ceiling in SQL (${ceiling})`,
+      "a sweep that finds nothing passes loudest");
+    ok(code <= (ceiling ?? 0),
+      `${name}: the product keeps ${code}, the column allows ${ceiling}`,
+      "a code cap above the column's is a write that fails once somebody uses the feature enough");
+  }
+
+  const fb = fs.readFileSync(path.join(ROOT, "src/app/api/feedback/route.ts"), "utf8");
+  ok(/catch \(error\)/.test(fb),
+    "and a constraint the repo cannot see still cannot 500 the request",
+    "the schema will always be able to refuse a write the code thought was fine");
+
+  /*
+    THE OFFLINE QUEUE SAYS SOMETHING IN EVERY STATE BUT THE EMPTY ONE
+
+    `flushQueue` is careful in a way worth naming: it reads `persisted !==
+    true` rather than the status, breaks at the first vent that did not land,
+    and keeps the tail — under a comment saying absence is not success,
+    because this queue is the last copy of words written with no connection.
+
+    The drain that calls it guarded its toast on `if (sent > 0)`. The comment
+    above that guard is about not letting somebody read "3 sent up" while two
+    sat on the device — the partial case, correctly fixed. Zero-sent was left
+    silent: a rate limit on the first vent, or `persisted: false`, and the
+    person came back online to nothing said while their words stayed on the
+    device.
+
+    Four states, and the one that was silent is the one where somebody is owed
+    a sentence most. Asserted as the condition rather than the message, since
+    the wording is the product's to change and the coverage is not.
+  */
+  const drain = fs.readFileSync(path.join(ROOT, "src/components/sw-register.tsx"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ");
+  ok(/if \(sent > 0 \|\| left > 0\)/.test(drain),
+    "the drain speaks when anything is still waiting, not only when something went up",
+    "zero sent with a full queue was the one state that said nothing");
+  ok(/sent === 0/.test(drain) && /nothing went up yet/.test(drain),
+    "and names the state where none of them landed",
+    "'still waiting' with no count of what went is the partial message wearing the total case");
+
+  /*
+    AND THE WIPE REACHES THE ONLY LOCAL STORE THAT HOLDS THEIR WORDS
+
+    "All cleared. Fresh start." removed `mw-anon-id`, `mw-onboarded` and
+    `mw-alliance` — an id and two flags. `mw-offline-queue` holds up to fifty
+    vents: the message, the pressure, what they tapped, written when there was
+    no connection. Every one survived the wipe under that sentence.
+
+    It is worse than a stale copy left behind. The wipe drops the anon id, so
+    the next `anonId()` mints a new one, and the next `online` event posts
+    those queued vents up *under the new identity*. Words somebody asked this
+    product to forget, re-uploaded and attached to the fresh start they asked
+    for.
+
+    Asserted with the ordering, because clearing before the server confirms
+    would delete the last copy of something that was never deleted: `putBack()`
+    runs on failure, and on that path the queue has to stay.
+  */
+  const history = fs.readFileSync(path.join(ROOT, "src/components/history-list.tsx"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ");
+  ok(/clearQueue\(\)/.test(history),
+    "the full wipe clears the offline queue",
+    "fifty of somebody's vents outliving 'All cleared. Fresh start.' on their own device");
+  const wipeAt = history.indexOf('removeItem("mw-anon-id")');
+  const clearAt = history.indexOf("clearQueue()");
+  const toastAt = history.indexOf('toast("All cleared');
+  ok(wipeAt > 0 && clearAt > wipeAt && toastAt > clearAt,
+    "on the success path, before the sentence that claims it",
+    "clearing before the server confirms would destroy the last copy of something still on the server");
+});
+
+check("114 The constitution is the same bytes for everybody, and it is first", () => {
+  /*
+    A cache that never hits looks exactly like a cache that works.
+
+    Every other failure in this suite announces itself: a wrong status code, a
+    missing sentence, an exception. This one is silent by construction — the
+    reply is correct, the assertions pass, the logs say nothing, and the only
+    surface that knows is a bill that arrives a month later. It had already
+    happened and nobody could have seen it: `groundingBlock` sat at byte 0 of
+    every system prompt this product has ever sent, carrying `Current time` to
+    the minute and `ISO` to the millisecond, so the longest prefix any two
+    requests ever shared was about twenty-five tokens. Roughly 1,574 tokens of
+    constitution sat behind a timestamp and were billed in full on every turn,
+    for every person, on every day this has been live.
+
+    So the invariant is asserted rather than commented: `STABLE_PREFIX` is what
+    `buildSystemPrompt` actually returns first, over inputs that vary
+    everything a prompt can vary.
+  */
+  ok(STABLE_PREFIX.length >= MIN_CACHEABLE_CHARS,
+    `the prefix is over the floor worth marking (${STABLE_PREFIX.length} chars)`,
+    "below it the block is sent, ignored, and buys nothing — silently");
+
+  /*
+    The clock is the thing that broke it, so the clock is what varies here.
+    Two different people, two different days, two different times, two
+    different classifications, and different context assembled behind them.
+  */
+  const shapes = [
+    {
+      grounding: { date: "5 August 2026", time: "18:00", iso: "2026-08-05T17:00:00.123Z", lines: [] },
+      classification: { intent: "vent", realWorldTag: null, language: "en", body: null },
+      tactic: ALL_TACTICS[0], ctx: { ...base }, memory: [],
+    },
+    {
+      grounding: { date: "11 January 2027", time: "3:07 AM", iso: "2027-01-11T02:07:44.998Z", lines: [] },
+      classification: { intent: "vent", realWorldTag: "fuel", language: "pidgin", body: "chest" },
+      tactic: ALL_TACTICS[ALL_TACTICS.length - 1],
+      ctx: { ...base, pressure: 88, mood: 2, body: "chest", recentTactics: ["a", "b", "c"] },
+      memory: [], turnsToday: 9, message: "Everything don tire me abeg",
+    },
+  ];
+  const built = shapes.map((s) => buildSystemPrompt(s));
+  for (const [i, prompt] of built.entries()) {
+    ok(prompt.startsWith(STABLE_PREFIX),
+      `shape ${i + 1} begins with the stable prefix`,
+      "a prompt whose head is not byte-identical cannot be cached by anyone, and nothing else here would notice");
+  }
+  ok(built[0] !== built[1], "and the shapes really are different prompts");
+
+  /*
+    Moved, not deleted. The date-answering job runs locally in `answerFactual`
+    before a model is called, so this block is a backstop — but a backstop that
+    quietly stopped being sent is the "half a repair" bug, and it would read as
+    a successful optimisation.
+  */
+  for (const prompt of built) {
+    ok(prompt.includes("REAL TIME GROUNDING"), "the clock is still in the prompt");
+    ok(prompt.includes("You know the date and time exactly."),
+      "with the whole instruction, not a truncated copy of it");
+    ok(prompt.indexOf("REAL TIME GROUNDING") > STABLE_PREFIX.length,
+      "below the prefix, where the rest of this turn's volatile facts are");
+    ok(prompt.trimEnd().endsWith("Start with the first thing you would say."),
+      "and the output contract is still the last thing read");
+  }
+
+  /*
+    The split itself. Every branch that returns a plain string is a case where
+    two blocks would be wrong, and the one that returns blocks must rejoin to
+    exactly what would otherwise have been sent — a system prompt assembled
+    from a bad guess is a different product answering somebody.
+  */
+  const long = "x".repeat(MIN_CACHEABLE_CHARS);
+  const blocks = systemBlocks(long + "TAIL", long);
+  ok(Array.isArray(blocks) && blocks.length === 2, "a real prefix splits into two blocks");
+  ok(blocks[0].cache_control?.type === "ephemeral", "the head is the one marked");
+  ok(blocks[1].cache_control === undefined, "and the tail is not");
+  is(blocks.map((b) => b.text).join(""), long + "TAIL",
+    "the two halves rejoin to the exact string that would have been sent");
+
+  is(systemBlocks(long + "TAIL"), long + "TAIL", "no prefix given sends one block");
+  is(systemBlocks("short tail", "short"), "short tail",
+    "a prefix under the floor sends one block");
+  is(systemBlocks(long, long), long,
+    "a prefix that is the whole prompt sends one block — the API rejects an empty second");
+
+  /*
+    The prefix that is not a prefix, and it has to be long enough to get here.
+
+    The first version of this assertion passed "not-a-prefix" — twelve
+    characters, which returns on the length floor two lines above the guard it
+    was written to test. Deleting `startsWith` entirely left the suite green.
+    That is this repository's most-recorded mistake in miniature: a probe
+    shaped so it cannot reach the thing it is looking at.
+
+    It matters more than the other branches because it is the only one whose
+    failure is *silent and wrong* rather than silent and free. Without the
+    guard, `slice(cachePrefix.length)` still runs — so the model is handed a
+    first block of somebody else's text and a second block with 4,096
+    characters cut off its front. A cache miss costs a fraction of a cent; this
+    is a different product answering somebody at 2am.
+  */
+  const wrong = "y".repeat(MIN_CACHEABLE_CHARS);
+  ok(wrong.length >= MIN_CACHEABLE_CHARS && !(long + "TAIL").startsWith(wrong),
+    "the non-prefix case is long enough to reach the guard being tested",
+    "an assertion satisfied by the length floor tests the length floor");
+  is(systemBlocks(long + "TAIL", wrong), long + "TAIL",
+    "a prefix that is not a prefix sends one block rather than a guess");
+
+  /*
+    And the invariant behind all of it, over every shape at once: whatever
+    comes back must be the same characters the caller passed in. Branch
+    assertions cover the cases somebody thought of; this covers the next one.
+  */
+  for (const [system, prefix] of [
+    [long + "TAIL", long], [long + "TAIL", undefined], [long + "TAIL", wrong],
+    [long + "TAIL", "short"], [long, long], [long, long.slice(0, 100)],
+  ]) {
+    const out = systemBlocks(system, prefix);
+    const sent = typeof out === "string" ? out : out.map((b) => b.text).join("");
+    is(sent, system, `nothing is added or lost when the prefix is ${prefix === undefined ? "absent" : `${prefix.length} chars`}`);
+  }
+
+  /*
+    One blank line between sections, everywhere, and it is the same function
+    that makes the prefix.
+
+    The separator used to be whatever a section's own text happened to end
+    with: `.filter(Boolean).join("\n")` over an array with `""` entries between
+    the sections, and `filter` removed them before `join` ever saw them. So a
+    block whose template literal closed on a newline got a blank line and a
+    block that closed on a full stop did not — seven of twelve headings
+    separated, five sitting on the previous sentence, decided by trailing
+    whitespace nobody was looking at.
+
+    Asserted on the built prompt rather than on `sections()` alone, because the
+    thing that broke was not the joiner — it was the gap between what the array
+    said and what the join did.
+  */
+  is(sections(["a\n\n", "", null, "b"]), "a\n\nb", "one blank line, and empties drop out");
+  for (const prompt of built) {
+    const headings = prompt.split("\n")
+      .map((l, i) => [l, i])
+      .filter(([l]) => /^[A-Z][A-Z ,'’—–-]{6,}$/.test(l.trim()) || /^[A-Z][A-Z ]+—/.test(l.trim()));
+    ok(headings.length >= 10, `the prompt has section headings to separate (${headings.length})`);
+    const jammed = headings.filter(([, i]) => i > 0 && prompt.split("\n")[i - 1].trim() !== "");
+    is(jammed.length, 0,
+      "every section heading has a blank line above it",
+      `${jammed.map(([l]) => l.slice(0, 24)).join(", ")} sits on the previous sentence`);
+    ok(!/\n{3,}/.test(prompt), "and never two blank lines, which would read as a missing block");
+  }
+
+  /*
+    And the callers. Both billed calls on a vent turn carry it: the retry
+    appends its correction to the end, so it hits the entry the first call just
+    wrote. The Carver is named as a deliberate exemption — its system prompt is
+    short and bespoke, with nothing stable in it to mark.
+  */
+  const route = fs
+    .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ");
+  const passes = route.match(/cachePrefix:\s*STABLE_PREFIX/g) ?? [];
+  const calls = route.match(/generateReply\(\{/g) ?? [];
+  is(passes.length, calls.length,
+    `every generateReply in the vent route passes the prefix (${calls.length})`,
+    "a call that omits it silently pays full price and no assertion here would fail");
+});
+
+check("115 An exception never gets to speak to somebody", () => {
+  /*
+    `circle-voice.tsx` told people what our LiveKit host is called.
+
+    The catch block it happened in is documented at length, correctly, about
+    `getUserMedia` — five DOMException names, each with a sentence somebody can
+    act on. What the comment does not say is that its `try` opens four hundred
+    lines earlier and covers `import("livekit-client")` and
+    `room.connect(grant.url, grant.token)`. Neither throws a DOMException, so
+    both fell past the five names into the last branch, which read
+    `Couldn't reach the voice room. ${message}` — and a LiveKit connection
+    failure names the URL it could not reach, which is our project host. A
+    failed dynamic import names a `_next/static/chunks` path.
+
+    This is the third time this file has handed somebody our infrastructure and
+    the second under this exact heading. The route used to answer 501 with three
+    environment variable names and this component printed them verbatim; that
+    was repaired in the route. The component had its own.
+
+    So the rule is the class rather than the sentence: nothing derived from a
+    caught exception may reach a string a person reads. Derived, not just the
+    binding — the bug was two assignments away from `e`, which is why the scan
+    below follows `const message = e instanceof Error ? e.message : String(e)`
+    rather than grepping for `e.message`.
+
+    Counts are not exceptions and are not covered: `sw-register.tsx` interpolates
+    how many vents went up, which is a number about them and the whole point of
+    the sentence.
+
+    WIDENED, BECAUSE THE FIRST VERSION OF THIS CHECK WAS THIN AND SAID SO
+
+    Scanning only `.tsx` found one named catch block in the entire component
+    tree — the one that had just been fixed. A check whose whole sample is the
+    bug it was written for is a check that passes for the wrong reason from the
+    next commit onward. So it reads `.ts` as well and adds `message:` to the
+    sinks, because a route's `message` field is a user-facing string: every
+    component in this product prints it verbatim, which is exactly how three
+    environment variable names reached somebody.
+
+    Widening it found a second live one immediately, in a file nobody was
+    looking at. `voice/mute/route.ts` answered 502 with `The voice server did
+    not accept that: ${message}` — and `mutePublishedTrack` is called with the
+    room name and an identity, so its failures quote them. The room name is
+    derived from the circle id. A circle's promise is that the room is sealed,
+    and the error path was the one surface that read part of it back.
+  */
+  const balanced = (src, at, open, close) => {
+    let depth = 0, j = at;
+    for (; j < src.length; j++) {
+      const c = src[j];
+      if (c === open) depth++;
+      else if (c === close) { depth--; if (!depth) { j++; break; } }
+    }
+    return src.slice(at, j);
+  };
+
+  const files = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.tsx?$/.test(p)) files.push(p);
+    }
+  };
+  walk(path.join(ROOT, "src"));
+  ok(files.length > 50, `every source file is read off the filesystem (${files.length})`,
+    "a hand-written list of files is the bug this repository has four times over");
+
+  const leaked = [];
+  let blocks = 0;
+  for (const f of files) {
+    const src = fs.readFileSync(f, "utf8");
+    for (const m of src.matchAll(/catch\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\{/g)) {
+      blocks++;
+      const caught = m[1];
+      const body = balanced(src, src.indexOf("{", m.index), "{", "}");
+
+      // Everything the caught error flows into, one assignment at a time.
+      const tainted = new Set([caught]);
+      for (const b of body.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;]+);/g)) {
+        if (new RegExp(`\\b${caught}\\b`).test(b[2])) tainted.add(b[1]);
+      }
+
+      for (const fn of ["setError", "toast"]) {
+        let i = 0;
+        while ((i = body.indexOf(`${fn}(`, i)) >= 0) {
+          const call = balanced(body, i + fn.length, "(", ")");
+          i += fn.length;
+          for (const t of tainted) {
+            if (new RegExp(`\\$\\{[^}]*\\b${t}\\b`).test(call)) {
+              leaked.push(`${path.relative(ROOT, f)}: ${fn}() interpolates ${t}`);
+            }
+          }
+        }
+      }
+
+      // A route's `message` is a user-facing string. Components print it
+      // verbatim — that is not an assumption, it is the recorded bug.
+      for (const mm of body.matchAll(/message:\s*([^,\n}]+)/g)) {
+        for (const t of tainted) {
+          if (new RegExp(`\\b${t}\\b`).test(mm[1])) {
+            leaked.push(`${path.relative(ROOT, f)}: message: … ${t}`);
+          }
+        }
+      }
+    }
+  }
+  ok(blocks > 20, `there are catch blocks to check (${blocks})`,
+    "a scan whose whole sample is the bug it was written for passes for the wrong reason from the next commit on");
+  is(leaked.length, 0,
+    "no caught exception reaches a sentence a person reads",
+    leaked.join(" · ") || "an error message can name a host, a chunk path or a token");
+
+  /*
+    And the sentence that replaced it, asserted where the person meets it. The
+    rule this repository keeps relearning is that a refusal must be true and
+    must offer what still works — the circle really does still work in text,
+    which is what makes this one honest rather than merely vague.
+  */
+  const voice = fs.readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8");
+  ok(/still works in text/.test(voice),
+    "the fallback names what the person can still do");
+  ok(!/\$\{message\}/.test(voice), "and the raw message is gone from the component");
+  ok(/console\.warn\("\[voice\] join failed:", kind\)/.test(voice),
+    "the failure is logged by kind, unconditionally",
+    "guarding the log on DOMException logged the microphone cases and dropped the connection ones — the diagnostic went to the person and not to us");
+
+  /*
+    And the second one, where the sentence still has to do its original job.
+    The comment it replaced was right about what a Keeper needs — whether the
+    room ignored them or the voice server did — and 502 with a sentence about
+    the voice server still says that. Only the SFU's own words are gone.
+  */
+  const mute = fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/voice/mute/route.ts"), "utf8");
+  ok(/didn't take that/.test(mute), "the mute refusal still says which side failed");
+  ok(!/voice server did not accept that: \$\{/.test(mute),
+    "and no longer in the SFU's words, which quote the room name and the seat");
+});
+
+check("116 A provider's words never reach a person or a log line", () => {
+  /*
+    Somebody having a bad day was shown a raw upstream error blob.
+
+    `providers.ts` threw `${r.status} ${body.slice(0, 300)}` — three hundred
+    characters of an arbitrary provider's response, on `Error.message`, which
+    is the field everything reaches for. `classifyModelError` copied it into
+    `detail`, `/api/vent` returned `detail` in the 503, and `vent-chat.tsx`
+    prints it under the reply as `[reason — detail]`. Two console calls logged
+    it on the way past. Seven providers are in this chain and not one of them
+    has told us what goes in that string; the request that produced it had just
+    carried the person's vent, their notes and their carve.
+
+    Every comment along that path was right about why it was there. "Days were
+    lost reading 'Network dipped' as a network problem. If the server said why,
+    show it" is true, and `reason` — the status — is the server saying why.
+    `insufficient_credit` is not a guess, it is what was matched. The body added
+    nothing a person could use and everything we do not control.
+
+    The repair is the one this repository already made for `Verdict.reject` and
+    wrote down as a rule: **make the obvious field the safe one.** `.message` is
+    a status and a provider id. The body lives on `.body`, which only the
+    classifier names, and the classifier reads it and throws it away.
+  */
+  const SECRET = "your credit balance is too low — top up at plans & billing, acct 9f3c";
+
+  // Read from `.message`, the way an SDK throws it.
+  const sdk = classifyModelError({ status: 400, name: "BadRequestError", message: SECRET });
+  is(sdk.status, "insufficient_credit",
+    "billing is still diagnosed from what the provider said",
+    "this is the failure that hid for a week behind a metadata probe — losing it would be worse than the leak");
+
+  // Read from `.body`, the way `ProviderError` carries it now.
+  const ours = classifyModelError({ status: 400, name: "ProviderError", body: SECRET });
+  is(ours.status, "insufficient_credit", "and from the body, when we are the ones who threw");
+
+  const modelGone = classifyModelError({ status: 400, name: "ProviderError", body: "no such model: gemini-2.5-flash" });
+  is(modelGone.status, "model_not_found", "a rejected model id is still read out of the body");
+
+  /*
+    And none of the three may carry a word of it back. Asserted on every
+    branch rather than the one that leaked, because the leak was in a value
+    shared by all of them.
+  */
+  for (const [name, v] of [["sdk", sdk], ["ours", ours], ["model", modelGone]]) {
+    ok(v.detail && v.detail.length > 0, `${name}: the failure bucket is not empty`,
+      "'unreachable' with nothing in it is the crime the raw detail was added to fix");
+    ok(!/credit balance|plans & billing|9f3c|no such model/i.test(v.detail),
+      `${name}: and carries none of what the provider said`,
+      `detail was "${v.detail}"`);
+    ok(v.detail.length < 60, `${name}: it is a shape, not a payload (${v.detail.length} chars)`);
+  }
+
+  // A throw with nothing on it at all — the case that made `detail` raw text
+  // in the first place. It still says something.
+  ok(classifyModelError(new Error("")).detail, "a bare throw still names something");
+  ok(classifyModelError("just a string").detail, "and so does a thrown non-Error");
+
+  /*
+    The source, where the value is made. Asserted here rather than at the call
+    site for the reason CLAUDE.md gives about `Verdict.reject`: the call site is
+    the place the rule already could not see.
+  */
+  const providers = fs.readFileSync(path.join(ROOT, "src/lib/vent/providers.ts"), "utf8");
+  ok(/new ProviderError\(r\.status, `\$\{id\} answered \$\{r\.status\}`, body\.slice/.test(providers),
+    "the status and who said it on message, their words on body",
+    "an upstream body on `.message` is read by every console call and returned to the browser");
+  ok(!/ProviderError\([^)]*body\.slice\(0, 300\)\}`/.test(providers),
+    "and never interpolated into the message");
+
+  const model = fs.readFileSync(path.join(ROOT, "src/lib/vent/model.ts"), "utf8");
+  ok(!/const detail = said/.test(model) && !/message\.slice\(0, 300\)/.test(model),
+    "and `detail` is derived rather than sliced off what came back");
+
+  const embed = fs.readFileSync(path.join(ROOT, "src/lib/vent/embeddings.ts"), "utf8");
+  ok(!/await r\.text\(\)\)\.slice/.test(embed),
+    "the embeddings log records the status and not the response body",
+    "the one request in this product that sends somebody's vent to a third party to be vectorised");
+
+  /*
+    AND THE SURFACE THAT MADE THIS URGENT, WHICH WAS NOT THE CHAT
+
+    `/api/health` is public and unauthenticated, and its `tried` array carries
+    the same `detail`. Fetched from production while this was being written, it
+    was serving to anyone on the internet:
+
+      {"provider":"anthropic","status":"insufficient_credit","detail":
+       "400 {\"type\":\"error\",...\"message\":\"Your credit balance is too
+        low...\"},\"request_id\":\"req_011Ceo…\"}"}
+
+    Not reasoned about — read off the live deployment. One fix covers both
+    because both read `classifyModelError`, and this asserts the shared source
+    rather than the two call sites, which is the arrangement that made one
+    repair enough.
+  */
+  const providersSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/providers.ts"), "utf8");
+  ok(/tried\.push\(\{ provider: p\.id, status: verdict\.status, detail: verdict\.detail \}\)/.test(providersSrc),
+    "the public health probe reports the same derived detail as the chat does",
+    "/api/health is unauthenticated — a second copy of this value is a leak to the whole internet");
+  const health = fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8");
+  ok(/tried: probe\.tried/.test(health),
+    "and passes it through rather than rebuilding it");
+});
+
+check("117 A thrown thing reaches stdout as a kind, never as its words", () => {
+  /*
+    Check 103 reads the literal, and nineteen call sites logged a variable.
+
+    The stdout rule is old and clear — codes, counts, kinds, statuses and
+    durations, never a message, never a note's subject or detail, never an anon
+    id — and 103 enforces it on the string somebody typed. It can stop
+    `console.warn("[carve] refused", n.subject)`. It cannot read
+    `console.warn("[carve] failed", error)`, which looks like nothing at all
+    and prints the message and the stack.
+
+    So nineteen lines were writing an unbounded string from somewhere else into
+    a place with no delete button, under a rule that exists because a hosted
+    runtime keeps stdout for as long as it keeps stdout:
+
+      model providers   an SDK throw carries the response body on `.message`,
+                        from a request that had just carried somebody's vent
+      Postgres          `invalid input syntax for type uuid: "…"` quotes the
+                        value, and here the value is usually an anon id
+      LiveKit           its failures quote the room name, which is derived
+                        from the circle id
+
+    `errorKind()` is the one policy: an HTTP status, a short error code, and
+    the class of the throw. `42501` and `42703` are the two most useful strings
+    this product has ever logged and neither is anybody's words.
+
+    The rule below is not "never mention the error". A sanitiser wrapping it is
+    the whole point — `console.warn("[voice] join failed:", kind)` is exactly
+    what is wanted. What is banned is the raw binding as a direct argument, and
+    `.message` on anything derived from it.
+  */
+  const balanced = (src, at, open, close) => {
+    let depth = 0, j = at;
+    for (; j < src.length; j++) {
+      const c = src[j];
+      if (c === open) depth++;
+      else if (c === close) { depth--; if (!depth) { j++; break; } }
+    }
+    return src.slice(at, j);
+  };
+  const files = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.tsx?$/.test(p)) files.push(p);
+    }
+  };
+  walk(path.join(ROOT, "src"));
+
+  const raw = [];
+  let logged = 0;
+  for (const f of files) {
+    const src = fs.readFileSync(f, "utf8");
+    for (const m of src.matchAll(/catch\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\{/g)) {
+      const caught = m[1];
+      const body = balanced(src, src.indexOf("{", m.index), "{", "}");
+      /*
+        Derived is not the same as unsafe, and for this sink the difference is
+        the whole rule.
+
+        `const kind = name || e.constructor.name` mentions the error and is
+        exactly what the stdout rule asks for — a kind. `const message =
+        e instanceof Error ? e.message : String(e)` mentions it too and is the
+        thing being banned. So a derived name counts as tainted only when it was
+        made by *reading the message* or by stringifying the throw whole.
+
+        Check 115 keeps the broader rule on purpose: its sink is a sentence
+        somebody reads, and `TypeError` in front of a person having a bad day is
+        noise even when it is not a leak.
+      */
+      const tainted = new Set([caught]);
+      const READS_WORDS = new RegExp(
+        `\\.message\\b|String\\(\\s*${caught}\\s*\\)|JSON\\.stringify\\(\\s*${caught}\\s*\\)|\\$\\{\\s*${caught}\\s*\\}`,
+      );
+      for (const b of body.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;]+);/g)) {
+        if (new RegExp(`\\b${caught}\\b`).test(b[2]) && READS_WORDS.test(b[2])) tainted.add(b[1]);
+      }
+      for (const mm of body.matchAll(/console\.(log|warn|error|info|debug)\(/g)) {
+        logged++;
+        const call = balanced(body, mm.index + mm[0].length - 1, "(", ")");
+        /*
+          Strip call expressions before looking. `errorKind(error)` is a
+          sanitiser doing its job; `error` on its own is the bug. Without this
+          the check reads its own fix as the thing it forbids — which it did,
+          on the run that produced this comment.
+        */
+        const direct = call.replace(/[A-Za-z_$][\w$.]*\([^()]*\)/g, "SAFE()");
+        for (const t of tainted) {
+          if (new RegExp(`[,(]\\s*${t}\\s*[,)]`).test(direct)) {
+            raw.push(`${path.relative(ROOT, f)}: console.${mm[1]}(… ${t} …)`);
+          }
+          if (new RegExp(`\\b${t}\\.message\\b`).test(call)) {
+            raw.push(`${path.relative(ROOT, f)}: console.${mm[1]}(… ${t}.message …)`);
+          }
+        }
+      }
+    }
+  }
+  ok(logged > 15, `there are console calls inside catch blocks to check (${logged})`,
+    "a scan that finds nothing passes for the wrong reason");
+
+  /*
+    AND THE SHAPE THAT IS NOT A THROW AT ALL
+
+    Everything above walks `catch` blocks, and PostgREST does not throw. It
+    returns `{ data, error }`, so six log lines in `supabase-store.ts` sat in
+    `if (error)` branches — `console.warn("[store] setCarve", error.code,
+    error.message)` — and the scan above went straight past all of them.
+
+    Those are the worst six in the file. `error.message` there is Postgres's
+    own sentence, and Postgres is the thing that quotes values: `invalid input
+    syntax for type uuid: "…"`, `Key (anon_id)=(…) already exists`. Every one
+    of them is on a path handling somebody's carve, their held note, or their
+    breaking point.
+
+    So the rule is stated plainly and swept over every file rather than over a
+    control-flow shape: **no console call logs a `.message`, anywhere.** That
+    is what CLAUDE.md already says — "never their message" — and it needs no
+    dataflow analysis to enforce. `error.code` stays, because a code is a code
+    and `contract.ts` maps the ones that matter to sentences that are ours.
+  */
+  const anyMessage = [];
+  for (const f of files) {
+    const src = fs.readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+    for (const mm of src.matchAll(/console\.(log|warn|error|info|debug)\(/g)) {
+      const call = balanced(src, mm.index + mm[0].length - 1, "(", ")");
+      if (/\.message\b/.test(call)) {
+        anyMessage.push(`${path.relative(ROOT, f)}: ${call.replace(/\s+/g, " ").slice(0, 60)}`);
+      }
+    }
+  }
+  is(anyMessage.length, 0,
+    "and no console call anywhere logs a `.message`",
+    anyMessage.join(" · ") || "PostgREST returns its errors rather than throwing, so a catch-block scan cannot see them");
+  is(raw.length, 0,
+    "no caught value is logged raw, and no `.message` is logged at all",
+    raw.join(" · ") || "console.warn(x, error) prints the message and the stack");
+
+  /*
+    And the policy itself, because a sanitiser that returns "" would satisfy
+    every assertion above while making the logs useless — which is the failure
+    bucket with nothing in it, the one this repository has recorded four times.
+  */
+  const SECRET = "invalid input syntax for type uuid: \"a3f9-not-an-id\"";
+
+  // What it keeps: the three fields that belong to the system.
+  is(errorKind({ status: 503, name: "ProviderError", message: SECRET }), "503 · ProviderError",
+    "an HTTP status and the class of the throw");
+  is(errorKind({ code: "42501", name: "PostgrestError", message: SECRET }), "42501 · PostgrestError",
+    "a Postgres code — the difference between 'the grants never landed' and '0011 is not applied'");
+  is(errorKind(new TypeError(SECRET)), "TypeError", "and a bare throw is its class");
+
+  // What it drops, asserted over every shape rather than the one that leaked.
+  for (const thrown of [
+    { status: 400, message: SECRET }, { code: "22P02", message: SECRET },
+    new Error(SECRET), new TypeError(SECRET), SECRET,
+    { message: SECRET }, { name: "X", detail: SECRET, hint: SECRET },
+  ]) {
+    const out = errorKind(thrown);
+    ok(!out.includes("a3f9") && !out.includes("uuid"),
+      `nothing of what it said survives (${out})`,
+      "Postgres quotes the value it refused, and here the value is usually an anon id");
+    ok(out.length > 0 && out.length < 48, `and it is a shape, not a payload (${out.length} chars)`);
+  }
+
+  // Never a blank, including for the values nobody thinks to throw.
+  for (const odd of [null, undefined, 0, "", {}, []]) {
+    ok(errorKind(odd), `${JSON.stringify(odd) ?? "undefined"} still answers something`,
+      "a bucket with nothing in it is the failure this repository has recorded four times");
+  }
+
+  /*
+    And a `code` that is really a sentence does not sneak through on the
+    strength of its field name. Some libraries put prose in `code`.
+  */
+  const wordy = errorKind({ code: "could not reach a3f9-not-an-id", name: "E" });
+  ok(!wordy.includes("a3f9"), `a prose code is not a code (${wordy})`);
+});
+
+check("118 A route that touches the store answers when the store says no", () => {
+  /*
+    The third deployment shape, and what it found in ten minutes.
+
+    `live-checks.sh` ran the product twice — with a store, and with none. Both
+    are real deployments. The third one is a store that is *there and failing*,
+    which CLAUDE.md names as uncovered in the section about the `?carve=1`
+    button: "no suite here has ever run a store that exists and fails".
+
+    Run once, it found three:
+
+      POST /api/feedback   500, empty body. `countFeedbackSince` — the rate
+                           limiter — sat one line above a try block whose own
+                           comment describes this exact failure and fixes the
+                           write below it. Half a repair, in the file that
+                           already carries the postmortem for the other half.
+      POST /api/profile    500, empty body. `ensureUser` unguarded, so
+                           onboarding failed silently — and onboarding is where
+                           the chair is written, which production has never
+                           recorded for seven of eight people.
+      GET  /api/heartbeat  503 carrying Postgres's `message` and `hint`
+                           verbatim, on a route with no token whose own doc
+                           comment reads: "Counts only. Never content. That is
+                           what makes it safe to leave open."
+
+    A 500 with an empty body is the worst answer available: the client has
+    nothing to branch on, so its honest branch has nothing to be honest with —
+    the same failure as the feedback client that read the status and not the
+    body, one layer down.
+
+    So the list is derived. Every route that calls `getStore()` is either
+    wrapped in `withStore` or named below with the reason it is not, because
+    "not on the list" and "decided against" look identical otherwise.
+  */
+  const routes = [];
+  const walkApi = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkApi(p);
+      else if (e.name === "route.ts") routes.push(p);
+    }
+  };
+  walkApi(path.join(ROOT, "src/app/api"));
+  ok(routes.length > 10, `routes are read off the filesystem (${routes.length})`,
+    "a hand-written route list is the bug this repository has four times over");
+
+  /*
+    Named exemptions, each with the reason it is one. A stale exemption fails
+    too — if one of these stops calling `getStore()`, it should stop being
+    listed here.
+  */
+  const EXEMPT = {
+    "health/route.ts":
+      "it is the diagnostic. Turning a store failure into 503 would make the probe unable to report the failure it exists to report — a green light over a broken road, from the other direction.",
+    "heartbeat/route.ts":
+      "it catches the one call it makes and answers in an operator's shape, not a person's. Asserted live in the failing-store pass rather than here.",
+    "community/route.ts":
+      "it degrades to `{carrying: null}` internally, because a community count that cannot be read is an absent sentence, not an error.",
+  };
+
+  /*
+    Read the exports, not the file.
+
+    The first version of this asked whether the source contained the word
+    `withStore` — and deleting `export const POST = withStore(handlePOST)` from
+    `feedback/route.ts` left the suite green, because the *import* line still
+    said `withStore`. A route that imports the wrapper and never uses it is
+    exactly the bug, and the check was reading the one line that survives it.
+
+    Next.js dispatches on the exported name, so that is what has to be
+    wrapped: `export async function POST` is a handler with no boundary, and
+    `export const POST = withStore(handlePOST)` is one with. Nothing else in
+    the file decides it.
+  */
+  const METHODS = "GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS";
+  const unwrapped = [];
+  let wrapped = 0;
+  for (const f of routes) {
+    const raw = fs.readFileSync(f, "utf8");
+    if (!/\bgetStore\(\)/.test(raw)) continue;
+    const rel = f.slice(f.indexOf("src/app/api/") + "src/app/api/".length);
+    if (EXEMPT[rel]) continue;
+
+    /*
+      Comments stripped, because this file's comments quote the code.
+
+      `feedback/route.ts` carries the postmortem for its own bug, and that
+      postmortem contains the sentence "`export async function POST` has no
+      wrapper". The first run of this rule read the explanation of the fix as
+      the presence of the bug — which is the same shape as check 45 asserting
+      the fragment from its own postmortem, two years of lessons apart.
+    */
+    const src = raw.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
+
+    const bare = [...src.matchAll(new RegExp(`export\\s+async\\s+function\\s+(${METHODS})\\b`, "g"))];
+    const consts = [...src.matchAll(new RegExp(`export\\s+const\\s+(${METHODS})\\s*=\\s*([A-Za-z_$][\\w$]*)`, "g"))];
+    for (const m of bare) unwrapped.push(`${rel}: export async function ${m[1]} has no boundary`);
+    for (const m of consts) {
+      if (m[2] === "withStore") wrapped++;
+      else unwrapped.push(`${rel}: ${m[1]} is wrapped in ${m[2]}, not withStore`);
+    }
+    if (bare.length === 0 && consts.length === 0) {
+      unwrapped.push(`${rel}: touches the store and exports no recognised handler`);
+    }
+  }
+  ok(wrapped >= 10, `there are wrapped handlers to find (${wrapped})`,
+    "a scan that matches nothing passes for the wrong reason");
+  is(unwrapped.length, 0,
+    "every store-touching route wraps every handler it exports",
+    unwrapped.join(" · ") || "an unguarded store call is a 500 with no body, and the client's honest branch has nothing to be honest with");
+
+  // A stale exemption is the other half of the same rule.
+  const stale = Object.keys(EXEMPT).filter((rel) => {
+    const f = path.join(ROOT, "src/app/api", rel);
+    if (!fs.existsSync(f)) return true;
+    const src = fs.readFileSync(f, "utf8");
+    return !/\bgetStore\(\)/.test(src) || /withStore/.test(src);
+  });
+  is(stale.length, 0, "and no exemption outlives its reason", stale.join(" · "));
+
+  for (const [rel, why] of Object.entries(EXEMPT)) {
+    ok(why.length > 60, `${rel} says why, at length`,
+      "a one-word exemption is a list entry, not a decision");
+  }
+
+  /*
+    And the third pass exists and is wired in. A verify script nothing runs is
+    the shape of `backup.yml` succeeding fourteen times while taking no copy.
+  */
+  const sh = fs.readFileSync(path.join(ROOT, ".github/live-checks.sh"), "utf8");
+  ok(/failing-store-verify\.mjs/.test(sh), "live-checks runs the failing-store pass");
+  ok(/broken-store\.mjs/.test(sh), "and boots the database that refuses");
+
+  /*
+    And the fourth shape, which is the only one that reaches the bug.
+
+    With every request refused, a route dies at `findUserId` and never calls
+    `setCarve` — the one store method that reports by returning `false` rather
+    than throwing. So even the third pass could not exercise its failure path,
+    and `FORGET_FAILED` — "Could not clear that. It is still here." — stayed
+    the dead code CLAUDE.md says it always was.
+
+    `--fail-methods PATCH,POST,PUT,DELETE` is `GRANT SELECT` without `GRANT
+    UPDATE`: an ordinary half-applied migration. Reads succeed, the write is
+    refused with `42703`, and the route answers `deleted: 0` with `had: true` —
+    the shape its own comment names as honest and describes as unreachable.
+    It is reachable now, and the fourth pass is the proof.
+  */
+  ok(/writes-only/.test(sh), "and runs the half-applied-schema pass after it",
+    "the shape where reads work and writes do not is the only one that reaches setCarve");
+  ok(/--fail-methods PATCH,POST,PUT,DELETE/.test(sh),
+    "with reads allowed through, which is what makes the write the thing that fails");
+  const verify = fs.readFileSync(path.join(ROOT, "scripts/failing-store-verify.mjs"), "utf8");
+  ok(/fd\.deleted === 0 && fd\.had === true/.test(verify),
+    "and asserts the exact shape both screens turn into FORGET_FAILED",
+    "asserting only that it is not `deleted: \"carve\"` would pass on a 503, which is a different answer");
+  ok(/would not let go of/.test(sh.slice(sh.indexOf("third pass"))),
+    "and refuses a port the previous server is still holding",
+    "a leftover server answering the third pass would report on the second one's build");
+});
+
+check("119 The reply that reached somebody is graded, sentence by sentence", () => {
+  /*
+    One production screenshot, kept as a fixture because it is the only
+    instrument that finds this class.
+
+    Somebody wrote that they were being treated like a broken machine that
+    needs fixing. The room answered:
+
+      "Being treated like a broken machine is its own kind of exhaustion. When
+       that voice starts, write down one plain sentence about what is actually
+       true. Do you want me to just witness this with you, or push?"
+
+    Three sentences: a task, a piece of therapy vocabulary, and a menu of what
+    the room might do next. Every one of them survives having the message
+    deleted, which is the test this product states and had no way to enforce
+    on any of the three. Fourteen reply graders and it passed all of them.
+
+    Why it passed is the useful part. `GENERIC_TASKS` already banned
+    journaling — `/(?:try |start |consider |do some )(?:journal…|writing it
+    down)/` — and that regex needs a hedging verb in front of it. A model asked
+    for an instruction does not hedge; it writes "write down one plain
+    sentence". Same species as `make you` and `\bdon\b` in `intent.ts`: a
+    pattern in the shape its author would phrase it, meeting text phrased the
+    way a model actually phrases it.
+
+    Held as the whole reply rather than as three separate strings, because
+    what made it bad was cumulative and a check on fragments would not have
+    noticed that.
+  */
+  const SHIPPED =
+    "Being treated like a broken machine is its own kind of exhaustion. " +
+    "When that voice starts, write down one plain sentence about what is actually true. " +
+    "Do you want me to just witness this with you, or push?";
+
+  const banned = bannedPhrase(SHIPPED);
+  ok(banned, "the reply is refused by name", "it passed all fourteen graders when it shipped");
+
+  // Each offence separately, so a single over-broad row cannot stand in for
+  // the other two and report the class as covered.
+  const caught = [];
+  for (const fragment of [
+    "write down one plain sentence about it",
+    "what is actually true here",
+    "do you want me to just witness this with you",
+  ]) {
+    if (bannedPhrase(fragment) || genericTask(fragment)) caught.push(fragment);
+  }
+  is(caught.length, 3, "and all three offences are caught, not one standing for three",
+    `missed: ${["write down one plain sentence about it", "what is actually true here", "do you want me to just witness this with you"].filter((f) => !caught.includes(f)).join(" · ")}`);
+
+  /*
+    THE HALF THAT MATTERS MORE THAN THE BAN
+
+    A ban that also refuses the good version of the same move is worse than no
+    ban: it teaches the room to avoid a clinical technique it is right to use.
+
+    `holisticExamples.jsonl` carries "Write down the one it keeps returning to,
+    on paper, next to the bed" — for somebody whose mind loops before sleep,
+    which is the actual CBT-I protocol rather than a gesture at one. It is a
+    task, it involves paper, and it is correct, because the thing being written
+    down came out of their message. That is the line this file already draws
+    for the drop set: aimed is fine, generic is not.
+  */
+  const aimed = "Write down the one it keeps returning to, on paper, next to the bed. Not to solve it.";
+  is(genericTask(aimed), null, "and the aimed version of the same move still passes",
+    "banning the paper rather than the emptiness would delete a correctly targeted CBT-I move");
+  is(bannedPhrase(aimed), null, "by name as well as by table");
+
+  /*
+    And every new row is checked against everything this product can author,
+    which is the only direction `GENERIC_TASKS` says it may grow in. Derived
+    off the files rather than a remembered number — the corpus grows.
+  */
+  /*
+    Only what the room says, never what the person said.
+
+    The first version of this read every string field in both corpora, and
+    failed — on `holisticExamples.jsonl`'s `input`, which is somebody writing
+    "i know exactly what this is ... i understand". `I understand` is a banned
+    *reply*: it claims a thing the room cannot claim. Coming from the person it
+    is the most ordinary sentence in the file, and a check that refuses it has
+    stopped being about tone and started policing the vent.
+
+    `input` and `message` are theirs. `full_integration` is the authored reply,
+    and the tactic holds and probe asks are what the room may say. That is the
+    whole set.
+  */
+  const THEIRS = new Set(["input", "message", "clauses", "affect", "somatic_read", "id", "intent", "language", "probes"]);
+  const authored = [];
+  for (const file of ["src/lib/vent/holisticExamples.jsonl", "src/lib/vent/goldenSet.jsonl"]) {
+    for (const line of fs.readFileSync(path.join(ROOT, file), "utf8").split("\n").filter(Boolean)) {
+      for (const [k, v] of Object.entries(JSON.parse(line))) {
+        if (typeof v === "string" && !THEIRS.has(k)) authored.push(v);
+      }
+    }
+  }
+  const tacticsSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/tactics.ts"), "utf8");
+  for (const m of tacticsSrc.matchAll(/hold:\s*"((?:[^"\\]|\\.)*)"/g)) authored.push(m[1]);
+  const probesSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/probes.ts"), "utf8");
+  for (const m of probesSrc.matchAll(/ask:\s*"((?:[^"\\]|\\.)*)"/g)) authored.push(m[1]);
+
+  // 72 holistic replies + 35 tactic holds + 58 probe asks. The floor is well
+  // under that so the corpus can grow, and well over zero so a scan that
+  // reads nothing cannot pass.
+  ok(authored.length > 120, `there is an authored corpus to check against (${authored.length})`,
+    "a corpus of nothing passes for the wrong reason");
+  const selfHits = authored.filter((s) => bannedPhrase(s) || genericTask(s));
+  is(selfHits.length, 0,
+    "and nothing this product authors is refused by its own tables",
+    selfHits.slice(0, 2).map((s) => s.slice(0, 60)).join(" · "));
+
+  /*
+    THE NUMBER IS A SENTENCE, AND IT IS ALREADY WRONG ONCE PER TABLE GROWTH
+
+    Check 86 asserts `POSITIONING.md`'s count against the tables. It failed on
+    the first run of this change, which is the check working — the rows went
+    in and the hand-typed integer one document away did not move. Recorded
+    here so the next person adding a row knows the doc is downstream of it.
+  */
+  const positioning = fs.readFileSync(path.join(ROOT, "docs/POSITIONING.md"), "utf8");
+  ok(/\d+ phrases and unasked-for tasks fail the \*\*build\*\*/.test(positioning),
+    "and the competitive claim still states a count check 86 can verify");
+
+  /*
+    AGREEMENT USED INSTEAD OF ENGAGEMENT
+
+    A different failure from the one above and ungraded until now: not advice,
+    not a label, not a task — *agreement*. It feels supportive, costs the room
+    nothing, and leaves somebody exactly where they were.
+
+    These fail this repository's own test more plainly than anything else in
+    the table. "Anyone would feel that way" is true of every human alive, which
+    is exactly what makes it worthless to the one who wrote in — the message
+    could be deleted and the sentence would still stand.
+
+    And one of them is the hedged-pattern bug for the fourth time. `that must
+    be hard` has been banned for a long time and reads `/that must be
+    (hard|difficult|tough)/` — a fixed opener, required — so "that sounds
+    incredibly hard" walked straight past it, exactly as "write down one plain
+    sentence" walked past the journaling row.
+  */
+  /*
+    One sentence per row, and each reaching only its own.
+
+    The first version probed "That sounds incredibly hard, and anyone would
+    feel that way" — which two rows catch, so neutering either one left the
+    assertion green. A test sentence saved by a different rule than the one
+    under test is the mistake this suite has now made three times, in three
+    different checks.
+  */
+  for (const [shape, sentence] of [
+    ["de-individuating", "Anybody would react the same way."],
+    ["a verdict on the feeling", "Your anger is completely valid."],
+    ["agreement that closes it", "Of course you feel exhausted."],
+    ["a ruling nobody asked for", "You have every right to be angry about it."],
+    ["the intensifier the old pattern missed", "That sounds incredibly hard."],
+  ]) {
+    const hit = bannedPhrase(sentence);
+    ok(hit, `over-validation is refused: ${shape}`,
+      `"${sentence}" — supportive, empty, and it locks them where they are`);
+  }
+
+  // And the older pattern genuinely could not reach the newer sentence, which
+  // is why the row exists rather than the old one being widened.
+  ok(!/that must be (hard|difficult|tough)/i.test("That sounds incredibly hard."),
+    "the pre-existing rule could not have caught it",
+    "if it could, this is a duplicate row rather than a gap");
+});
+
+check("120 The database lets a person rate as often as the route says they may", () => {
+  /*
+    Production carries `vent_feedback_user_id_key UNIQUE (user_id)` and no
+    migration in this repository declares it.
+
+    `0002_truth_anchor.sql` creates the table with a plain `user_id` and no
+    uniqueness — using `create table if not exists`, which does nothing at all
+    to a table that is already there in a different shape. So the repo's
+    definition has never applied to the database it describes, and the name
+    Postgres generated, `<table>_<column>_key`, is the fingerprint of a
+    `unique` written on the column by something no longer in this history.
+
+    The cost is a disagreement nobody could see: the route allows five ratings
+    an hour and the database allows one for ever, so a person's second rating
+    raises 23505 and is dropped. `feedback/route.ts` says why that matters —
+    "silently losing them corrupts the one place the product learns what is
+    losing" — and `npm run rlhf` is downstream of it. Every DPO pair this
+    product has built came from first ratings only, and nothing said so.
+
+    Two assertions, because the interesting one is not "0020 exists".
+  */
+  const migrations = fs.readdirSync(path.join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql"));
+  const all = migrations
+    .map((f) => fs.readFileSync(path.join(ROOT, "supabase/migrations", f), "utf8"))
+    .join("\n");
+
+  /*
+    1. Nothing here may introduce the constraint again. Written against the
+       schema rather than against 0002, because the next person to add a
+       column to this table is the one who would type `unique` by reflex.
+  */
+  const declares = migrations.filter((f) => {
+    const src = fs.readFileSync(path.join(ROOT, "supabase/migrations", f), "utf8")
+      .replace(/^\s*--[^\n]*$/gm, " ");
+    return /vent_feedback[\s\S]{0,400}?\buser_id\b[^\n,)]*\bunique\b/i.test(src)
+      || /add\s+constraint[^\n]*unique[^\n]*\(\s*user_id\s*\)/i.test(src)
+      || /create\s+unique\s+index[^\n]*vent_feedback\s*\(\s*user_id\s*\)/i.test(src);
+  });
+  is(declares.length, 0,
+    "no migration makes a rating a once-ever thing",
+    declares.join(" · ") || "the route allows five an hour, and the disagreement is invisible from either side");
+
+  /*
+    2. And the repair drops it by *lookup*, not by the name somebody guessed.
+
+       0016's lesson, which cost a debugging session: `drop ... if exists`
+       matches nothing and says nothing when the thing moved.
+       `vent_feedback_user_id_key` is auto-generated, which makes it a guess
+       about what an earlier tool happened to call it.
+  */
+  const fix = fs.readFileSync(path.join(ROOT, "supabase/migrations/0020_feedback_not_once_ever.sql"), "utf8");
+  ok(/pg_constraint/.test(fix) && /contype\s*=\s*'u'/.test(fix),
+    "0020 finds the constraint in the catalogue",
+    "dropping an auto-generated name by hand is the 0016 bug wearing a constraint");
+  ok(!/drop\s+constraint\s+if\s+exists\s+vent_feedback_user_id_key/i.test(fix),
+    "and not by a hardcoded name");
+  ok(/raise notice[^\n]*nothing to do/i.test(fix),
+    "and says so when it did nothing",
+    "a migration that did nothing and one that worked must not look identical — the green-tick lesson from backup.yml");
+
+  /*
+    3. The foreign key keeps an index after the unique one goes with its
+       constraint. Asserted because it is the collateral a reviewer would not
+       think to check, and an unindexed FK makes every cascade delete a scan.
+  */
+  ok(/create index if not exists vent_feedback_user_idx/.test(all),
+    "and vent_feedback.user_id is still indexed on its own",
+    "dropping a unique constraint drops its index with it");
+
+  // The route's number, read from the route, so this cannot drift from it.
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/feedback/route.ts"), "utf8");
+  const perHour = Number(route.match(/FEEDBACK_PER_HOUR\s*=\s*(\d+)/)?.[1]);
+  ok(perHour > 1, `the route allows more than one rating (${perHour}/hour)`,
+    "if this ever becomes 1 the constraint was right and this check is the thing to delete");
+});
+
+check("121 The health probe can tell a hardened function from the one it replaced", () => {
+  /*
+    The repo fixed `match_memories` and production ran the broken version for
+    months.
+
+    CLAUDE.md's entry on 0014 is the sharpest thing in the file. The vulnerable
+    definition was `security definer`, filtered on a uuid the *caller* supplied,
+    and was granted to `authenticated` — so any signed-in person could read
+    anybody's memories over `/rest/v1/rpc/match_memories`. 0014 replaced it,
+    documented it at length, and nothing anywhere compared the live schema to
+    this one: `/api/health` probed tables and columns and never a function.
+
+    `RPC_CONTRACT` held exactly one entry, `vent_rate_count`, so the RPC probe
+    existed and did not cover the RPC that mattered.
+
+    Why the signature is enough to tell them apart: 0006 created a *four*
+    argument `match_memories` and 0014 replaced it with a *three* argument one —
+    the same fact that made 0016's `drop function` match nothing. PostgREST
+    resolves by named parameters, so a call carrying exactly 0014's three
+    answers PGRST202 against a database still running 0006.
+  */
+  const sql = fs.readFileSync(path.join(ROOT, "supabase/migrations/0014_rpc_hardening.sql"), "utf8");
+
+  /*
+    Derived off the migration, not typed twice. A hand-written parameter list
+    beside the schema it describes is this repository's most-repeated bug, and
+    here the two drifting apart turns the probe into one that always passes.
+  */
+  const decl = sql.match(/create or replace function public\.match_memories\(([\s\S]*?)\)\s*returns/);
+  ok(decl, "0014 still declares match_memories", "the probe below is derived from this");
+  const declared = [...decl[1].matchAll(/^\s*(p_[a-z_]+)/gm)].map((m) => m[1]);
+  is(declared.length, 3, `0014 declares three parameters (${declared.join(", ")})`,
+    "0006's was four — that difference is the whole discriminator");
+
+  const probed = Object.keys(RPC_CONTRACT.match_memories ?? {});
+  is(probed.sort().join(","), declared.slice().sort().join(","),
+    "and the health probe calls it with exactly those",
+    "a probe whose parameters drift from the schema resolves to nothing and reports a fault that is not there, or resolves to the old function and reports health");
+
+  /*
+    And the probe is over the RPC that carries the vulnerability, not merely
+    over some RPC. Named rather than counted: the point is which one.
+  */
+  ok("match_memories" in RPC_CONTRACT,
+    "the function 0014 hardened is the one being watched",
+    "the RPC probe existed for a year and covered vent_rate_count alone");
+
+  // The vector has to be the width the column is, or the call fails for a
+  // reason that has nothing to do with the question being asked.
+  const contractSrc = fs.readFileSync(path.join(ROOT, "src/lib/store/contract.ts"), "utf8");
+  const probeDims = Number(contractSrc.match(/const PROBE_DIMS = (\d+)/)?.[1]);
+  const embedSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/embeddings.ts"), "utf8");
+  const embedDims = Number(embedSrc.match(/EMBED_DIMS = (\d+)/)?.[1]);
+  is(probeDims, embedDims,
+    `the probe vector is the width the column is (${probeDims})`,
+    "`embeddings.ts` is server-only and cannot be imported here, so the copy is asserted rather than trusted");
+  is((RPC_CONTRACT.match_memories.p_embedding ?? []).length, embedDims,
+    "and the array actually built is that wide");
+
+  /*
+    WHAT THIS CANNOT SEE, STATED SO NOBODY READS IT AS MORE
+
+    It separates the signatures and not `security invoker` from `security
+    definer`. Two functions with these three parameters and different bodies
+    are identical from here. That limit belongs in the file, because the
+    failure this whole check exists to prevent was somebody reading a green
+    light as a guarantee it never made.
+  */
+  ok(/Supabase's own advisors|advisors/.test(contractSrc) || /advisors/.test(fs.readFileSync(path.join(ROOT, "CLAUDE.md"), "utf8")),
+    "and the limit points at the tool that does cover bodies and grants",
+    "a probe that cannot see something must say so where somebody reads it");
+});
+
+check("122 A reply that is correct and incomprehensible is a failed reply", () => {
+  /*
+    Fourteen graders, and not one asked whether the sentence lands.
+
+    Naming the *mechanism* is the most valuable move this room makes. "You were
+    taught you matter only when you work, so when you can't work you feel you
+    don't matter" does more than any amount of reflection. And it is exactly
+    the move that fails in one specific way: the mechanism has a name in the
+    literature, the name is shorter than the explanation, and a model reaches
+    for it. "You are experiencing internalized instrumentalization" is the same
+    insight with the person taken out of it.
+
+    Nothing here graded comprehension. `advice` catches what a reply tells
+    somebody to do, `diagnosis` catches a label for what they have, `generic`
+    catches a sentence that fits anybody — and a correct, engaged, on-tactic
+    reply nobody can read passed all of them.
+  */
+  const CASE = (said) => ({
+    id: "jargon", intent: "vent", language: "en", message: said, probes: "clarity",
+  });
+  const DEFAULT_SAID = "they treat me like a machine that needs fixing";
+
+  const jargonOf = (reply, said = DEFAULT_SAID) =>
+    gradeReply(CASE(said), reply, { tokensSpent: true, said }).filter((f) => f.grader === "jargon");
+
+  is(jargonOf("You are experiencing internalized instrumentalization.").length, 1,
+    "the bare term is caught",
+    "this is the exact sentence the move degrades into");
+
+  is(jargonOf("You were taught you matter only when you work — so when you can't work, you feel you don't matter.").length, 0,
+    "and the same insight said plainly is not",
+    "a grader that fires on the good version teaches the room to stop naming mechanisms");
+
+  /*
+    THE EXEMPTION IS THE POINT, NOT A CONCESSION
+
+    The rule is "no jargon unless you unpack it in the same sentence", not "no
+    jargon". A reply that names a mechanism and then says what it means has
+    done the work, and refusing it would delete the best move in the library
+    while looking like rigour — the same shape as banning the paper instead of
+    the empty instruction, one check over.
+  */
+  is(jargonOf("That's what people call a core belief — a rule you learned so early it feels like a fact.").length, 0,
+    "a term unpacked in the same sentence passes",
+    "name it, then say it plainly, is the move this is protecting");
+  is(jargonOf("That is a core belief.").length, 1,
+    "and the same term with nothing after it does not");
+
+  /*
+    The unpacking has to be an unpacking, not a dash.
+
+    "core belief — a learned rule" has a connector and four words after it,
+    which is a label with punctuation in front of it. Six is the floor, and
+    without this assertion `unpacked()` could return true for any term followed
+    by a comma and the whole grader would be off — which is exactly what the
+    mutation pass found, because the two assertions above are both about
+    sentences with no connector at all and neither could see it.
+  */
+  is(jargonOf("That is a core belief — a learned rule.").length, 1,
+    "a connector with four words after it is a label, not an explanation");
+  is(jargonOf("That is a core belief — a rule you learned so early it feels like a fact.").length, 0,
+    "and the same connector with an actual explanation after it passes");
+
+  /*
+    Their word handed back is theirs, the same exemption `diagnosis` makes.
+
+    Bare on purpose. The first version of this assertion used "You called it
+    your inner child, and that is the part still waiting" — which passes
+    whether or not this exemption exists, because the comma and the eight words
+    after it satisfy `unpacked()`. Deleting the exemption left the suite green.
+    A probe that cannot reach the guard it is named for, one more time.
+  */
+  is(jargonOf("That is your inner child.", "it's my inner child stuff").length, 0,
+    "a word they used first may be said back to them bare");
+  is(jargonOf("That is your inner child.").length, 1,
+    "and the same bare sentence to somebody who never said it does not pass");
+
+  /*
+    AND THE WORDS THAT ARE ALSO ORDINARY ENGLISH ARE NOT ON THE LIST
+
+    Three candidates were cut, and the first one is the whole lesson: this is a
+    Nigerian product and `conditioning` is what comes out of the wall. Same
+    species as `make you`, `fit`, `belle` and `\bdon\b` — a marker earns its
+    place by what it excludes.
+  */
+  for (const ordinary of [
+    "The air conditioning in that office is the only cold thing about it.",
+    "Their projection for the quarter came in lower than yours.",
+    "The displacement after the flood took the whole street.",
+  ]) {
+    is(jargonOf(ordinary).length, 0, `ordinary English is not jargon: "${ordinary.slice(0, 42)}…"`,
+      "a word that is jargon and ordinary English does not belong on the list");
+  }
+
+  /*
+    Nothing this product authors trips it — the only direction the list may
+    grow. Derived off the files, because the corpus grows and a remembered
+    number does not.
+  */
+  const authored = [];
+  const THEIRS = new Set(["input", "message", "clauses", "affect", "somatic_read", "id", "intent", "language", "probes"]);
+  for (const file of ["src/lib/vent/holisticExamples.jsonl", "src/lib/vent/goldenSet.jsonl"]) {
+    for (const line of fs.readFileSync(path.join(ROOT, file), "utf8").split("\n").filter(Boolean)) {
+      for (const [k, v] of Object.entries(JSON.parse(line))) {
+        if (typeof v === "string" && !THEIRS.has(k)) authored.push(v);
+      }
+    }
+  }
+  const tacticsSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/tactics.ts"), "utf8");
+  for (const m of tacticsSrc.matchAll(/hold:\s*"((?:[^"\\]|\\.)*)"/g)) authored.push(m[1]);
+  const probesSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/probes.ts"), "utf8");
+  for (const m of probesSrc.matchAll(/ask:\s*"((?:[^"\\]|\\.)*)"/g)) authored.push(m[1]);
+
+  ok(authored.length > 120, `there is an authored corpus to check against (${authored.length})`);
+  const selfHits = authored.filter((s) => jargonOf(s).length > 0);
+  is(selfHits.length, 0, "and nothing the room can say trips it",
+    selfHits.slice(0, 2).map((s) => s.slice(0, 60)).join(" · "));
+
+  /*
+    Where it lives when it fires. `jargon` is a retry and never the authored
+    line: the hold is plain by construction so it beats an opaque reply on
+    clarity, and it is generic so it loses on everything else. An opaque
+    sentence made of their words still carries their words; the hold carries
+    nobody's.
+  */
+  const fs2 = fs.readFileSync(path.join(ROOT, "src/lib/vent/failsafe.ts"), "utf8");
+  ok(/RETRY_ONLY = new Set\(\["language", "jargon"\]\)/.test(fs2),
+    "it buys a retry and never the authored line");
+  ok(!/REJECT = new Set\(\[[^\]]*"jargon"/s.test(fs2),
+    "and is not in the rejection set",
+    "an opaque reply is not a harmful one, and the two tiers mean different things");
+});
+
+check("123 The rule underneath 'I am not enough' has a move of its own", () => {
+  /*
+    Somebody described as a machine that needs fixing is not sad. They are
+    exhausted from earning their own worth, and the rule doing that — if being
+    loved followed from functioning, then not functioning reads as not being
+    lovable — is the entire content of the message. `defusion` puts distance
+    between a person and a sentence and `thought_record` asks what has held up;
+    neither names the rule that made the sentence feel true.
+
+    Asserted by what it selects on, never by the file containing it. A tactic
+    that reads correctly and fires on nothing is the failure this suite has
+    recorded for the Wells MCT set, and a regex written through a script that
+    matches nothing is the one it fails builds over.
+  */
+  const forMessage = (m) => selectTactic({
+    message: m,
+    classification: classify(m),
+    recentTactics: [],
+    pressure: 50, body: null, mood: null, duality: null,
+  });
+
+  is(forMessage("Being treated like a broken machine that needs fixing")?.id, "earned_worth",
+    "it fires on the message that prompted it",
+    "this is the production reply that started the whole thread");
+  is(forMessage("Dem dey treat me like say I be machine wey need repair")?.id, "earned_worth",
+    "and on the same thing said in Pidgin");
+  is(forMessage("I'm just not productive enough, I feel like a burden to everybody")?.id, "earned_worth",
+    "and on the family rather than the sentence");
+
+  /*
+    And not on everything, which is the half that matters. A tactic that fits
+    a recognisable family is one edit away from fitting everybody — the shape
+    that made `exact_mirror` the product's first reply every time.
+  */
+  ok(forMessage("my brother still hasn't called me back since the burial")?.id !== "earned_worth",
+    "and never on a message about somebody else",
+    "bereavement is not a worth problem, and answering it as one is the room not reading");
+
+  /*
+    AND THE SHARE, BECAUSE ONE MESSAGE CANNOT SEE THIS
+
+    The assertion above passed a mutation that widened the predicate to match
+    *everything*. It would: the selector tiers and weights, so at 76 the tactic
+    can fit all comers and still lose that one message to something else. One
+    negative case cannot tell "fits a family" from "fits everybody".
+
+    Which is the failure this repository has measured twice and written down
+    both times — `exact_mirror` making the first reply a template,
+    `rogers_never_said` answering four of five messages the day `probes.ts` was
+    written. Neither was found by a negative case; both were found by counting.
+
+    So this counts, over every real message the repository has: the fixture
+    corpus and the holistic inputs. Two bounds, and the lower one matters as
+    much as the upper — a tactic that reads well and fires on nothing is the
+    Wells MCT set, present and unused.
+  */
+  const corpus = [
+    ...JSON.parse(fs.readFileSync(path.join(ROOT, "scripts/fixtures/vent.json"), "utf8"))
+      .vents.map((v) => v.user_message),
+    ...fs.readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+      .split("\n").filter(Boolean).map((l) => JSON.parse(l).input),
+  ].filter((m) => typeof m === "string" && m.length > 3);
+
+  ok(corpus.length > 50, `there are real messages to count over (${corpus.length})`);
+
+  /*
+    Counted on the *predicate*, not on what won.
+
+    The first version counted selections and failed on its first run: zero of
+    eighty-eight. The predicate matches three — "i dey feel like say i be
+    burden for my family", "i am useless, i cannot do anything right", "i have
+    to prove myself every single day at that office or i am not" — and loses
+    all three, to `iterated_game`, `double_standard` and `ifs_parts`.
+
+    That is written down rather than tuned away. Raising this tactic's weight
+    until it beats three established moves, on a sample of three, so that an
+    assertion written an hour ago goes green, is fitting the code to the test —
+    and `exact_mirror` at 90 is what that looks like after it ships. The
+    weight is a guess, it is declared as one in `tactics.ts`, and whether this
+    move should beat `ifs_parts` on "prove myself every day or I am not
+    enough" is a question for a person in a real room, which CLAUDE.md already
+    says is where every product-quality finding here has come from.
+
+    What the two bounds do catch is the thing that cannot be seen from one
+    message: a predicate narrowed until it matches nothing, and a predicate
+    widened until it matches everybody. Both were mutations that walked past
+    the negative case above.
+  */
+  const t2 = ALL_TACTICS.find((x) => x.id === "earned_worth");
+  const matched = corpus.filter((m) => {
+    try { return t2.fits({ message: m, classification: classify(m), recentTactics: [], pressure: 50, body: null, mood: null, duality: null }); }
+    catch { return false; }
+  }).length;
+  ok(matched > 0, `its predicate reaches real messages (${matched}/${corpus.length})`,
+    "a move that reads well and matches nothing is the Wells set: present, and unused");
+  ok(matched / corpus.length < 0.2,
+    `and a family rather than everybody (${(matched / corpus.length * 100).toFixed(0)}%)`,
+    "`rogers_never_said` answered four of five messages, and no negative case found it — counting did");
+
+  const t = ALL_TACTICS.find((x) => x.id === "earned_worth");
+  ok(t, "the tactic exists to be weighed");
+  const w = t.weight({ pressure: 50, mood: null, duality: null, body: null });
+  ok(w < 90, `weighted under the number that has twice taken over a selector (${w})`,
+    "`exact_mirror` and `rogers_never_said` were both 90, and both became the only move that fired");
+
+  /*
+    THE MOVE MUST NOT CONTAIN THE WORDS FOR THE MOVE
+
+    "Conditional worth", "core belief" and "internalized instrumentalization"
+    are all shorter than the explanation, which is exactly why a model reaches
+    for them. The instruction says to name the rule and forbids naming the
+    name; if the instruction itself used one, it would be teaching the thing
+    check 122 spends a retry undoing.
+  */
+  /*
+    Graded against the list directly, not through `gradeReply`.
+
+    The first version ran the instruction through the reply grader and a
+    mutation replacing "the rule they were taught" with "their core belief"
+    walked straight past it — because `unpacked()` is generous on purpose, and
+    the instruction is one long sentence with a comma and plenty of words after
+    the term. That generosity is right for a reply and wrong here.
+
+    Two surfaces, two rules, one list. On a reply the rule is "not bare",
+    because naming a mechanism and then saying it plainly is the best move in
+    the library. On text we author it is "never", because an instruction
+    carrying the short abstract noun is teaching the model to reach for it —
+    which is the thing the grader then spends a billed retry undoing.
+  */
+  for (const [what, text] of [["instruction", t.instruction], ["hold", t.hold]]) {
+    const hit = JARGON.find((re) => re.test(text));
+    is(hit ? text.match(hit)[0] : null, null,
+      `the ${what} carries none of the words for it`,
+      "an instruction that uses the term teaches the model the term");
+  }
+
+  // And the hold is a sentence somebody can read, not a task.
+  is(genericTask(t.hold), null, "the hold is not a task that would fit anybody");
+  is(bannedPhrase(t.hold), null, "and says nothing VOICE bans");
+
+  /*
+    The action, if one is given, is aimed rather than listed — which is the
+    line this repository already draws for the drop set. "A deliberately
+    unproductive minute" is the move *because* the rule says worth is output;
+    naming a specific act here would put it on every reply this tactic ever
+    produces, and the library's own generic-task table would then be right to
+    refuse it.
+  */
+  ok(/unproductive/.test(t.instruction),
+    "the counter-move is what contradicts the rule, not a coping task");
+  ok(/out of what they told you|never from a list/.test(t.instruction),
+    "and it is drawn from their message rather than a list",
+    "a named act would be generic on every turn this fires, and `drink water` is already banned for that reason");
+});
+
+check("124 The crisis turn answers in the language they wrote it in", () => {
+  /*
+    The router speaks Pidgin on this path and the reply did not.
+
+    `intent.ts` is proud of its Pidgin crisis coverage — "i wan die is the
+    sentence this list existed for and did not have" — and the conditional
+    block added "if i no dey again, e go better" beneath it. Then
+    `CRISIS_RESPONSE` was one English string, rendered on five surfaces, and
+    `classification.language` was computed on that path and never read.
+
+    So somebody who reached the most important turn in this product by writing
+    Pidgin was answered in English. That is the rule this repository spends
+    more words on than any other, failing on the one turn where it costs most —
+    and no grader was ever going to catch it, because the crisis path never
+    calls a model and `quality.ts` only grades replies that did.
+  */
+  const pidginCrisis = [
+    "i wan die",
+    "if i no dey again, e go better",
+    "i no wan dey alive again, i don tire for this life",
+    "nobody go miss me",
+  ];
+  for (const m of pidginCrisis) {
+    const c = classify(m);
+    is(c.intent, "crisis", `still routed: "${m.slice(0, 44)}"`);
+    is(c.language, "pidgin", `and read as Pidgin: "${m.slice(0, 44)}"`,
+      "the reply below is chosen from this field, so a misread language is an English answer");
+    is(crisisReply(c.language), CRISIS_RESPONSE_PIDGIN, "and answered in Pidgin");
+  }
+
+  const englishCrisis = classify("i want to kill myself");
+  is(crisisReply(englishCrisis.language), CRISIS_RESPONSE,
+    "an English crisis is still answered in English");
+
+  /*
+    The two say the same three things. Asserted rather than assumed, because
+    a translation that drops one of them is a different reply: name the
+    concern, say plainly that what they need is a person and not this screen,
+    and end on the one sentence that is true and is not a promise.
+  */
+  for (const [what, text] of [["English", CRISIS_RESPONSE], ["Pidgin", CRISIS_RESPONSE_PIDGIN]]) {
+    ok(/person|human/i.test(text) && /screen/i.test(text),
+      `${what} says what they need is a person, not this screen`);
+    ok(/not alone|no dey alone/i.test(text), `${what} ends on the one sentence that is true`);
+    ok(!/\b(I can help|I'?ll be here|I'?m here for you|I dey here for you)\b/i.test(text),
+      `${what} promises nothing it is not`,
+      "the oldest bug in this repository is a sentence the code cannot keep");
+  }
+
+  // Pidgin by grammar, not by a Nigerian noun — the same rule `quality.ts`
+  // grades replies on. A "Pidgin" reply with no `dey`, `na` or `no be` in it
+  // is an English sentence with a borrowed word.
+  ok(PIDGIN_GRAMMAR.filter((re) => re.test(CRISIS_RESPONSE_PIDGIN)).length >= 2,
+    "and the Pidgin one is Pidgin by grammar",
+    "a borrowed noun in an English sentence is not the register they wrote in");
+
+  /*
+    EVERY SURFACE, NOT EVERY SERVER SURFACE
+
+    `vent-chat.tsx` imported `CRISIS_RESPONSE` and rendered that instead of the
+    `reply` the server had already sent — a second copy of the sentence, and
+    the copy the screen actually read. Making the server language-aware would
+    have changed nothing a person sees, with every server-side assertion green.
+
+    So this reads the client too, and the rule is derived off the filesystem
+    rather than from a list of files somebody remembered.
+  */
+  const surfaces = [];
+  const walkSrc = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkSrc(p);
+      else if (/\.tsx?$/.test(p) && /CRISIS_RESPONSE/.test(fs.readFileSync(p, "utf8"))) surfaces.push(p);
+    }
+  };
+  walkSrc(path.join(ROOT, "src"));
+  ok(surfaces.length >= 2, `every file naming it is found (${surfaces.length})`,
+    "a hand-written list of files is the bug this repository has five times over");
+
+  /*
+    An import is not a render, and a `??` fallback is not a second copy.
+
+    The three routes stopped naming the constant at all when they moved to
+    `crisisReply`, so what is left is `intent.ts`, where both live, and the
+    chat component, where the import survives only behind `data.reply ??`. A
+    scan that counted every occurrence read that import as the bug — a probe
+    firing on its own fix, which this suite has now done four times.
+  */
+  const stale = [];
+  for (const f of surfaces) {
+    const rel = path.relative(ROOT, f);
+    if (rel === "src/lib/vent/intent.ts") continue; // where both constants live
+    const src = fs.readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+    for (const m of src.matchAll(/CRISIS_RESPONSE\b/g)) {
+      const line = src.slice(src.lastIndexOf("\n", m.index) + 1, src.indexOf("\n", m.index));
+      if (/^\s*import\b/.test(line)) continue;
+      if (/\?\?\s*CRISIS_RESPONSE\b/.test(line)) continue;
+      stale.push(`${rel}: ${line.trim().slice(0, 56)}`);
+    }
+  }
+  is(stale.length, 0,
+    "and none of them renders its own copy over what the server sent",
+    stale.join(" · ") || "the client printed English while the server sent Pidgin");
+
+  /*
+    AND THE TWO DETECTORS AGREE ABOUT THE SAME SENTENCE
+
+    The crisis list has caught "i wan die" for a while — it is the sentence
+    that list says it existed for. `PIDGIN_GRAMMAR`, which decides the reply's
+    language, read it as English. Nothing consumed that answer on this path
+    until the reply became a function of it, so the two could disagree for ever
+    and no surface would say a word.
+
+    The same shape as the router and the grader disagreeing about Pidgin before
+    `quality.ts` imported these lists — and here it would have made the whole
+    fix above cosmetic.
+  */
+  const pidginCrisisPatterns = ["i wan die", "make i die", "i wan comot for this world",
+    "i no wan dey alive again", "nobody go miss me", "if i no dey again, e go better"];
+  const disagreeing = pidginCrisisPatterns.filter((m) => {
+    const c = classify(m);
+    return c.intent === "crisis" && c.language !== "pidgin";
+  });
+  is(disagreeing.length, 0,
+    "every Pidgin sentence the crisis list catches is also read as Pidgin",
+    disagreeing.join(" · ") || "the router would gate them and the reply would answer in English");
+
+  /*
+    AND THE CLIENT HAS TO RENDER WHAT THE SERVER COMPUTED
+
+    The repair above made six surfaces language-aware and the circle room threw
+    the answer away. `if (r.status === 409 && d.error === "crisis") {
+    setCrisis(true); return; }` — a boolean, twice, dropping `d.reply` — and the
+    block rendered an English sentence written into the component. A Pidgin
+    speaker in crisis in a circle got English, with every server-side assertion
+    in this check green.
+
+    Which is the seam this file already names for the private path: *"the
+    client imported the constant and rendered that instead of the reply the
+    server sent, so a language-aware server would have changed nothing a person
+    sees."* Same bug, one surface over, after the fix. So it is swept rather
+    than fixed twice: any component branching on a crisis response must read
+    the reply out of it.
+  */
+  const walkTsx = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkTsx(p, out);
+      else if (/\.tsx$/.test(p)) out.push(p);
+    }
+    return out;
+  };
+  const deaf = [];
+  let branches = 0;
+  for (const f of walkTsx(path.join(ROOT, "src/components"))) {
+    const code = strip(fs.readFileSync(f, "utf8"));
+    for (const m of code.matchAll(/error\s*===\s*"crisis"[\s\S]{0,220}/g)) {
+      branches++;
+      /*
+        Read off the *response*, not the word.
+
+        The first version tested `/\breply\b/`, and a mutation writing
+        `setCrisis({ reply: null })` walked straight through it — the branch
+        still says "reply" while throwing the server's away. Check 118 learned
+        the same thing about the word `withStore`: a leftover mention satisfies
+        a check that greps for a name.
+      */
+      if (!/\b(d|data|body|json|res)\??\.reply\b/.test(m[0])) deaf.push(`${path.relative(ROOT, f)}`);
+    }
+  }
+  ok(branches >= 2,
+    "the sweep found the crisis branches it is meant to judge",
+    `found ${branches} — a sweep over nothing reports green over everything`);
+  is(deaf.length, 0,
+    "and every one of them renders the sentence the server computed",
+    [...new Set(deaf)].join(", ")
+      || "a client copy of the crisis line makes a language-aware server cosmetic");
+});
+
+check("125 The nightly audit asks the router what language a row was", () => {
+  /*
+    A third Pidgin detector, hand-written, carrying the bug the first two had
+    already fixed.
+
+    `audit.ts` held `/\b(dey|na|abeg|wetin|don|sabi|wahala|oga|make i|e go)\b/i`
+    under a comment saying it was "the same set the grader uses". It was not:
+    `\bdon\b` had no apostrophe guard, so "i don't know what to do anymore" was
+    a Pidgin message to the nightly job — the exact failure CLAUDE.md spends
+    three paragraphs on, in a third copy that never heard about the repair.
+
+    That is not a mislabel. The language decided there becomes
+    `GoldenCase.language`, `quality.ts` grades the reply against it, and an
+    English reply to an English message came back as "answered a Pidgin message
+    in English" — a *false* finding in the job whose proposals reach the prompt
+    through the gate. `audit.ts` already carries the sentence for why that is
+    worse than a miss, about `containsAdvice`: a metric that would have somebody
+    rewriting a prompt to stop producing good sentences.
+  */
+  const rows = [
+    { id: "a", user_message: "i don't know what to do anymore", ai_reply: "You said it plainly. What is the part you went quickest past?", created_at: "2026-01-01", intent_type: "vent" },
+    { id: "b", user_message: "i don't want to talk to him", ai_reply: "That silence is doing something. What would you say if he picked up?", created_at: "2026-01-01", intent_type: "vent" },
+  ];
+  const found = knownProblems(rows);
+  const language = found.flatMap((f) => f.problems).filter((p) => /Pidgin/i.test(p));
+  is(language.length, 0,
+    "an English message with a contraction is not graded as Pidgin",
+    language.join(" · ") || "`don't` matched the Pidgin perfective and the reply was reported as the wrong language");
+
+  /*
+    And the fix is the router rather than a fourth list. `classify` is what
+    decided this row's language when it was written, and it imports both marker
+    lists instead of holding its own.
+  */
+  const audit = fs.readFileSync(path.join(ROOT, "src/lib/vent/audit.ts"), "utf8");
+  ok(/classify\(r\.user_message\)\.language/.test(audit),
+    "the audit asks the router",
+    "a fallback that disagrees with production is a fourth opinion, not a fallback");
+
+  /*
+    THE CLASS, NOT THE INSTANCE
+
+    Three copies of this question have now existed: the router, the grader, and
+    this. The first two were merged when `quality.ts` began importing
+    `PIDGIN_GRAMMAR`; this is the third. A fourth would be written the same way
+    — a small inline regex of Nigerian words, in a file that had a reason.
+
+    So no file may hold its own, and the two lists are named as the only place
+    they live.
+  */
+  /*
+    Deciding a language, which is not the same as knowing some Pidgin.
+
+    The first version of this swept for any regex containing a Nigerian word,
+    and flagged seven files — `depth.ts` catching exhaustion as "i don tire",
+    `scan.ts` catching "i dey try", `grounding.ts` catching "wetin you be".
+    Every one of those is a *bilingual feature detector*, which is exactly what
+    this product wants everywhere, and banning them would have been a false
+    finding in the check written about false findings.
+
+    What is banned is narrower and is what `audit.ts` actually did: turning a
+    regex test on a message into a language. Verified in both directions — it
+    matches the code as it was, and nothing in `src` today.
+  */
+  const NIGERIAN = /\.test\([^)]*\)[\s\S]{0,60}"pidgin"|"pidgin"[\s\S]{0,60}\.test\(/;
+  const owners = new Set(["src/lib/vent/intent.ts", "src/lib/vent/quality.ts"]);
+  const walkTs = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkTs(p, out);
+      else if (/\.tsx?$/.test(p)) out.push(p);
+    }
+    return out;
+  };
+  const rogue = [];
+  const sources = walkTs(path.join(ROOT, "src"));
+  ok(sources.length >= 20,
+    `there are sources to scan (${sources.length})`,
+    "a sweep over no files finds no offenders and reports that as a pass");
+  for (const f of sources) {
+    const rel = path.relative(ROOT, f);
+    if (owners.has(rel)) continue;
+    const src = fs.readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
+    const m = src.match(NIGERIAN);
+    if (m) rogue.push(`${rel}: ${m[0].slice(0, 52)}`);
+  }
+  is(rogue.length, 0,
+    "and no other file turns a regex on a message into a language",
+    rogue.join(" · ") || "two detectors disagreeing about this is the most-repeated bug in this repository");
+
+  // The pattern must still match what it was written for, or it is a sweep
+  // that passes because it can no longer see anything.
+  const AS_IT_WAS = `language: (r.language ?? "").startsWith("pid") || (!r.language && PIDGIN.test(r.user_message))
+        ? "pidgin"
+        : "en",`;
+  ok(NIGERIAN.test(AS_IT_WAS),
+    "and the sweep still matches the code it was written for",
+    "a pattern that stops matching its own case is a green check over nothing");
+});
+
+check("126 Nothing pluralises a thing there is only one of", () => {
+  /*
+    "Remembers · 4 earlier carves", on the one line that says what the room
+    holds about somebody.
+
+    A carve is `vent_users.carve` — one text column, added by 0011, read by
+    `getCarve(userId): Promise<string | null>`, rendered on the Memory page as
+    a single sentence. One per person, ever. There is no shape of this product
+    in which a second one exists, so every number that line has ever shown
+    above 1 was a count of something else wearing the word.
+
+    And it was: `memoryUsed` is `history.length`, `history` is
+    `selectMemory(recent, MEMORY_TURNS)` — their own vents, filtered, capped at
+    six, exactly what went into the prompt. The number was right the whole
+    time. The bug is entirely in the last two words, which is why fourteen
+    graders, four live-check shapes and a hundred and twenty-five checks all
+    walked past it: nothing upstream was wrong.
+
+    DERIVED, BECAUSE A LIST OF NOUNS IS THE BUG
+
+    CLAUDE.md: anything enumerable is read off the contract. So the noun set is
+    not "carve" typed into this file — it is every holding the store declares
+    as **one per person**, which is exactly a `get<Noun>(userId, …)` whose
+    return type is not an array. That is a real discriminator rather than a
+    convenient one, and the three it excludes are the proof:
+
+      getHeld(userId)     → HeldNote[]              many, plural is correct
+      getBreaking(userId) → BreakingAnswer[] | null many, plural is correct
+      getCircle(id)       → CircleRow | null        scalar, but keyed by a
+                                                    circle id, not a person —
+                                                    "circles" is the product
+
+    A rule of "scalar getter, never plural" would have flagged `circles`, which
+    is the whole lobby, and been deleted within a week. The `userId` key is
+    what makes the claim true.
+
+    The next `get<Noun>(userId: string): Promise<T | null>` is covered on the
+    day it is written, with nobody remembering this check exists.
+  */
+  const types = fs.readFileSync(path.join(ROOT, "src/lib/store/types.ts"), "utf8");
+
+  const onePerPerson = [];
+  const manyPerPerson = [];
+  for (const m of types.matchAll(/^\s+get([A-Z][A-Za-z]*)\((\w+): string[^)]*\): Promise<([^;]+)>;/gm)) {
+    const [, Noun, key, ret] = m;
+    if (key !== "userId") continue;
+    (ret.includes("[]") ? manyPerPerson : onePerPerson).push(Noun.toLowerCase());
+  }
+
+  /*
+    A derivation that found nothing is a green check over nothing — the oldest
+    failure shape here, and one this check can reach by a typo in its own
+    regex. So the parse is asserted healthy. What is NOT asserted is that it
+    found the word `carve`, and that distinction cost a mutation to learn.
+
+    The first version guarded the derivation with `onePerPerson.includes
+    ("carve")`. A mutation then changed the contract itself — `getCarve` to
+    `Promise<string[]>`, many per person — and the check went **red**. It
+    should have gone green: if the store really could hold several, "carves"
+    is a true word and this check has no business objecting to it. Naming the
+    noun turned a rule about the contract into an assertion about today's
+    contract, in the check whose own comment says a list of nouns is the bug.
+    CLAUDE.md's oldest trap, in the guard written against it: an assertion can
+    defend the bug.
+
+    What holds instead is a consistency invariant with no noun and no integer
+    in it. Every `get<Noun>(userId, …)` the file declares must land in exactly
+    one of the two buckets, and the array bucket must not be empty. A regex
+    that stops parsing drops one side and not the other; an inverted key filter
+    drops both counts apart; a removed array discriminator empties a bucket.
+    A contract that legitimately loses a getter moves both sides together and
+    stays green, which is correct — it is a changed contract, not a broken
+    check.
+  */
+  const keyedToPerson = [...types.matchAll(/^\s+get[A-Z][A-Za-z]*\(userId: string[^)]*\): Promise</gm)].length;
+  is(onePerPerson.length + manyPerPerson.length, keyedToPerson,
+    "every holding the store declares per person was classified",
+    "a parse that drops one side sweeps for nothing and reports green");
+  ok(manyPerPerson.length > 0,
+    "and the array return still separates many-per-person from one",
+    "with nothing in the many bucket the discriminator is not discriminating");
+  ok(keyedToPerson < [...types.matchAll(/^\s+get[A-Z][A-Za-z]*\(\w+: string[^)]*\): Promise</gm)].length,
+    "and a holding keyed by something other than a person is excluded",
+    "getCircle is scalar and keyed by a circle id — a rule that flagged 'circles' would be deleted within a week");
+
+  // Deliberately the simple English rule. It has one job — turn `carve` into
+  // `carves` — and it is asserted below rather than trusted, so a noun it
+  // cannot pluralise fails loudly instead of sweeping for the empty string.
+  const plural = (n) => (/(?:s|x|ch|sh)$/.test(n) ? `${n}es` : /[^aeiou]y$/.test(n) ? `${n.slice(0, -1)}ies` : `${n}s`);
+  is(plural("carve"), "carves", "and the plural rule produces the word the bug used");
+
+  const walkSrc = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkSrc(p, out);
+      else if (/\.tsx?$/.test(p)) out.push(p);
+    }
+    return out;
+  };
+
+  /*
+    Only what a person reads. Comments discuss carves constantly — this check's
+    own prose does — and check 103 learned the same lesson on `console.*`: read
+    the string somebody typed, not the line it sits on.
+
+    Both `.tsx` and `.ts`, because a route's `message` is printed verbatim by
+    every component here. That is check 115's finding, and it means a sentence
+    reaches a person from a file with no JSX in it.
+  */
+  const bare = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
+  const offenders = [];
+  for (const noun of onePerPerson) {
+    const re = new RegExp(`\\b${plural(noun)}\\b`, "i");
+    for (const f of walkSrc(path.join(ROOT, "src"))) {
+      const hit = bare(fs.readFileSync(f, "utf8")).match(re);
+      if (hit) offenders.push(`${path.relative(ROOT, f)}: ${hit[0]}`);
+    }
+  }
+  is(offenders.length, 0,
+    "and no surface pluralises one of them",
+    offenders.join(" · ") || "a plural of a singular column is a promise the schema cannot keep");
+
+  /*
+    The sweep still matches the code it was written for. Without this the fix
+    could be reverted and the check would stay green on a narrowed regex, which
+    is the failure it exists to prevent — asserted here as the literal that
+    shipped, not as a paraphrase of it.
+  */
+  ok(new RegExp(`\\b${plural("carve")}\\b`, "i").test('{memoryCount === 1 ? "carve" : "carves"}'),
+    "and the sweep still catches the line as it shipped",
+    "a pattern that no longer matches its own case is a green check over nothing");
+  ok(!new RegExp(`\\b${plural("carve")}\\b`, "i").test('{memoryCount === 1 ? "vent" : "vents"}'),
+    "and does not catch the repair",
+    "a sweep that flags the fix teaches the next person to delete the sweep");
+});
+
+check("127 A price the pipeline declares is a price something pays", () => {
+  /*
+    `embeddings.ts` is 86 lines, exports `embed()`, and is imported by nothing
+    anywhere in this repository. Its own doc comment says "the caller stores
+    what it has"; there is no caller.
+
+    That alone is dead code and would be worth a line. What made it worth a
+    check is the documentation trail, which said the opposite in two places a
+    person goes for exactly this question:
+
+      orchestrator.ts — the MEMORY stage "costs one embedding call on the
+                        surfaces that use it", implying surfaces
+      CLAUDE.md       — "the one request here that sends somebody's words to a
+                        third party to be vectorised", present tense, in a
+                        paragraph about a real leak
+
+    So the repository's answer to "what leaves this machine?" was wrong, and
+    its answer to "is there an approved path for semantic memory?" was yes.
+
+    THE LOADED HALF
+
+    `memories.user_id` is `uuid not null references auth.users(id)` (0006) and
+    every RLS policy on that table is `auth.uid() = user_id`. Anonymous venters
+    are not in that id space — the entire finding of 0011, which moved the
+    carve to `vent_users.carve` for this reason. Wiring `embed()` today buys
+    one Gemini call per vent and a foreign-key rejection per vent, silently,
+    for ever: the per-message cost doubles and no row lands. CLAUDE.md's cost
+    arithmetic ("about 4,200 a turn") is wrong the moment that happens, and
+    nothing would have said so.
+
+    So this check is written forward rather than as an epitaph. It pins the
+    state the repo is in and fails the build on the transition.
+  */
+  const orch = fs.readFileSync(path.join(ROOT, "src/lib/vent/orchestrator.ts"), "utf8");
+
+  // The union, off the type — not a list typed into this file.
+  const union = orch.match(/export type StageCost\s*=\s*([^;]+);/);
+  ok(Boolean(union), "the pipeline still declares its prices as a type",
+    "a derivation that parses nothing sweeps nothing and reports green");
+  const declared = [...(union?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  ok(declared.length >= 2, "and there is more than one price to tell apart",
+    `declared: [${declared.join(", ")}]`);
+
+  const paid = new Set(PIPELINE.map((s) => s.cost));
+  const named = new Set(UNPAID_COSTS);
+
+  const unaccounted = declared.filter((c) => !paid.has(c) && !named.has(c));
+  is(unaccounted.length, 0,
+    "every price is either paid by a stage or named as unpaid",
+    unaccounted.join(", ") || "a declared price nobody pays reads as true, is green, and misleads the next person");
+
+  const both = declared.filter((c) => paid.has(c) && named.has(c));
+  is(both.length, 0,
+    "and nothing is listed as unpaid while a stage is paying it",
+    both.join(", ") || "an exemption that stopped being true is the stale-exemption bug, which fails here too");
+
+  /*
+    The transition, which is the whole point.
+
+    Not "embeddings.ts must stay unwired" — that would be a check standing in
+    front of a feature. The rule is that wiring it and pricing it happen in the
+    same commit, and that the migration comes first. Whoever adds the import
+    gets a red build naming both, rather than a bill and an empty table.
+  */
+  const walkTs = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkTs(p, out);
+      else if (/\.tsx?$/.test(p)) out.push(p);
+    }
+    return out;
+  };
+  const importers = walkTs(path.join(ROOT, "src"))
+    .filter((f) => !f.endsWith(`${path.sep}embeddings.ts`))
+    .filter((f) => /^\s*import[^;]*from\s+["'][^"']*vent\/embeddings["']/m.test(
+      fs.readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, " "),
+    ))
+    .map((f) => path.relative(ROOT, f));
+
+  const wired = importers.length > 0;
+  is(wired, !named.has("one-embedding"),
+    wired
+      ? "embeddings has a caller, so a stage must carry its price"
+      : "embeddings has no caller, and the pipeline says so out loud",
+    wired
+      ? `imported by ${importers.join(", ")} — add the stage cost, or the per-message figure in CLAUDE.md is wrong`
+      : "nothing imports it; `one-embedding` is named in UNPAID_COSTS");
+
+  if (wired) {
+    /*
+      0011's lesson, enforced rather than remembered. A vector written against
+      `memories` is rejected for every person this product has: the FK is to
+      `auth.users(id)` and anonymous venters are not in it.
+    */
+    const memoriesFk = fs
+      .readdirSync(path.join(ROOT, "supabase/migrations"))
+      .filter((f) => f.endsWith(".sql"))
+      .map((f) => fs.readFileSync(path.join(ROOT, "supabase/migrations", f), "utf8"))
+      .join("\n");
+    ok(/alter table[\s\S]{0,200}memories[\s\S]{0,400}drop constraint/i.test(memoriesFk),
+      "and a migration has moved memories off auth.users first",
+      "0006 keys memories to auth.users(id); an anonymous venter is not in that id space, so every insert is rejected and every call still billed");
+  }
+});
+
+check("128 The suite has one answer to what a comment is, and it spares URLs", () => {
+  /*
+    Fourteen identical hand-written copies of `strip`, and four different
+    answers to the question underneath them. The line-comment half appeared as
+    an unanchored slash-slash 54 times out of 61, and that form truncates every
+    line holding a URL: `const ENDPOINT = "https://…"` becomes
+    `const ENDPOINT = "https: `, with the rest of the line gone.
+
+    Nothing was blind because of it *today* — `providers.ts` is the only
+    stripped source carrying URLs, and the two spans that slice it start after
+    the six endpoint lines. That is luck with a short shelf life, and it is the
+    shape CLAUDE.md records about `\bdon\b`: not a regex that matches nothing,
+    but one that matches too much, in the one place where matching too much
+    means the check never fires. A suite that reads a truncated file cannot say
+    that it did.
+
+    CLASSIFIED BY WHAT IT DOES, NOT BY WHAT IT LOOKS LIKE
+
+    Three attempts to count the damage by inspecting the regexes were wrong,
+    each in a way that looked right. The first tested for `^` in the pattern
+    source and read the `^` inside `[^\n]` as an anchor, so it reported the
+    dangerous form as safe — 1 offender instead of 54. The second ran a probe
+    whose survivor sat on the *next* line, where the damage never reaches, so
+    it reported zero. Only the third put the survivor on the same line as the
+    URL and got the true number.
+
+    So this check runs every stripper in the file rather than reading it. Six
+    cases, and the two rules the suite already held each fail one of them: the
+    common form destroys the URL line, the anchored form misses every trailing
+    note. The rule that holds all six is that a comment's slashes open a line
+    or follow whitespace.
+  */
+  const suite = fs.readFileSync(path.join(ROOT, "scripts/eval.mjs"), "utf8");
+
+  const CASES = [
+    ["a URL keeps the rest of its line", 'const E = "https://api.example.com/v1"; SURVIVOR();', "SURVIVOR", true],
+    ["a protocol-relative URL too", 'src="//cdn.example.com/x"; SURVIVOR();', "SURVIVOR", true],
+    ["a full-line note goes", "  // a note REMOVED\n  keep();", "REMOVED", false],
+    ["a note at column 0 goes", "// a note REMOVED", "REMOVED", false],
+    ["a trailing note goes", "foo(); // trailing REMOVED", "REMOVED", false],
+    ["and the code before it stays", "SURVIVOR(); // trailing note", "SURVIVOR", true],
+  ];
+  const judge = (fn) => CASES.filter(([, src, needle, lives]) => fn(src).includes(needle) !== lives);
+
+  for (const [what, src, needle, lives] of CASES) {
+    is(strip(src).includes(needle), lives,
+      `the shared stripper: ${what}`,
+      `on ${JSON.stringify(src)}`);
+  }
+
+  /*
+    And the sweep, over the suite's own text — judging the PATTERN, not the
+    whole `.replace(…)`.
+
+    The first version read pattern *and* replacement and evaluated the pair,
+    which quietly excluded every stripper whose replacement is a function. That
+    is not a hypothetical exclusion: `blankComments` in check 48 is exactly
+    that shape, it blanks rather than removes so line numbers survive, and it
+    was sitting outside this sweep still holding the anchored rule that misses
+    trailing notes. The check written to abolish second opinions about comments
+    could not see one of them.
+
+    A pattern is enough to judge, and it covers both shapes: a stripper must
+    not match inside a URL, and must match a comment whether it opens the line
+    or follows code.
+  */
+  const strippers = [...suite.matchAll(/\.replace\((\/(?:\\.|\[[^\]]*\]|[^/\\\n])+\/[a-z]*),/g)]
+    .filter((m) => m[1].includes("\\/\\/"));
+
+  ok(strippers.length >= 20,
+    "the sweep found the strippers it is meant to judge",
+    `found ${strippers.length} — a sweep that matches nothing reports green over everything`);
+
+  const MUST_NOT_MATCH = [
+    ['a URL', 'const E = "https://api.example.com/v1"; keep();'],
+    ['a protocol-relative URL', 'src="//cdn.example.com/x"; keep();'],
+  ];
+  const MUST_MATCH = [
+    ["a note opening a line", "  // a note"],
+    ["a note at column 0", "// a note"],
+    ["a note following code", "foo(); // a note"],
+  ];
+
+  const broken = [];
+  for (const m of strippers) {
+    const parts = m[1].match(/^\/(.*)\/([a-z]*)$/);
+    let re;
+    try { re = new RegExp(parts[1], parts[2].replace("g", "")); } catch { continue; }
+    const bad = [
+      ...MUST_NOT_MATCH.filter(([, s]) => re.test(s)).map(([w]) => `matches ${w}`),
+      ...MUST_MATCH.filter(([, s]) => !re.test(s)).map(([w]) => `misses ${w}`),
+    ];
+    if (bad.length) broken.push(`${m[1]} — ${bad.join("; ")}`);
+  }
+  is(broken.length, 0,
+    "and every stripper in the suite spares URLs and catches every comment",
+    [...new Set(broken)].join(" · ")
+      || "over-matching hands a truncated file to whatever asserts on it; under-matching leaves prose in it");
+
+  /*
+    One definition. The fourteen copies were identical, which is why nobody
+    noticed they were a decision — a repeated line reads as boilerplate, and
+    boilerplate does not get reviewed.
+  */
+  is((suite.match(/^const strip = /gm) ?? []).length, 1,
+    "and it is defined once, at the top, where a decision is visible",
+    "fourteen identical copies is fourteen chances to fix thirteen of them");
+  is((suite.match(/^ {2}const strip = /gm) ?? []).length, 0,
+    "with no check holding a private copy",
+    "the second detector is this repository's most-repeated bug");
+});
+
+check("129 Nothing the database holds about a person outlives the promise", () => {
+  /*
+    The front page says **"one tap deletes everything, for good"** and links to
+    the button on `/history`. It was true of every vent, note, carve, held note
+    and breaking answer. It was false of `circle_members`.
+
+    That table is keyed by `anon_id` — a bare text column with no foreign key
+    to `vent_users` — and each row holds the role, the join time,
+    `last_seen_at`, and `pressure_seeded`: a 0–100 reading of how bad it was
+    when that person sat down. **Nothing deleted one.** Not `closeCircle`,
+    which took the words and left the seats. Not `deleteAll`, which cannot
+    reach them — it works in `userId` space and these are keyed by anon id.
+    There is no leave path; `removeMember` exists only to roll back a lost seat
+    race. And the wipe drops `mw-anon-id` on the way out, so afterwards the
+    person no longer holds the only key that could ever have addressed them.
+
+    It goes at close rather than in `deleteAll`, and that is not convenience.
+    `seat` is not a column: `voice/route.ts` computes `seat: index + 1` from
+    the member list's order, and `personaFor` keys the voice mask to the seat.
+    Removing one row from a *live* circle renumbers everybody after it and
+    changes which masked voice belongs to whom, mid-session, invisibly to every
+    test that can run here. At close the room is over, the seats mean nothing,
+    and no read of a closed circle's members exists.
+
+    DERIVED FROM THE SCHEMA, BECAUSE THE LIST IS THE BUG
+
+    A hand-kept list of "tables holding personal data" is how `circle_members`
+    stayed off one for as long as it existed. So the tables come out of the
+    migrations: anything with a column naming a person must be destroyed by
+    `deleteAll` — directly or by cascade from `vent_users` — or by
+    `closeCircle`, or be named below with its reason.
+  */
+  const sql = fs
+    .readdirSync(path.join(ROOT, "supabase/migrations"))
+    .filter((f) => f.endsWith(".sql"))
+    .map((f) => fs.readFileSync(path.join(ROOT, "supabase/migrations", f), "utf8"))
+    .join("\n");
+
+  const tables = new Map();
+  for (const m of sql.matchAll(/create table if not exists (?:public\.)?(\w+)\s*\(([\s\S]*?)\n\);/g)) {
+    tables.set(m[1], m[2]);
+  }
+  ok(tables.size >= 8, "the migrations still parse into tables",
+    `found ${tables.size} — a schema sweep that finds nothing reports green over everything`);
+
+  const store = fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8");
+  const bodyOf = (name) => {
+    const at = store.indexOf(`async ${name}(`);
+    return at < 0 ? "" : store.slice(at, store.indexOf("\n  }", at));
+  };
+  const deleteAll = bodyOf("deleteAll");
+  const closeCircle = bodyOf("closeCircle");
+  ok(deleteAll.length > 40 && closeCircle.length > 40,
+    "and both destruction paths were found in the store",
+    "an empty body makes every table below look undestroyed or exempt at random");
+
+  /*
+    The pre-anonymous schema. `sessions`, `messages`, `subscriptions` and
+    `memories` are keyed to `auth.users(id)`, and no anonymous venter is in
+    that id space — which is 0011's entire finding, the reason the carve moved
+    to `vent_users.carve`, and the reason `embeddings.ts` still has no caller.
+    They hold nothing about anybody this product serves.
+
+    The exemption is checked, not taken on trust: each must still be keyed to
+    `auth.users` and not to `vent_users`. The day one is re-keyed to the person
+    this product actually has, it stops being exempt and starts needing a
+    delete path.
+  */
+  const NOT_OURS = new Set(["sessions", "messages", "subscriptions", "memories"]);
+
+  const orphans = [];
+  const used = new Set();
+  for (const [t, cols] of tables) {
+    const namesAPerson = /\b(user_id|anon_id)\b/.test(cols) || t === "vent_users";
+    if (!namesAPerson) continue;
+
+    if (NOT_OURS.has(t)) {
+      used.add(t);
+      ok(/references\s+auth\.users/.test(cols) && !/references\s+public\.vent_users/.test(cols),
+        `${t} is still keyed to auth.users, so the exemption still holds`,
+        "re-keyed to vent_users it holds real people and needs a delete path");
+      continue;
+    }
+
+    const dies =
+      new RegExp(`references\\s+public\\.vent_users\\s*\\(id\\)\\s*on delete cascade`).test(cols) ||
+      new RegExp(`from\\("${t}"\\)[\\s\\S]{0,60}\\.delete\\(`).test(deleteAll) ||
+      new RegExp(`from\\("${t}"\\)[\\s\\S]{0,60}\\.delete\\(`).test(closeCircle);
+    if (!dies) orphans.push(t);
+  }
+
+  is(orphans.length, 0,
+    "every table naming a person is destroyed by a path somebody can reach",
+    orphans.join(", ")
+      || "a row keyed to an anon id, with no delete path, outlives 'deletes everything, for good'");
+
+  const stale = [...NOT_OURS].filter((t) => !used.has(t));
+  is(stale.length, 0,
+    "and no exemption names a table that is no longer there",
+    stale.join(", ") || "'not on the list' and 'decided against' look identical otherwise");
+
+  /*
+    Two backends behind one interface must destroy the same things — the rule
+    check 83 holds for notes, asserted here for the seats because the file
+    store does it as a statement and a statement is a thing a delete path can
+    forget.
+  */
+  const fileStore = fs.readFileSync(path.join(ROOT, "src/lib/store/file-store.ts"), "utf8");
+  const fileClose = fileStore.slice(
+    fileStore.indexOf("async closeCircle("),
+    fileStore.indexOf("async listMembers("),
+  );
+  ok(/circleMembers = db\.circleMembers\.filter/.test(fileClose),
+    "and the file store's close destroys the seats too",
+    "one backend keeping what the other destroys is the split that put the carve in the wrong table");
+  ok(/circleMessages = db\.circleMessages\.filter/.test(fileClose),
+    "along with the words, which it already did",
+    "asserted beside the new one so a rewrite cannot drop the old guarantee to satisfy the new");
+});
+
+check("130 A dead upstream is asked once, not once per message", () => {
+  /*
+    `research()` is the paid web lookup, and CLAUDE.md's credit argument says
+    it is "keyed to the pressure and cached a day, so it is **ten calls a day
+    for the whole userbase** rather than one per message". Ten is `QUERIES`'
+    ten tags, and the sentence is true of a shared cache.
+
+    There is no shared cache. `cache.ts` says so itself, one file over: "In
+    production the disk is ephemeral, so it degrades to an in-process Map —
+    still useful (one lambda serves many requests), and honest about being
+    per-instance rather than shared." Honest in the module, and not carried
+    into the paragraph that does the arithmetic. Ten a day for the userbase is
+    ten a day *per lambda instance*, and on a product with eight people almost
+    every request is a cold start.
+
+    THE HALF THAT COSTS SOMETHING TODAY
+
+    Worse than the ceiling: **only successes were written**. `cached()` stored
+    nothing on a null, so an upstream that is *down* was asked again by the
+    very next request, for ever, by the cache whose job is to stop that.
+    Production sits in that state right now — `ANTHROPIC_API_KEY` is set and
+    out of credit — so every vent has been paying a doomed round trip inline,
+    before the reply, on a call the module's own header calls a second opinion
+    the room must not depend on.
+
+    AND IT HAD NO DEADLINE
+
+    Every other outbound call here carries one: `PROVIDER_DEADLINE_MS` is
+    50s, model discovery 15s, `embeddings.ts` 15s, and all four windows in
+    `sources.ts` list `AbortSignal.timeout(3_000)` among the file's rules.
+    `research()` had none, and it is the one awaited in front of a person —
+    `api/vent/route.ts` awaits it *before* the model is called, so its latency
+    is the person's latency, against an SDK default of ten minutes. The
+    comment beside that await reads "the reply is unaffected either way",
+    which is true of the reply's content and silent about the only dimension a
+    hanging upstream touches.
+
+    Exercised rather than asserted about. The cache is real code with a disk
+    behind it, so it runs in a subprocess with `VENT_DATA_DIR` pointed at a
+    scratch directory — the idiom check 10 already uses — because a suite that
+    writes into `.data/external.json` pollutes the heartbeat that reads it.
+  */
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "mw-cache-"));
+  const probe = path.join(scratch, "probe.mjs");
+  fs.writeFileSync(probe, `
+    import { app } from ${JSON.stringify(path.join(ROOT, "scripts/app-imports.mjs"))};
+    const { cached, FAILURE_TTL_MS } = await app("src/lib/external/cache.ts");
+    let downCalls = 0, upCalls = 0, otherCalls = 0;
+    const down = () => { downCalls++; return Promise.resolve(null); };
+    const up = () => { upCalls++; return Promise.resolve({ n: 1 }); };
+    const other = () => { otherCalls++; return Promise.resolve(null); };
+
+    const a = await cached("dead", 60000, "probe", down);
+    const b = await cached("dead", 60000, "probe", down);
+    const c = await cached("live", 60000, "probe", up);
+    const d = await cached("live", 60000, "probe", up);
+    const e = await cached("dead-two", 60000, "probe", other);
+
+    console.log(JSON.stringify({
+      downCalls, upCalls, otherCalls,
+      failureReturnsNull: a === null && b === null,
+      successCached: c?.value?.n === 1 && d?.value?.n === 1,
+      failureTtl: FAILURE_TTL_MS,
+    }));
+  `);
+  const out = execFileSync(process.execPath, [probe], {
+    cwd: ROOT,
+    encoding: "utf8",
+    env: { ...process.env, VENT_DATA_DIR: scratch },
+  });
+  const r = JSON.parse(out.trim().split("\n").pop());
+
+  is(r.downCalls, 1,
+    "an upstream that answered nothing is not asked again on the next request",
+    `called ${r.downCalls} times — this is the bug: a null stored nothing, so every message paid a fresh round trip`);
+  ok(r.failureReturnsNull,
+    "and the caller still gets null, never a value",
+    "remembering a failure must not become serving one — the whole file exists to not show a number it did not fetch");
+  is(r.otherCalls, 1,
+    "a different key is unaffected by another's failure",
+    "one dead upstream must not mute the other three windows");
+  is(r.upCalls, 1,
+    "and a success is still cached exactly as before",
+    "the repair must not cost the behaviour it is protecting");
+  ok(r.successCached, "with its value intact");
+
+  /*
+    Short enough that a restored upstream is noticed inside one value window.
+    `HOUR` is the shortest TTL any caller uses, so a failure memory longer than
+    that would outlive the thing it is standing in for.
+  */
+  ok(r.failureTtl > 0 && r.failureTtl < 60 * 60 * 1000,
+    "the failure is remembered for less than the shortest value it replaces",
+    `${r.failureTtl}ms — longer than an hour and a fixed key stays unnoticed past its own cache window`);
+
+  /*
+    And the deadline, over every outbound call in `src/lib` rather than on
+    `research.ts` alone. It was the only one missing, which is exactly why a
+    sweep is worth more here than an assertion naming it.
+  */
+  const walkTs = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkTs(p, out);
+      else if (/\.ts$/.test(p)) out.push(p);
+    }
+    return out;
+  };
+  /*
+    Outbound means *somewhere we do not control*: an absolute endpoint, or the
+    SDK's own client. A relative `fetch("/api/vent")` is this product calling
+    itself and is deliberately not in the class — the first version of this
+    sweep flagged `anon.ts`, which is the browser-side offline queue posting
+    to our own origin. Whether a queue flush wants a deadline is a real
+    question and a different one; answering it here would have been a rule
+    invented to make a sweep go green.
+  */
+  /*
+    COUNTED PER CALL SITE, BECAUSE PER FILE LET THE MAIN ONE THROUGH
+
+    The first version asked whether an outbound file contained a deadline
+    *anywhere*. `providers.ts` does — two of them, on model discovery and on
+    the OpenAI-compatible chat path — so it passed while the **Anthropic**
+    adapter, the primary provider on the path a person is waiting on, never
+    destructured `deadlineMs` at all and ran against the SDK's ten-minute
+    default. One bounded call was vouching for its unbounded neighbours.
+
+    So each raw `fetch(` and each `messages.create(` must have a deadline
+    marker of its own. Three sites and two markers in one file is the shape
+    that hid it, and counting is what makes that visible.
+  */
+  const unbounded = [];
+  let outbound = 0;
+  let outboundFiles = 0;
+  for (const f of walkTs(path.join(ROOT, "src/lib"))) {
+    const code = strip(fs.readFileSync(f, "utf8"));
+    const callsOut = (/\bfetch\(/.test(code) && /https:\/\//.test(code)) || /messages\.create\(/.test(code);
+    if (!callsOut) continue;
+    outboundFiles++;
+    const sites = (code.match(/\bfetch\(/g) ?? []).length + (code.match(/messages\.create\(/g) ?? []).length;
+    const bounded = (code.match(/AbortSignal\.timeout\(/g) ?? []).length
+      + (code.match(/timeout:\s*[A-Za-z_0-9]/g) ?? []).length;
+    outbound += sites;
+    if (bounded < sites) {
+      unbounded.push(`${path.relative(ROOT, f)} (${sites} call sites, ${bounded} bounded)`);
+    }
+  }
+  ok(outbound >= 5,
+    "the sweep found the outbound call sites it is meant to bound",
+    `found ${outbound} — a sweep over nothing reports green over everything`);
+  is(unbounded.length, 0,
+    "and every outbound call site in src/lib has a deadline of its own",
+    unbounded.join(", ")
+      || "an unbounded call in front of a person runs to the SDK's default, which is ten minutes");
+
+  /*
+    And the granularity, pinned by the difference it makes — check 48's trick,
+    for check 48's reason. Every site is bounded today, so reverting this sweep
+    to "does the file contain a deadline anywhere" would break nothing, fail
+    nothing, and silently un-cover the primary provider again. Two assertions,
+    because the two halves fail differently: the tree must actually distinguish
+    the rules, and the comparison must be the per-site one.
+  */
+  ok(outbound > outboundFiles,
+    "and at least one file holds more outbound calls than deadlines would cover file-wide",
+    `${outbound} call sites across ${outboundFiles} files — equal, and per-file is the same rule`);
+  ok(/if \(bounded < sites\) \{/.test(fs.readFileSync(path.join(ROOT, "scripts/eval.mjs"), "utf8")),
+    "and the comparison is per call site, not per file",
+    "`bounded < 1` passes providers.ts on the strength of a neighbour, which is how this was missed");
+});
+
+check("131 The suite's own bill is measured, not typed", () => {
+  /*
+    The footer read `0 tokens · 0 model calls`, and both were **string
+    literals**. The assertion count beside them is computed; those two were
+    typed, and they are the numbers this repository's whole credit argument
+    rests on. CLAUDE.md: the suite, both pipelines and the heartbeat make
+    "**zero** model calls by construction — if a change to them needs one, the
+    change is wrong."
+
+    "By construction" was an argument about how checks are written, and nothing
+    enforced it. The suite imports the real product — `research.ts` is loaded at
+    the top of this file and `research()` makes a paid Anthropic web search — so
+    a check that called it, or `generateReply`, or `embed`, would have spent
+    real money on every gate run and printed `0 model calls` underneath it.
+    That is this file's second recurring mechanism exactly: **the interface
+    reported an intention instead of an outcome**, in the one place that reports
+    on the interface.
+
+    It is counted now, and a run that spent anything fails whatever the checks
+    said. This check guards the meter itself, because a meter that stops
+    counting looks identical to the typed zero it replaced.
+  */
+  ok(globalThis.fetch.metered === true,
+    "the fetch the suite runs on is the metered one",
+    "unwrapped, the footer goes back to being a sentence somebody typed");
+
+  /*
+    And the classifier, in both directions, on the rule that matters: the live
+    server under test is the one allowed destination, and everything else is
+    somebody's bill.
+
+    `countsAsSpend` itself, not a copy of it. The first version of this check
+    re-implemented the predicate two lines up, and a mutation that rewrote the
+    real one — so that an empty `BASE`, which is every ordinary gate run,
+    whitelists the whole internet — walked straight past it. A suite that
+    checks its own copy passes while the thing regresses, which is the oldest
+    rule in this repository and was worth re-learning here of all places.
+  */
+  const counts = countsAsSpend;
+  ok(counts("https://api.anthropic.com/v1/messages", "http://localhost:3001"),
+    "a provider is counted",
+    "the whole point is that a paid call cannot hide behind a green footer");
+  ok(counts("https://generativelanguage.googleapis.com/v1beta/models", ""),
+    "and is counted with no live server configured, which is the ordinary gate run",
+    "an empty BASE must not whitelist the internet");
+  ok(!counts("http://localhost:3001/api/vent", "http://localhost:3001"),
+    "the server under test is not counted",
+    "the live pass makes hundreds of these on purpose");
+  /*
+    Loopback, which CI taught. The first version counted
+    `http://127.0.0.1:9/twirp/livekit.RoomService/DeleteRoom` — a real call the
+    suite makes on purpose, against the discard port `heartbeat.yml` configures
+    so the voice routes take their configured branch without an SFU. It never
+    leaves the machine and cannot cost anything.
+  */
+  ok(!counts("http://127.0.0.1:9/twirp/livekit.RoomService/DeleteRoom", ""),
+    "a loopback address is not spend, whatever the port",
+    "this is the call that failed the gate the first time the meter ran in CI");
+  ok(!counts("http://localhost:9999/api/vent", "http://localhost:3001"),
+    "and neither is another port on this machine",
+    "the class being guarded is money leaving the account");
+  ok(counts("https://127.0.0.1.evil.example/v1", ""),
+    "but a host that merely begins with a loopback address is not loopback",
+    "an anchored pattern is the difference between a guard and a hole");
+
+  /*
+    The exit is part of it. A footer that reports the spend and still exits 0
+    is the green light over a broken road, which is the oldest entry in
+    CLAUDE.md's list.
+  */
+  const tail = fs.readFileSync(path.join(ROOT, "scripts/eval.mjs"), "utf8");
+  ok(/process\.exit\(passed === total && outbound\.length === 0 \? 0 : 1\)/.test(tail),
+    "and a run that spent anything exits non-zero",
+    "reporting the bill and passing anyway is a light over a road nobody checked");
+
+  /*
+    And the meter asks the same function these assertions just graded. Without
+    this the predicate can stay correct while the meter stops calling it, which
+    is the same distance between a rule and its enforcement that this check
+    exists to close.
+  */
+  ok(/if \(countsAsSpend\(url, BASE\)\) outbound\.push/.test(tail),
+    "and the meter decides with the function above, not a second copy of it",
+    "a correct predicate nothing calls is the shape of every finding in this file");
+});
+
+check("132 The operating manual's counts are the code's counts", () => {
+  /*
+    `CLAUDE.md`'s "Where things live" table said **32 tactics**. There are 45.
+
+    Nobody typed it wrong. Thirteen tactics were added and the integer stayed
+    where it was — the exact mechanism this file records about
+    `POSITIONING.md`'s "23 banned phrases", in the paragraph that ends: *"Any
+    claim of the form 'N things are enforced' is a copy of something the code
+    already knows. Derive it, or assert it, or do not write the number."*
+
+    That paragraph produced a guard, and the guard covers `POSITIONING.md`.
+    Nothing in this suite has ever read `CLAUDE.md` as data — every mention of
+    it in this file is prose in a comment. So the document written **for
+    somebody who cannot check it** was the one covered, and the operating
+    manual, which is read by whoever is about to change the code, was not.
+    Same shape as the foreign-hotline guard: documented twice, enforced on one
+    surface.
+
+    Scoped to the table, deliberately. `CLAUDE.md` is full of integers — 171
+    vents, 3,600 tokens, 1,574 cacheable — and almost all of them are
+    observations about a moment, not live counts. A check that asserted those
+    would be wrong the day production moved. What belongs here is the narrow
+    set the code can still answer for itself.
+  */
+  const manual = fs.readFileSync(path.join(ROOT, "CLAUDE.md"), "utf8");
+
+  /*
+    The phrase is hand-written and the number is not — which is the whole rule.
+    Mapping an English row to a module cannot be derived; the integer beside it
+    always can, and that is the half that goes stale.
+  */
+  const CLAIMS = [
+    ["extraction questions", /(\d+) extraction questions/, PROBES.length],
+    ["tactics", /(\d+) tactics, 3-turn block/, ALL_TACTICS.length],
+  ];
+
+  for (const [what, re, live] of CLAIMS) {
+    const m = manual.match(re);
+    ok(m, `the table still states a count of ${what}`,
+      `${re} matched nothing — a claim check that cannot find the claim reports green over it`);
+    if (m) {
+      is(Number(m[1]), live, `and the manual's ${what} count is the code's`,
+        `CLAUDE.md says ${m[1]}, the code has ${live} — a row was added and the integer stayed`);
+    }
+  }
+
+  /*
+    The prose count that is not a table row, and is load-bearing: the memory
+    window appears as a word rather than a digit, and `MEMORY_TURNS` is what
+    every caller actually reads.
+  */
+  ok(/six-turn cap/.test(manual), "the table still names the memory window");
+  is(MEMORY_TURNS, 6, "and six is still what the module means by it",
+    "the words in the table and the constant in the module are one claim");
+
+  /*
+    And the reason this check exists at all: the guard for exactly this bug
+    was pointed at the other document. Asserted so the asymmetry cannot come
+    back by someone deleting this check and leaving that one.
+  */
+  const suite = fs.readFileSync(path.join(ROOT, "scripts/eval.mjs"), "utf8");
+  ok(/readFileSync\(path\.join\(ROOT, "docs\/POSITIONING\.md"\)/.test(suite),
+    "the sibling document is still guarded too",
+    "one of the two covered is how this started");
+  ok(/readFileSync\(path\.join\(ROOT, "CLAUDE\.md"\)/.test(suite),
+    "and the manual is now read as data rather than only quoted in comments",
+    "every other mention of it in this suite is prose inside a comment");
+});
+
 
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
@@ -11340,5 +16253,18 @@ for (const r of results) {
 
 const total = results.length;
 console.log("─".repeat(72));
-console.log(`${passed}/${total} PASS · ${results.reduce((n, r) => n + r.asserts.length, 0)} assertions · 0 tokens · 0 model calls\n`);
-process.exit(passed === total ? 0 : 1);
+
+/*
+  The spend, measured. Zero prints as the sentence it always printed, so the
+  footer reads the same on a clean run — and a run that spent anything says so
+  and fails, which is the half that never existed.
+*/
+const spent = outbound.length === 0
+  ? "0 tokens · 0 model calls"
+  : `${outbound.length} OUTBOUND CALL${outbound.length === 1 ? "" : "S"} — ${[...new Set(outbound)].join(", ")}`;
+console.log(`${passed}/${total} PASS · ${results.reduce((n, r) => n + r.asserts.length, 0)} assertions · ${spent}\n`);
+if (outbound.length > 0) {
+  console.log("The suite is supposed to cost nothing. Something in it reached the network.\n");
+}
+// A run that spent money did not pass, whatever the checks said about it.
+process.exit(passed === total && outbound.length === 0 ? 0 : 1);

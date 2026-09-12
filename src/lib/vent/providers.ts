@@ -32,6 +32,22 @@ export interface ProviderCall {
   messages: Array<{ role: "user" | "assistant"; content: string }>;
   maxTokens: number;
   /**
+   * The leading slice of `system` that never changes, if the caller has one.
+   *
+   * An optimisation with a correctness rule attached: the adapter splits the
+   * system prompt here and marks the first half cacheable, so the halves must
+   * rejoin to exactly the string that would otherwise have been sent. An
+   * adapter that gets a prefix which is not actually a prefix must send one
+   * block and say nothing — a cache miss is free, and a truncated constitution
+   * is a different product answering somebody.
+   *
+   * Optional, and unset everywhere except the vent path. The Carver, the
+   * classifier and the health probe each send a short bespoke system prompt
+   * with nothing stable in it, and a caller that omits this gets exactly the
+   * behaviour it had before the field existed.
+   */
+  cachePrefix?: string;
+  /**
    * How much brain this message earns, from `depthFor` in `./depth`.
    *
    * Reorders the chain rather than swapping models inside a provider: the
@@ -168,10 +184,35 @@ export const MODEL = {
 class ProviderError extends Error {
   status: number;
 
-  constructor(status: number, message: string) {
+  /**
+   * The provider's own words, for classification only, and never on `message`.
+   *
+   * Billing arrives as a 400 whose *text* is the whole diagnosis — "credit
+   * balance is too low" — so `classifyModelError` has to read what came back.
+   * The body cannot simply be dropped. What it must not do is ride on
+   * `.message`, because `.message` is the field everything reaches for: two
+   * console calls log it, and `/api/vent` returned it to the browser inside
+   * `detail`, where `vent-chat.tsx` printed it on screen under the reply.
+   *
+   * So somebody having a bad day was shown up to 300 characters of an
+   * arbitrary third-party error body, from a request that had just carried
+   * their vent, their notes and their carve. Seven providers are in this
+   * chain and not one of them has told us what goes in that string.
+   *
+   * This is the same repair `Verdict.reject` already got one file over, and
+   * the rule it was written under is the one that generalises: **make the
+   * obvious field the safe one.** `.message` is a status and a provider id.
+   * Anything wanting the body has to name `.body` on purpose and answer for
+   * what it does with it — and the only caller that names it is the
+   * classifier, which reads it and throws it away.
+   */
+  body?: string;
+
+  constructor(status: number, message: string, body?: string) {
     super(message);
     this.name = "ProviderError";
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -518,7 +559,9 @@ export function openAiCompatible(
           );
           return attempt(useModel, call, false);
         }
-        throw new ProviderError(r.status, `${r.status} ${body.slice(0, 300)}`);
+        // The status and who said it on `message`; their words on `body`,
+        // which only the classifier reads. See ProviderError.
+        throw new ProviderError(r.status, `${id} answered ${r.status}`, body.slice(0, 300));
       }
 
       let text: string | undefined;
@@ -555,7 +598,7 @@ export function openAiCompatible(
       // "a stub is bad" and means "a long reply cut mid-sentence is fine".
       // The reply that sent somebody looking was fifty-two words. One rule
       // now, in model.ts, asked by both adapters.
-      if (wasCutOff(text, finishReason === "length")) {
+      if (wasCutOff(text, finishReason)) {
         throw new ProviderError(
           502,
           `${id} was cut off before it finished a sentence (${text.length} chars)`,
@@ -592,6 +635,62 @@ export function openAiCompatible(
   };
 }
 
+/**
+ * The smallest prefix worth marking, in characters.
+ *
+ * Anthropic will not cache a block below 1,024 tokens on Sonnet and Opus, or
+ * 2,048 on Haiku — it does not error, it simply does not cache, and the
+ * response comes back with zeroes in the cache fields nobody is reading. So a
+ * short prefix costs a slightly larger request body and buys nothing.
+ *
+ * Four characters to the token is the ratio this repository already uses for
+ * its prompt budget (check 24), and this is the Sonnet floor at that ratio.
+ * Deliberately not the Haiku floor: on Haiku the block is sent, ignored, and
+ * the call is correct anyway. Being wrong here costs nothing in either
+ * direction, which is why it is a constant and not a per-model table.
+ */
+export const MIN_CACHEABLE_CHARS = 4096;
+
+/**
+ * Split a system prompt into a cacheable head and the rest.
+ *
+ * Returns a string when there is nothing to gain, and the two-block form when
+ * there is. Every refusal below is a case where splitting would either change
+ * what the model reads or mark something that is not stable:
+ *
+ * - no prefix given — the ordinary case for every caller but the vent path
+ * - the prefix is not actually a prefix — the caller and the builder have
+ *   drifted apart, and the honest response is to stop optimising, not to send
+ *   a system prompt assembled from a guess
+ * - the prefix is too short to be cached — a bigger body for no discount
+ * - the prefix is the whole prompt — the second block would be empty, which
+ *   this API rejects
+ *
+ * Exported so check 114 can test the split itself. The bug this shape is
+ * written against is the one CLAUDE.md names four times: a probe that cannot
+ * see what it is looking at. A cache that silently never hits looks exactly
+ * like a cache that works, from every surface in this repository — there is no
+ * failing assertion, no log line, and the only difference is on a bill that
+ * arrives a month later. So the logic that decides it is a pure function with
+ * its own assertions, rather than a condition inside a network call.
+ */
+export function systemBlocks(
+  system: string,
+  cachePrefix?: string,
+):
+  | string
+  | Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }> {
+  if (!cachePrefix) return system;
+  if (cachePrefix.length < MIN_CACHEABLE_CHARS) return system;
+  if (!system.startsWith(cachePrefix)) return system;
+  const rest = system.slice(cachePrefix.length);
+  if (rest.length === 0) return system;
+  return [
+    { type: "text", text: cachePrefix, cache_control: { type: "ephemeral" } },
+    { type: "text", text: rest },
+  ];
+}
+
 function anthropicProvider(): Provider {
   const apiKey = env.anthropicApiKey;
   return {
@@ -599,8 +698,23 @@ function anthropicProvider(): Provider {
     model: MODEL.anthropic,
     configured: Boolean(apiKey),
     keyState: keyStateOf("ANTHROPIC_API_KEY", apiKey),
-    async send({ system, messages, maxTokens, onDelta }) {
-      const client = new Anthropic({ apiKey });
+    async send({ system, messages, maxTokens, onDelta, cachePrefix, deadlineMs }) {
+      /*
+        The deadline the rest of the chain already had.
+
+        `deadlineMs` is declared on `ProviderCall` and the OpenAI-compatible
+        adapter honours it — `AbortSignal.timeout(call.deadlineMs ??
+        PROVIDER_DEADLINE_MS)`. This adapter never destructured it. So the
+        *primary* provider, on the path a person is waiting on, ran against the
+        SDK's own default of ten minutes with retries, while model discovery
+        (15s) and every sibling call were bounded.
+
+        Set on the client so both branches below get it: the streaming one and
+        the plain `create`. A per-request option would have covered whichever
+        branch somebody remembered, which is how this file already learned
+        about `wasCutOff` being applied on one path and not the other.
+      */
+      const client = new Anthropic({ apiKey, timeout: deadlineMs ?? PROVIDER_DEADLINE_MS });
       const params = {
         model: MODEL.anthropic,
         max_tokens: maxTokens,
@@ -623,7 +737,21 @@ function anthropicProvider(): Provider {
           from the temperature anyway. It comes from the prompt.
         */
         thinking: { type: "disabled" as const },
-        system,
+        /*
+          One block or two, and the two rejoin to exactly the one.
+
+          The constitution is ~1,574 tokens of the ~2,030 a vent sends before
+          any context is assembled, and it was being re-read and re-billed on
+          every turn because `groundingBlock` — carrying a millisecond ISO
+          timestamp — sat in front of it. `prompt.ts` moved the clock down;
+          this marks what that made cacheable.
+
+          `systemBlocks` returns the plain string on anything it is not sure
+          about, which is the failure this must have: a cache miss is a rounding
+          error and a mangled system prompt is a different product talking to
+          somebody at 2am.
+        */
+        system: systemBlocks(system, cachePrefix),
         messages,
       };
 
@@ -653,7 +781,7 @@ function anthropicProvider(): Provider {
 
       // The guard the OpenAI path already had, on the path that shipped the
       // fragment. Asking is free; not asking cost a sentence.
-      if (wasCutOff(text, completion.stop_reason === "max_tokens")) {
+      if (wasCutOff(text, completion.stop_reason)) {
         throw new ProviderError(
           502,
           `anthropic was cut off before it finished a sentence (${text.length} chars)`,

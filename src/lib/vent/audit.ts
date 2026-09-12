@@ -1,7 +1,21 @@
 import { gradeReply, worstOf, type Finding as Note, type GoldenCase } from "./quality";
 import { acceptable, MAX_RULE_CHARS, type LearnedRule } from "./learned";
 import { wasAuthored } from "./tactics";
+import { isFailureReply } from "./model";
+
+/**
+ * Everything in a row that this product wrote rather than a model.
+ *
+ * Two questions because they live in two modules for a build reason — see
+ * `isFailureReply`. Asked once here so the two filters below cannot drift
+ * apart, which is how the audit came to grade seven rate-limit messages as
+ * replies in the first place.
+ */
+const ourOwnWords = (reply: string | null | undefined): boolean =>
+  wasAuthored(reply ?? null) || isFailureReply(reply);
+
 import { echoesThem } from "./echo";
+import { classify } from "./intent";
 
 /**
  * The nightly self-audit, minus the part that costs money.
@@ -105,7 +119,7 @@ export function knownProblems(
   const out: Finding[] = [];
   for (const r of rows) {
     if (!r.ai_reply || r.intent_type !== "vent") continue;
-    if (wasAuthored(r.ai_reply)) continue;
+    if (ourOwnWords(r.ai_reply)) continue;
     /*
       A stored row rebuilt into the shape the grader already speaks, rather
       than a second grader that reads rows. The suite's oldest rule: anything
@@ -116,7 +130,8 @@ export function knownProblems(
       id: r.id,
       message: r.user_message,
       // The column when the row has one; the markers only when it does not.
-      language: (r.language ?? "").startsWith("pid") || (!r.language && PIDGIN.test(r.user_message))
+      language: (r.language ?? "").startsWith("pid")
+        || (!r.language && classify(r.user_message).language === "pidgin")
         ? "pidgin"
         : "en",
       intent: "vent",
@@ -138,8 +153,41 @@ export function knownProblems(
   return out;
 }
 
-/** Markers, not a language detector — the same set the grader uses. */
-const PIDGIN = /\b(dey|na|abeg|wetin|don|sabi|wahala|oga|make i|e go)\b/i;
+/*
+  THE THIRD PIDGIN DETECTOR, AND IT CARRIED THE BUG THIS FILE ALREADY FIXED
+
+  This was `/\b(dey|na|abeg|wetin|don|sabi|wahala|oga|make i|e go)\b/i`, under a
+  comment claiming it was "the same set the grader uses". It was not.
+
+  `\bdon\b`, with no apostrophe guard. CLAUDE.md records this at length — the
+  Pidgin perfective holds its boundary against an apostrophe, so *every English
+  sentence containing the commonest contraction in the language* tested as
+  Pidgin. `intent.ts` fixed it to `/\bdon\b(?!['‘’])/`; this copy never heard.
+  "i don't know what to do anymore" was a Pidgin message to this file.
+
+  Stated narrowly, because the first draft of this comment overstated it. The
+  borrowed nouns in that list — `abeg`, `wahala`, `oga`, `sabi` — are *not* a
+  bug here. `PIDGIN_LEXICAL` decides routing on purpose, because somebody who
+  writes "wahala" to this room is saying something about how they want to be
+  met; what those words must never do is make a *reply* Pidgin, which is a
+  different question asked in `quality.ts`. The router agrees with the old list
+  on all four, and the only sentences they disagree about are the contractions.
+
+  WHY THAT MATTERED MORE THAN A MISLABEL
+
+  The language decided here becomes `GoldenCase.language`, and `quality.ts`
+  grades a reply against it. So an English reply to an English message was
+  reported as "answered a Pidgin message in English" — a *false* finding, in the
+  job whose proposals reach the prompt through the gate. This file's own comment
+  about `containsAdvice` says what that costs: "a false finding is worse than a
+  missed one here: it is a metric that would have had somebody rewriting a
+  prompt to stop producing good sentences."
+
+  So it asks the router. `classify` is what decided this row's language when it
+  was written, it imports both marker lists rather than holding a third, and a
+  fallback that disagrees with production is not a fallback — it is a fourth
+  opinion about the question this product asks most often.
+*/
 
 
 /**
@@ -156,7 +204,7 @@ const PIDGIN = /\b(dey|na|abeg|wetin|don|sabi|wahala|oga|make i|e go)\b/i;
  */
 export function flatReplies(rows: AuditRow[], limit = 10): AuditRow[] {
   const scored = rows
-    .filter((r) => r.ai_reply && r.intent_type === "vent" && !wasAuthored(r.ai_reply))
+    .filter((r) => r.ai_reply && r.intent_type === "vent" && !ourOwnWords(r.ai_reply))
     .map((r) => {
       const reply = r.ai_reply ?? "";
       let weight = 0;
