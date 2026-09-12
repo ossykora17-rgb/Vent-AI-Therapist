@@ -553,6 +553,40 @@ export function gradeReply(
 
     Left as a comment rather than deleted because the next person will have the
     same good idea.
+
+    THIRD AND FOURTH, FROM A PRESENCE SPEC, DEAD THE SAME WAY.
+
+    "Never stack questions" and "no 'we'" — both deterministic, both genuinely
+    ungraded, and both measured against the same seventy-two before a line was
+    written. They fail identically to the two above.
+
+      `/\?[^?]*\?/` flagged **3 of 72**, every one correct. "What happens at
+      the point where you stop? Same point every time?" is a narrowing
+      follow-up, not a second demand, and the Pidgin example offers a *menu* —
+      "Weight? Sharp? E dey move?" — which is one act of attention wearing
+      four question marks. The spec's rule assumes turn-taking. This product
+      answers once per turn, so the follow-up is the space-leaving.
+
+      Bare `let's` flagged **2 of 72**, both correct, and both the good use:
+      "Let's see if they were three things or one thing three times" is an
+      invitation to look, which is the whole function. `make you` again — the
+      commonest hit is the ordinary one.
+
+    Narrowed to the room actually carrying the load — `we'll get through`,
+    `we're in this together`, `our journey` — it flags **0 of 72 and 0 of 897**.
+    A regex that matches nothing is not coverage, and shipping one would have
+    put a green check over a rule nothing enforces.
+
+    The 897 are local eval rows, not production, so a zero there is weak. The
+    seventy-two are the instrument, and they killed all three.
+
+    What survives from that spec needs no code: its sentence cap is already
+    `REPLY_SENTENCE_CAP` at 3, its "no neuroscience explanations" is already in
+    `JARGON`, its no-advice and no-fabrication rules are `advice`,
+    `generic_task` and `invented`, and its safety clause is the crisis path
+    that never reaches a model. The remainder — emotional accuracy, presence,
+    present-moment grounding — is what CLAUDE.md means by a person in a real
+    room, and no fifth attempt will change that.
   */
 
   /*
