@@ -1572,6 +1572,30 @@ walked through green, because two empty lists are exactly what a sweep over no
 files reports and it reports them as a pass. Any sweep whose finding is an empty
 list needs a count of what it examined, asserted beside it.
 
+**And the same false door, one screen further in, still live after the lobby's
+was repaired.** `circle-room.tsx` rendered the whole agreement to anybody not in
+the room, whatever its seat count — the rules, the chair question, the consent
+box and a full-width gold **Take a seat** — on a circle with six people in it.
+Working through all of it answers **409** and toasts *"That circle is full."*
+Every fact needed to know that arrived in the same payload the button was drawn
+from: `seats` and `maxSeats`. This file already records the lobby's version, a
+gold *Open a circle* over a plate explaining four hundred pixels lower that
+circles could not open, under the rule that *the room never offers a door that
+opens onto a 501*. The repair reached the lobby and not the room.
+
+**The branch is one flag and its negation, and that is not a style note.**
+`6 >= undefined` and `6 < undefined` are **both false**, so writing the pair as
+two comparisons makes a payload that lost `maxSeats` render neither half —
+somebody outside the room looking at nothing at all, no way in and no sentence
+saying why. A flag falls back to offering the seat, and a 409 they can read
+beats a blank space. It was written the wrong way first, in the repository whose
+whole subject is the other deployment shape, with a comment underneath claiming
+the unsafe form was the safe one.
+
+Check 101 holds the branch and check 134 holds the payload it branches on,
+because a correct branch over an absent field renders nothing and looks
+identical from the static side.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

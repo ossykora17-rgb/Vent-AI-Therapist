@@ -242,6 +242,9 @@ export function CircleRoom({ id }: { id: string }) {
   }
 
   const mins = state ? Math.max(0, Math.round(state.msRemaining / 60000)) : 0;
+  /* Read once, so the agreement and the refusal cannot both render and cannot
+     both disappear. See the comment beside the two branches. */
+  const roomIsFull = Boolean(state && state.seats >= state.maxSeats);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -321,7 +324,55 @@ export function CircleRoom({ id }: { id: string }) {
           </div>
         )}
 
-        {state && !state.joined && (
+        {/*
+          A door onto a 409.
+
+          This block rendered for anybody not in the room, whatever its seat
+          count — the whole agreement, the chair question, the consent box and
+          a full-width gold "Take a seat" — on a circle with six people in it.
+          Ticking all of it answers 409 and toasts "That circle is full."
+
+          Every fact needed to know that arrived in the same payload the button
+          was drawn from: `seats` and `maxSeats`. This repository already
+          records the identical bug one screen out, in the lobby, where a gold
+          "Open a circle" sat above a plate explaining four hundred pixels
+          lower that circles could not open. The room never offers a door that
+          opens onto a refusal.
+
+          The lobby is the door that is open, and it is more open than it was:
+          the route steers somebody asking for this pressure into a room with
+          space, or opens them one. So this names what is shut and points at
+          that, rather than apologising.
+        */}
+        {/*
+          One flag and its negation, never `>=` and `<` of the same pair.
+
+          `6 >= undefined` and `6 < undefined` are **both false**, so a payload
+          that lost `maxSeats` — a version skew, a route edited in a hurry —
+          would make both branches vanish and leave somebody not in the room
+          looking at nothing at all, with no way in and no sentence saying why.
+          A flag falls back to offering the seat instead, and a 409 they can
+          read beats a blank space.
+
+          Written the wrong way first, in the check-the-other-shape file.
+        */}
+        {state && !state.joined && roomIsFull && (
+          <div className="glass p-5">
+            <p className="font-display text-heading leading-[1.3]">This one filled up.</p>
+            <p className="mt-3 max-w-[46ch] text-body leading-[1.7] text-ash">
+              Six seats, and they are taken. Nothing said in here is readable
+              from outside it, so there is nothing to wait around for.
+            </p>
+            <Link
+              href="/circles"
+              className="mt-4 inline-flex min-h-[44px] items-center text-body font-semibold text-ink underline underline-offset-4"
+            >
+              Find a room with space →
+            </Link>
+          </div>
+        )}
+
+        {state && !state.joined && !roomIsFull && (
           <div className="glass p-5">
             <p className="label-mono mb-3">Before you sit</p>
             <ul className="space-y-2 text-body leading-[1.6]">

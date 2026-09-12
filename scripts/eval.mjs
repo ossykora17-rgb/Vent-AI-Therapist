@@ -5476,6 +5476,25 @@ if (BASE) {
     const full = await fetch(`${BASE}/api/circles/${second.circle.id}?anonId=${b}`).then((r) => r.json());
     is(full.seats, MAX_SEATS, "the room is full", `filled with ${rest.length} more`);
 
+    /*
+      And a stranger arriving at it is told, in the payload the seat button is
+      drawn from.
+
+      The room rendered the whole agreement and a gold "Take a seat" to anybody
+      not in it, whatever the seat count — six people in the room, work through
+      all of it, 409. The branch is check 101's; this is the half that proves
+      the facts it branches on actually arrive, because a correct branch over
+      an absent field renders nothing at all.
+    */
+    const outside = await fetch(
+      `${BASE}/api/circles/${second.circle.id}?anonId=eval-${Date.now()}-outside`,
+    ).then((r) => r.json());
+    is(outside.joined, false, "somebody who is not in it is told so");
+    is(outside.seats, MAX_SEATS, "and given the seat count the refusal is read from");
+    is(outside.maxSeats, MAX_SEATS,
+      "and the ceiling to compare it against",
+      "a branch on `seats >= maxSeats` with maxSeats absent renders neither half");
+
     const stillMine = await post("/api/circles", { anonId: b, tag, pressure: 55 }).then((r) => r.json());
     is(stillMine.circle?.id, second.circle.id,
       "and a full room is still their room, not a reason to open an empty one",
@@ -11934,6 +11953,42 @@ check("101 The room does not promise that somebody is coming", () => {
   ok(/!mine\s*&&[\s\S]{0,400}?Open a different circle/.test(lobby),
     "and never offers to open a different circle to somebody who cannot",
     "the route sends them back to their seat, which makes this a control that does not do what it says");
+
+  /*
+    AND THE SAME DOOR ONE SCREEN IN
+
+    The room rendered the whole agreement — the rules, the chair question, the
+    consent box and a full-width gold "Take a seat" — to anybody not in it,
+    whatever its seat count. On a circle with six people in it, working through
+    all of that answers **409** and toasts "That circle is full."
+
+    Every fact needed to know that arrived in the payload the button was drawn
+    from: `seats` and `maxSeats`. Same bug as the lobby's gold "Open a circle"
+    over a plate explaining four hundred pixels lower that circles could not
+    open, one screen further in, and still live after that one was repaired.
+
+    Asserted as **one flag and its negation**, which is not a style note:
+    `6 >= undefined` and `6 < undefined` are both false, so writing the pair as
+    two comparisons makes a payload that lost `maxSeats` render neither branch
+    — somebody outside the room looking at nothing at all, with no way in and
+    no sentence saying why. A flag falls back to offering the seat, and a 409
+    they can read beats a blank space. It was written the wrong way first.
+  */
+  const roomSrc = strip(fs.readFileSync(path.join(ROOT, "src/components/circle-room.tsx"), "utf8"));
+  ok(/const roomIsFull = /.test(roomSrc),
+    "the room reads its own fullness once");
+  const shut = roomSrc.indexOf("!state.joined && roomIsFull");
+  const open = roomSrc.indexOf("!state.joined && !roomIsFull");
+  ok(shut >= 0 && open >= 0,
+    "and the refusal and the offer are that flag and its negation",
+    "two comparisons of the same pair both go false on a payload missing maxSeats, and render nothing");
+  const seat = roomSrc.indexOf("Take a seat");
+  ok(open >= 0 && seat > open,
+    "the seat is only offered where there is one",
+    "a gold button, a consent box and a chair question, answered 409");
+  ok(shut >= 0 && shut < open && /\/circles/.test(roomSrc.slice(shut, open)),
+    "and the branch that refuses points at the lobby, which can still open one",
+    "naming what is shut without naming what is open is the bug with better manners");
 });
 
 check("102 The turn's verdict is computed, never asked for", () => {
