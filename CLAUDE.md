@@ -1572,6 +1572,28 @@ walked through green, because two empty lists are exactly what a sweep over no
 files reports and it reports them as a pass. Any sweep whose finding is an empty
 list needs a count of what it examined, asserted beside it.
 
+**Then that rule was asked of every other sweep, and five more were passing by
+not looking.** Checks **18, 29, 46, 72 and 125** each walk `src`, collect
+offenders, and assert the list is empty — with nothing pinning how many files
+they read. Point the walk at nothing and all five go green: the crisis-line
+layout guard, the rate-limiter's refusal wording, the always-visible *"not a
+licensed therapist"* line, the dark-mode scrim sweep, and the guard against a
+fourth Pidgin detector. Five rules with no enforcement behind them, indefinitely,
+with a green tick on top.
+
+**The method is the part worth keeping, because a static detector cannot do
+it.** Mine flagged eight and three were wrong — 103 already floors on
+`scanned > 20`, and 112 and 126 both fail on an empty parse through assertions
+that carry no `>=` at all (126's is `keyedToPerson < <bigger set>`, which is
+`0 < 0` and false when the parse finds nothing). A check that reads suites for
+the *shape* of a floor would flag those three and need a hand-kept exemption
+list, which is this file's own definition of the bug. What settles it is
+behavioural: **replace the derivation with `[]`, run the suite, and read which
+checks still pass.** Re-run that whenever a sweep is added.
+
+No meta-check was written, for the reason above. The floors are the fix and the
+mutation is the proof.
+
 **And the same false door, one screen further in, still live after the lobby's
 was repaired.** `circle-room.tsx` rendered the whole agreement to anybody not in
 the room, whatever its seat count — the rules, the chair question, the consent

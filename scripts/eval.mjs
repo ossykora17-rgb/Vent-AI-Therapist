@@ -2081,8 +2081,12 @@ check("18 Nothing pinned to the bottom lands on the crisis line", () => {
   // A bottom-anchored fixed overlay, minus the full-screen ones: a modal
   // backdrop covering everything is a different thing from a notification
   // that quietly parks on top of a phone number for four seconds.
+  const components = walkTsx(path.join(ROOT, "src/components"));
+  ok(components.length >= 10,
+    `there are components to scan (${components.length})`,
+    "a sweep over no files finds no offenders and reports that as a pass");
   const offenders = [];
-  for (const file of walkTsx(path.join(ROOT, "src/components"))) {
+  for (const file of components) {
     const src = fs.readFileSync(file, "utf8");
     for (const cls of src.match(/className=\{?"[^"]*"/g) ?? []) {
       if (!/\bfixed\b/.test(cls) || /\binset-0\b/.test(cls)) continue;
@@ -2149,7 +2153,7 @@ check("18 Nothing pinned to the bottom lands on the crisis line", () => {
   // anybody noticed. That is exactly the kind of defect that never gets
   // reported by the people it fails.
   const labelled = [];
-  for (const file of walkTsx(path.join(ROOT, "src/components"))) {
+  for (const file of components) {
     const src = fs.readFileSync(file, "utf8");
     /*
       Where the opening tag actually ends, counted rather than matched.
@@ -3339,7 +3343,11 @@ check("29 The rate limiter knows who it is refusing", () => {
       return /\.tsx?$/.test(e.name) ? [full] : [];
     });
   const PAYWALL = /out of (tokens|credits)|upgrade to continue|limit reached|you have used your|as an AI\b/i;
-  const offenders = walk(path.join(ROOT, "src"))
+  const sources = walk(path.join(ROOT, "src"));
+  ok(sources.length >= 20,
+    `there are sources to scan (${sources.length})`,
+    "a sweep over no files finds no offenders and reports that as a pass");
+  const offenders = sources
     // Two files name these phrases in order to forbid them: the grader and the
     // table it now imports from.
     .filter((f) => !/lib\/vent\/(quality|voice)\.ts$/.test(f))
@@ -5807,7 +5815,11 @@ check("46 The always-visible line says it is an AI, and says it once", () => {
     });
 
   const TERMS = path.join(ROOT, "src/app/terms/page.tsx");
-  const offenders = walk(path.join(ROOT, "src"))
+  const sources = walk(path.join(ROOT, "src"));
+  ok(sources.length >= 20,
+    `there are sources to scan (${sources.length})`,
+    "a sweep over no files finds no offenders and reports that as a pass");
+  const offenders = sources
     .filter((f) => f !== path.join(ROOT, HOME) && f !== TERMS)
     .filter((f) => /not a licensed therapist/i.test(fs.readFileSync(f, "utf8")))
     .map((f) => path.relative(ROOT, f));
@@ -8547,11 +8559,13 @@ check("72 The lights go down in both themes", () => {
   // Nothing paints its own. Two scrims at two alphas were two people guessing
   // at one gesture, and only one of them can be corrected in one place.
   const strays = [];
+  let scanned = 0;
   const walk = (dir) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, e.name);
       if (e.isDirectory()) walk(full);
       else if (e.name.endsWith(".tsx")) {
+        scanned++;
         const src = fs.readFileSync(full, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
         for (const m of src.matchAll(/className=(?:"|\{")([^"]*inset-0[^"]*)"/g)) {
           if (/\bbg-(ink|paper|card)\b|\bbg-(ink|paper|card)\//.test(m[1])) {
@@ -8562,6 +8576,7 @@ check("72 The lights go down in both themes", () => {
     }
   };
   walk(path.join(ROOT, "src"));
+  ok(scanned >= 10, `there are components to scan (${scanned})`, "a sweep over no files finds no offenders and reports that as a pass");
   is(strays.length, 0,
     `every full-bleed overlay uses it${strays.length ? ` (${strays.join("; ")})` : ""}`,
     "a hand-rolled scrim is a second answer to a question that has one");
@@ -15286,7 +15301,11 @@ check("125 The nightly audit asks the router what language a row was", () => {
     return out;
   };
   const rogue = [];
-  for (const f of walkTs(path.join(ROOT, "src"))) {
+  const sources = walkTs(path.join(ROOT, "src"));
+  ok(sources.length >= 20,
+    `there are sources to scan (${sources.length})`,
+    "a sweep over no files finds no offenders and reports that as a pass");
+  for (const f of sources) {
     const rel = path.relative(ROOT, f);
     if (owners.has(rel)) continue;
     const src = fs.readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
