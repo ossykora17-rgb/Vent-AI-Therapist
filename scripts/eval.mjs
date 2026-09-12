@@ -8989,6 +8989,55 @@ check("76 The office has one voice, and nothing we wrote breaks it", () => {
   ok(!/[Tt]hree to four sentences/.test(prompt),
     "and no longer carries its own sentence count",
     `REPLY_SENTENCE_CAP is ${REPLY_SENTENCE_CAP}`);
+
+  /*
+    NOT ITS VALUE — ITS SINGLENESS.
+
+    Moving the cap from 3 to 4 left the suite green, which is correct and was
+    worth checking: the value is a product decision, and a check asserting
+    `=== 4` would go red the day somebody legitimately picks 5. That is check
+    126's lesson — naming the number turns a rule about the contract into an
+    assertion about today's contract.
+
+    What was actually at risk is the thing this repository calls "a number is
+    a sentence": three files state the cap to the model — the prompt's two
+    language branches, the failsafe's retry line and `OFFICE_RULES` — and
+    every one of them interpolates the constant today. Spell one of them as a
+    word and the grader and the prompt disagree about what the office asks
+    for, silently, in the direction that ships longer replies.
+
+    Comments blanked rather than stripped, because `voice.ts` carries a
+    postmortem that opens "Three sentences, and the person had just said..."
+    and that prose is not an instruction to anybody.
+  */
+  const spellsACount = [];
+  let capFilesRead = 0;
+  for (const f of ["prompt.ts", "voice.ts", "failsafe.ts"]) {
+    capFilesRead++;
+    const src = fs.readFileSync(path.join(ROOT, "src/lib/vent", f), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+      .replace(/(^|[ \t])\/\/[^\n]*/gm, (m) => m.replace(/[^\n]/g, " "));
+    /*
+      A *ceiling*, not any mention of a number near the word.
+
+      The first version flagged `voice.ts`'s own prompt line — "the right
+      reply is one sentence, sometimes it is only the question" — which is a
+      floor and the correct advice, and is the same argument the constant's
+      doc comment makes. `make you` again: the commonest hit was the ordinary
+      use. What competes with the constant is a stated maximum.
+    */
+    const CEILING =
+      /\b(?:one|two|three|four|five|six|\d+)\s+(?:short\s+)?sentences?\s*,?\s*(?:maximum|max\b)|\bat most\s+(?:one|two|three|four|five|six|\d+)\s+(?:short\s+)?sentences?\b|\bno more than\s+(?:one|two|three|four|five|six|\d+)\s+(?:short\s+)?sentences?\b/gi;
+    for (const m of src.matchAll(CEILING)) {
+      spellsACount.push(`${f}: ${m[0]}`);
+    }
+  }
+  // The floor this file's last commit was about, on the sweep written after
+  // it: an empty file list reports no offenders and reports that as a pass.
+  is(capFilesRead, 3, `and there are files to read (${capFilesRead})`);
+  is(spellsACount.join(" | "), "",
+    "and no file states a sentence count the constant does not supply",
+    "the prompt and the grader disagreeing about the cap is invisible and ships longer replies");
   /*
     "Ask one question that digs" was a numbered step in a three-step template,
     and the template was half the reason replies read as scripted. What has to
@@ -9655,6 +9704,68 @@ check("82 The room reads its own reply before anybody else does", () => {
     "exactly one retry, never a loop",
     "a reply that keeps failing must end at an authored line, not at the rate limit");
   ok(/tactic\.hold/.test(block), "and a retry that also fails falls back to the authored line");
+
+  /*
+    AND THE ROOM DOES NOT PUT ITSELF IN THE ROOM
+
+    First-person plural is the room joining somebody inside their own problem.
+    There is one person here and a machine; "we can look at that" asserts a
+    second party who will not be there at 3am. Differentiation is the posture
+    the whole product is built on — close without fusing, care without
+    carrying — and nothing had ever graded it.
+
+    The exemption is the work, as always. `make we` is Pidgin's hortative and
+    `PIDGIN_GRAMMAR` carries `make I / we / e / dem` deliberately; banning it
+    would force stilted Pidgin on somebody who wrote in Pidgin, which is the
+    register-decline failure this repository spends more words on than
+    anything else. Sixth word to be given up for meaning one thing in English
+    and another in Naija, after `make you`, `fit`, `belle`, `\bdon\b` and
+    `conditioning`.
+  */
+  const vent = { id: "f", message: "i am tired of all of it", intent: "vent", language: "en", probes: "" };
+  const fusedOn = (reply) =>
+    gradeReply(vent, reply, { said: "i am tired of all of it" }).some((f) => f.grader === "fused");
+
+  for (const bad of [
+    "We can look at that together.",
+    "Let's take one piece of it.",
+    "That is our next move.",
+    "It left us both somewhere strange.",
+  ]) {
+    ok(fusedOn(bad), `the room is not in it with them: ${JSON.stringify(bad)}`);
+  }
+  for (const fine of [
+    "You are tired of all of it, and that is the whole sentence.",
+    "Make we leave the why tonight.",
+    "That's what people call a core belief — a rule you learned so early it feels like a fact.",
+  ]) {
+    ok(!fusedOn(fine), `and it does not fire on ${JSON.stringify(fine)}`,
+      "the Pidgin hortative is grammar, not a pronoun the room chose");
+  }
+
+  /*
+    Over the corpus, because a grader that flags hand-written replies is the
+    grader that is wrong — the rule `scripts/quality.mjs` opens with, and the
+    one that killed "ask one question" and "use their own words back".
+  */
+  const authored = fs
+    .readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+    .trim().split("\n").map((l) => JSON.parse(l));
+  ok(authored.length >= 60, `there is a corpus to grade (${authored.length})`,
+    "a sweep over no replies finds no offenders and reports that as a pass");
+  const flagged = authored.filter((r) => fusedOn(r.full_integration || ""));
+  is(flagged.length, 0,
+    "and no authored reply trips it",
+    flagged.map((r) => (r.full_integration || "").slice(0, 60)).join(" | "));
+
+  /*
+    Private room only, and it has to stay that way. The circles rulebook is a
+    different function on a different surface, and the Keeper's own refusal is
+    "We no dey fix here. We dey witness" — a circle really does have six
+    people in it.
+  */
+  is(checkMessage("We no dey fix here. We dey witness.", "share").ok, true,
+    "the Keeper may still say we, because a circle has six people in it");
 });
 
 check("83 The office keeps what they said, and never a diagnosis", () => {

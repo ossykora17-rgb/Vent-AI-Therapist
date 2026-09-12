@@ -136,10 +136,18 @@ export const RETRY_ONLY = new Set(["language", "jargon"]);
 
 /**
  * Computed here, deliberately not acted on. Named rather than merely absent,
- * because "we decided this is drift" and "nobody has looked at this yet" are
- * different states and an empty space cannot tell you which one it is.
+ * because a decision and an oversight are different states and an empty space
+ * cannot tell you which one it is.
+ *
+ * `fused` sits here on arrival rather than in `REJECT`, and the reason is the
+ * same one `earned_worth` carries: nothing has measured how often a model
+ * actually writes "we" into a reply on this product. It is `major`, so the row
+ * never reaches training and the heartbeat counts it — and the day there is a
+ * number, that number decides whether it earns a billed retry. Tuning a new
+ * grader into the rejection set on a sample of zero is how a weight gets set
+ * to 90.
  */
-export const NOTED = new Set(["coverage", "length"]);
+export const NOTED = new Set(["coverage", "length", "fused"]);
 
 /**
  * Cannot fire on this path, whatever the reply says.

@@ -516,12 +516,50 @@ export function gradeReply(
     The prompt asked for three to four sentences and this complained at six —
     a two-sentence gap where the reply was long by the contract and fine by
     the grader, which is how a reply gets to be a paragraph without anything
-    objecting. `REPLY_SENTENCE_CAP` is now the only number, and it is 3.
+    objecting. `REPLY_SENTENCE_CAP` is the only number, wherever it currently
+    sits — the prompt, the failsafe's retry line and this check all import it,
+    so none of them can disagree about what the office asks for.
   */
   if (n > REPLY_SENTENCE_CAP) {
     add("length", "minor", `${n} sentences — the office says ${REPLY_SENTENCE_CAP}`);
   }
   if (reply.length > 700) add("length", "minor", `${reply.length} chars is a paragraph, not a reply`);
+
+  /*
+    THE ROOM IS NOT IN IT WITH THEM.
+
+    First-person plural is the room joining somebody inside their own problem
+    — "we can look at that", "let's see", "our next step". Differentiation is
+    the whole posture this product is built on: close without fusing, care
+    without carrying. There is one person here and a machine, and a plural
+    pronoun quietly asserts a second party who will not be there at 3am.
+
+    **`make we` is exempt, and that is not a softening of the rule.** It is
+    Pidgin's hortative — `PIDGIN_GRAMMAR` carries `make I / we / e / dem` on
+    purpose, and this file's own corpus uses it: *"Make we leave the why
+    tonight."* Banning it would force stilted Pidgin on somebody who wrote in
+    Pidgin, which is the register-decline failure CLAUDE.md spends more words
+    on than anything else. Sixth time a marker has had to give up a word that
+    is one thing in English and another in Naija, after `make you`, `fit`,
+    `belle`, `\bdon\b` and `conditioning`.
+
+    Private room only, by construction rather than by a flag: `quality.ts`
+    grades replies the model wrote here, and the circles rulebook is
+    `checkMessage(x, "share")` — a different function on a different surface.
+    The Keeper's own refusal is "We no dey fix here. We dey witness", and it
+    must stay that way. A circle really does have six people in it.
+
+    `major`, not a retry: it drops the row from SFT so the habit is never
+    trained in, and the heartbeat counts it — but nothing here has measured
+    how often a model actually produces it, and tuning a new grader into a
+    billed retry on a sample of zero is what `earned_worth` looks like before
+    it ships. Promote it when there is a number.
+  */
+  const withoutHortative = reply.replace(/\bmake\s+(?:i|we|e|dem)\b/gi, " ");
+  const fused = withoutHortative.match(/\b(?:we|us|our|ours|ourselves)\b|\blet['’]s\b/i);
+  if (fused) {
+    add("fused", "major", `the room put itself in the room: "${fused[0]}"`);
+  }
 
   /*
     THE TWO GRADERS THAT DID NOT SURVIVE THEIR OWN CORPUS.
@@ -581,7 +619,7 @@ export function gradeReply(
     seventy-two are the instrument, and they killed all three.
 
     What survives from that spec needs no code: its sentence cap is already
-    `REPLY_SENTENCE_CAP` at 3, its "no neuroscience explanations" is already in
+    `REPLY_SENTENCE_CAP`, its "no neuroscience explanations" is already in
     `JARGON`, its no-advice and no-fabrication rules are `advice`,
     `generic_task` and `invented`, and its safety clause is the crisis path
     that never reaches a model. The remainder — emotional accuracy, presence,

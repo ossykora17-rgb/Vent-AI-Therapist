@@ -1594,6 +1594,58 @@ checks still pass.** Re-run that whenever a sweep is added.
 No meta-check was written, for the reason above. The floors are the fix and the
 mutation is the proof.
 
+**Two decisions, taken rather than drifted into: the cap is 4, and the private
+room may not say "we".**
+
+`REPLY_SENTENCE_CAP` moved from 3 to 4. The argument in its doc comment still
+holds — one sentence and a question is usually right — and this is a ceiling
+rather than a target, so it costs up to a third more output tokens on the
+replies that use it and nothing on the replies that do not. Every reader
+imports the constant (both language branches of the prompt, the failsafe's
+retry line, the `length` grader), so one edit moved all four.
+
+**`fused` is the grader, and the exemption is the whole work.** First-person
+plural is the room joining somebody inside their own problem: there is one
+person here and a machine, and "we can look at that" asserts a second party who
+will not be there at 3am. But **`make we` is Pidgin's hortative** — this file
+already keeps `make I / we / e / dem` in `PIDGIN_GRAMMAR` on purpose, and the
+authored corpus uses it: *"Make we leave the why tonight."* Banning it would
+force stilted Pidgin on somebody who wrote in Pidgin, which is the
+register-decline failure this file spends more words on than anything else.
+**Sixth word given up for being one thing in English and another in Naija**,
+after `make you`, `fit`, `belle`, `\bdon\b` and `conditioning`.
+
+Private room only by construction rather than by a flag: `quality.ts` grades
+what the model wrote here, and the circles rulebook is `checkMessage(x,
+"share")` — a different function on a different surface. The Keeper's own
+refusal is *"We no dey fix here. We dey witness"*, and a circle really does
+have six people in it. Check 82 asserts that line still passes.
+
+`major`, not a retry, and named in `NOTED`: the row never reaches training and
+the heartbeat counts it, but **nothing has measured how often a model actually
+writes it.** Tuning a new grader into the rejection set on a sample of zero is
+what `earned_worth` looks like before it ships. Promote it when there is a
+number.
+
+**Three authored replies were reworded, and the fourth was not.** The ban flags
+hand-written corpus — *"Let's see if they were three things or one thing three
+times"*, *"Then we don't"*, *"Let's take the map away tonight"* — and the rule
+in `scripts/quality.mjs` says a grader that flags the corpus is the grader that
+is wrong. Not here: the grader is a decision that postdates those lines, so the
+corpus moved. The fourth is the Pidgin one and it is untouched.
+
+**And the mutation pass found two holes in its own new work.** Reverting the cap
+to 3 left the suite green — correct, because the *value* is a product decision
+and a check asserting `=== 4` is check 126's trap. What was actually at risk is
+singleness: three files state the ceiling to the model and all three interpolate
+the constant, so spelling one as a word makes the prompt and the grader disagree
+silently, in the direction that ships longer replies. That is what is asserted.
+Its first version then flagged `voice.ts`'s own prompt line — *"the right reply
+is one sentence, sometimes it is only the question"* — which is a **floor** and
+correct advice: `make you` again, the commonest hit being the ordinary use. And
+the narrowed sweep had no coverage floor, so pointing it at `[]` passed — the
+hole closed one commit earlier, reopened in the check written after it.
+
 **And the same false door, one screen further in, still live after the lobby's
 was repaired.** `circle-room.tsx` rendered the whole agreement to anybody not in
 the room, whatever its seat count — the rules, the chair question, the consent

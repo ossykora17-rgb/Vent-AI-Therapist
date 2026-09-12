@@ -378,13 +378,23 @@ export function askedForSkill(message: string): boolean {
 }
 
 /**
- * One to three sentences.
+ * One to four sentences.
  *
  * The prompt said "three to four" and the grader complained at six, which is
  * a two-sentence gap where nobody was in charge. A tired therapist at 11am
  * does not produce four sentences; they produce one, and then a question.
+ *
+ * Raised from 3 to 4 by decision, not by drift. The argument above is still
+ * the argument — one sentence and a question is usually right, and this is a
+ * ceiling rather than a target. What moved is the ceiling: a fourth sentence
+ * is now allowed rather than noted, which costs up to a third more output
+ * tokens on the replies that use it and nothing on the replies that do not.
+ *
+ * Every reader imports this constant — the prompt, the failsafe's retry
+ * instruction and the `length` grader — so the number lives here and only
+ * here. It was nearly written into the prompt as a word twice.
  */
-export const REPLY_SENTENCE_CAP = 3;
+export const REPLY_SENTENCE_CAP = 4;
 
 /** Terminal punctuation, ignoring the ellipsis somebody trails off with. */
 export function sentenceCount(text: string): number {
