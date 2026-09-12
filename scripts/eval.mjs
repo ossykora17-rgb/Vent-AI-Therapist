@@ -5345,6 +5345,30 @@ if (BASE) {
     for (const [what, res, expected = 410] of closed) {
       is(res.status, expected, `${what} is refused once the circle is over`);
     }
+
+    /*
+      And a room that never existed at all.
+
+      The seal guarded its sweep with `circle && …`, so a bad id fell past it
+      into the seat check and answered 403 not_a_member — "you are not a
+      member" about a room nobody is a member of. Seven of the eight handlers
+      addressed by an id already answered 404; this was the eighth, and the one
+      whose ordering had just been corrected.
+
+      The static half is check 95, over every handler. This is the answer a
+      caller actually gets, because the same argument read correctly in that
+      handler's own comment while the line above it did the opposite.
+    */
+    const ghost = "00000000-0000-4000-8000-000000000000";
+    const never = [
+      ["sealing", await post(`/api/circles/${ghost}`, { anonId: two, mood: 8 }, "PATCH")],
+      ["taking a seat", await post(`/api/circles/${ghost}`, { anonId: two, consent: true, pressure: 50 })],
+      ["reading the transcript", await fetch(`${BASE}/api/circles/${ghost}/messages?anonId=${two}`)],
+    ];
+    for (const [what, res] of never) {
+      is(res.status, 404, `${what} in a room that never existed is 404, not 403`,
+        "a refusal about somebody's seat, in a room nobody has a seat in, is a false sentence");
+    }
   });
 
   await checkAsync("134 Two people who came for the same room get it, and know which one is theirs", async () => {
@@ -11253,6 +11277,68 @@ check("95 Every door onto a circle asks whether it is over", () => {
     "and every handler asks whether the room is over before it checks a seat",
     wrongOrder.join(", ")
       || "a refusal naming somebody's seat, about a room that has ended, is a false sentence");
+
+  /*
+    AND ONE RUNG FURTHER OUT: A ROOM THAT NEVER EXISTED
+
+    The same argument, and the same handler got it wrong again. The seal
+    guarded its sweep with `circle && …`, so a circle that does not exist fell
+    straight past it into the seat check and answered **403 not_a_member** —
+    "you are not a member" about a room nobody is a member of. That is the bug
+    the DELETE assertions above record as fixed, in the same file, for DELETE,
+    and the seal is the handler whose sweep ordering was corrected an hour
+    earlier without anybody looking at the line above it.
+
+    Not a rule invented to make this sweep go green: **seven of the eight
+    handlers addressed by an id already answered 404 here.** It is written down
+    as what the file already does, so the eighth stops being the exception.
+
+    Over every route under `[id]`, not just this file — the messages, voice and
+    mute handlers all refuse by seat too, and a hand-kept list of the ones that
+    matter is the shape this repository keeps finding holes in.
+  */
+  const byId = files.filter((f) => path.relative(ROOT, f).includes("[id]"));
+  const noNotFound = [];
+  const lateNotFound = [];
+  let refusing = 0;
+  for (const f of byId) {
+    const src = strip(fs.readFileSync(f, "utf8"));
+    const where = path.basename(path.dirname(f));
+    const found = [...src.matchAll(/async function (handle[A-Z]+)\b/g)];
+    for (let i = 0; i < found.length; i++) {
+      const h = src.slice(found[i].index, i + 1 < found.length ? found[i + 1].index : src.length);
+      const seat = Math.min(
+        ...["not_a_member", "not_keeper"].map((r) => {
+          const at = h.indexOf(r);
+          return at < 0 ? Infinity : at;
+        }),
+      );
+      // Only handlers that refuse somebody personally. A handler with no seat
+      // refusal has nothing to get in the wrong order.
+      if (seat === Infinity) continue;
+      refusing++;
+      const gone = h.indexOf("not_found");
+      if (gone < 0) noNotFound.push(`${where}/${found[i][1]}`);
+      else if (gone > seat) lateNotFound.push(`${where}/${found[i][1]}`);
+    }
+  }
+  /*
+    The floor, because the first version of this sweep did not have one and a
+    mutation pointing it at `[nope]` walked straight through green — the
+    failure the assertion twenty lines above ("a sweep that walks nothing
+    passes loudest") was written about, reproduced in the check written under
+    it an hour later. Both halves report nothing when the sweep finds nothing,
+    which is indistinguishable from both halves being satisfied.
+  */
+  ok(refusing >= 6,
+    `and there are handlers that refuse by seat to check (${refusing})`,
+    "two empty lists are what a sweep over no files reports, and it reports them as a pass");
+  is(noNotFound.join(", "), "",
+    "every handler that refuses somebody by their seat first says whether the room exists",
+    "`listMembers` on an id that is not there returns an empty list, so the seat check answers about a room that never was");
+  is(lateNotFound.join(", "), "",
+    "and says it first",
+    "a 404 written below a 403 is a 404 that never runs");
 });
 
 check("96 A definer function never takes the caller's word for who they are", () => {

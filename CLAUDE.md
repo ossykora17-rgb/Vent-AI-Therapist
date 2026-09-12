@@ -1551,6 +1551,27 @@ check 95 enforces on the handlers, one screen earlier. Check 101 holds it,
 because a sentence that is false about the person reading it is what check 101
 is for.
 
+**And the handler whose order had just been corrected was wrong one rung
+further out.** The seal guarded its sweep with `circle && …`, so a circle that
+does not exist fell past it into the seat check and answered **403
+`not_a_member`** — *you are not a member* about a room nobody is a member of.
+That is the bug the DELETE handler's own comment records as fixed, in the same
+file, forty lines down, for DELETE. Moving the sweep above the membership check
+an hour earlier did not make anybody look at the line above *that*.
+
+Not a rule invented to make a sweep go green: **seven of the eight handlers
+addressed by an id already answered 404 here.** So it is written down as what
+the file already does, over every route under `[id]` — the messages, voice and
+mute handlers refuse by seat too — and the eighth stops being the exception.
+*Does this room exist* is true of every caller as well, and it is truer first.
+
+**The check written under that lesson reproduced it within the hour.** Check 95
+opens with `ok(files.length >= 5, "a sweep that walks nothing passes loudest")`,
+and the sweep added below it had no floor: a mutation pointing it at `[nope]`
+walked through green, because two empty lists are exactly what a sweep over no
+files reports and it reports them as a pass. Any sweep whose finding is an empty
+list needs a count of what it examined, asserted beside it.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

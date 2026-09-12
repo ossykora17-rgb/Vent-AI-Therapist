@@ -309,9 +309,20 @@ async function handlePATCH(request: Request, { params }: Params) {
     True for everybody is the right order: "this room is over" is true of any
     caller, and "you are not a member" is true only of some. Checking the
     narrower one first can only ever answer the wrong question.
+
+    And the same argument one rung further out. A circle that never existed
+    fell past `circle &&` into the seat check and answered **403 not_a_member**
+    — "you are not a member" about a room nobody is a member of, which is the
+    bug the DELETE handler's own comment forty lines down records as fixed, in
+    the same file, for itself. Seven of the eight handlers addressed by id
+    already answered 404 here; this was the eighth, and it is the one whose
+    ordering was corrected an hour ago without the guard above it being
+    noticed. "Does this room exist" is true of every caller too, and it is
+    truer first.
   */
   const circle = await store.getCircle(id);
-  if (circle && (await sweepIfOver(store, circle))) {
+  if (!circle) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (await sweepIfOver(store, circle)) {
     return NextResponse.json({ error: "closed" }, { status: 410 });
   }
 
@@ -325,7 +336,7 @@ async function handlePATCH(request: Request, { params }: Params) {
     kind: "circle_close",
     anon_id: anonId,
     circle_id: id,
-    tag: circle?.tag ?? null,
+    tag: circle.tag,
     rating: mood,
     tension_before: before,
     tension_after: tensionNow(mood),
