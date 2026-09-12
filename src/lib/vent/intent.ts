@@ -283,6 +283,42 @@ const REAL_WORLD: Array<[Exclude<RealWorldTag, null>, RegExp]> = [
 export const REAL_WORLD_TAGS = REAL_WORLD.map(([tag]) => tag);
 
 /**
+ * The words a circle on this pressure will actually repeat.
+ *
+ * The Keeper's thirty-eight-minute reflection counts repeated words across
+ * what the room said. Its word list was eighteen entries — `chest`, `throat`,
+ * `tired`, `shame` — body and affect, and **not one word from any of the nine
+ * pressures a circle is convened around**. So a money circle could not hear
+ * *money*, a japa circle could not hear *visa*, and the Keeper's one real move
+ * fell through to "N people spoke" every time. Measured over three-share
+ * circles built from real sentences this router itself tagged: it named a
+ * pattern in **0** of them.
+ *
+ * Derived here rather than listed there, because the table above already *is*
+ * the vocabulary — the words that identify a pressure are the words a room on
+ * that pressure repeats — and because a tenth pressure must not need somebody
+ * to remember a second list. This is the same argument `REAL_WORLD_TAGS`
+ * makes one line up.
+ *
+ * `(?:…)\w*` extends a prefix alternative to the whole word, so `\b(relocat)`
+ * counts *relocating* and *relocated* as the words people typed rather than as
+ * a stem nobody wrote. Literal alternatives already end at `\b` and are
+ * unaffected.
+ */
+/*
+  Takes a string rather than `RealWorldTag`, deliberately. `circles.tag` is
+  `string | null` on the row — the database holds it to the nine with a CHECK,
+  the TypeScript does not — and a cast here would assert a guarantee neither
+  side actually makes. A tag this table does not know returns null and the
+  Keeper simply hears no theme words, which is the correct degradation and the
+  same one an untagged circle gets.
+*/
+export function themePattern(tag: string | null | undefined): RegExp | null {
+  const found = REAL_WORLD.find(([t]) => t === tag);
+  return found ? new RegExp(`(?:${found[1].source})\\w*`, "gi") : null;
+}
+
+/**
  * Pidgin, and the two words that are also ordinary English.
  *
  * "AI too dey zuga with some of those weird speakings." A real person, about

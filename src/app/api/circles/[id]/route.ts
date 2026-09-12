@@ -120,8 +120,20 @@ async function handleGET(request: Request, { params }: Params) {
     if (phase === "reflect" || phase === "close") {
       const spokeReflection = said.some((m) => m.anon_id === KEEPER_REFLECT);
       if (!spokeReflection) {
+        /*
+          The identities travel, and so does the room's own subject.
+
+          This was `.map((m) => m.content)` — which stripped who said what one
+          line before a sentence that counts people, and left the Keeper unable
+          to hear the pressure the circle was convened around. Both halves of
+          its thirty-eight-minute line were reading a shape it had not been
+          given.
+        */
         const reflection = keeperReflection(
-          said.filter((m) => m.kind === "share").map((m) => m.content),
+          said
+            .filter((m) => m.kind === "share")
+            .map((m) => ({ anonId: m.anon_id, content: m.content })),
+          circle.tag,
         );
         if (reflection) {
           await store.addCircleMessage({

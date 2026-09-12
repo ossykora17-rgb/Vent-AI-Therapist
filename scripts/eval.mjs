@@ -41,7 +41,7 @@ const { BANNED_PHRASES, FILE_LANGUAGE, bannedPhrase, REPLY_SENTENCE_CAP, NO_MEMO
         GENERIC_TASKS, genericTask, askedForSkill } =
   await app("src/lib/vent/voice.ts");
 const { openThread, threadBlock } = await app("src/lib/vent/prompt.ts");
-const { aimedAtTheMachine, PIDGIN_GRAMMAR, PIDGIN_LEXICAL, REAL_WORLD_TAGS } = await app("src/lib/vent/intent.ts");
+const { aimedAtTheMachine, PIDGIN_GRAMMAR, PIDGIN_LEXICAL, REAL_WORLD_TAGS, themePattern } = await app("src/lib/vent/intent.ts");
 
 /**
  * The operator's vocabulary, in one place, because two files enforce it.
@@ -480,17 +480,79 @@ check("9  Circle governance protects people without breaking a promise", () => {
   ok(!checkMessage("x".repeat(200), "witness").ok, "a reflection stays one line");
 
   // Counted, never generated: a word nobody said cannot appear.
+  const share = (anonId, content) => ({ anonId, content });
   const reflection = keeperReflection([
-    "my chest is tight when i think about it",
-    "tight all week, chest again",
-    "i feel small",
+    share("a", "my chest is tight when i think about it"),
+    share("b", "tight all week, chest again"),
+    share("c", "i feel small"),
   ]);
   ok(/chest 2 times/.test(reflection), "it counts what the room actually said", reflection);
   ok(!/small/.test(reflection), "a word said once is not a pattern", reflection);
   ok(!/shame/.test(reflection), "and a word nobody said never appears");
 
-  const quiet = keeperReflection(["today was hard", "mine too"]);
+  const quiet = keeperReflection([share("a", "today was hard"), share("b", "mine too")]);
   ok(/2 people spoke/.test(quiet), "no pattern still says something true", quiet);
+
+  /*
+    PEOPLE, NOT MESSAGES
+
+    That sentence counted `contents.length` — the shares — and rendered it as
+    people, and the route handed it `.map((m) => m.content)`, so the identities
+    were stripped one line before the claim that counts them. One person
+    sharing three times made the Keeper announce "3 people spoke" at minute
+    thirty-eight, out loud, to a room that knows exactly who spoke.
+
+    The old assertion above is the shape its author was standing in: two
+    messages from two people, where the two numbers agree. It passed for years
+    and could not see this.
+  */
+  const oneVoice = keeperReflection([
+    share("a", "work is hard"),
+    share("a", "really hard"),
+    share("a", "so hard"),
+  ]);
+  ok(/\b1 person spoke/.test(oneVoice),
+    "one person sharing three times is one person",
+    `${oneVoice} — "you are not the only one" is the promise; overstating the room invents evidence for it`);
+
+  /*
+    AND THE MOVE ITSELF WAS DEAD
+
+    `PATTERN_WORDS` is eighteen words of body and affect and contains nothing
+    from any of the nine pressures a circle is convened around. Measured over
+    three-share circles built from real sentences the router itself tagged, the
+    pattern branch named a word in **0** of them — the Keeper's one real move,
+    always falling through to the count.
+
+    `themePattern` is the router's own table rather than a second list, so the
+    economy circle can hear money and a tenth pressure arrives here without
+    anybody remembering to come back.
+  */
+  const money = [
+    share("a", "the price of everything"),
+    share("b", "petrol price again"),
+    share("c", "i am broke"),
+  ];
+  ok(/I heard/.test(keeperReflection(money, "economy")),
+    "a money circle can hear its own subject",
+    keeperReflection(money, "economy"));
+  ok(/people spoke/.test(keeperReflection(money)),
+    "and the same shares in an untagged circle fall back rather than guess",
+    "a theme this table does not know must hear no theme words, not the wrong ones");
+
+  /*
+    Derived, and asserted as derived: every tag the router can assign yields a
+    pattern. A tenth pressure fails here on the day it is added without one,
+    which is the same guarantee the opening line already has one check below.
+  */
+  for (const tag of REAL_WORLD_TAGS) {
+    ok(themePattern(tag) instanceof RegExp,
+      `the ${tag} circle has words of its own to hear`,
+      "a pressure the Keeper is deaf to is a reflection that can only ever count");
+  }
+  ok(themePattern("not_a_tag") === null && themePattern(null) === null,
+    "and an unknown tag is silence rather than a wrong theme",
+    "silence beats a guess, in the one sentence the Keeper reads aloud");
 
   // Single source of truth: the room opens with the tactic library's phrasing.
   for (const tag of Object.keys(REAL_WORLD_TACTIC)) {
@@ -12921,7 +12983,6 @@ check("111 Every route is verified by at least one live pass", () => {
     ["/api/external/economy/context", "third party — covered over sources.ts"],
     ["/api/external/guardian/score", "third party — covered over guardian.ts"],
     ["/api/external/jobs/context", "third party — covered over sources.ts"],
-    ["/api/external/quote/context", "third party — covered over sources.ts"],
     ["/api/external/weather/context", "third party — covered over sources.ts"],
     ["/api/heartbeat", "scheduled job, no human waiting on the response"],
   ]);
@@ -14719,6 +14780,57 @@ check("124 The crisis turn answers in the language they wrote it in", () => {
   is(disagreeing.length, 0,
     "every Pidgin sentence the crisis list catches is also read as Pidgin",
     disagreeing.join(" · ") || "the router would gate them and the reply would answer in English");
+
+  /*
+    AND THE CLIENT HAS TO RENDER WHAT THE SERVER COMPUTED
+
+    The repair above made six surfaces language-aware and the circle room threw
+    the answer away. `if (r.status === 409 && d.error === "crisis") {
+    setCrisis(true); return; }` — a boolean, twice, dropping `d.reply` — and the
+    block rendered an English sentence written into the component. A Pidgin
+    speaker in crisis in a circle got English, with every server-side assertion
+    in this check green.
+
+    Which is the seam this file already names for the private path: *"the
+    client imported the constant and rendered that instead of the reply the
+    server sent, so a language-aware server would have changed nothing a person
+    sees."* Same bug, one surface over, after the fix. So it is swept rather
+    than fixed twice: any component branching on a crisis response must read
+    the reply out of it.
+  */
+  const walkTsx = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkTsx(p, out);
+      else if (/\.tsx$/.test(p)) out.push(p);
+    }
+    return out;
+  };
+  const deaf = [];
+  let branches = 0;
+  for (const f of walkTsx(path.join(ROOT, "src/components"))) {
+    const code = strip(fs.readFileSync(f, "utf8"));
+    for (const m of code.matchAll(/error\s*===\s*"crisis"[\s\S]{0,220}/g)) {
+      branches++;
+      /*
+        Read off the *response*, not the word.
+
+        The first version tested `/\breply\b/`, and a mutation writing
+        `setCrisis({ reply: null })` walked straight through it — the branch
+        still says "reply" while throwing the server's away. Check 118 learned
+        the same thing about the word `withStore`: a leftover mention satisfies
+        a check that greps for a name.
+      */
+      if (!/\b(d|data|body|json|res)\??\.reply\b/.test(m[0])) deaf.push(`${path.relative(ROOT, f)}`);
+    }
+  }
+  ok(branches >= 2,
+    "the sweep found the crisis branches it is meant to judge",
+    `found ${branches} — a sweep over nothing reports green over everything`);
+  is(deaf.length, 0,
+    "and every one of them renders the sentence the server computed",
+    [...new Set(deaf)].join(", ")
+      || "a client copy of the crisis line makes a language-aware server cosmetic");
 });
 
 check("125 The nightly audit asks the router what language a row was", () => {
