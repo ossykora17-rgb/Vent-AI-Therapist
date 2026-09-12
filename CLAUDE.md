@@ -28,9 +28,22 @@ npm run data       # store → data/sft.jsonl + data/eval.jsonl
 npm run rlhf       # ratings → data/dpo.jsonl, and what is losing
 ```
 
-`npm run gate` is the only opinion that counts about whether a change is
-safe. It has **zero dependencies**, so a fresh `git worktree` runs the whole
+`npm run gate` is the only **dependency-free** opinion about whether a change
+is safe. It has zero dependencies, so a fresh `git worktree` runs the whole
 suite with no `npm install`. Keep it that way.
+
+**It is not the only opinion, and this sentence used to say it was.** CI also
+runs `npm run lint`, `npx tsc --noEmit` and `next build`, and the gate runs
+none of the three — it cannot, because every one of them is an install and
+the zero-dependency property is the point. So a green gate and a red CI is a
+normal outcome, not a contradiction, and it happened on the commit that
+corrected this paragraph: `prefer-const` on a `let` the gate has no opinion
+about.
+
+Run `npm run lint` and `npx tsc --noEmit` before pushing. The gate now names
+the three steps it did not take instead of saying "the diff may be merged" —
+a line that grants permission has to be as honest as a refusal, which is the
+rule this file opens with, arriving at the sentence that hands out merges.
 
 And keep it unable to pass by not running. It used to exit **0** without
 running anything when the local store had no new rows — which on a fresh

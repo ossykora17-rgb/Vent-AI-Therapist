@@ -401,7 +401,26 @@ if (GATE) {
     live: Boolean(live),
   };
 
-  console.log(`\n  gate ${gate.passed ? "PASSES — the diff may be merged" : "FAILS — do not merge; read the diff above"}`);
+  /*
+    What it passed, and what it did not look at.
+
+    This said "the diff may be merged", and CLAUDE.md calls this command "the
+    only opinion that counts about whether a change is safe". Both overstate
+    it. CI runs `lint`, `tsc --noEmit` and `build` as well, and a green gate
+    with a red CI is not hypothetical — it happened on the commit that added
+    this line, over a `let` that should have been a `const`.
+
+    The gate cannot run those three and should not try: its whole virtue is
+    zero dependencies, so a fresh `git worktree` runs it with no `npm
+    install`, and eslint, typescript and next are all installs. So the honest
+    repair is not to widen the gate. It is to stop the sentence claiming the
+    three steps it never took — the oldest rule here, applied to the line that
+    grants permission to merge.
+  */
+  console.log(`\n  gate ${gate.passed ? "PASSES — nothing here objects" : "FAILS — do not merge; read the diff above"}`);
+  if (gate.passed) {
+    console.log("       not run here: lint · tsc --noEmit · build — CI runs all three");
+  }
 }
 
 // ── record ─────────────────────────────────────────────────────────────────

@@ -181,7 +181,6 @@ async function handlePOST(request: Request) {
     Falls through to creating on any doubt: no rooms, a full one, a seat that
     lost its race. A person who asked for a circle always gets one.
   */
-  let joinedExisting = false;
   let circle;
   try {
     const open = await store.listOpenCircles();
@@ -250,7 +249,8 @@ async function handlePOST(request: Request) {
   }
 
   return NextResponse.json(
-    { circle, role: roleForSeat(0), joined: joinedExisting ? "existing" : "new", storage: store.kind },
+    // Always "new" here: the existing-room path above returns on its own.
+    { circle, role: roleForSeat(0), joined: "new", storage: store.kind },
     { status: 201, headers: { "cache-control": "no-store" } },
   );
 }
