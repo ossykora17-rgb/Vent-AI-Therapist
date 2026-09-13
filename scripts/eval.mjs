@@ -14856,75 +14856,92 @@ check("120 The database lets a person rate as often as the route says they may",
     "if this ever becomes 1 the constraint was right and this check is the thing to delete");
 });
 
-check("121 The health probe can tell a hardened function from the one it replaced", () => {
+check("121 No health probe demands a function the migrations destroy", () => {
   /*
-    The repo fixed `match_memories` and production ran the broken version for
-    months.
+    THE PROBE OUTLIVED ITS SUBJECT, AND THE ENDPOINT CRIED WOLF
 
-    CLAUDE.md's entry on 0014 is the sharpest thing in the file. The vulnerable
-    definition was `security definer`, filtered on a uuid the *caller* supplied,
-    and was granted to `authenticated` — so any signed-in person could read
-    anybody's memories over `/rest/v1/rpc/match_memories`. 0014 replaced it,
-    documented it at length, and nothing anywhere compared the live schema to
-    this one: `/api/health` probed tables and columns and never a function.
+    `RPC_CONTRACT` probed `match_memories`, and the reasoning was right when it
+    was written. 0006 created a `security definer` version filtered on a uuid
+    the *caller* supplied and granted to `authenticated` — any signed-in person
+    could read anybody's memories over `/rest/v1/rpc/match_memories`. 0014
+    replaced it and nothing compared the live schema to this one. 0006's took
+    four arguments and 0014's takes three; PostgREST resolves by named
+    parameters, so calling with 0014's three answered PGRST202 against a
+    database still running 0006. A real discriminator on a public endpoint.
 
-    `RPC_CONTRACT` held exactly one entry, `vent_rate_count`, so the RPC probe
-    existed and did not cover the RPC that mattered.
+    Then 0016 was applied to production, and it drops the function outright.
 
-    Why the signature is enough to tell them apart: 0006 created a *four*
-    argument `match_memories` and 0014 replaced it with a *three* argument one —
-    the same fact that made 0016's `drop function` match nothing. PostgREST
-    resolves by named parameters, so a call carrying exactly 0014's three
-    answers PGRST202 against a database still running 0006.
+    `/api/health` answered **503 degraded**, `database: unreachable`,
+    `tableErrors: {match_memories: PGRST202}` — over a deployment persisting
+    every one of 221 vents, answering on Anthropic, `writable: ok`. The probe
+    was demanding a function the repository had deliberately destroyed.
+
+    Two migrations in this repo contradicted each other and the suite asserted
+    the losing side: 0014 hardens the function, this check asserted the probe
+    covered it, and 0016 deletes it. All three could not be true, and the one
+    that broke was the one nobody could see until 0016 ran.
+
+    So the assertion is the class, not the instance. An instance is not a
+    class — CLAUDE.md's rule, and the reason this check no longer names
+    `match_memories` in its subject line.
   */
-  const sql = fs.readFileSync(path.join(ROOT, "supabase/migrations/0014_rpc_hardening.sql"), "utf8");
+  const migDir = path.join(ROOT, "supabase/migrations");
+  const migFiles = fs.readdirSync(migDir).filter((f) => f.endsWith(".sql"));
 
-  /*
-    Derived off the migration, not typed twice. A hand-written parameter list
-    beside the schema it describes is this repository's most-repeated bug, and
-    here the two drifting apart turns the probe into one that always passes.
-  */
-  const decl = sql.match(/create or replace function public\.match_memories\(([\s\S]*?)\)\s*returns/);
-  ok(decl, "0014 still declares match_memories", "the probe below is derived from this");
-  const declared = [...decl[1].matchAll(/^\s*(p_[a-z_]+)/gm)].map((m) => m[1]);
-  is(declared.length, 3, `0014 declares three parameters (${declared.join(", ")})`,
-    "0006's was four — that difference is the whole discriminator");
-
-  const probed = Object.keys(RPC_CONTRACT.match_memories ?? {});
-  is(probed.sort().join(","), declared.slice().sort().join(","),
-    "and the health probe calls it with exactly those",
-    "a probe whose parameters drift from the schema resolves to nothing and reports a fault that is not there, or resolves to the old function and reports health");
+  // A sweep that walks nothing passes loudest.
+  ok(migFiles.length >= 15, `${migFiles.length} migrations read`,
+    "a sweep over no files reports an empty offender list and calls it a pass");
 
   /*
-    And the probe is over the RPC that carries the vulnerability, not merely
-    over some RPC. Named rather than counted: the point is which one.
-  */
-  ok("match_memories" in RPC_CONTRACT,
-    "the function 0014 hardened is the one being watched",
-    "the RPC probe existed for a year and covered vent_rate_count alone");
+    Both shapes, because 0016 uses the second and a pattern that only knew the
+    first would report zero destroyed functions and pass over everything.
 
-  // The vector has to be the width the column is, or the call fails for a
-  // reason that has nothing to do with the question being asked.
-  const contractSrc = fs.readFileSync(path.join(ROOT, "src/lib/store/contract.ts"), "utf8");
-  const probeDims = Number(contractSrc.match(/const PROBE_DIMS = (\d+)/)?.[1]);
-  const embedSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/embeddings.ts"), "utf8");
-  const embedDims = Number(embedSrc.match(/EMBED_DIMS = (\d+)/)?.[1]);
-  is(probeDims, embedDims,
-    `the probe vector is the width the column is (${probeDims})`,
-    "`embeddings.ts` is server-only and cannot be imported here, so the copy is asserted rather than trusted");
-  is((RPC_CONTRACT.match_memories.p_embedding ?? []).length, embedDims,
-    "and the array actually built is that wide");
+      drop function if exists public.foo(...)
+      ... where p.proname = 'foo' ... execute format('drop function ...')
+
+    The second is 0016's own repair: `drop ... if exists` on a signature that
+    moved matches nothing silently, so it loops `pg_proc` by name instead.
+  */
+  const destroyed = new Map();
+  for (const f of migFiles) {
+    const sql = fs.readFileSync(path.join(migDir, f), "utf8");
+    for (const m of sql.matchAll(/drop\s+function\s+(?:if\s+exists\s+)?(?:public\.)?([a-z_][a-z0-9_]*)/gi)) {
+      if (!destroyed.has(m[1])) destroyed.set(m[1], f);
+    }
+    if (/drop\s+function/i.test(sql)) {
+      for (const m of sql.matchAll(/proname\s*=\s*'([a-z_][a-z0-9_]*)'/gi)) {
+        if (!destroyed.has(m[1])) destroyed.set(m[1], f);
+      }
+    }
+  }
+
+  ok(destroyed.size >= 1, `${destroyed.size} function(s) dropped by migrations`,
+    "a parse that finds nothing makes the assertion below vacuous");
+  ok(destroyed.has("match_memories"),
+    "0016 still destroys match_memories, and the parse can see it",
+    "if this stops matching, the probe below is passing because it is blind");
+
+  const demanded = Object.keys(RPC_CONTRACT).filter((r) => destroyed.has(r));
+  is(demanded.length, 0,
+    "no probed RPC is one a migration drops",
+    `${demanded.map((r) => `${r} (dropped by ${destroyed.get(r)})`).join(", ")} — /api/health would report 503 degraded over a working deployment`);
+
+  // The probe still covers something, or the rule above is satisfied by an
+  // empty contract — which is the way this check would pass by not looking.
+  ok(Object.keys(RPC_CONTRACT).length >= 1,
+    `the RPC probe still watches ${Object.keys(RPC_CONTRACT).length}`,
+    "removing every entry satisfies the rule and abolishes the probe");
 
   /*
     WHAT THIS CANNOT SEE, STATED SO NOBODY READS IT AS MORE
 
-    It separates the signatures and not `security invoker` from `security
-    definer`. Two functions with these three parameters and different bodies
-    are identical from here. That limit belongs in the file, because the
-    failure this whole check exists to prevent was somebody reading a green
-    light as a guarantee it never made.
+    It compares names against the migrations in this repository. It cannot know
+    whether a migration has been *applied* — that is the gap CLAUDE.md spends a
+    section on, and the reason the endpoint is the thing to check rather than
+    this file.
   */
-  ok(/Supabase's own advisors|advisors/.test(contractSrc) || /advisors/.test(fs.readFileSync(path.join(ROOT, "CLAUDE.md"), "utf8")),
+  const contractSrc = fs.readFileSync(path.join(ROOT, "src/lib/store/contract.ts"), "utf8");
+  ok(/advisors/.test(contractSrc) || /advisors/.test(fs.readFileSync(path.join(ROOT, "CLAUDE.md"), "utf8")),
     "and the limit points at the tool that does cover bodies and grants",
     "a probe that cannot see something must say so where somebody reads it");
 });

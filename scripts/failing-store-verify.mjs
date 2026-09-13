@@ -60,6 +60,8 @@
  *                        what makes it safe to leave open."
  */
 
+import fs from "node:fs";
+
 const BASE = (process.argv[2] || "http://localhost:3055").replace(/\/$/, "");
 /**
  * `refusing` — the database says no to everything.
@@ -299,11 +301,43 @@ async function main() {
         ? "no uuid in any field, and the planted one came back redacted"
         : "no uuid — but no redaction marker either, so nothing was checked");
 
-  // The probe that would have caught a live vulnerability, on the wire rather
-  // than in the contract file. See check 121.
-  const probed = /match_memories/.test(health.text);
-  record(12, "and it probes the function 0014 hardened", probed,
-    probed ? "match_memories reported" : "the RPC probe covered vent_rate_count alone for a year");
+  /*
+    The RPC probe reaches the wire, for every RPC — not for one named here.
+
+    This check used to assert that `match_memories` appeared in the response,
+    because that was the RPC carrying a live vulnerability and the probe had
+    covered `vent_rate_count` alone for a year. Then 0016 was applied to
+    production and it *destroys* `match_memories`, so the assertion started
+    demanding a function the repository had deliberately deleted — and
+    `/api/health` answered 503 `degraded` over a deployment that was
+    persisting every vent and answering on Anthropic.
+
+    `npm run gate` skips this file when nothing is serving on :3001, which is
+    the gap CLAUDE.md already names about check 95: the pass that catches this
+    is not the pass the operating manual tells you to trust. The eval suite's
+    copy of the rule was repaired and this one was not, and CI is where that
+    surfaced. Third mechanism, one script over.
+
+    So the names are read off the contract rather than written here. Every RPC
+    the product declares must be reported by name when the database refuses
+    everything — which proves the probe ran *and* that its failures reach the
+    response, and stays true whatever the contract comes to hold.
+  */
+  const contractSrc = fs.readFileSync(
+    new URL("../src/lib/store/contract.ts", import.meta.url), "utf8");
+  const rpcBlock = contractSrc.match(/export const RPC_CONTRACT[^=]*=\s*\{([\s\S]*?)\n\};/);
+  const rpcNames = rpcBlock
+    ? [...rpcBlock[1].matchAll(/^ {2}([a-z_][a-z0-9_]*):\s*\{/gm)].map((m) => m[1])
+    : [];
+  // A sweep that walks nothing passes loudest: zero names makes `every` true.
+  const unreported = rpcNames.filter((fn) => !new RegExp(`\\b${fn}\\b`).test(health.text));
+  record(12, "and every RPC it declares is reported when the database refuses",
+    rpcNames.length >= 1 && unreported.length === 0,
+    rpcNames.length === 0
+      ? "no RPC names parsed out of contract.ts — this check examined nothing"
+      : unreported.length
+        ? `declared but never reported: ${unreported.join(", ")}`
+        : `${rpcNames.length} RPC(s) probed and reported: ${rpcNames.join(", ")}`);
 
   // ── 4. The private session still works ──────────────────────────────────
   const vent = await post("/api/vent", { anonId: ANON, message: "work is crushing me and I cannot sleep" });
