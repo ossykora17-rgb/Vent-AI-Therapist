@@ -16313,6 +16313,107 @@ check("132 The operating manual's counts are the code's counts", () => {
 });
 
 
+await checkAsync("135 The push signature a phone would reject is one nothing here ever built", async () => {
+  /*
+    EVERY PART WORKING IS NOT THE FEATURE WORKING — AGAIN, AND WITH CRYPTO
+
+    `circle_push` shipped with a migration, a table, a store method, two
+    routes, a service worker, a client control and a destruction path in
+    `closeCircle`. Four checks objected while it was written and every one was
+    right. Not one of them signed anything.
+
+    `vapidHeader` ended with `der.writeUInt8(der.length - 2, 1)`. The PKCS#8
+    envelope opens `30 81 41` — SEQUENCE, long-form length, `0x81` meaning
+    "one length byte follows" — so offset 1 is that marker, not a length. The
+    write produced `30 42 41` and `sign()` threw ERR_OSSL_ASN1_WRONG_TAG on
+    every call.
+
+    `sendJoinPing` never throws outward, deliberately: a push that fails must
+    not take down the request that triggered it. So a deployment with correct
+    VAPID keys and one with none were **identical from every surface** —
+    `isPushConfigured` true, `/api/push` returning a key, the browser
+    subscribing, the row written, and nothing ever ringing. No status code, no
+    log line, no red check. The invisible-failure class CLAUDE.md names about
+    prefix caching, wearing a notification.
+
+    It was findable the whole time. `app-imports.mjs` already neutralises
+    `server-only`, so this module could always have been imported here. The
+    suite had zero assertions about push.
+
+    Free and offline: a generated keypair and one local signature. No network,
+    no push service, no cost — the meter above would fail the run otherwise.
+  */
+  const { generateKeyPairSync, createVerify } = await import("node:crypto");
+  const { publicKey, privateKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  const jwk = privateKey.export({ format: "jwk" });
+  const pub = Buffer.concat([Buffer.from([0x04]),
+    Buffer.from(jwk.x, "base64url"), Buffer.from(jwk.y, "base64url")]);
+
+  process.env.VAPID_PUBLIC_KEY = pub.toString("base64url");
+  process.env.VAPID_PRIVATE_KEY = Buffer.from(jwk.d, "base64url").toString("base64url");
+  process.env.VAPID_SUBJECT = "mailto:nobody@example.invalid";
+
+  const push = await app("src/lib/push/send.ts");
+  ok(push.isPushConfigured, "three keys present reads as configured",
+    "the module reads env at load; if this is false the import ran too early");
+  is(push.pushPublicKey(), process.env.VAPID_PUBLIC_KEY,
+    "and the browser is handed the public key, never the private one");
+
+  /*
+    The header is built by the module under test and verified against the key
+    the module was never given — which is the only way to tell a signature a
+    push service accepts from a buffer of the right length.
+  */
+  const header = typeof push.vapidHeader === "function"
+    ? push.vapidHeader("https://fcm.googleapis.com/fcm/send/abc")
+    : null;
+  ok(header, "the module exposes its header builder to this check",
+    "a crypto path with no seam is a crypto path nothing can verify");
+
+  const m = String(header).match(/^vapid t=([\w-]+)\.([\w-]+)\.([\w-]+), k=([\w-]+)$/);
+  ok(m, "the header is the shape RFC 8292 specifies", `got: ${String(header).slice(0, 60)}`);
+
+  if (m) {
+    const [, h, b, sig, k] = m;
+    is(k, process.env.VAPID_PUBLIC_KEY, "and k= carries the public key");
+    is(Buffer.from(sig, "base64url").length, 64,
+      "the signature is 64 raw bytes (ieee-p1363), not a DER blob");
+
+    const v = createVerify("SHA256");
+    v.update(`${h}.${b}`);
+    ok(v.verify({ key: publicKey, dsaEncoding: "ieee-p1363" }, Buffer.from(sig, "base64url")),
+      "AND IT VERIFIES — a push service would accept this",
+      "the signature was produced but does not check out: the key wrap is wrong and nothing rings");
+
+    const claims = JSON.parse(Buffer.from(b, "base64url").toString("utf8"));
+    is(claims.aud, "https://fcm.googleapis.com", "aud is the push service origin, not the endpoint");
+    is(claims.sub, "mailto:nobody@example.invalid", "sub is the contact RFC 8292 requires");
+    ok(claims.exp > Math.floor(Date.now() / 1000) && claims.exp <= Math.floor(Date.now() / 1000) + 24 * 3600,
+      "exp is inside the spec's 24-hour cap", `exp=${claims.exp}`);
+  }
+
+  /*
+    And the line that caused it, named — not as a style rule but because the
+    envelope's length byte is a fact about P-256 and patching it is always
+    wrong here.
+  */
+  const src = strip(fs.readFileSync(path.join(ROOT, "src/lib/push/send.ts"), "utf8"));
+  ok(!/der\.write(?:U?Int)\w*\(/.test(src),
+    "and nothing rewrites a byte of the PKCS#8 envelope",
+    "offset 1 is the long-form length marker, not a length");
+  /*
+    Stripped first, and the reason is this check's own first run: the
+    postmortem above the fix quotes `der.writeUInt8(der.length - 2, 1)`
+    verbatim, so scanning raw source failed on the explanation of the repair.
+    Check 48's finding, arriving in the check written an hour after it was
+    re-read — the better the postmortem, the blinder the check that reads
+    around it.
+  */
+  ok(src.includes("308141020100301306072a8648ce3d"),
+    "and the stripper left the code it is scanning",
+    "a strip that ate the file satisfies the ban above by deleting everything");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
