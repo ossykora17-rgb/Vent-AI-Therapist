@@ -1868,6 +1868,39 @@ contract would read as "not applied yet" for ever, and the set is capped small
 enough to read — a long list of tables exempt from `degraded` is a health
 endpoint that cannot go red.
 
+**And it happened again the next day, from the other end of the same rule.**
+0016, 0020 and 0021 were applied to production. `/api/health` went **503
+`degraded`**, `database: unreachable`, `tableErrors: {match_memories:
+PGRST202}` — over a deployment persisting all 221 vents, answering on
+Anthropic, `writable: ok`. Second red light over a working road in two days.
+
+This one was not a missing migration. `RPC_CONTRACT` probed `match_memories`
+so a deployment still running 0006's vulnerable definition would report a
+failing RPC instead of looking healthy — correct, and the sharpest probe in
+the file. **0016 drops that function outright.** So the repository held two
+migrations and a check that could not all be true: 0014 hardens it, check 121
+asserted the probe covered it, 0016 destroys it. Nothing could see the
+contradiction until 0016 ran, because every one of the three was green on its
+own.
+
+A probe outliving its subject is the general case, and it is not the same bug
+as `PENDING_OK` even though it produces the same status code. There the table
+was coming; here the function is *gone on purpose* and the endpoint was
+demanding it for ever. Check 121 no longer names `match_memories` — it derives
+every function any migration drops, in **both** shapes (`drop function
+public.x` and 0016's own `proname = 'x'` loop, which exists precisely because
+the first shape matched nothing when the signature moved), and fails if any
+probed RPC is in that set. Mutations in three directions fail it: reinstating
+the probe, walking no migrations, and blinding the parse to the by-name loop.
+
+Two facts worth keeping from the application itself, both read off the live
+database rather than reasoned about. `vent_feedback_user_id_key` **was really
+there** — this file inferred it from a generated name and it is now confirmed
+and dropped, so a person's second rating is no longer discarded. And
+`profiles` and `memories` held **0 rows** against 221 vents and 19 circles, so
+0016's "THIS IS IRREVERSIBLE AND IT DESTROYS ROWS" destroyed nothing. Counting
+first is what made that a fact instead of a hope.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in
