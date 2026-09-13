@@ -772,10 +772,16 @@ sentence was written to deny.
 only successes were ever written.** A `null` stored nothing, so an upstream
 that is *down* — a dead key, an exhausted quota, a refusal — was asked again by
 the very next request, for ever, by the cache whose entire job is to stop that.
-Production is in exactly that state: `ANTHROPIC_API_KEY` is set and out of
-credit, so every vent has been paying a doomed round trip **inline, before the
-reply**, for a second opinion the module's own header says the room must not
-depend on.
+Production *was* in exactly that state: `ANTHROPIC_API_KEY` set and out of
+credit, so every vent paid a doomed round trip **inline, before the reply**,
+for a second opinion the module's own header says the room must not depend on.
+
+**The credit landed on 2026-09-13 and the fix is what makes that boring.**
+`/api/health` now answers `answeredBy: "anthropic"`, `tried: [{anthropic:
+ok}]`, `skipped: []`. The failure-caching repair is the reason this paragraph
+is history rather than a live cost: an upstream that goes down again is asked
+once per five-minute window instead of once per vent, whether or not anybody
+notices. Do not read the balance as the fix.
 
 **And it had no deadline.** `PROVIDER_DEADLINE_MS` is 50s, model discovery 15s,
 `embeddings.ts` 15s, and all four windows in `sources.ts` list
@@ -894,8 +900,18 @@ than estimated: check 24 caps the system prompt at **3,600 tokens**, and
 `MAX_TOKENS` caps the reply at **600** — about 4,200 a turn, plus one Carver
 call per session (`CARVE_MAX_TOKENS`, derived) and one extra full call on
 whatever share the failsafe rejects. Multiply by the traffic you expect before
-choosing a provider, and remember which one is answering: production currently
-falls through Anthropic on `insufficient_credit` and lands on Gemini Flash.
+choosing a provider, and remember which one is answering. That sentence used
+to end "production currently falls through Anthropic on `insufficient_credit`
+and lands on Gemini Flash", and it is **no longer true**: credit landed on
+2026-09-13 and `/api/health` reports Anthropic answering `claude-sonnet-5` with
+nothing skipped. The arithmetic above is therefore Sonnet 5's — $2 per million
+in, $10 per million out — which on the 178 vents production took in a month is
+about **$2.50**. The chain still has Gemini, Groq and OpenRouter behind it with
+keys present, so the fallthrough remains a real path and not a hypothetical.
+
+Check the endpoint rather than this paragraph. A balance is a fact about a
+moment, and this file's whole discipline is that a moment written down as a
+present tense goes stale without announcing it.
 
 **About 1,574 of those tokens are the same tokens every time, and they were
 uncacheable by construction.** Prefix caching matches on a literal prefix.
