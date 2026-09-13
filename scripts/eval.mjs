@@ -7950,6 +7950,48 @@ check("65 The backup copies what can be lost and nothing that was promised destr
   ok(/NEVER_EXPORT/.test(code) && /circle_messages/.test(code),
     "circle transcripts are excluded by name",
     "confidentiality is a deletion policy, and a durable copy is its opposite");
+  /*
+    A PENDING table is one whose feature is off without it, not a way to
+    silence drift.
+
+    Adding `circle_push` to the contract turned production's /api/health into
+    a 503 `degraded` the instant it deployed — with `writable: ok`, the model
+    answering, and every vent persisted. That endpoint defines degraded as
+    "nobody can be answered", and it was false: one unapplied migration made
+    the probe alarming in the wrong direction. A green light over a broken
+    road is this file's oldest bug; that was a red light over a working one.
+
+    The exemption is the dangerous half, so it is checked rather than trusted.
+    Every entry must be a table a migration actually creates — an entry naming
+    a table nothing creates would let a genuine typo in the contract read as
+    "not applied yet", for ever — and the set must stay small enough to read.
+  */
+  const contractSrc = fs.readFileSync(path.join(ROOT, "src/lib/store/contract.ts"), "utf8");
+  const pendingBlock = /export const PENDING_OK[^=]*=\s*new Set\(\[([^\]]*)\]\)/.exec(contractSrc);
+  ok(pendingBlock, "the pending set is declared as a readable literal");
+  const pending = [...(pendingBlock?.[1] ?? "").matchAll(/"([a-z_][a-z0-9_]*)"/g)].map((m) => m[1]);
+  const ddlAll = fs
+    .readdirSync(path.join(ROOT, "supabase/migrations"))
+    .filter((f) => f.endsWith(".sql"))
+    .map((f) => fs.readFileSync(path.join(ROOT, "supabase/migrations", f), "utf8"))
+    .join("\n");
+  ok(ddlAll.length > 500, `there are migrations to read (${ddlAll.length} chars)`,
+    "a sweep over no DDL finds no missing table and reports that as a pass");
+  const unbacked = pending.filter(
+    (t) => !new RegExp(`create table if not exists public\\.${t}\\b`).test(ddlAll),
+  );
+  is(unbacked.join(", "), "",
+    "every pending table is one a migration actually creates",
+    "an entry naming a table nothing creates turns a contract typo into 'not applied yet', permanently");
+  ok(pending.length <= 3,
+    `the pending set stays small enough to read (${pending.length})`,
+    "a long list of tables exempt from degraded is a health endpoint that cannot go red");
+
+  const healthSrc = fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8");
+  ok(/pendingTables/.test(healthSrc) && /PENDING_OK\.has/.test(healthSrc),
+    "and health sorts them out of missing rather than ignoring them",
+    "absent-and-expected still has to be visible, or the operator cannot tell which migration to run");
+
   const exclusion = code.slice(code.indexOf("NEVER_EXPORT"));
   ok(/filter\(\([^)]*\)\s*=>\s*!\s*NEVER_EXPORT\.has/.test(exclusion),
     "and the exclusion is applied to the table list, not merely declared",

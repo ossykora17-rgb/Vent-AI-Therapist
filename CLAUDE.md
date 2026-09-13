@@ -1771,6 +1771,34 @@ unquoted — and not a renamed column, because bending a standard field name to
 satisfy a regex is fitting the code to the test. A pattern written the way its
 author's data happened to look, again, after `make you` and `\bdon\b`.
 
+**And it shipped a regression the merge itself revealed: a red light over a
+working road.** Adding `circle_push` to `FULL_CONTRACT` turned production's
+`/api/health` into a **503 `degraded`** the instant it deployed — with
+`writable: ok`, Anthropic answering, and every vent persisted. That endpoint
+defines degraded as *nobody can be answered*, and it was false. One unapplied
+migration made the probe alarming in the wrong direction.
+
+A green light over a broken road is this file's oldest bug, arriving four
+times. This is its mirror, and it is not obviously the lesser one: an endpoint
+that cries wolf about a working deployment is how somebody learns to stop
+reading it.
+
+A **half-applied schema is a normal shape here** — `live-checks.sh` runs one on
+purpose, `getCarve` treats `42703` with 0011 pending as a normal state rather
+than a fault, and a first Supabase deployment passes through two of these
+shapes on its way up. So `PENDING_OK` names the tables whose absence means a
+migration has not run, and an entry earns its place by both halves being true:
+the feature is **off** without the table with no surface that fails, and
+nothing a person does depends on it. Still probed, still reported as
+`pendingTables` so an operator knows what to apply — it simply stops claiming
+the room is shut when it is open.
+
+The exemption is the dangerous half, so it is checked rather than trusted:
+every entry must name a table a migration actually creates, or a typo in the
+contract would read as "not applied yet" for ever, and the set is capped small
+enough to read — a long list of tables exempt from `degraded` is a health
+endpoint that cannot go red.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in
