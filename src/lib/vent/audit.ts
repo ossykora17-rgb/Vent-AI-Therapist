@@ -201,10 +201,37 @@ export function knownProblems(
  *
  * Sorted worst-first and capped by the caller, because the point is to spend
  * one call on the ten worst nights rather than fifty calls on everything.
+ *
+ * `broke` IS REQUIRED, AND THAT IS THE REPAIR
+ *
+ * The first line of this comment has always said "broke nothing", the caller
+ * printed the result as `flat, unbroken`, and the block directly above that
+ * call argues the case — *"the grader that fired already names the rule the
+ * product states; adding an instruction telling the model to obey a rule it
+ * was already given is how a prompt doubles in size while nothing improves."*
+ * Three statements of the rule, and the subtraction was in none of them:
+ * `knownProblems` was computed, printed, and never taken out of this set.
+ *
+ * Measured on a four-row sample carrying one clean reply: 3 broke a rule, 3
+ * were flat, and **all 3 of the flat ones were the convicted ones** — the
+ * genuinely unbroken-and-flat count was zero. So the billed call's entire
+ * payload was replies the free deterministic graders had already judged, and
+ * the correct number of calls that night was none.
+ *
+ * It is a required positional parameter rather than an optional one because
+ * an optional exclusion is the same bug with a default: every call site now
+ * fails to compile until it says what was already convicted. CLAUDE.md's rule
+ * about making the obvious field the safe one, applied to an argument.
  */
-export function flatReplies(rows: AuditRow[], limit = 10): AuditRow[] {
+export function flatReplies(
+  rows: AuditRow[],
+  broke: readonly { id: string }[],
+  limit = 10,
+): AuditRow[] {
+  const convicted = new Set(broke.map((f) => f.id));
   const scored = rows
     .filter((r) => r.ai_reply && r.intent_type === "vent" && !ourOwnWords(r.ai_reply))
+    .filter((r) => !convicted.has(r.id))
     .map((r) => {
       const reply = r.ai_reply ?? "";
       let weight = 0;

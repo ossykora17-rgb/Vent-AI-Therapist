@@ -9425,10 +9425,50 @@ check("79 The room proposes, the gate decides", () => {
   const flat = flatReplies([
     row({ id: "a", ai_reply: "That sounds like a lot to carry." }),
     row({ id: "b", ai_reply: "Rent, again. Which part of it is loudest right now?" }),
-  ]);
+  ], []);
   is(flat.map((r) => r.id).join(","), "a", "no question and no echo is flat; a real reply is not");
-  is(flatReplies([row({ ai_reply: authored })]).length, 0,
+  is(flatReplies([row({ ai_reply: authored })], []).length, 0,
     "and an authored fallback is never flat either");
+
+  /*
+    AND A REPLY THE FREE GRADERS ALREADY CONVICTED IS NEVER IN THE PAID SAMPLE
+
+    The doc comment on `flatReplies` opens "Replies that broke nothing", the
+    caller prints `flat, unbroken`, and the block above that call argues the
+    case — and `knownProblems` was computed, printed, and never subtracted.
+
+    Measured on a four-row sample with one clean reply: 3 broke a rule, 3 were
+    flat, and all 3 flat ones were the convicted ones. Zero genuinely
+    unbroken-and-flat, so the correct number of billed calls was none and the
+    audit would have made one carrying only already-judged replies.
+
+    `broke` is a required positional parameter now, so this cannot be omitted
+    by a new caller — but a required argument can still be passed `[]`, which
+    is why the behaviour is asserted here and not only the signature.
+  */
+  const convicted = row({ id: "c", ai_reply: "That sounds like a lot to carry." });
+  is(flatReplies([convicted], []).length, 1,
+    "the row is flat when nothing has convicted it",
+    "if this is 0 the probe below proves nothing — it would pass on a row that was never a candidate");
+  is(flatReplies([convicted], [{ id: "c" }]).length, 0,
+    "and drops out of the paid sample once a grader has named it",
+    "a model paid to opine on a reply the free graders already judged is the waste this whole stage exists to avoid");
+
+  /*
+    And the caller passes the real set rather than satisfying the signature.
+
+    A required parameter can be fed `[]`, which is the same bug wearing a
+    longer signature — CLAUDE.md's "a correct predicate nothing calls is the
+    shape of half the findings here", applied to an argument. Read off the
+    script the nightly workflow runs.
+  */
+  const auditSrc = strip(fs.readFileSync(path.join(ROOT, "scripts/audit.mjs"), "utf8"));
+  const callsite = auditSrc.match(/flatReplies\(([^)]*)\)/);
+  ok(callsite, "the nightly script still selects a paid sample",
+    "if this stops matching the assertion below reports on nothing");
+  ok(callsite && /\bknown\b/.test(callsite[1]),
+    `and hands it what the free graders convicted (${callsite?.[1]?.trim()})`,
+    "passing [] compiles, runs, prints `flat, unbroken`, and bills a call on rows already judged");
 
   /*
     The script's shape, asserted where it costs money. A nightly job that calls
@@ -13369,7 +13409,7 @@ check("110 The road from production to training carries what is on it", () => {
     { user_message: "rent don pass me this month", ai_reply: busy, intent_type: "vent", mood_score: 2, created_at: "2026-09-01T00:00:00Z" },
     { user_message: "work is heavy and nobody sees it", ai_reply: "That is a lot to carry alone.", intent_type: "vent", mood_score: 2, created_at: "2026-09-02T00:00:00Z" },
   ];
-  const flat = flatReplies(rows, 10);
+  const flat = flatReplies(rows, [], 10);
   ok(!flat.some((r) => r.ai_reply === busy),
     "a busy upstream is never a candidate for the audit's paid call",
     "no question mark and none of their words scores it 4 — straight into the ten worst");

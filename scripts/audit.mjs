@@ -137,7 +137,7 @@ for (const f of known.slice(0, 8)) {
   the model to obey a rule it was already given is how a prompt doubles in
   size while nothing improves.
 */
-const flat = flatReplies(rows, 10);
+const flat = flatReplies(rows, known, 10);
 console.log(`flat, unbroken ${flat.length}  (the only ones worth a call)`);
 
 fs.mkdirSync(OUT, { recursive: true });
