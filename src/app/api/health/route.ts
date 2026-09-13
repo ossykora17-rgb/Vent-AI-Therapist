@@ -2,7 +2,7 @@ import { redactIds } from "@/lib/errors";
 import { isPushConfigured } from "@/lib/push/send";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { FULL_CONTRACT, RPC_CONTRACT, explainDbCode } from "@/lib/store/contract";
+import { FULL_CONTRACT, PENDING_OK, RPC_CONTRACT, explainDbCode } from "@/lib/store/contract";
 import { getStore } from "@/lib/store";
 import {
   env,
@@ -75,6 +75,12 @@ export async function GET() {
   // Which tables answered and which did not — a migration that was never run
   // looks exactly like a wrong key unless the check says which.
   const missingTables: string[] = [];
+  /**
+   * Absent because a migration has not run, which is a normal shape here and
+   * not a fault. Reported so an operator knows what to apply; never counted
+   * into `degraded`, because people are being answered.
+   */
+  const pendingTables: string[] = [];
   // Why they did not answer. "Missing" and "not allowed to read" are different
   // problems with the same symptom, and calling both of them missing sent this
   // hunting for a table that existed. PostgREST puts the difference in `code`
@@ -180,7 +186,8 @@ export async function GET() {
           continue;
         }
 
-        missingTables.push(name);
+        if (PENDING_OK.has(name)) pendingTables.push(name);
+        else missingTables.push(name);
         tableErrors[name] = {
           code: res.error.code ?? undefined,
           hint: redactIds(res.error.hint) ?? explainDbCode(res.error.code) ?? undefined,
@@ -413,6 +420,7 @@ export async function GET() {
           : "ok",
       database,
       missingTables,
+      pendingTables,
       tableErrors,
       // Present and self-clearing. Never affects `status` or the HTTP code.
       transient,

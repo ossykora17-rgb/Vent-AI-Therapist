@@ -152,6 +152,39 @@ export const AUXILIARY_CONTRACT: Readonly<Record<string, string>> = {} as const;
 export const FULL_CONTRACT = { ...TABLE_CONTRACT, ...AUXILIARY_CONTRACT };
 
 /**
+ * Tables whose absence means a migration has not been run, not that the
+ * database is broken.
+ *
+ * Written because adding `circle_push` to the contract turned production's
+ * `/api/health` into a **503 degraded** the moment it deployed — with
+ * `writable: ok`, the model answering, and every vent being persisted. The
+ * endpoint's own comment defines degraded as *nobody can be answered*, and
+ * that was false: one unapplied migration had made the health probe alarming
+ * in the wrong direction, which is this repository's oldest bug wearing its
+ * opposite face. A green light over a broken road is the usual one; this was
+ * a red light over a working one.
+ *
+ * A half-applied schema is a **normal shape here** — `live-checks.sh` runs one
+ * on purpose, `getCarve` treats `42703` with 0011 pending as a normal state
+ * rather than a fault, and a first Supabase deployment passes through two of
+ * these shapes on its way up.
+ *
+ * An entry earns its place by both halves being true:
+ *
+ *   1. the feature it belongs to is **off** when the table is absent, with no
+ *      user-facing surface that fails — `isPushConfigured` is false without
+ *      VAPID keys and the room draws no control at all; and
+ *   2. nothing a person does depends on it. A vent, a carve, a note and a
+ *      circle all work exactly as before.
+ *
+ * A table that fails either half is not pending, it is missing, and belongs
+ * nowhere near this set. The absence is still probed and still reported — as
+ * `pendingTables`, so an operator sees precisely which migration to run — it
+ * simply stops claiming the room is shut when it is open.
+ */
+export const PENDING_OK: ReadonlySet<string> = new Set(["circle_push"]);
+
+/**
  * What a Postgres error code means, in the words of the fix.
  *
  * Returned to the caller so the answer is actionable without a search. The
