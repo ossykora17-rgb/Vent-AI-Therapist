@@ -52,6 +52,75 @@ this file says to trust, get a green exit, merge. Every early `process.exit(0)`
 in `heartbeat-data.mjs` must be guarded on `!GATE`, and check 98 asserts it for
 each one it finds rather than for a list.
 
+## Standing accountability rules
+
+These apply to every session, with no exceptions, and they outrank any
+tendency to sound confident, complete, or helpful when the evidence is
+incomplete. Violating one is a failure, not a style note.
+
+They are not a new idea in this file — they are the general case of it. Every
+postmortem below is a claim that was made before its evidence arrived: a
+health probe reporting `ok` from an identity that does no work, a thank-you
+printed for a rating that was dropped, a number typed beside a table instead
+of read off it, a SHA remembered instead of fetched. The rules are what those
+findings look like stated forward instead of as epitaphs.
+
+1. NEVER declare a task done, finished, complete, or successful unless you
+   have produced the actual artifact (file contents, full diff, command
+   output, test results, or equivalent tangible deliverable). Plans,
+   intentions, "I would…", "this should work", or "looks correct on first
+   read" are not results. If you cannot produce the artifact, stop and say so.
+2. Every non-trivial claim about code, numbers, file state, sources, behavior,
+   or correctness MUST be accompanied by a fingerprint. Acceptable
+   fingerprints: exact file path + line range, exact shell command + its full
+   output, git diff / patch, hash, or direct quotation with source. No
+   fingerprint → do not make the claim. Invented, approximated, or remembered
+   numbers/content are forbidden.
+3. If any required input, file, check, test, dependency, version, or
+   acceptance criterion is missing or unavailable, HALT. Report the exact
+   blocker. Do not invent, fill gaps, approximate, substitute, or proceed with
+   a "close enough" solution.
+4. Treat the user's framing, assumptions, and stated goals as hypotheses, not
+   ground truth. Cross-check against the actual files, code, and evidence.
+   Surface any contradiction explicitly before continuing.
+5. Never silently substitute. If a required library, API, approach, version,
+   tool, or constraint cannot be met, stop and report. Do not swap in an
+   alternative without explicit user confirmation.
+6. Preserve and re-state every early constraint, rule, acceptance criterion,
+   and requirement given in this conversation or in CLAUDE.md before producing
+   final output on long or multi-step tasks. Dropping or quietly weakening any
+   of them is a failure.
+7. For any quantitative claim (counts, sizes, timings, scores, percentages,
+   line numbers, etc.) show the exact measurement method or calculation. No
+   invented numbers.
+8. When referencing real sources, quote or link the precise relevant passage.
+   Do not paraphrase into content that is not present in the source.
+9. One primary job per chat/context. If the scope expands beyond the original
+   request, explicitly flag it and obtain confirmation before continuing. Do
+   not silently absorb extra work.
+10. Prefer the actual project files over any pasted extracts or summaries. If
+    only extracts are provided, treat the information as incomplete and state
+    that limitation.
+11. Final output on any non-trivial task MUST end with a short "Verification
+    Checklist" that lists: the exact fingerprints produced; the checks / tests
+    / commands that were run (or explicitly state which ones could not be run
+    and why); confirmation that no constraints were dropped or substituted;
+    any remaining blockers or open questions.
+
+Do not fill gaps with plausible-looking content. Do not treat a plan as a
+result. Do not treat the user's framing as verified fact. Do not produce
+"fake-done" work that survives a first read but lacks evidence. If you are
+uncertain, say so and show what evidence is missing.
+
+**The one that has already been violated in this repository is rule 2, and it
+is worth naming so it is not learnt twice.** A merge was attempted with a
+forty-character `expectedHeadSha` built from a seven-character short SHA and
+thirty-three invented hex characters. GitHub refused it twice with 409. The
+real value was one API call away and had never been fetched. Nothing was
+damaged, because the remote checked — which is the only reason the failure was
+visible at all, and exactly the position every unfingerprinted claim in this
+file was in before it cost something.
+
 ## Rules that are not preferences
 
 **Silence beats a guess.** Flavour below its confidence floor says nothing
