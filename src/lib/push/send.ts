@@ -57,8 +57,16 @@ export function pushPublicKey(): string | null {
 const b64url = (b: Buffer) => b.toString("base64url");
 const unb64 = (s: string) => Buffer.from(s, "base64url");
 
-/** RFC 8292 §2: a JWT signed ES256 over the push service's origin. */
-function vapidHeader(endpoint: string): string {
+/**
+ * RFC 8292 §2: a JWT signed ES256 over the push service's origin.
+ *
+ * Exported so a check can verify a real signature against a real key. It has
+ * no other caller, and that is the point: this path threw on every call for
+ * as long as it existed, and `sendJoinPing` swallowing the throw meant no
+ * surface anywhere could tell a working build from a silent one. A crypto
+ * path with no seam is a crypto path nothing can verify.
+ */
+export function vapidHeader(endpoint: string): string {
   const aud = new URL(endpoint).origin;
   const header = b64url(Buffer.from(JSON.stringify({ typ: "JWT", alg: "ES256" })));
   const body = b64url(
@@ -74,13 +82,33 @@ function vapidHeader(endpoint: string): string {
   );
   const signer = createSign("SHA256");
   signer.update(`${header}.${body}`);
-  // The private key arrives as raw base64url scalar, which is how every VAPID
-  // generator emits it; wrap it in the PKCS#8 envelope Node expects.
+  /*
+    The private key arrives as raw base64url scalar, which is how every VAPID
+    generator emits it; wrap it in the PKCS#8 envelope Node expects.
+
+    THE LENGTH IS NOT PATCHED, AND THAT LINE IS WHY THIS NEVER RANG
+
+    This used to end `der.writeUInt8(der.length - 2, 1)`. The envelope opens
+    `30 81 41` — SEQUENCE, long-form length, 0x41 content bytes — so offset 1
+    is the `0x81` marker saying "one length byte follows", not a length. The
+    write turned it into `30 42 41` and every signature threw
+    `ERR_OSSL_ASN1_WRONG_TAG`. `sendJoinPing` never throws outward by design,
+    so a build with correct VAPID keys would have been indistinguishable from
+    one with none: configured, silent, for ever.
+
+    The prefix is exact for a 32-byte scalar and needs no patching. What it
+    does need is a scalar that really is 32 bytes — P-256 keys with a leading
+    zero byte are emitted short by some generators, and a short one would
+    under-run the `04 20` the envelope declares. Left-padded rather than
+    patched, because the length in the envelope is a fact about the curve.
+  */
+  const scalar = Buffer.alloc(32);
+  const raw = unb64(PRIVATE);
+  raw.copy(scalar, Math.max(0, 32 - raw.length), Math.max(0, raw.length - 32));
   const der = Buffer.concat([
     Buffer.from("308141020100301306072a8648ce3d020106082a8648ce3d030107042730250201010420", "hex"),
-    unb64(PRIVATE),
+    scalar,
   ]);
-  der.writeUInt8(der.length - 2, 1);
   const sig = signer.sign({ key: der, format: "der", type: "pkcs8", dsaEncoding: "ieee-p1363" });
   return `vapid t=${header}.${body}.${b64url(sig)}, k=${PUBLIC}`;
 }

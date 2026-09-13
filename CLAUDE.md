@@ -1919,6 +1919,48 @@ and dropped, so a person's second rating is no longer discarded. And
 0016's "THIS IS IRREVERSIBLE AND IT DESTROYS ROWS" destroyed nothing. Counting
 first is what made that a fact instead of a hope.
 
+**And then push was found never to have rung, by one line, with the keys in
+hand.** Generating the VAPID pair meant checking the encoding against
+`vapidHeader`, and it threw: `ERR_OSSL_ASN1_WRONG_TAG` on every call it had
+ever made. The envelope opens `30 81 41` — SEQUENCE, long-form length, `0x81`
+meaning *one length byte follows* — and the function ended
+`der.writeUInt8(der.length - 2, 1)`, writing over that marker to make
+`30 42 41`. A byte.
+
+`sendJoinPing` never throws outward, deliberately and correctly: a failed
+notification must not take down the request that triggered it. So a build with
+correct keys and a build with none were **identical from every surface** —
+`isPushConfigured` true, `/api/push` serving a key, the browser subscribing,
+the row written, `closeCircle` destroying it on time, and nothing ever
+ringing. No status code, no red check, no log line. This is the
+invisible-failure class from the prefix-caching entry — *the reply is correct,
+the suite is green, and the only witness is a bill a month later* — wearing a
+notification instead, where the witness is a person who never came back to a
+room because nothing told them to.
+
+Four checks objected while `circle_push` was written and every one was right.
+**Not one of them signed anything.** The feature had a migration, a table, a
+store method, two routes, a service worker, a client control and a destruction
+path, and zero assertions about its crypto — *every part working is not the
+feature working*, for the second time in this file, now with the part being
+the only one a person actually experiences.
+
+It was reachable the whole time. `app-imports.mjs` neutralises `server-only`
+at resolve, so the suite could always have imported this module. Check 135
+does: it generates a P-256 pair, hands the module the keys through the
+environment it really reads, and **verifies the signature against the public
+key the module was never given.** Free and offline — one local signature, no
+push service, which the spend meter requires. `vapidHeader` is exported for
+no other reason, and that is stated where it is exported: a crypto path with
+no seam is a crypto path nothing can verify. The mutation that matters is the
+second: flipping one bit of the scalar still produces 64 bytes of the right
+shape, and only the verify catches it.
+
+Its first run then failed on the repair's own postmortem, which quotes the
+banned line verbatim — check 48's finding, in a check written the same hour it
+was re-read. Stripped now, with an assertion that the stripper left the file
+behind.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in
