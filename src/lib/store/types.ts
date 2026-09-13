@@ -74,6 +74,22 @@ export interface CircleMemberRow {
   joined_at: string;
 }
 
+/**
+ * A browser to wake when somebody sits down in this circle.
+ *
+ * No name, no device string, no user agent, no last-seen. The row answers one
+ * question — where to send the one notification — and cannot answer another.
+ */
+export interface CirclePushRow {
+  id: string;
+  circle_id: string;
+  anon_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  created_at: string;
+}
+
 export interface CircleMessageRow {
   id: string;
   circle_id: string;
@@ -343,6 +359,32 @@ export interface Store {
   addMember(
     m: Omit<CircleMemberRow, "id" | "joined_at" | "last_seen_at" | "typing_until">,
   ): Promise<boolean>;
+  /**
+   * Where to wake somebody who is holding this room, if they asked to be woken.
+   *
+   * Keyed to the circle, not to the person, and that is the whole design: a
+   * push subscription is a capability to wake a device, and held per person it
+   * is a thing this product keeps indefinitely on a front page promising one
+   * tap deletes everything. Here it dies in `closeCircle` with the seats and
+   * the transcript, so the capability cannot outlive the forty-five minutes it
+   * was granted for.
+   *
+   * Returns whether a row was written, like `addMember` and unlike everything
+   * else in this interface — a subscription that did not land must not be
+   * reported as kept, and check 87 sweeps every boolean-returning method for a
+   * caller that reads the answer.
+   */
+  savePush(p: {
+    circleId: string;
+    anonId: string;
+    endpoint: string;
+    p256dh: string;
+    auth: string;
+  }): Promise<boolean>;
+  /** Everybody in this room who asked to be woken, minus the person who just acted. */
+  listPush(circleId: string, exceptAnonId: string): Promise<CirclePushRow[]>;
+  /** One endpoint, gone. Called when the push service says it is dead (404/410). */
+  dropPush(endpoint: string): Promise<void>;
   /**
    * Give the seat back. Used to undo a join that lost a race, and by nothing
    * else — leaving a circle is not a feature, it is a thing that happens when

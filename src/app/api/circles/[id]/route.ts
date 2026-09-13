@@ -9,6 +9,7 @@ import { economyContext, weatherContext } from "@/lib/external/sources";
 import { isLivekitConfigured } from "@/lib/env";
 import { closeVoiceRoom } from "@/lib/voice/close";
 import { sweepIfOver } from "@/lib/circles/sweep";
+import { pingTheRoom } from "@/lib/push/send";
 import {
   MAX_SEATS, PHASE_LABEL, economyFact, weatherFact, keeperIntention, keeperReflection,
   phaseFor, roleForSeat,
@@ -18,6 +19,7 @@ import { withStore } from "@/lib/http/with-store";
 export const dynamic = "force-dynamic";
 
 /** Authorship, so each Keeper line is written at most once. */
+
 const KEEPER_OPEN = "keeper:open";
 const KEEPER_REFLECT = "keeper:reflect";
 
@@ -258,6 +260,10 @@ async function handlePOST(request: Request, { params }: Params) {
   if (!took) {
     return NextResponse.json({ error: "full", seats: after.length }, { status: 409 });
   }
+
+  // The seat landed. This is the moment the room has been waiting for, and
+  // until now nothing told the person holding it.
+  await pingTheRoom(store, id, anonId);
 
   return NextResponse.json(
     { role, seats: after.length, storage: store.kind },

@@ -8,7 +8,7 @@ import { isExpired, MAX_SEATS, TRANSCRIPT_TTL_MS } from "@/lib/circles/rules";
 import { TYPING_WINDOW_MS } from "@/lib/circles/presence";
 import { StoreUnavailableError } from "./errors";
 import type {
-  CircleMemberRow, CircleMessageRow, CircleRow,
+  CircleMemberRow, CircleMessageRow, CirclePushRow, CircleRow,
   NewVent, ProfilePatch, Store, VentRow, HeldNote, BreakingAnswer } from "./types";
 import { BREAKING_CAP, HELD_CAP } from "./types";
 
@@ -554,6 +554,24 @@ export class SupabaseStore implements Store {
     */
     done("closeCircle:seats",
       await this.db.from("circle_members").delete().eq("circle_id", id));
+    /*
+      And the way to wake anybody about this room.
+
+      0021 declares `on delete cascade` from `circles`, which would take these
+      rows the day a circle row is actually deleted — but a closed circle is
+      not a deleted one: the row stays with `status: "closed"`, so the cascade
+      never fires and the subscription would outlive the promise. Stated here,
+      explicitly, next to the seats it belongs beside.
+
+      A push subscription is a capability to ring a phone. It was granted for
+      this room and it dies with this room, which is the entire reason 0021
+      keys it to the circle rather than to the person: held per browser it
+      would be a thing this product keeps indefinitely, and `deleteAll` cannot
+      reach an anon-id row — which is exactly how the seats above outlived
+      "one tap deletes everything, for good".
+    */
+    done("closeCircle:push",
+      await this.db.from("circle_push").delete().eq("circle_id", id));
     done("closeCircle", await this.db.from("circles").update({ status: "closed" }).eq("id", id));
   }
 
@@ -575,6 +593,60 @@ export class SupabaseStore implements Store {
       .order("joined_at", { ascending: true })
       .order("id", { ascending: true }));
     return (data ?? []) as unknown as CircleMemberRow[];
+  }
+
+  async savePush(pp: {
+    circleId: string; anonId: string; endpoint: string; p256dh: string; auth: string;
+  }): Promise<boolean> {
+    // Upsert on the constraint 0021 declares, so a browser re-subscribing
+    // updates rather than duplicating. Reports by returning, like `setCarve`
+    // and for the same reason: a subscription that did not land must not be
+    // reported as kept.
+    const { data, error } = await this.db
+      .from("circle_push")
+      .upsert(
+        {
+          circle_id: pp.circleId,
+          anon_id: pp.anonId,
+          endpoint: pp.endpoint,
+          p256dh: pp.p256dh,
+          auth: pp.auth,
+        },
+        { onConflict: "circle_id,endpoint" },
+      )
+      .select("id");
+    if (error) {
+      // 42P01 is the table not existing yet — 0021 pending, which is a normal
+      // state on a deployment that has not run it and not a fault. The room
+      // simply cannot offer to wake anybody.
+      console.warn("[store] savePush", error.code);
+      return false;
+    }
+    /*
+      The rows are the answer; the absence of an error is not.
+
+      `true` for "Postgres did not complain" is the shape this store has now
+      been wrong about three times — `setCarve`, `anchorLatestVent`, and the
+      first draft of this method an hour ago. An upsert that matched nothing
+      and changed nothing returns no error, and "You'll be told when someone
+      sits down" is a promise that a phone will ring. It is not one to make on
+      a write whose effect nobody counted.
+    */
+    return ((data as unknown as Array<{ id: string }> | null)?.length ?? 0) > 0;
+  }
+
+  async listPush(circleId: string, exceptAnonId: string): Promise<CirclePushRow[]> {
+    // No space after the comma — see FULL_SELECT.
+    const data = ok("listPush", await this.db
+      .from("circle_push")
+      .select("id,circle_id,anon_id,endpoint,p256dh,auth,created_at")
+      .eq("circle_id", circleId)
+      .neq("anon_id", exceptAnonId));
+    return (data ?? []) as unknown as CirclePushRow[];
+  }
+
+  async dropPush(endpoint: string): Promise<void> {
+    done("dropPush", await this.db.from("circle_push").delete().eq("endpoint", endpoint));
   }
 
   async seatedIn(anonId: string): Promise<string[]> {

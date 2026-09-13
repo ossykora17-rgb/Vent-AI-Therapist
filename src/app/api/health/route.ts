@@ -1,4 +1,5 @@
 import { redactIds } from "@/lib/errors";
+import { isPushConfigured } from "@/lib/push/send";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { FULL_CONTRACT, RPC_CONTRACT, explainDbCode } from "@/lib/store/contract";
@@ -375,6 +376,17 @@ export async function GET() {
     paystack: isPaystackConfigured,
     perspective: isPerspectiveConfigured,
     livekit: isLivekitConfigured,
+    /*
+      Whether this build can wake a phone about a circle.
+
+      Worth a line here for the same reason `backups` is: a capability that is
+      simply off looks identical from every other surface to one that is
+      broken, and the difference is an env var somebody either set or did not.
+      Of the first sixteen circles, fourteen held one person — so "nobody is
+      being told when somebody sits down" is a fact about why this product is
+      quiet, and it belongs where an operator already looks.
+    */
+    push: isPushConfigured,
   };
 
   return NextResponse.json(

@@ -772,10 +772,16 @@ sentence was written to deny.
 only successes were ever written.** A `null` stored nothing, so an upstream
 that is *down* — a dead key, an exhausted quota, a refusal — was asked again by
 the very next request, for ever, by the cache whose entire job is to stop that.
-Production is in exactly that state: `ANTHROPIC_API_KEY` is set and out of
-credit, so every vent has been paying a doomed round trip **inline, before the
-reply**, for a second opinion the module's own header says the room must not
-depend on.
+Production *was* in exactly that state: `ANTHROPIC_API_KEY` set and out of
+credit, so every vent paid a doomed round trip **inline, before the reply**,
+for a second opinion the module's own header says the room must not depend on.
+
+**The credit landed on 2026-09-13 and the fix is what makes that boring.**
+`/api/health` now answers `answeredBy: "anthropic"`, `tried: [{anthropic:
+ok}]`, `skipped: []`. The failure-caching repair is the reason this paragraph
+is history rather than a live cost: an upstream that goes down again is asked
+once per five-minute window instead of once per vent, whether or not anybody
+notices. Do not read the balance as the fix.
 
 **And it had no deadline.** `PROVIDER_DEADLINE_MS` is 50s, model discovery 15s,
 `embeddings.ts` 15s, and all four windows in `sources.ts` list
@@ -894,8 +900,18 @@ than estimated: check 24 caps the system prompt at **3,600 tokens**, and
 `MAX_TOKENS` caps the reply at **600** — about 4,200 a turn, plus one Carver
 call per session (`CARVE_MAX_TOKENS`, derived) and one extra full call on
 whatever share the failsafe rejects. Multiply by the traffic you expect before
-choosing a provider, and remember which one is answering: production currently
-falls through Anthropic on `insufficient_credit` and lands on Gemini Flash.
+choosing a provider, and remember which one is answering. That sentence used
+to end "production currently falls through Anthropic on `insufficient_credit`
+and lands on Gemini Flash", and it is **no longer true**: credit landed on
+2026-09-13 and `/api/health` reports Anthropic answering `claude-sonnet-5` with
+nothing skipped. The arithmetic above is therefore Sonnet 5's — $2 per million
+in, $10 per million out — which on the 178 vents production took in a month is
+about **$2.50**. The chain still has Gemini, Groq and OpenRouter behind it with
+keys present, so the fallthrough remains a real path and not a hypothetical.
+
+Check the endpoint rather than this paragraph. A balance is a fact about a
+moment, and this file's whole discipline is that a moment written down as a
+present tense goes stale without announcing it.
 
 **About 1,574 of those tokens are the same tokens every time, and they were
 uncacheable by construction.** Prefix caching matches on a literal prefix.
@@ -1713,6 +1729,54 @@ would need a table, a destruction path in `closeCircle` or `deleteAll`, an
 exemption from the backup, and a line in the privacy page. That is a retention
 decision, and this file's own test says a retention decision is read by a
 person. The finding is the deliverable; the schema is not.
+
+**One notification, and the design decision is which key it hangs on.** The
+steering stops the product opening a second empty room; it cannot make the
+first person still be there when the second arrives. Fourteen of the first
+sixteen circles held exactly one person, and the Keeper needs
+`members.length > 1` to say a word — so `circle_push` exists to send one
+sentence: *somebody sat down in the room you are holding.*
+
+It was written first as a per-browser subscription table and that was wrong. A
+push subscription is a capability to wake a device; held per person it is a
+thing this product keeps indefinitely, and `deleteAll` works in `userId` space
+and cannot reach a row keyed by anon id — **which is exactly how
+`circle_members` outlived "one tap deletes everything, for good"**. Keyed to
+the circle, the question does not arise: the row dies in `closeCircle` beside
+the seats and the transcript, so the capability cannot outlive the
+forty-five minutes it was granted for. It is also true to the thing, because a
+subscription that survives the room has no notification left to deliver.
+
+The payload is the circle id and nothing else — not the tag, not the seat
+count, not who arrived. A notification is decrypted onto a lock screen that may
+be face-up on a table in a room with other people in it. It says *come back*,
+never *about what*.
+
+**Four checks objected, and every one of them was right.** Check 60 caught
+`savePush` returning `true` because Postgres had not complained — the shape
+this store has now been wrong about three times, after `setCarve` and
+`anchorLatestVent`; the rows are the evidence and the absence of an error is
+not. Check 112 went red on its own the moment `closeCircle` learned to destroy
+the new table, which is what deriving the backup's exclusion from the sweep
+buys. Check 111 caught both new routes belonging to no live pass — the
+`/api/notes` trap, named in this file and stepped in anyway. And check 16
+caught a column the contract declared and the DDL appeared not to have.
+
+That last one was the check being wrong, and it is the sixth face of this
+file's most-repeated finding. The DDL parser read column names as `[a-z_]+`,
+which is every column this schema had until one arrived with a digit in it:
+**`p256dh`**, whose name is fixed by RFC 8291 and is not ours to choose. The
+fix is the identifier rule — `[a-z_][a-z0-9_]*`, what Postgres accepts
+unquoted — and not a renamed column, because bending a standard field name to
+satisfy a regex is fitting the code to the test. A pattern written the way its
+author's data happened to look, again, after `make you` and `\bdon\b`.
+
+**The capability question lives at `/api/push`, outside the `[id]` prefix, and
+that is not filing.** Every handler under `api/circles/[id]` operates on a
+circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in
+`withStore` (check 118). A route that answers "does this build have VAPID keys"
+does neither and should not need two exemptions to say it is not that kind of
+route. **A route that needs two exemptions is in the wrong place.**
 
 <!-- BEGIN:nextjs-agent-rules -->
 

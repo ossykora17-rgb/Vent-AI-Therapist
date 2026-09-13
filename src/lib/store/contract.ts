@@ -123,6 +123,7 @@ export const TABLE_CONTRACT: Readonly<Record<string, string>> = {
   circle_members:
     "id,circle_id,anon_id,role,pressure_seeded,last_seen_at,typing_until,joined_at",
   circle_messages: "id,circle_id,anon_id,content,kind,flagged,created_at",
+  circle_push: "id,circle_id,anon_id,endpoint,p256dh,auth,created_at",
 } as const;
 
 /**

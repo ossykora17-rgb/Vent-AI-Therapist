@@ -6,7 +6,7 @@ import path from "node:path";
 import { isExpired, MAX_SEATS, MESSAGE_KINDS, SHARE_MAX_CHARS } from "@/lib/circles/rules";
 import { TYPING_WINDOW_MS } from "@/lib/circles/presence";
 import type {
-  CircleMemberRow, CircleMessageRow, CircleRow,
+  CircleMemberRow, CircleMessageRow, CirclePushRow, CircleRow,
   NewVent, ProfilePatch, Store, VentRow, HeldNote, BreakingAnswer } from "./types";
 import { BREAKING_CAP, HELD_CAP } from "./types";
 
@@ -63,11 +63,13 @@ interface Db {
   circleMembers: CircleMemberRow[];
   notes: StoredNote[];
   circleMessages: CircleMessageRow[];
+  /** Optional so a file written before 0021 still parses — see `read()`. */
+  circlePush: CirclePushRow[];
 }
 
 const EMPTY: Db = {
   users: [], vents: [], feedback: [],
-  circles: [], circleMembers: [], circleMessages: [],
+  circles: [], circleMembers: [], circleMessages: [], circlePush: [],
   notes: [],
 };
 
@@ -438,6 +440,13 @@ export class FileStore implements Store {
         is why check 83 asserts the pair rather than trusting them to agree.
       */
       db.circleMembers = db.circleMembers.filter((m) => m.circle_id !== id);
+      /*
+        And the way to wake anybody about it. A push subscription is a
+        capability to ring a phone; it is granted for this room and it dies
+        with this room, which is the entire reason it is keyed to the circle
+        rather than to the person.
+      */
+      db.circlePush = (db.circlePush ?? []).filter((x) => x.circle_id !== id);
     });
   }
 
@@ -454,6 +463,43 @@ export class FileStore implements Store {
         depending on where it was deployed.
       */
       .sort((a, b) => a.joined_at.localeCompare(b.joined_at) || a.id.localeCompare(b.id));
+  }
+
+  async savePush(pp: {
+    circleId: string; anonId: string; endpoint: string; p256dh: string; auth: string;
+  }): Promise<boolean> {
+    let wrote = false;
+    await this.write((db) => {
+      db.circlePush = db.circlePush ?? [];
+      const at = db.circlePush.findIndex(
+        (x) => x.circle_id === pp.circleId && x.endpoint === pp.endpoint,
+      );
+      const row = {
+        id: at >= 0 ? db.circlePush[at].id : randomUUID(),
+        circle_id: pp.circleId,
+        anon_id: pp.anonId,
+        endpoint: pp.endpoint,
+        p256dh: pp.p256dh,
+        auth: pp.auth,
+        created_at: at >= 0 ? db.circlePush[at].created_at : new Date().toISOString(),
+      };
+      if (at >= 0) db.circlePush[at] = row;
+      else db.circlePush.push(row);
+      wrote = true;
+    });
+    return wrote;
+  }
+
+  async listPush(circleId: string, exceptAnonId: string): Promise<CirclePushRow[]> {
+    return (this.read().circlePush ?? []).filter(
+      (x) => x.circle_id === circleId && x.anon_id !== exceptAnonId,
+    );
+  }
+
+  async dropPush(endpoint: string): Promise<void> {
+    await this.write((db) => {
+      db.circlePush = (db.circlePush ?? []).filter((x) => x.endpoint !== endpoint);
+    });
   }
 
   async seatedIn(anonId: string): Promise<string[]> {

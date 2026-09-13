@@ -243,6 +243,27 @@ async function main() {
     ["/api/pattern", await fetch(`${BASE}/api/pattern?anonId=${ANON}`)],
     ["/api/community", await fetch(`${BASE}/api/community`)],
     ["/api/circles/does-not-exist", await fetch(`${BASE}/api/circles/does-not-exist`)],
+    /*
+      The two push routes, in the shape that has no keys and no store.
+
+      `/api/push` is the capability question and must answer `configured:
+      false` rather than 501 or a crash — the client asks it before drawing
+      anything, and the room never offers a door that opens onto a 501.
+
+      The subscribe route is under `[id]` and is checked here for the same
+      reason every other route is: a route added on Tuesday is covered by
+      nothing on Wednesday unless somebody puts it here, which is how
+      `/api/notes` shipped verified by zero of twenty-seven checks.
+    */
+    ["/api/push", await fetch(`${BASE}/api/push`)],
+    ["/api/circles/does-not-exist/push", await fetch(`${BASE}/api/circles/does-not-exist/push`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        anonId: ANON, endpoint: "https://example.invalid/x",
+        p256dh: "x".repeat(20), auth: "y".repeat(12),
+      }),
+    })],
   ];
   const wireLeaks = [];
   const wire5xx = [];
