@@ -828,6 +828,46 @@ one per message. The audit runs the free deterministic graders first and only
 asks a model about replies that broke *no* stated rule and are still flat —
 one call, ten samples, and none at all on a night with nothing flat.
 
+**That last sentence was false, and it was stated in four places.** The doc
+comment on `flatReplies` opens *"Replies that broke nothing and still went
+nowhere"*, the caller prints the result as `flat, unbroken`, the block directly
+above that call argues the case — *"the grader that fired already names the
+rule the product states; adding an instruction telling the model to obey a rule
+it was already given is how a prompt doubles in size while nothing improves"* —
+and this paragraph said it too. `knownProblems` was computed one line up,
+printed, and **never subtracted**. Four statements of a rule and no
+implementation of it, which is the typed `0 model calls` again: an intention
+where an outcome belongs.
+
+Measured on a four-row sample carrying one clean reply: **3 broke a rule, 3
+were flat, and all 3 of the flat ones were the convicted ones.** Genuinely
+unbroken-and-flat: **zero**. So the billed call's whole payload was replies the
+free deterministic graders had already judged, and the right number of calls
+that night was none — which is what it now prints. Worse than the money: the
+prompt sent with them asks for a *new rule*, so the one path that reaches the
+live prompt was being fed defects that already have names.
+
+`broke` is a **required positional parameter** now — every call site fails to
+compile until it says what was convicted. That is CLAUDE.md's "make the obvious
+field the safe one" applied to an argument, and it is still not enough on its
+own, because a required argument can be fed `[]`. So the behaviour is asserted
+as well as the signature, and separately the **caller** is read off
+`scripts/audit.mjs` to prove it passes `known` rather than something that
+type-checks. Three mutations fail it: drop the filter, pass `[]`, and make the
+probe row one that was never a candidate — the last because a probe that proves
+nothing is how the first two would have looked green.
+
+**And the loop this feeds has never once run.** `audit.yml` gates on
+`VENT_BACKUP_TOKEN` and `VENT_BASE_URL` and `exit 0`s when either is unset.
+Both are unset: production answers `backups: "off"`. **21 of 21 scheduled runs
+report success, every one of them 7 to 11 seconds long**, and
+`LEARNED_RULES: readonly LearnedRule[] = []` in `learned.ts` is the other end of
+the same pipe. The workflow's own step summary says so — *"This job is the only
+thing that grades the replies real people actually received"* — which is the
+honest skip this file already argued for, and it has been true every night
+since. The machinery is correct and has been fed nothing; both secrets are the
+whole difference.
+
 **That sentence said "for the whole userbase", and the cache one file over
 says otherwise in its own header:** *"In production the disk is ephemeral, so
 it degrades to an in-process Map — still useful (one lambda serves many
