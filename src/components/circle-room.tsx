@@ -93,6 +93,15 @@ export function CircleRoom({ id }: { id: string }) {
    *  or refusing. Distinct from `notFound`: that circle is gone for good, this
    *  one may be there and unreachable, and the two deserve different sentences. */
   const [unreachable, setUnreachable] = React.useState(false);
+  /**
+   * Whether this build can wake a phone, and whether they asked it to.
+   *
+   * "off" is the deployment answer — no VAPID keys — and renders nothing at
+   * all rather than a switch that fails when tapped. The other four are this
+   * person's state in this room.
+   */
+  const [notify, setNotify] =
+    React.useState<"off" | "idle" | "asking" | "on" | "denied">("off");
   const [chair, setChair] = React.useState<string>("sunk");
   const [reflecting, setReflecting] = React.useState(false);
   const [mood, setMood] = React.useState<number | null>(null);
@@ -109,6 +118,8 @@ export function CircleRoom({ id }: { id: string }) {
    * would tear down and rebuild the four-second interval on every keystroke.
    */
   const draftRef = React.useRef("");
+  /** The VAPID public key, once the build has said it has one. */
+  const pushKey = React.useRef<string | null>(null);
   React.useEffect(() => { draftRef.current = draft; }, [draft]);
 
   const me = React.useMemo(() => (typeof window === "undefined" ? "" : anonId()), []);
@@ -155,6 +166,29 @@ export function CircleRoom({ id }: { id: string }) {
   React.useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length]);
+
+  /*
+    Ask the build, once, whether it can do this at all.
+
+    Read off the body rather than the status: a 200 that says
+    `configured: false` is the ordinary answer on a deployment with no VAPID
+    keys, and treating `res.ok` as the answer is the half-measure this
+    repository already paid for once with a thank-you for a rating it dropped.
+  */
+  React.useEffect(() => {
+    let live = true;
+    void fetch("/api/push")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!live || !d?.configured || !d?.publicKey) return;
+        if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+        if (!("PushManager" in window)) return;
+        pushKey.current = d.publicKey as string;
+        setNotify(Notification.permission === "denied" ? "denied" : "idle");
+      })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
 
 
   async function join() {
@@ -216,6 +250,55 @@ export function CircleRoom({ id }: { id: string }) {
       return r.ok;
     } catch {
       return false;
+    }
+  }
+
+  /*
+    Ask the browser, then tell the server where to reach it.
+
+    Three things can say no and each is a different sentence: the person can
+    refuse permission, the push service can refuse a subscription, and the
+    store can refuse the row. Only the last one is a failure worth a toast —
+    the first is their decision and the second is not theirs to fix.
+
+    `subscribed` is read off the body, not off `res.ok`. "You'll be told" is a
+    promise that a phone will ring, and this product has shipped a thank-you
+    for a rating it dropped by reading the status and never the body.
+  */
+  async function askToBeWoken() {
+    const key = pushKey.current;
+    if (!key || !state) return;
+    setNotify("asking");
+    try {
+      if (Notification.permission !== "granted") {
+        const answer = await Notification.requestPermission();
+        if (answer !== "granted") { setNotify(answer === "denied" ? "denied" : "idle"); return; }
+      }
+      const reg = await navigator.serviceWorker.ready;
+      const sub =
+        (await reg.pushManager.getSubscription()) ??
+        (await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: key,
+        }));
+      const raw = sub.toJSON().keys ?? {};
+      const r = await fetch(`/api/circles/${id}/push`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          anonId: me,
+          endpoint: sub.endpoint,
+          p256dh: raw.p256dh,
+          auth: raw.auth,
+        }),
+      });
+      const d = await r.json().catch(() => null);
+      if (d?.subscribed === true) { setNotify("on"); return; }
+      setNotify("idle");
+      toast("Couldn't set that up. The room still works.", "error");
+    } catch {
+      setNotify("idle");
+      toast("Couldn't set that up. The room still works.", "error");
     }
   }
 
@@ -522,6 +605,36 @@ export function CircleRoom({ id }: { id: string }) {
                 >
                   {ALONE_DOOR}
                 </Link>
+                {/*
+                  Only here, and only when the build can actually do it.
+
+                  This is the exact moment the offer is true: one person, in a
+                  room, deciding whether to keep a tab open for forty-five
+                  minutes. Fourteen of the first sixteen circles ended here.
+
+                  `notify === "off"` means no VAPID keys in this deployment and
+                  nothing renders — the room never offers a door that opens
+                  onto a 501, which is the rule `voice/route.ts` learned by
+                  handing somebody three environment variable names. It is also
+                  absent once the room has two people, because the notification
+                  it offers has already happened.
+                */}
+                {notify !== "off" && (
+                  <button
+                    type="button"
+                    onClick={() => void askToBeWoken()}
+                    disabled={notify === "on" || notify === "asking"}
+                    className="focusable min-h-[44px] text-body text-ash underline underline-offset-4 disabled:no-underline disabled:opacity-70"
+                  >
+                    {notify === "on"
+                      ? "You'll be told when someone sits down."
+                      : notify === "asking"
+                        ? "Asking…"
+                        : notify === "denied"
+                          ? "Notifications are blocked in this browser."
+                          : "Tell me when someone sits down"}
+                  </button>
+                )}
               </div>
             ) : (
               <p className="glass p-4 text-body leading-[1.6]">

@@ -1730,6 +1730,54 @@ exemption from the backup, and a line in the privacy page. That is a retention
 decision, and this file's own test says a retention decision is read by a
 person. The finding is the deliverable; the schema is not.
 
+**One notification, and the design decision is which key it hangs on.** The
+steering stops the product opening a second empty room; it cannot make the
+first person still be there when the second arrives. Fourteen of the first
+sixteen circles held exactly one person, and the Keeper needs
+`members.length > 1` to say a word — so `circle_push` exists to send one
+sentence: *somebody sat down in the room you are holding.*
+
+It was written first as a per-browser subscription table and that was wrong. A
+push subscription is a capability to wake a device; held per person it is a
+thing this product keeps indefinitely, and `deleteAll` works in `userId` space
+and cannot reach a row keyed by anon id — **which is exactly how
+`circle_members` outlived "one tap deletes everything, for good"**. Keyed to
+the circle, the question does not arise: the row dies in `closeCircle` beside
+the seats and the transcript, so the capability cannot outlive the
+forty-five minutes it was granted for. It is also true to the thing, because a
+subscription that survives the room has no notification left to deliver.
+
+The payload is the circle id and nothing else — not the tag, not the seat
+count, not who arrived. A notification is decrypted onto a lock screen that may
+be face-up on a table in a room with other people in it. It says *come back*,
+never *about what*.
+
+**Four checks objected, and every one of them was right.** Check 60 caught
+`savePush` returning `true` because Postgres had not complained — the shape
+this store has now been wrong about three times, after `setCarve` and
+`anchorLatestVent`; the rows are the evidence and the absence of an error is
+not. Check 112 went red on its own the moment `closeCircle` learned to destroy
+the new table, which is what deriving the backup's exclusion from the sweep
+buys. Check 111 caught both new routes belonging to no live pass — the
+`/api/notes` trap, named in this file and stepped in anyway. And check 16
+caught a column the contract declared and the DDL appeared not to have.
+
+That last one was the check being wrong, and it is the sixth face of this
+file's most-repeated finding. The DDL parser read column names as `[a-z_]+`,
+which is every column this schema had until one arrived with a digit in it:
+**`p256dh`**, whose name is fixed by RFC 8291 and is not ours to choose. The
+fix is the identifier rule — `[a-z_][a-z0-9_]*`, what Postgres accepts
+unquoted — and not a renamed column, because bending a standard field name to
+satisfy a regex is fitting the code to the test. A pattern written the way its
+author's data happened to look, again, after `make you` and `\bdon\b`.
+
+**The capability question lives at `/api/push`, outside the `[id]` prefix, and
+that is not filing.** Every handler under `api/circles/[id]` operates on a
+circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in
+`withStore` (check 118). A route that answers "does this build have VAPID keys"
+does neither and should not need two exemptions to say it is not that kind of
+route. **A route that needs two exemptions is in the wrong place.**
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

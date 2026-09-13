@@ -5,6 +5,7 @@ import { getStore } from "@/lib/store";
 import { classify, CRISIS_LINES, crisisReply } from "@/lib/vent/intent";
 import { CIRCLE_MINUTES, MAX_SEATS, phaseFor, roleForSeat } from "@/lib/circles/rules";
 import { sweepIfOver } from "@/lib/circles/sweep";
+import { pingTheRoom } from "@/lib/push/send";
 import { withStore } from "@/lib/http/with-store";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +54,6 @@ const createSchema = z.object({
  */
 const SWEEP_BATCH = 5;
 
-/** Open circles, with seat counts. No content, ever — just the shape. */
 async function handleGET(request: Request) {
   const store = getStore();
   if (!store) {
@@ -284,6 +284,12 @@ async function handlePOST(request: Request) {
       const already = took
         ? null
         : (await store.listMembers(mine.id)).find((x) => x.anon_id === input.anonId);
+      if (took) {
+        // A seat that landed is the event the room has been waiting for.
+        // `already` is somebody returning to a seat they held, which wakes
+        // nobody — the room already counted them.
+        await pingTheRoom(store, mine.id, input.anonId);
+      }
       if (took || already) {
         return NextResponse.json(
           {

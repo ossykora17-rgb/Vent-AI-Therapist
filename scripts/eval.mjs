@@ -1868,17 +1868,34 @@ check("16 The store asks PostgREST for something it can parse", () => {
     .map((f) => fs.readFileSync(path.join(ROOT, "supabase/migrations", f), "utf8"))
     .join("\n");
 
+  /*
+    An identifier, not a word.
+
+    These three patterns were `[a-z_]+`, which is every column this schema had
+    until one arrived with a digit in it: `p256dh`, the client public key on a
+    Web Push subscription, whose name is fixed by RFC 8291 and is not ours to
+    choose. The parser reported it "invented" — present in the contract and
+    absent from the DDL — when it was in the DDL the whole time and simply
+    could not be read.
+
+    The correct fix is the identifier rule, not a renamed column. Bending a
+    standard field name to satisfy a regex is fitting the code to the test,
+    and `[a-z_][a-z0-9_]*` is exactly what Postgres accepts unquoted in lower
+    case. Same shape as `make you` and `\bdon\b`: a pattern written the way
+    its author's data happened to look.
+  */
+  const IDENT = "[a-z_][a-z0-9_]*";
   const defined = {};
-  for (const m of ddl.matchAll(/create table if not exists public\.([a-z_]+)\s*\(([\s\S]*?)\n\);/g)) {
+  for (const m of ddl.matchAll(new RegExp(`create table if not exists public\\.(${IDENT})\\s*\\(([\\s\\S]*?)\\n\\);`, "g"))) {
     defined[m[1]] = m[2]
       .split("\n")
       .map((l) => l.trim())
       .filter((l) => l && !l.startsWith("--"))
-      .map((l) => /^([a-z_]+)\s+\S/.exec(l)?.[1])
+      .map((l) => new RegExp(`^(${IDENT})\\s+\\S`).exec(l)?.[1])
       .filter((c) => c && !["unique", "check", "primary", "foreign", "constraint"].includes(c));
   }
-  for (const m of ddl.matchAll(/alter table (?:if exists )?public\.([a-z_]+)([\s\S]*?);/g)) {
-    for (const a of m[2].matchAll(/add column if not exists ([a-z_]+)/g)) {
+  for (const m of ddl.matchAll(new RegExp(`alter table (?:if exists )?public\\.(${IDENT})([\\s\\S]*?);`, "g"))) {
+    for (const a of m[2].matchAll(new RegExp(`add column if not exists (${IDENT})`, "g"))) {
       (defined[m[1]] ??= []).push(a[1]);
     }
   }
