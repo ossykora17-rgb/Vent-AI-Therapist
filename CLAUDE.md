@@ -1893,6 +1893,24 @@ the first shape matched nothing when the signature moved), and fails if any
 probed RPC is in that set. Mutations in three directions fail it: reinstating
 the probe, walking no migrations, and blinding the parse to the by-name loop.
 
+**And the repair reached three copies of four.** `contract.ts` and check 121
+were fixed, the gate went green, and CI went red: `failing-store-verify.mjs`
+held the same rule on the wire — *"and it probes the function 0014
+hardened"* — and `npm run gate` **skips** that file when nothing is serving on
+:3001. The command this document tells you to trust could not see the copy
+that ships, which is the gap already written down about check 95, arriving on
+the fix for the paragraph above it. Third mechanism, one script over, inside
+the commit repairing the same rule.
+
+That copy now derives the names off `contract.ts` and asserts every declared
+RPC is reported by name when the database refuses everything — which proves
+the probe ran *and* that its failures reach the response, and names nothing.
+Its floor is the one that matters: zero names parsed makes `every` vacuously
+true, so an empty parse fails loudly instead of passing. Mutation: blind the
+parse, `FAIL 12 — no RPC names parsed out of contract.ts, this check examined
+nothing`. Run `npm run live-checks` before pushing anything that touches a
+rule with a copy on the wire; the gate alone is not enough and says so.
+
 Two facts worth keeping from the application itself, both read off the live
 database rather than reasoned about. `vent_feedback_user_id_key` **was really
 there** — this file inferred it from a generated name and it is now confirmed
