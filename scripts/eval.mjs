@@ -4554,9 +4554,18 @@ check("41 A drifted table names every column it is missing", () => {
     broken road. This was the first one the other way round, and it is the
     same bug wearing the opposite colour.
   */
-  ok(/code === "PGRST303"/.test(health),
+  /*
+    The literal moved into `contract.ts` so the suite could grade it directly —
+    the route imports `next/server`, which this loader cannot resolve, so a
+    rule kept there is a rule no check can exercise. Both halves are still
+    asserted: the code is still recognised, and the diversion still happens
+    before anything can be counted as missing. The anchor is the call now,
+    because the call is what the route actually does.
+  */
+  const contractSrc = fs.readFileSync(path.join(ROOT, "src/lib/store/contract.ts"), "utf8");
+  ok(/code === "PGRST303"/.test(contractSrc),
     "clock skew is recognised as timing rather than schema");
-  const skewIdx = health.indexOf('code === "PGRST303"');
+  const skewIdx = health.indexOf("isTransportFailure(res.error)");
   const pushIdx = health.indexOf("missingTables.push(name)");
   ok(skewIdx > 0 && skewIdx < pushIdx,
     "and it is diverted BEFORE it can be counted as a missing table");
@@ -4569,8 +4578,22 @@ check("41 A drifted table names every column it is missing", () => {
     keeps a self-clearing wobble from paging somebody at 7am — asserted here
     rather than trusted, because the two are four hundred lines apart.
   */
-  ok(/database = missingTables\.length \? "unreachable" : "ok";/.test(health),
-    "database still turns on real drift only");
+  /*
+    This asserted the literal `database = missingTables.length ? ... : ...`,
+    and a gateway timeout later forced that line to grow a second clause — so
+    the assertion failed on a change it had no opinion about, while the rule it
+    actually holds was never at risk.
+
+    What it holds is the property: skew alone never makes the database
+    unreachable. `isTotalOutage` counts **codeless** probes, and skew carries
+    `PGRST303`, so it cannot reach that clause however many tables it hits.
+    Check 137 grades that function directly.
+  */
+  ok(/database = missingTables\.length \|\| isTotalOutage\(/.test(health),
+    "database turns on real drift, or on a sweep where every probe was codeless");
+  ok(/let codeless = 0;/.test(health) && /if \(!res\.error\.code\) codeless\+\+;/.test(health),
+    "and the outage counter counts codeless failures, never skew",
+    "counting every transient entry pages somebody at 7am for a wobble that clears itself");
   ok(/status: database === "unreachable" \? 503 : 200/.test(health),
     "and 503 still follows database, so nothing else can reach it");
 });
@@ -16518,6 +16541,79 @@ check("136 No harness decides a language by typing one", () => {
   is(rows.filter((r) => r.language !== undefined).length, 0,
     "and the corpus still declares no language of its own",
     "if rows gain a language field this check asserts the wrong thing and must be rewritten");
+});
+
+await checkAsync("137 A timeout is not a missing table", async () => {
+  /*
+    THE THIRD RED LIGHT OVER A WORKING ROAD IN THREE DAYS
+
+    The first two were contract drift — `circle_push` in `FULL_CONTRACT` before
+    0021 ran, then `match_memories` probed after 0016 destroyed it. This one is
+    a transport blip wearing a schema verdict.
+
+    Production answered 503 `degraded`, `database: unreachable`,
+    `missingTables: ["vent_feedback"]`, with `tableErrors` reading exactly
+    `{"message":"Gateway Timeout"}` — no code, no hint, which is why only the
+    message rendered. `writable: ok`, Anthropic answering, 221 vents persisted.
+    A refetch 27 seconds later returned 200 `ok` on the same commit.
+
+    `transient` existed for this and was gated on one literal, `PGRST303`.
+    A Supabase gateway timeout carries no code at all, so it fell through to
+    the schema bucket — and `missingTables` is a sentence: the table is there,
+    the request did not arrive.
+
+    THE INVERSION IS THE HALF WORTH TESTING
+
+    Routing every codeless error to `transient` is right for one table and
+    catastrophically wrong for all of them: a database that is genuinely down
+    answers nothing, every probe comes back codeless, and the endpoint prints
+    `ok` over an outage — CLAUDE.md's oldest bug, arriving as the price of
+    fixing its mirror. So `allTimedOut` names it as unreachable.
+
+    Graded on the exported predicate rather than a copy of it, which is the
+    `countsAsSpend` precedent: a check that re-implements the rule two lines
+    above its assertions passes while the product regresses.
+  */
+  const { isTransportFailure, isTotalOutage } = await app("src/lib/store/contract.ts");
+
+  ok(isTransportFailure({ message: "Gateway Timeout" }),
+    "a codeless failure is transport",
+    "this exact body is what production returned while reporting a missing table");
+  ok(isTransportFailure({ code: "PGRST303", hint: "clock skew" }),
+    "and clock skew still is, which is what the bucket was built for");
+
+  for (const [code, what] of [["42P01", "undefined table"], ["42703", "undefined column"],
+                              ["PGRST202", "function not in schema cache"], ["42501", "permission denied"]]) {
+    ok(!isTransportFailure({ code, message: what }),
+      `${code} is a real verdict about the schema (${what})`,
+      "widening this to swallow coded errors turns the endpoint green over a broken road");
+  }
+  ok(!isTransportFailure(null), "and no error is not a failure at all");
+
+  /*
+    The predicate is called by both loops, and the inversion guard exists.
+    A correct predicate nothing calls is the shape of half the findings here.
+  */
+  const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8"));
+  const calls = (route.match(/isTransportFailure\(res\.error\)/g) ?? []).length;
+  is(calls, 2, "both probe loops ask it", "one loop deciding for itself is how there were two rules");
+  ok(/isTotalOutage\(codeless, names\.length\)/.test(route),
+    "and a sweep where every probe came back codeless is still unreachable",
+    "without this, a database that is entirely down reports ok");
+
+  /*
+    CHECK 41 CAUGHT THIS BEING WRITTEN TOO WIDE, AND IT WAS RIGHT
+
+    The first version counted every `transient` entry. Clock skew is one key's
+    `iat` and can land on all nine tables at once, so that version would have
+    answered 503 for a wobble that clears itself — the exact 7am page check 41
+    exists to prevent. Skew has a code; a gateway timeout does not.
+  */
+  ok(isTotalOutage(9, 9), "nine codeless failures out of nine probes is an outage");
+  ok(!isTotalOutage(0, 9), "nine clock-skew failures are not — none of them were codeless");
+  ok(!isTotalOutage(8, 9), "and eight of nine is still a blip, not an outage");
+  ok(!isTotalOutage(0, 0), "a probe that ran nothing reports nothing",
+    "0 === 0 is the empty-derivation trap this repository keeps finding");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

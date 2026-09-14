@@ -2,7 +2,7 @@ import { redactIds } from "@/lib/errors";
 import { isPushConfigured } from "@/lib/push/send";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { FULL_CONTRACT, PENDING_OK, RPC_CONTRACT, explainDbCode } from "@/lib/store/contract";
+import { FULL_CONTRACT, PENDING_OK, RPC_CONTRACT, explainDbCode, isTotalOutage, isTransportFailure } from "@/lib/store/contract";
 import { getStore } from "@/lib/store";
 import {
   env,
@@ -173,12 +173,32 @@ export async function GET() {
         names.map((t) => supabase!.from(t).select(FULL_CONTRACT[t]).limit(0)),
       );
 
+      /** Probes that failed with no code at all — transport, counted for the total-outage rule. */
+      let codeless = 0;
       for (const [i, res] of results.entries()) {
         if (!res.error) continue;
         const name = names[i];
 
-        // Timing, not schema. Reported, never counted.
-        if (res.error.code === "PGRST303") {
+        /*
+          Timing or transport, not schema. Reported, never counted.
+
+          PGRST303 is clock skew, and it was the only member of this bucket.
+          The wider rule is the one that cost a 503 over a working
+          deployment: **an error carrying no code is not the database's
+          opinion about your schema.** Supabase answered `{"message":
+          "Gateway Timeout"}` — no code, no hint — for two tables, and both
+          fell through to `missingTables`. The endpoint then reported
+          `vent_feedback` missing and `database: unreachable` over a
+          deployment persisting 221 vents with `writable: ok`, and cleared on
+          its own 27 seconds later.
+
+          Third red light over a working road in three days, and the first
+          two were contract drift. This one is a transport blip wearing a
+          schema verdict, and `missingTables` is a sentence: the table is
+          there, the request did not arrive.
+        */
+        if (isTransportFailure(res.error)) {
+          if (!res.error.code) codeless++;
           transient[name] = {
             code: res.error.code,
             hint: redactIds(res.error.hint) ?? explainDbCode(res.error.code) ?? undefined,
@@ -262,7 +282,8 @@ export async function GET() {
       for (const [i, res] of rpcResults.entries()) {
         if (!res.error) continue;
         const name = rpcNames[i];
-        if (res.error.code === "PGRST303") {
+        // Same rule as the table loop: no code is not a verdict about the RPC.
+        if (isTransportFailure(res.error)) {
           transient[name] = { code: res.error.code, hint: explainDbCode(res.error.code) ?? undefined };
           continue;
         }
@@ -344,7 +365,20 @@ export async function GET() {
         writable = "ok";
       }
 
-      database = missingTables.length ? "unreachable" : "ok";
+      /*
+        AND THE INVERSION, BECAUSE THE FIX ABOVE OPENS IT
+
+        Routing every codeless error to `transient` is right for one table
+        timing out and catastrophically wrong for all of them: a database
+        that is genuinely down answers nothing, every probe comes back
+        codeless, and the endpoint would print `database: ok` over it. That
+        is the oldest bug in CLAUDE.md — a green light over a broken road —
+        arriving as the cost of fixing its mirror.
+
+        So a sweep in which *every* probed table failed without a code is not
+        a blip. It is an unreachable database, and it is named as one.
+      */
+      database = missingTables.length || isTotalOutage(codeless, names.length) ? "unreachable" : "ok";
     } catch {
       database = "unreachable";
     }

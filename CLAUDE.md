@@ -2057,6 +2057,52 @@ importing `classify`, and empty the corpus read.
 written minutes earlier is not in HEAD. Back up to the scratchpad and restore
 from there; never revert an uncommitted file with git.
 
+**Third red light over a working road in three days, and this one was a
+timeout wearing a schema verdict.** Production answered **503 `degraded`**,
+`database: unreachable`, `missingTables: ["vent_feedback"]`, with `tableErrors`
+reading exactly `{"message":"Gateway Timeout"}` — no code, no hint, which is
+why only the message rendered. `writable: ok`, Anthropic answering, 221 vents
+persisted. A refetch 27 seconds later returned **200 `ok`** on the same commit.
+
+The first two were contract drift. This one is transport: `transient` existed
+for precisely this and was gated on one literal, `PGRST303`. A gateway timeout
+carries no code at all, so it fell straight through to the schema bucket — and
+`missingTables` is a sentence. The table is there; the request did not arrive.
+
+The rule is now **a failure carrying no code is not a verdict about the
+schema**, and it lives in `contract.ts` rather than the route, because the
+route imports `next/server` and this suite's loader cannot resolve it — a rule
+kept there is a rule no check can exercise. `countsAsSpend` is the precedent:
+one function, graded directly, called by everything that decides.
+
+**The inversion is the half that could have gone wrong silently, and check 41
+caught it being written too wide.** Routing every codeless error to `transient`
+is right for one table and catastrophic for all of them: a database that is
+down answers nothing, every probe returns codeless, and the endpoint prints
+`ok` over an outage — the oldest bug here, arriving as the price of fixing its
+mirror. The first guard counted every `transient` entry, and check 41 went red
+on it, correctly: clock skew is one key's `iat` and can land on all nine tables
+at once, so that version would have paged somebody at 7am for a wobble that
+clears itself — the exact thing that check exists to prevent. **Skew has a
+code. A gateway timeout does not.** `isTotalOutage` counts codeless probes
+only.
+
+Check 41 itself then had to move twice rather than be argued with, and both
+times it was half right: it asserted the literal `database = missingTables
+.length ? …`, which had to grow a clause it has no opinion about, and it
+anchored its ordering probe on the `PGRST303` literal, which moved into
+`contract.ts`. It asserts the properties now — skew alone never reaches the
+outage clause, and the diversion still happens before anything is counted
+missing — with the call as the anchor, because the call is what the route does.
+
+**And the mutation pass lied about itself, for the third time this session.**
+Four mutations reported one catch. The pattern was `grep -E '^FAIL  (41\|137)'`
+— inside an ERE, `\|` is a literal pipe, so three results were invisible rather
+than absent. Re-run with a correct pattern and an `assert n != s` proving each
+mutation actually applied: **all four fail.** *Classify a measurement by what it
+does, never by what it looks like* — the `strip` lesson, arriving in the
+instrument rather than the code, which is where it keeps arriving.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in
