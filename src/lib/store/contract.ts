@@ -48,6 +48,45 @@
  * exists and accepts this signature, which is precisely what a caller needs
  * to know before it depends on it.
  */
+/**
+ * Is a probe failure the database's opinion about the schema, or transport?
+ *
+ * Lives here rather than in the route because the route imports `next/server`,
+ * which the eval suite's loader cannot resolve — so a rule kept there is a
+ * rule no check can exercise, and `countsAsSpend` is the precedent: one
+ * function, graded directly, called by everything that decides.
+ *
+ * `PGRST303` is clock skew. The wider rule is the one that cost a 503 over a
+ * working deployment: **a failure carrying no code is not a verdict about the
+ * schema.** Supabase answered `{"message":"Gateway Timeout"}` — no code, no
+ * hint — for two tables, both fell into `missingTables`, and the endpoint
+ * reported `database: unreachable` over 221 persisted vents with
+ * `writable: ok`. It cleared on its own 27 seconds later.
+ */
+export function isTransportFailure(error: { code?: string | null } | null): boolean {
+  if (!error) return false;
+  return error.code === "PGRST303" || !error.code;
+}
+
+/**
+ * ...and the inversion, which is the half that can go wrong silently.
+ *
+ * Routing every codeless error to `transient` is right for one table and
+ * catastrophically wrong for all of them: a database that is down answers
+ * nothing, every probe returns codeless, and the endpoint prints `ok` over an
+ * outage — the oldest bug in CLAUDE.md, arriving as the price of fixing its
+ * mirror.
+ *
+ * **Codeless, not merely transient.** Check 41 already holds the reason and it
+ * caught this being written too wide: clock skew is one key's `iat` and can hit
+ * every table at once, so counting skew here would page somebody at 7am for a
+ * wobble that clears itself — the exact failure that check exists to prevent.
+ * Skew has a code. A gateway timeout does not. That is the whole line.
+ */
+export function isTotalOutage(codelessCount: number, probed: number): boolean {
+  return probed > 0 && codelessCount === probed;
+}
+
 export const RPC_CONTRACT: Readonly<Record<string, Record<string, unknown>>> = {
   vent_rate_count: {
     p_user_id: "00000000-0000-0000-0000-000000000000",
