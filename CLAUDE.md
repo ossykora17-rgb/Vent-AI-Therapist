@@ -2001,6 +2001,62 @@ banned line verbatim — check 48's finding, in a check written the same hour it
 was re-read. Stripped now, with an assertion that the stripper left the file
 behind.
 
+**A fourth Pidgin detector, and it held no regex at all.** This file records
+three: the router and the grader disagreeing before `quality.ts` imported both
+marker lists; `audit.ts` carrying a private copy under a comment claiming it
+was "the same set the grader uses"; and the crisis list catching `i wan die`
+while `PIDGIN_GRAMMAR` read it as English.
+
+The fourth was a **typed constant**. `scripts/quality.mjs` built every authored
+case with `language: "en"` written out, and the 72 rows in
+`holisticExamples.jsonl` carry no language field — `{"undefined": 72}`. So the
+corpus grader was told every example was English, and **ten correct Pidgin
+replies to Pidgin messages came back as "answered an English message in
+Pidgin"**.
+
+The placement is what makes it expensive. That file's own header calls it *"the
+only way to know whether a prompt change helped"*, and the rule four lines
+above the bug is the instrument this repository uses to **kill** candidate
+graders — *if the corpus flags them, the graders are wrong*. Four graders have
+been rejected on that instrument. It had ten permanent false readings while
+they were.
+
+**Asking `classify` took 10 to 41, in the other direction, and that number is
+the real finding.** The pairing had never been printed, so it hid both ways at
+once:
+
+| message → reply | count |
+| --- | --- |
+| pidgin → pidgin | 10 |
+| **pidgin → english** | **41** |
+| english → pidgin | 0 |
+| english → english | 21 |
+
+The authored corpus answers a Pidgin message in English 41 times out of 72 —
+usually a short, lightly code-switched opener like *"work dey choke me"* met
+with an English reply that hands their word back. That is either the corpus
+being right about register (four words of Pidgin do not oblige a full Pidgin
+reply) or it is the production failure measured above, where six of twelve
+Pidgin turns came back in English, sitting in the examples the model is shown.
+
+**Not decided here, and the reason is this file's own test.** Rewriting 41
+hand-written replies is a register decision about every Nigerian who uses this,
+and the rule says a corpus is the instrument rather than the thing under test.
+The 2x2 now prints beside the flag count so a reader can tell a grader bug from
+a corpus one instead of watching a number move. The measurement is the
+deliverable; the rewrite is read by a person in a real room.
+
+Check 136 holds the narrow rule — no harness may decide the language of a real
+message by typing one — behaviourally rather than by the absence of a string, a
+fixture that states its own language being an input and not a verdict. Three
+mutations fail it: restore the hardcode, type `"pidgin"` instead while still
+importing `classify`, and empty the corpus read.
+
+**And the mutation pass destroyed the check twice by the same command.**
+`git checkout scripts/eval.mjs` to undo a mutation reverts to HEAD, and a check
+written minutes earlier is not in HEAD. Back up to the scratchpad and restore
+from there; never revert an uncommitted file with git.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in
