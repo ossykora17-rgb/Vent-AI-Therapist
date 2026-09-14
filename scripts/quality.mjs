@@ -21,6 +21,7 @@ import path from "node:path";
 import { app, ROOT } from "./app-imports.mjs";
 
 const { gradeReply, worstOf } = await app("src/lib/vent/quality.ts");
+const { classify, PIDGIN_GRAMMAR } = await app("src/lib/vent/intent.ts");
 
 const args = process.argv.slice(2);
 const flag = (n, d = null) => {
@@ -63,6 +64,26 @@ if (billable > MAX_CALLS) {
 // The graders are validated against the authored corpus, whose replies were
 // written by hand to the constitution. If they flag those, the graders are
 // wrong — which is a thing to find out before paying to learn it.
+//
+// THE LANGUAGE IS ASKED FOR, NOT ASSUMED, AND THAT IS THE FOURTH TIME
+//
+// This built every case with `language: "en"` hardcoded. The 72 authored rows
+// carry no language field — `{"undefined": 72}` — so every Pidgin example in
+// the corpus was handed to the grader as English, and ten correct Pidgin
+// replies to Pidgin messages came back as "answered an English message in
+// Pidgin". A false finding, ten of seventy-two, permanently.
+//
+// It is the bug CLAUDE.md records about `audit.ts` — a second opinion about
+// the question this product asks most often — arriving in the **fourth**
+// detector, and in the worst place for it. This file's own header calls
+// itself "the only way to know whether a prompt change helped", and the rule
+// four lines above is the instrument this repository uses to *kill* candidate
+// graders: if the corpus flags, the grader is wrong. An instrument with ten
+// permanent false readings cannot say that.
+//
+// Same repair as `audit.ts`: ask `classify`. It imports both marker lists
+// rather than holding a fifth copy, and it is what decided the language of
+// every production row this corpus imitates.
 if (DRY) {
   const authored = fs
     .readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
@@ -71,7 +92,13 @@ if (DRY) {
   let flagged = 0;
   for (const ex of authored) {
     const findings = gradeReply(
-      { id: "authored", message: ex.input, intent: "vent", language: "en", probes: "" },
+      {
+        id: "authored",
+        message: ex.input,
+        intent: "vent",
+        language: classify(ex.input).language === "pidgin" ? "pidgin" : "en",
+        probes: "",
+      },
       ex.full_integration,
       {},
     );
@@ -82,6 +109,36 @@ if (DRY) {
       for (const f of bad) console.log(`       ${f.severity} ${f.grader}: ${f.detail}`);
     }
   }
+  /*
+    THE REGISTER PAIRING, PRINTED, BECAUSE THE NUMBER ABOVE IS NOT THE FINDING
+
+    Hardcoding `language: "en"` hid this in both directions at once, and the
+    flag count alone still hides it: a reader sees a number move and cannot
+    tell a grader bug from a corpus one. So the 2x2 is printed beside it.
+
+    What it says today is a product question, not a harness one. The authored
+    corpus answers a Pidgin message in English 41 times out of 72 — usually a
+    short, lightly code-switched line like "work dey choke me" met with an
+    English reply that uses their word back. That is either the corpus being
+    right about register (a four-word Pidgin opener does not oblige a full
+    Pidgin reply) or it is the exact failure CLAUDE.md measured in production,
+    where six of twelve Pidgin turns came back in English.
+
+    Not decided here. Rewriting 41 hand-written replies is a register decision
+    about every Nigerian who uses this, and this file's own rule says the
+    corpus is the instrument rather than the thing under test. The measurement
+    is the deliverable; the rewrite is read by a person in a real room.
+  */
+  const pair = { pp: 0, pe: 0, ep: 0, ee: 0 };
+  for (const ex of authored) {
+    const m = classify(ex.input).language === "pidgin" ? "p" : "e";
+    const a = PIDGIN_GRAMMAR.some((re) => re.test(ex.full_integration)) ? "p" : "e";
+    pair[m + a]++;
+  }
+  console.log(
+    `\nregister  pidgin>pidgin ${pair.pp} · pidgin>english ${pair.pe}` +
+    ` · english>pidgin ${pair.ep} · english>english ${pair.ee}`,
+  );
   console.log(`\n${authored.length} authored replies graded · ${flagged} flagged · 0 tokens`);
   console.log(`${bar}\n`);
   process.exit(flagged === 0 ? 0 : 1);

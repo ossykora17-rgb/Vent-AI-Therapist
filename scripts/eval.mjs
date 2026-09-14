@@ -16454,6 +16454,72 @@ await checkAsync("135 The push signature a phone would reject is one nothing her
     "a strip that ate the file satisfies the ban above by deleting everything");
 });
 
+check("136 No harness decides a language by typing one", () => {
+  /*
+    THE FOURTH PIDGIN DETECTOR, AND THE WORST PLACE FOR IT
+
+    CLAUDE.md records three: the router and the grader disagreeing before
+    `quality.ts` imported both marker lists; `audit.ts` holding a private regex
+    under a comment claiming it was "the same set the grader uses"; and the
+    crisis list catching `i wan die` while `PIDGIN_GRAMMAR` read it as English.
+
+    The fourth held no regex at all. `scripts/quality.mjs` built every authored
+    case with `language: "en"` written out — and the 72 rows in
+    `holisticExamples.jsonl` carry no language field, `{"undefined": 72}`. So
+    the corpus grader was told every example was English.
+
+    Ten correct Pidgin replies to Pidgin messages came back as "answered an
+    English message in Pidgin": a false finding, permanently, in the file whose
+    own header calls it "the only way to know whether a prompt change helped"
+    and whose rule four lines up is what this repository uses to KILL candidate
+    graders — if the corpus flags, the grader is wrong. An instrument with ten
+    permanent false readings cannot carry that sentence.
+
+    Asking `classify` turned 10 into 41, in the other direction, and that is a
+    finding about the corpus rather than the harness — printed as a 2x2 beside
+    the count so nobody has to guess which moved.
+
+    The rule is narrow on purpose. Banned: a harness deciding the language of a
+    real message by typing one. Not banned: a fixture stating its own language,
+    or a check constructing a case to probe a grader — those are inputs, not
+    verdicts, which is the line check 125 already draws.
+  */
+  const harnesses = ["scripts/quality.mjs", "scripts/audit.mjs", "src/lib/vent/audit.ts"];
+  const offenders = [];
+  let scanned = 0;
+  for (const rel of harnesses) {
+    const file = path.join(ROOT, rel);
+    if (!fs.existsSync(file)) continue;
+    scanned++;
+    const src = strip(fs.readFileSync(file, "utf8"));
+    if (/language:\s*"(?:en|pidgin)"/.test(src) && !/\bclassify\s*\(/.test(src)) {
+      offenders.push(`${rel} types a language and never asks classify`);
+    }
+  }
+  is(scanned, harnesses.length, `${scanned} harnesses read`,
+    "a sweep that walks nothing passes loudest");
+  is(offenders.join(" · "), "", "every harness that grades a real message asks the router",
+    "a fifth detector is how the first four happened");
+
+  /*
+    And the one that matters is asserted by behaviour rather than by the
+    absence of a string: a file can import `classify`, call it somewhere
+    unrelated, and still type the case it grades.
+  */
+  const qsrc = strip(fs.readFileSync(path.join(ROOT, "scripts/quality.mjs"), "utf8"));
+  ok(/language:\s*classify\(/.test(qsrc),
+    "the authored case takes its language from the router",
+    "`language: \"en\"` over 72 rows with no language field is where this started");
+
+  const rows = fs.readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+    .trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  ok(rows.length >= 50, `${rows.length} authored rows read`,
+    "an empty corpus makes the assertion below vacuously true");
+  is(rows.filter((r) => r.language !== undefined).length, 0,
+    "and the corpus still declares no language of its own",
+    "if rows gain a language field this check asserts the wrong thing and must be rewritten");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
