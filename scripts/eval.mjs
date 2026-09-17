@@ -16616,6 +16616,113 @@ await checkAsync("137 A timeout is not a missing table", async () => {
     "0 === 0 is the empty-derivation trap this repository keeps finding");
 });
 
+await checkAsync("138 The one bridge between the two surfaces can still carry somebody", async () => {
+  /*
+    TWO SURFACES ON ONE ENGINE, AND ONE DOOR BETWEEN THEM
+
+    `circleInvite` is it. A person writing "i no get person wey i fit tell" in
+    `/chat` is told a peer room has a seat — the only moment the private
+    session and the circle ever touch. Its own comment says why it exists:
+    somebody "got a real answer and was never told a circle was open with free
+    seats on the other side of the same app".
+
+    Nothing here had ever asked whether it fires. That is the third instance of
+    *every part working is not the feature working* — after the notes that
+    produced zero rows in a month and the push that never rang.
+
+    Measured on the authored corpus: 4 of 72 sound alone, and the detector is
+    exact — with no open circle it fires 0 of 4, with one warm room 4 of 4. So
+    the detector is not the limit. The gate is `seats > 0 && seats <
+    MAX_SEATS && !isExpired`, which is a question about the clock: is somebody
+    sitting in an unexpired room at the instant you happened to type.
+
+    Production has held 19 circles at a 45-minute lifetime. That is roughly
+    855 minutes of circle-uptime in a ~43,200-minute month — about 2% of
+    wall-clock, arithmetic rather than a measurement, and the reason it is
+    written here as an order of magnitude and not asserted below. The bridge is
+    correct and almost never in the right place at the right time.
+
+    WHAT THIS ASSERTS, AND WHAT IT DELIBERATELY DOES NOT
+
+    Not the 2%: that is a fact about a moment, and check 132's rule says an
+    integer about production goes stale. Not the lifetime, not the seat gate —
+    both are product decisions.
+
+    What it holds is that the door still opens and still refuses, with two
+    bounds in the shape check 123 uses: a detector narrowed until it reaches
+    nobody fails the floor, widened until it reaches everybody fails the
+    ceiling, and the invite itself must stay silent when there is no room. A
+    bridge that fires for everyone is a menu, and a bridge that fires for
+    no one is the state this check exists to make visible.
+  */
+  const { soundsAlone, circleInvite } = await app("src/lib/community/invite.ts");
+  const { CIRCLE_MINUTES } = await app("src/lib/circles/rules.ts");
+  const rows = fs.readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+    .trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  ok(rows.length >= 50, `${rows.length} authored messages read`,
+    "an empty corpus makes every bound below vacuous");
+
+  const alone = rows.filter((r) => soundsAlone(r.input));
+  ok(alone.length >= 2, `${alone.length} of ${rows.length} sound alone`,
+    "a detector that reaches nobody is a door nailed shut — the failure this check was written to make visible");
+  ok(alone.length <= rows.length / 3, `and it is not everybody (${alone.length}/${rows.length})`,
+    "widened to every vent the invite becomes a menu, and CLAUDE.md's rule is that two doors on one reply is not depth");
+
+  /*
+    The refusal first, because it is the half that protects somebody: an
+    invitation to a room that is not there is worse than no invitation, which
+    is the sentence the route's own comment ends on.
+  */
+  const silent = alone.filter((r) => circleInvite(r.input, [], null) === null).length;
+  is(silent, alone.length, "no open circle, no invitation — every time",
+    "arriving at a room that was never there is worse than never being offered it");
+
+  const warm = [{
+    id: "c1", tag: "economy",
+    created_at: new Date(Date.now() - 10 * 60_000).toISOString(),
+    seats: 2,
+  }];
+  const opened = alone.filter((r) => circleInvite(r.input, warm, "economy") !== null).length;
+  is(opened, alone.length, "one warm room with a seat, and the door opens for all of them",
+    "if this drops the bridge has closed and the two surfaces stopped touching");
+
+  // And an expired room is not a room, however many seats it reports.
+  const stale = [{ ...warm[0], created_at: new Date(Date.now() - 90 * 60_000).toISOString() }];
+  is(alone.filter((r) => circleInvite(r.input, stale, "economy") !== null).length, 0,
+    "and a circle whose time is up is never offered",
+    "a seat count on a dead room is the only field that would still look fine");
+
+  /*
+    THE GUARD A PERSON ACTUALLY MEETS, AND THE MUTATION THAT FOUND IT
+
+    Deleting `isExpired` from the filter left this check green, and that is
+    the correct answer rather than a hole: `if (minutesLeft < 8) return null`
+    sits below it and is strictly tighter, so every expired room was already
+    refused twice. Defence in depth, and the 90-minute probe above overshot
+    the guard that does the work.
+
+    Eight minutes is the real edge — the one the module names: *"a room with
+    two minutes left is not an invitation, it is a closing door."* Walking
+    somebody into a room that ends before they have said anything is the
+    `Your turn comes` failure this repository opens with, wearing a clock.
+
+    Asserted as a boundary rather than as the integer 8, so moving the floor
+    is a product decision that stays green and deleting it does not.
+  */
+  const room = (minsOld) => [{
+    ...warm[0], created_at: new Date(Date.now() - minsOld * 60_000).toISOString(),
+  }];
+  const offered = (minsOld) =>
+    alone.filter((r) => circleInvite(r.input, room(minsOld), "economy") !== null).length;
+
+  const early = offered(5);
+  const late = offered(CIRCLE_MINUTES - 2);
+  is(early, alone.length, `a room five minutes old is offered (${early}/${alone.length})`,
+    "if a fresh room is refused the bridge is shut for the case it exists for");
+  is(late, 0, "a room with two minutes left is not, however many seats it has",
+    "a closing door is the `Your turn comes` refusal wearing a clock");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;
