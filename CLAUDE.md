@@ -2103,6 +2103,61 @@ mutation actually applied: **all four fail.** *Classify a measurement by what it
 does, never by what it looks like* — the `strip` lesson, arriving in the
 instrument rather than the code, which is where it keeps arriving.
 
+**Two surfaces on one engine, and the one door between them is gated on a
+coincidence.** `circleInvite` is the whole bridge: a person writing *"i no get
+person wey i fit tell"* in `/chat` is told a peer room has a seat. It is the
+only moment the private session and the circle ever touch, and nothing here had
+ever asked whether it fires — the third instance of *every part working is not
+the feature working*, after the notes that produced zero rows in a month and
+the push that never rang.
+
+The detector is not the limit. Measured on the authored corpus: **4 of 72
+sound alone**, and the invite fires **0 of 4** with no open circle and **4 of
+4** with one warm room. What gates it is the clock — `seats > 0 && seats <
+MAX_SEATS && !isExpired`, then `minutesLeft < 8`. The question it really asks
+is *is somebody sitting in a live room at the instant you happened to type*.
+
+Production has held 19 circles at a 45-minute lifetime: roughly 855 minutes of
+circle-uptime in a ~43,200-minute month, about **2%** of wall-clock. That is
+arithmetic off this file's own counts rather than a measurement, which is why
+it is written here and not asserted anywhere. The bridge is correct and almost
+never in the right place at the right time — the same root cause as the
+fragmentation entry above, seen from the other side: the room that would have
+fit somebody closed before they needed it.
+
+Check 138 holds what does not go stale: two bounds in check 123's shape — a
+detector narrowed until it reaches nobody fails the floor, widened until it
+reaches everybody fails the ceiling — plus the refusal, which is the half that
+protects a person, because *"arriving at a room that was never there is worse
+than never being offered it"*. The lifetime, the seat gate and the eight
+minutes are product decisions and none of them is asserted as an integer.
+
+**One mutation escaped and it was right to.** Deleting `isExpired` from the
+filter left the check green, because `if (minutesLeft < 8) return null` sits
+below it and is strictly tighter — every expired room was already refused
+twice. Defence in depth, and the 90-minute probe had overshot the guard that
+does the work. So the boundary a person actually meets is asserted instead: a
+five-minute-old room is offered, a room with two minutes left is not. That one
+fails in **both** directions — delete the floor and dead rooms get offered,
+raise it past the lifetime and the door shuts for everybody. Not an assertion
+invented to make a mutation fail; a guard the first probe had stepped over.
+
+**What is still cold, and it is the return leg.** The vent path can send
+somebody to a circle. The circle sends nothing back: the seal's mood, the word
+carried, the word dropped and the drop in points all go to `logPreference`,
+which no-ops in production. A person vents, is offered a room, sits in it,
+drops a word, comes back to `/chat` — and the room has no idea it happened.
+The entry above frames that as lost training data. It is also why the product
+reads as two products: the bridge is one-way by construction.
+
+Not built here, and the reason is unchanged — carrying a circle's closing
+reading past the circle is a **new thing this product would hold about
+somebody**, and this file's own test says a retention decision is read by a
+person. Worth writing down beside it: the word they dropped is *their own
+word about themselves*, which is the exact shape of `vent_users.held` — a
+column that already has a page, a button and a destruction path. That is the
+version that needs no new promise. Whether to take it is still not mine.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in
