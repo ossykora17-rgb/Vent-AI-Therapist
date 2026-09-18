@@ -330,6 +330,49 @@ if (newCircles.length > 0 && closes.length === 0) {
 }
 
 /*
+  And the same shape, one surface over, on the reading this product is built on.
+
+  The block above says zero circle closes is silence about the sink rather than
+  about the rooms. Its own comment names the parallel — *"the same shape as the
+  anchor that could never be set"* — and then guards only the circles. The
+  anchor had the excuse of being genuinely unreachable at the time; it is
+  reachable now, and the reason to say this out loud changed underneath it.
+
+  `tension_after` is written by one gesture: somebody answering the weight
+  scale. That scale used to be a full-width card with ten buttons after every
+  single vent turn — impossible to miss, and easy to resent. It is now a
+  hairline above the composer that asks at most three times a sitting and then
+  goes deliberately quiet. That was the right trade and it is stated as a trade
+  in CLAUDE.md: *"a quiet sitting records no anchor and the efficacy loop
+  learns nothing from it."*
+
+  Which means zero anchors in a week now has two completely different readings
+  that look identical from here: nobody had anything to report, or the ambient
+  scale is too quiet to be found. The second is a regression in the interface
+  and the first is not, and the difference is invisible unless somebody says it.
+
+  It is not repaired by making the scale louder — that decision was taken
+  deliberately and reversing it on a week of silence would be fitting the
+  product to the metric. What this line does is stop the emptiness from
+  looking like a result, which is the only thing the circles guard above
+  claims to do either.
+
+  It also carries a coupling worth knowing when this fires: `mood` is the whole
+  predicate for `behavioral_activation` — `(c) => (c.mood ?? 10) <= 4` — so a
+  sitting where nobody answers the scale is a sitting where that move cannot be
+  selected at all. Measured on the authored corpus: it wins 15 of 72 messages
+  when the mood is 4 or below and **0 of 72** when the mood is absent. Silence
+  here does not only cost a row; it narrows the library the next reply is
+  chosen from.
+*/
+const anchored = newVents.filter((v) => v.tension_after != null);
+if (newVents.length > 0 && anchored.length === 0) {
+  console.log(
+    `anchors       0/${newVents.length} — nobody answered the weight scale, so this is silence about the scale, not about the drop`,
+  );
+}
+
+/*
   Nothing to *report* is not nothing to *check*, and this exit did both.
 
   `npm run gate` is the only opinion that counts about whether a change is
