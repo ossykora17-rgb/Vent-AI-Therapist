@@ -4974,7 +4974,23 @@ check("44 The Breaking Room is wired the way the module is written", () => {
   // the answer, and a sweep anchored to the first token would have dropped it
   // silently — the rule un-covered by the shape of a correct fix, which is the
   // same thing that happened to this check's previous version one commit ago.
-  const moodGuards = [...chat.matchAll(/\{[^\n]*?askMood[^\n]*?&& \(/gm)].map((m) => m[0]);
+  /*
+    The rule outlived two shapes of the thing it guards.
+
+    It began as the mood card's JSX guard, character for character. Then the
+    ambient strip arrived and it became a sweep for guards *opening* on
+    `askMood`. Then the strip and the pressure slider became one track that is
+    always rendered — so the gate stopped being a JSX guard at all and became
+    `askingAfter`, an expression. Three shapes, one rule: what asks for the
+    weight waits while a heavy question is on the table.
+
+    So this reads every place `askMood` decides whether something asks, in
+    either shape, and requires all of them to wait.
+  */
+  const moodGuards = [
+    ...chat.matchAll(/\{[^\n]*?askMood[^\n]*?&& \(/gm),
+    ...chat.matchAll(/askingAfter\s*=\s*[\s\S]{0,200}?;/g),
+  ].map((m) => m[0]);
   ok(moodGuards.length >= 2,
     `${moodGuards.length} guards open on askMood`,
     "a sweep that walks nothing passes loudest — and this one used to walk one line");
@@ -7888,7 +7904,34 @@ check("63 The arrival reading is a reading, or it is nothing", () => {
     untouched slider is the default presented as an answer — the interface
     telling the person a thing about themselves that they never said.
   */
-  ok(/!pressureSet/.test(client),
+  /*
+    Read over the whole control surface, not over one file.
+
+    This asserted `/!pressureSet/` against `vent-chat.tsx`, and the day the
+    pressure slider moved out of its tray and onto the single track above the
+    composer, the rule went with it and the check went red over a screen that
+    still honours it perfectly — a hollow mark until the number is theirs, a
+    filled one after. The rule is "the screen says which of the two it is",
+    and the screen is both files.
+  */
+  const surface = [
+    "src/components/chat/vent-chat.tsx",
+    "src/components/chat/pressure-track.tsx",
+  ].map((f) => strip(fs.readFileSync(path.join(ROOT, f), "utf8")));
+  ok(surface.length >= 2, `${surface.length} files make up the composer's control surface`,
+    "a sweep that walks nothing passes loudest");
+  /*
+    Asserted on the mark, not on the pair of files.
+
+    The first version was `surface.some(f => /pressureSet/ && /border/)`, and a
+    mutation making the mark unconditionally gold walked straight through it —
+    `vent-chat.tsx` contains both words for unrelated reasons, so the wrong
+    file satisfied the rule for the right one. A check passing by not looking,
+    inside the check that guards the one number this product claims about
+    itself.
+  */
+  const track = surface[1];
+  ok(/pressureSet \|\| after !== null \? "bg-gold" : "border/.test(track),
     "the composer distinguishes a reading from a default on screen",
     "showing 'some' for a number nobody gave is the same invention, rendered");
 });
@@ -17219,9 +17262,16 @@ check("143 The weight is asked for in the periphery, and refusal ends the asking
   const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
   ok(/\(10 - value\) \* 10/.test(chat), "and the arithmetic that reads it still says ten");
 
-  const whisperSrc = fs.readFileSync(path.join(ROOT, "src/components/chat/weight-whisper.tsx"), "utf8");
-  ok(/WHISPER_MAX - WHISPER_MIN \+ 1/.test(whisperSrc),
-    "the ticks are derived from the contract, never counted out by hand");
+  const whisperSrc = fs.readFileSync(path.join(ROOT, "src/components/chat/pressure-track.tsx"), "utf8");
+  /*
+    The stops are the server's arithmetic run backwards, derived rather than
+    typed. `tension_after = (10 - mood) * 10`, so a mark at 0 is mood 10 — and
+    if either side is ever written out by hand the line and the column it
+    feeds can disagree without a single check going red.
+  */
+  ok(/10 - stop \/ 10/.test(whisperSrc),
+    "the stops are derived from the contract, never counted out by hand");
+  ok(/i \* 10/.test(whisperSrc), "and there are ten of them, spaced by it");
 
   /*
     Ambient at rest. The whole premise is an opacity, so it is asserted: the
@@ -17231,7 +17281,14 @@ check("143 The weight is asked for in the periphery, and refusal ends the asking
   ok(/opacity-15/.test(whisperSrc), "at rest it is texture");
   ok(/lifted \? "opacity-100" : "opacity-15"/.test(whisperSrc),
     "and full contrast is the exception, earned by hover, focus or a reason");
-  ok(/role="radiogroup"/.test(whisperSrc) && /aria-label=\{`\$\{n\} out of/.test(whisperSrc),
+  // Anchored on the property rather than on the loop variable's name, which
+  // is the third time in this check's short life that a token moved under it.
+  ok(/role="radiogroup"/.test(whisperSrc)
+      // A word boundary, because `role="radio"` is a substring of
+      // `role="radiogroup"` and the group alone satisfied this while every
+      // mark inside it had stopped being a radio.
+      && /(^|\s)role="radio"[\s/>]/m.test(whisperSrc)
+      && /aria-label=\{`[^`]*out of 10/.test(whisperSrc),
     "15% opacity is a rest state, not a hiding place — it is still a labelled control");
 
   /*
@@ -17258,9 +17315,15 @@ check("143 The weight is asked for in the periphery, and refusal ends the asking
     "and it is held open for exactly as long as the settle takes",
     "a hold with no release leaves a scale hanging over the box for ever");
 
-  const guard = chat.slice(chat.indexOf("(askMood || settlingHold)"), chat.indexOf("<WeightWhisper"));
-  ok(guard.length > 0 && !/whisperReason/.test(guard),
-    "and silence never removes the way to answer", guard.trim().slice(0, 80));
+  /*
+    Silence never removes the control, and the track makes that structural
+    rather than careful: it is rendered unconditionally, because it is also
+    the pressure slider. Going quiet can only ever null the *reason*.
+  */
+  ok(!/&&\s*<PressureTrack/.test(chat) && /^\s*<PressureTrack/m.test(chat),
+    "the line is always drawn — silence is about asking, never about the control");
+  ok(/reason=\{askingAfter \? whisperReason : null\}/.test(chat),
+    "and going quiet nulls the question rather than the instrument");
 
   /*
     No receipt. "Anchored." was the product confirming its own database at the

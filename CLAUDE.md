@@ -2460,6 +2460,58 @@ time in two commits that a sweep anchored to a token lost coverage to a correct
 change**, which is the argument for anchoring on the rule rather than on the
 line, made twice in a row by the same check.
 
+**Two instruments for one axis, twelve pixels apart.** The ambient scale
+shipped, the settle was repaired, and the screen was still wrong — which a
+screenshot said and no check could. Above one input box sat a mono-uppercase
+toggle reading `● SET THE PRESSURE ⌄`, with a 0–100 range slider folded behind
+it, and directly under it ten hairline marks on a different scale in a
+different visual language, asking the same question at the other end of the
+session.
+
+Nothing was broken. `chair → tension → drop` is one chain and it was being
+drawn as two unrelated controls, so the composer read as a control panel rather
+than as a room. **Adding a good control beside an existing one is how a screen
+stops having a goal.**
+
+`pressure-track.tsx` is that axis: one line, left light, right heavy, the same
+direction at both ends. Before anything is answered it is the pressure slider —
+promoted out of the tray, because a measurement folded behind a chevron is a
+measurement most people never give. After a vent is answered the same line
+takes a tap. The arrival mark stays where it was and **the drop stops being a
+number somebody is told and becomes a distance they watched move.**
+
+**The scale still did not move.** The ten stops are `(10 - mood) * 10` run
+backwards — `moodFor = 10 - stop / 10` — derived in one line rather than typed,
+so the track and the column it feeds cannot disagree. Check 143 fails on a
+hand-written lookup table that returns the same numbers today.
+
+Three checks went red and all three were anchored to lines rather than rules,
+which is now the ordinary cost of a correct change here. Check 44 had already
+moved twice — the card's guard verbatim, then a sweep for guards *opening* on
+`askMood` — and the gate is not a JSX guard at all now, it is `askingAfter`, so
+it reads both shapes. Check 63 asserted `/!pressureSet/` against
+`vent-chat.tsx` and the distinction had moved file with the slider; the rule —
+*an untouched track must not read as an answer* — is unchanged and holds on the
+mark, hollow until the number is theirs.
+
+**And the repair to 63 passed the mutation it was written for.** `surface.some(
+f => /pressureSet/.test(f) && /border/.test(f))` over two files let the *wrong*
+file satisfy the rule for the right one: making the mark unconditionally gold
+walked straight through, inside the check that guards the one number this
+product claims about itself. It reads the mark's own ternary now. Check 143's
+`role="radio"` had the same disease twice over — a substring of
+`role="radiogroup"`, and then still a substring of `data-role="radio"` after
+the first repair. Both anchored on both ends.
+
+Five mutations fail: the after-question stops waiting for a heavy question,
+silence removes the instrument, the stops are typed instead of derived, an
+untouched track reads as an answer, and the marks stop being radios.
+
+**The orphan in the traps list above is real and cost a run here.** `ss -lptn`
+showed nothing on :3001 while `next-server` (pid 774, parent already gone) was
+serving it and `live-checks.sh` correctly refused. `ps -eo pid,ppid,cmd` found
+it in one line. Read the process list, not the socket table.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in
