@@ -16,6 +16,13 @@ import { cn } from "@/lib/utils";
 import { carryingWord } from "@/lib/community/carrying";
 import { useComposerHeight } from "@/lib/ui/use-composer-height";
 import { readEventStream } from "@/lib/ui/event-stream";
+import { WeightWhisper } from "@/components/chat/weight-whisper";
+import {
+  shouldInvite,
+  stillTeaching,
+  WHISPER_IDLE_MS,
+  type WhisperReason,
+} from "@/lib/vent/whisper";
 
 /**
  * Has the room introduced itself to whoever is holding this device?
@@ -37,6 +44,39 @@ const allianceSaid = () => {
 const markAllianceSaid = () => {
   try {
     localStorage.setItem(ALLIANCE_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+};
+
+/**
+ * How many times this device has answered the weight scale.
+ *
+ * Beside the alliance flag for the same reason and with the same failure mode:
+ * a wipe clears the anon id and this together, so somebody starting over is
+ * taught the gesture again — which is correct, because for all the room knows
+ * they are somebody else.
+ *
+ * What it gates is whether a *card* is drawn. It is never sent anywhere: a
+ * product that asked a server how subtle to be would be keeping a fact about
+ * somebody in order to be quiet at them, which is the promise-shaped version
+ * of the bug this whole change is fixing.
+ *
+ * Storage blocked reads as 0, so the full card keeps rendering. That is the
+ * safe direction: the failure is a card somebody has seen before, not a
+ * hairline control nobody was ever shown.
+ */
+const ANCHORED_KEY = "mw-anchored";
+const anchoredCount = () => {
+  try {
+    return Number(localStorage.getItem(ANCHORED_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+};
+const markAnchored = () => {
+  try {
+    localStorage.setItem(ANCHORED_KEY, String(anchoredCount() + 1));
   } catch {
     /* ignore */
   }
@@ -198,6 +238,26 @@ export function VentChat() {
   const [body, setBody] = React.useState<Body | null>(null);
   const [mood, setMood] = React.useState<number | null>(null);
   const [askMood, setAskMood] = React.useState(false);
+
+  /*
+    THE AMBIENT SCALE — what it knows, and what it is allowed to do with it.
+
+    `teaching` starts true and is corrected on mount. Rendering the card on the
+    server and the hairline on the client would be a hydration mismatch, and
+    the safe direction when storage is unreadable is the card: a control
+    somebody has already learnt costs them a glance, a control nobody was ever
+    shown costs the measurement entirely.
+
+    `ignored` is per sitting and lives in state on purpose — same rule as the
+    breaking room's `shut`. Three noes tonight is three noes tonight, and
+    nothing carries it into next week.
+  */
+  const [teaching, setTeaching] = React.useState(true);
+  const [ignored, setIgnored] = React.useState(0);
+  const [turnWords, setTurnWords] = React.useState(0);
+  const [repliedAt, setRepliedAt] = React.useState<number | null>(null);
+  const [idleMs, setIdleMs] = React.useState(0);
+  const [closing, setClosing] = React.useState(false);
   const [tensionBefore, setTensionBefore] = React.useState<number | null>(null);
   const [tensionAfter, setTensionAfter] = React.useState<number | null>(null);
   const [crisis, setCrisis] = React.useState<VentResponse["crisis"] | null>(null);
@@ -351,11 +411,67 @@ export function VentChat() {
     endRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
   }, [streamed]);
 
+  // Read once on mount. The default is the card — see `teaching` above for
+  // why that is the safe direction rather than the tidy one.
+  React.useEffect(() => {
+    setTeaching(stillTeaching(anchoredCount()));
+  }, []);
+
+  /*
+    The pause, measured once rather than polled.
+
+    One timer that fires at the threshold, not a ticker re-rendering the whole
+    transcript every second to watch a number it already knows the shape of.
+    What it stores is the real elapsed time at the moment it fired, because
+    `shouldInvite` takes milliseconds and a function handed a flag dressed as a
+    duration is a function nobody can grade.
+  */
+  React.useEffect(() => {
+    if (repliedAt === null || !askMood) return;
+    const id = window.setTimeout(
+      () => setIdleMs(Date.now() - repliedAt),
+      WHISPER_IDLE_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, [repliedAt, askMood]);
+
+  /*
+    Leaving is the last honest moment to ask, and the only one that is not an
+    interruption — there is nothing left to interrupt.
+
+    `visibilitychange` rather than `beforeunload`: the second one does not fire
+    reliably on mobile Safari, which is most of this product's traffic, and it
+    is the wrong event anyway. Somebody switching to WhatsApp mid-sitting has
+    gone, whether or not the tab is ever closed.
+  */
+  React.useEffect(() => {
+    const onVisibility = () => setClosing(document.visibilityState === "hidden");
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  /*
+    Computed, never asked for. Every input is something the room already knew:
+    whether a vent turn is unanswered, how long the message was, how long the
+    pause has run, how many offers went by, and whether they are gone. The rule
+    itself lives in `whisper.ts` so the suite grades the thing that ships.
+  */
+  const whisperReason: WhisperReason | null = shouldInvite({
+    pending: askMood,
+    words: turnWords,
+    idleMs,
+    ignored,
+    closing,
+  });
+
   async function send(text: string) {
     const message = text.trim();
     if (!message || thinking || gated) return;
 
     setLines((l) => [...l, { id: nextId.current++, speaker: "you", text: message }]);
+    // Counted here because here is where the message is. A long vent is the
+    // one invitation reason that came from them rather than from a clock.
+    setTurnWords(message.split(/\s+/).filter(Boolean).length);
     setDraft("");
     setThinking(true);
     setStreamed("");
@@ -484,6 +600,12 @@ export function VentChat() {
         // default — so the drop card drew a number out of the same fiction.
         if (tensionBefore === null && pressureSet) setTensionBefore(pressure);
         setAskMood(true);
+        // The pause is measured from the reply, not from the request: the
+        // seconds somebody spends waiting on a model are not a pause, they
+        // are a wait, and a control that steps forward during one is
+        // interrupting the answer it is asking about.
+        setRepliedAt(Date.now());
+        setIdleMs(0);
       }
 
       setTag(data.realWorldTag ?? null);
@@ -563,6 +685,16 @@ export function VentChat() {
   async function submitMood(value: number) {
     setMood(value);
     setAskMood(false);
+    /*
+      Answering ends the asking for this turn, and counts toward retiring the
+      card. `ignored` goes back to zero because it measures offers that went by
+      unanswered — an answer is the opposite of that, and carrying the count
+      through one would make somebody who answers on the third ask go silent on
+      their next turn for having hesitated twice.
+    */
+    setIgnored(0);
+    markAnchored();
+    if (!stillTeaching(anchoredCount())) setTeaching(false);
     // Shown immediately — the drop is theirs to see whether or not a database
     // agrees. Only the *claim* about saving waits for the server.
     const after = Math.round((10 - value) * 10);
@@ -578,21 +710,18 @@ export function VentChat() {
     if (memoryCount > 0 && (memoryCount + 1) % 7 === 0) setAskHeld(true);
 
     /*
-      Whether the card below is about to speak for this.
+      This used to compute `cardWillSpeak` — whether the drop card below was
+      about to render — so that "Anchored." could be suppressed when it would
+      have landed on top of it. Two confirmations of one event, and the fix was
+      to keep the larger one.
 
-      A screenshot of the moment: the drop card rendering "35 points lighter
-      than when you sat down", and a toast parked across its last line saying
-      "Anchored." Two confirmations of one event, the smaller one covering
-      part of the larger, and the smaller one is the app talking about its
-      own database at the single moment this product has something to say
-      about the person.
-
-      So the card gets the moment when there is a card. The toast is kept for
-      the two cases where nothing else will speak: a rating that produced no
-      drop to show, and a write that did not land — that one always speaks,
-      even over the card, because it is the only place they would learn it.
+      The argument survived the toast it was made about. There is no success
+      confirmation at all now, so there is nothing left to suppress, and a
+      derived boolean with no reader is how a comment starts describing code
+      that is no longer there. The rule it encoded is still true and now holds
+      by construction: the drop card is the only thing that speaks, because it
+      is the only thing that has something of theirs to say.
     */
-    const cardWillSpeak = tensionBefore !== null && tensionBefore - after > 0;
 
     // This said "Saved. That's the anchor." and made no request at all. The
     // rating lived in React state and died with the tab, which is why
@@ -605,8 +734,21 @@ export function VentChat() {
         body: JSON.stringify({ anonId: anonId(), mood: value }),
       });
       const d = await res.json();
+      /*
+        Silence on success, and that is the change rather than an oversight.
+
+        "Anchored." was the product confirming its own database at the one
+        moment it has something to say about the person, and a receipt turns
+        noticing into reporting. Nothing is said now: the drop card below is
+        their own arithmetic, not our acknowledgement, and it speaks for itself
+        whether or not a row landed.
+
+        The failure still speaks, and it is not a confirmation — it is the only
+        place somebody would ever learn that the number they just gave went
+        nowhere. `cardWillSpeak` is gone with the toast it guarded: it existed
+        to stop two confirmations of one event, and there is one left.
+      */
       if (!d.anchored) toast("Noted here — not saved.", "info");
-      else if (!cardWillSpeak) toast("Anchored.", "success");
     } catch {
       toast("Noted here — not saved.", "info");
     }
@@ -1321,7 +1463,17 @@ export function VentChat() {
 
         {/* Waits while a heavy question is on the table, and returns after.
             Never cleared by it — see `acceptBreaking`. */}
-        {askMood && !offer && !answering && (
+        {/*
+          The card is now the teaching state, not the steady state.
+
+          It renders for the first `TEACHING_SITTINGS` anchored sittings and
+          then never again on this device: the hairline above the composer is
+          the steady state, and nobody discovers a 15%-opacity control on their
+          own. Ordering the guards `askMood && teaching` rather than the other
+          way round keeps the original rule readable — this card is still the
+          one that waits while a heavy question is on the table.
+        */}
+        {askMood && teaching && !offer && !answering && (
           <div className="presence mt-6 p-6 sm:p-8">
             <p className="nameplate mb-4">Before you go</p>
             {/* The room asking, so the room's voice. This is not chrome —
@@ -1654,6 +1806,28 @@ export function VentChat() {
                 Leave it
               </button>
             </div>
+          )}
+
+          {/*
+            THE STEADY STATE, in the periphery of the box rather than across
+            the transcript.
+
+            Drawn only while there is a vent turn it could actually answer —
+            a scale with nothing behind it is a control that submits a reading
+            about nothing. Guarded on the same two states as the card it
+            replaces: a heavy question on the table and an answer being typed
+            both own the composer, and a second thing to decide above the box
+            is the menu this product's own rules forbid.
+
+            `gated` is the third, and it is not symmetry. A crisis turn is the
+            one moment nothing may ask a person for a number.
+          */}
+          {askMood && !teaching && !gated && !offer && !answering && (
+            <WeightWhisper
+              reason={whisperReason}
+              onPick={(n) => void submitMood(n)}
+              onIgnore={() => setIgnored((n) => n + 1)}
+            />
           )}
 
           <div className="flex items-end gap-2">

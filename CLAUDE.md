@@ -2349,6 +2349,87 @@ to"* — and it was made before the artifact was public. **Decide it before
 `ANTHROPIC_API_KEY` is set**, because that is the moment the path becomes live,
 and this file's own test says a retention decision is read by a person.
 
+**The right question in the shape of a demand.** "BEFORE YOU GO" was a
+full-width card with ten 44px buttons, rendered after **every** vent turn. The
+sentence on it — *"Where did the weight land?"* — is the best question this
+product asks. The card announced the room's agenda at the end of every
+exchange, broke the transcript in half, and handed somebody who had just
+written the worst sentence of their week a form to fill in first.
+
+It is the teaching state now, for the first two anchored sittings on a device,
+and a hairline track above the composer for ever after: ten marks at 15%
+opacity, lifted by hover, keyboard focus, or a reason. `whisper.ts` owns when
+it may step forward — a long message, a ten-second pause, or leaving — and the
+component owns nothing but the drawing, because a rule the suite asserts has to
+be imported from the module that ships.
+
+**The scale did not move, and that is the change that would have failed
+silently.** `tension_after` is `(10 - mood) * 10` and every anchored row in
+production is in that space. A five-dot track is prettier, ships clean, and
+re-scales a year of rows against a column that cannot say which scale it was
+written in — the prefix-caching class exactly: correct reply, green suite, and
+the only witness is a mean drop that quietly stops meaning anything. Check 143
+pins `1-10` against the arithmetic that reads it.
+
+**Refusal is a real answer and it costs something, so the cost is written
+down.** Three invitations ignored and this goes quiet for the sitting. A quiet
+sitting records no anchor and the efficacy loop learns nothing from it. That is
+the trade and it is worth taking, because a room that asks a fourth time is not
+ambient, it is nagging at a lower opacity. What silence must never do is remove
+the *control*: going quiet is about asking, and the track stays rendered and
+tappable, or refusal would take away the ability to answer later in the name of
+giving somebody agency. Asserted, because the tidy implementation is the wrong
+one.
+
+**The teaching card is not a courtesy, it is the discovery path.** Nobody finds
+a 15%-opacity control on their own. Delete the card and this is a measurement
+with no way in — *every part working is not the feature working*, for the
+fourth time in this file, now wearing an interaction instead of a migration.
+
+**The receipt is gone and the failure still speaks.** *"Anchored."* was the
+product confirming its own database at the one moment it has something to say
+about the person, and a receipt turns noticing into reporting. Nothing is said
+on success now; the drop card is their own arithmetic and speaks for itself.
+*"Noted here — not saved."* stays, because a write that did not land is the one
+thing they could learn nowhere else, and it is not a confirmation. `cardWillSpeak`
+went with the toast it guarded — a derived boolean with no reader is how a
+comment starts describing code that is not there — and its argument is recorded
+where it stood rather than deleted with it.
+
+**Check 44 was pinned to a line rather than to a rule, and a correct change
+failed it.** It asserted `/\{askMood && !offer && !answering &&/` character for
+character. The rule — *what asks for the weight waits while a heavy question is
+on the table* — is still exactly right; the literal stopped being true the day
+the card grew a `teaching` guard. Check 29's finding, one file over. It sweeps
+every guard opening on `askMood` now, which made it stronger rather than merely
+repaired: there are **two** surfaces asking for this number and the rule had
+only ever been asserted of one.
+
+**And check 128 caught its own author within the hour.** The new check read the
+whisper component's source into a variable called `strip` — the hairline strip —
+which shadowed the suite's one comment stripper inside that scope. `strip is not
+a function`, and the ban on a fifteenth private copy fired at the same time. The
+check written about having one answer to what a comment is, catching a collision
+with the word itself.
+
+**Core Haptics is not reachable from a web page, and the iOS question is left
+open rather than answered from memory.** The brief asks for a transient with an
+intensity curve decaying to zero; that is an iOS-native framework and this
+product ships as a website, so the organic settle is delivered visually and the
+gap is named in the module rather than left as a silent no-op.
+`navigator.vibrate` is called optional-chained at 8ms and skipped under reduced
+motion. **Whether it fires on iOS Safari is not asserted anywhere in this
+change**, because MDN was unreachable from the environment it was written in and
+a remembered compatibility table is a claim with no fingerprint. The design does
+not depend on the answer: the visual settle is the whole feedback channel and
+the tick is a bonus where it exists.
+
+**What no check here can answer is the one that matters.** Whether a 15%
+hairline reads as accompaniment or as something hidden, and whether the first
+two cards are enough to teach it, is the fifth question this file says a gate
+can never ask. Nine mutations fail check 143 and not one of them proves a
+person notices the track. That one is read by a person, on a phone, at 2am.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in

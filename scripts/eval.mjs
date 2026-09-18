@@ -56,6 +56,7 @@ const { parseTechnique, researchBlock, QUERIES, ALLOWED } =
   await app("src/lib/vent/research.ts");
 const { knownProblems, flatReplies, parseProposals, auditPrompt } =
   await app("src/lib/vent/audit.ts");
+const whisper = await app("src/lib/vent/whisper.ts");
 const { echoesThem } = await app("src/lib/vent/echo.ts");
 const { wasAuthored, inTheLoop } = await app("src/lib/vent/tactics.ts");
 const { inspectReply, chooseReply, REJECT, RETRY_ONLY, NOTED, UNREACHABLE } =
@@ -4952,8 +4953,29 @@ check("44 The Breaking Room is wired the way the module is written", () => {
   const card = chat.slice(chat.indexOf("{offer &&"), chat.indexOf("{offer &&") + 60);
   ok(!/askMood/.test(card),
     "the offer does not wait on a flag that is always set when it exists", card.trim());
-  ok(/\{askMood && !offer && !answering &&/.test(chat),
-    "it is the mood check that waits, and only while a question is on the table");
+  /*
+    Re-anchored on the rule, not on the line it used to occupy.
+
+    This read `/\{askMood && !offer && !answering &&/` — the mood card's guard,
+    character for character. The rule it encodes is still exactly right: what
+    asks for the weight waits while a heavy question is on the table. The
+    literal stopped being true the day the card grew a `teaching` guard and
+    retired in favour of the hairline scale above the composer, and a correct
+    change failed a check that was pinned to where the rule lived rather than
+    to what it says. Check 29's finding, in the file next door.
+
+    Swept over every guard that opens on `askMood`, which is how it got
+    stronger rather than merely repaired: there are two surfaces asking for
+    this number now, the teaching card and the ambient track, and the rule was
+    only ever asserted of one of them. A third would be covered by writing it.
+  */
+  const moodGuards = [...chat.matchAll(/\{askMood && ([^(]*?)&& \(/g)].map((m) => m[1]);
+  ok(moodGuards.length >= 2,
+    `${moodGuards.length} guards open on askMood`,
+    "a sweep that walks nothing passes loudest — and this one used to walk one line");
+  const impatient = moodGuards.filter((g) => !/!offer/.test(g) || !/!answering/.test(g));
+  is(impatient.join(" · "), "",
+    "everything that asks for the weight waits while a question is on the table");
   const accept = chat.slice(chat.indexOf("function acceptBreaking"));
   // Comments stripped, or this reads the paragraph explaining the bug and
   // reports the bug. The check is about the code.
@@ -17104,6 +17126,133 @@ check("142 The audit reports names and ids, never anybody's words", () => {
   ok(/flat:\s*flat\.map\(\(r\)\s*=>\s*r\.id\)/.test(script),
     "the report stores flat replies by id",
     "the whole row would carry the vent as well as the reply");
+});
+
+check("143 The weight is asked for in the periphery, and refusal ends the asking", () => {
+  /*
+    WHAT REPLACED A FORM, AND WHAT MUST NOT COME BACK WITH IT
+
+    "BEFORE YOU GO" was a full-width card with ten 44px buttons after every
+    vent turn — the right question in the shape of a demand. It is now the
+    teaching state for the first two anchored sittings, and a hairline track
+    above the composer for ever after.
+
+    Every rule below is graded against `whisper.ts` itself rather than against
+    a copy written here, because the component imports that module and a suite
+    that checks its own copy passes while the product regresses.
+  */
+  const {
+    shouldInvite, inviteSpent, stillTeaching,
+    WHISPER_IDLE_MS, WHISPER_LONG_WORDS, IGNORES_BEFORE_SILENT, TEACHING_SITTINGS,
+    WHISPER_MIN, WHISPER_MAX, SETTLE_MS, LINGER_MS,
+  } = whisper;
+  const at = (over) => ({ pending: true, words: 0, idleMs: 0, ignored: 0, closing: false, ...over });
+
+  // Nothing to answer, nothing to ask. A scale offered with no turn behind it
+  // submits a reading about nothing.
+  is(shouldInvite(at({ pending: false, idleMs: 60_000, closing: true })), null,
+    "with no unanswered turn it never steps forward");
+
+  /*
+    Refusal is a real answer, and this is the assertion that makes it one.
+    Three offers ignored and every reason goes quiet — `closing` included,
+    which is the one most easily argued into an exception and the one where a
+    fourth ask would land hardest.
+  */
+  ok(inviteSpent(IGNORES_BEFORE_SILENT), "three noes is spent");
+  ok(!inviteSpent(IGNORES_BEFORE_SILENT - 1), "and two is not");
+  const afterNo = ["closing", "long", "idle"].map((k) =>
+    shouldInvite(at({
+      ignored: IGNORES_BEFORE_SILENT,
+      closing: k === "closing",
+      words: k === "long" ? WHISPER_LONG_WORDS : 0,
+      idleMs: k === "idle" ? WHISPER_IDLE_MS : 0,
+    })));
+  is(afterNo.filter((r) => r !== null).join(" · "), "",
+    "and once it is spent no reason revives it, closing least of all");
+
+  /*
+    The pause is inside the band the brief names, asserted as a band rather
+    than as an integer. `=== 10_000` would pin today's product decision the way
+    check 126's first version pinned a noun — the requirement is 8–12 seconds,
+    and anything in it is somebody's call to make.
+  */
+  ok(WHISPER_IDLE_MS >= 8_000 && WHISPER_IDLE_MS <= 12_000,
+    "the pause is a pause, not an interrupt and not a missed moment", `${WHISPER_IDLE_MS}ms`);
+  is(shouldInvite(at({ idleMs: WHISPER_IDLE_MS })), "idle", "it steps forward on the pause");
+  is(shouldInvite(at({ idleMs: WHISPER_IDLE_MS - 1 })), null, "and not one millisecond early");
+  is(shouldInvite(at({ words: WHISPER_LONG_WORDS })), "long", "and on a message that cost something");
+
+  /*
+    The order is the product decision, not an implementation detail. A reason
+    that came from them outranks a reason that came from our clock, and the
+    last moment outranks both.
+  */
+  is(shouldInvite(at({ closing: true, words: WHISPER_LONG_WORDS, idleMs: WHISPER_IDLE_MS })), "closing",
+    "leaving wins — there is nothing left to interrupt");
+  is(shouldInvite(at({ words: WHISPER_LONG_WORDS, idleMs: WHISPER_IDLE_MS })), "long",
+    "and their reason beats our timer");
+
+  // The card teaches and then gets out of the way.
+  ok(stillTeaching(0) && stillTeaching(TEACHING_SITTINGS - 1), "the first sittings get the card");
+  ok(!stillTeaching(TEACHING_SITTINGS), "and it retires rather than becoming furniture");
+
+  // Under the brief's ceilings: the motion finishes inside 400ms, the strip is
+  // back to texture inside two seconds.
+  ok(SETTLE_MS <= 400, "the settle finishes before it becomes an animation", `${SETTLE_MS}ms`);
+  ok(LINGER_MS <= 2_000, "and nothing stays lit", `${LINGER_MS}ms`);
+
+  /*
+    THE SCALE DID NOT MOVE, AND THAT IS THE ONE THAT WOULD HAVE BEEN SILENT.
+
+    `tension_after` is `(10 - mood) * 10` and every anchored row in production
+    is in that space. A five-dot track would look better, ship clean, and
+    silently re-scale a year of rows against a column that cannot say which
+    scale it was written in — the invisible-failure class, wearing a redesign.
+  */
+  is(`${WHISPER_MIN}-${WHISPER_MAX}`, "1-10", "the server's scale is untouched");
+  const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
+  ok(/\(10 - value\) \* 10/.test(chat), "and the arithmetic that reads it still says ten");
+
+  const whisperSrc = fs.readFileSync(path.join(ROOT, "src/components/chat/weight-whisper.tsx"), "utf8");
+  ok(/WHISPER_MAX - WHISPER_MIN \+ 1/.test(whisperSrc),
+    "the ticks are derived from the contract, never counted out by hand");
+
+  /*
+    Ambient at rest. The whole premise is an opacity, so it is asserted: the
+    low state is unconditional and the lift is the branch, never the other way
+    round.
+  */
+  ok(/opacity-15/.test(whisperSrc), "at rest it is texture");
+  ok(/lifted \? "opacity-100" : "opacity-15"/.test(whisperSrc),
+    "and full contrast is the exception, earned by hover, focus or a reason");
+  ok(/role="radiogroup"/.test(whisperSrc) && /aria-label=\{`\$\{n\} out of/.test(whisperSrc),
+    "15% opacity is a rest state, not a hiding place — it is still a labelled control");
+
+  /*
+    Going quiet must never take the control away. `shouldInvite` returning null
+    is about *asking*; the strip stays rendered and stays tappable, or refusal
+    would cost somebody the ability to answer later — agency removed in the
+    name of giving it.
+  */
+  const guard = chat.slice(chat.indexOf("{askMood && !teaching"), chat.indexOf("<WeightWhisper"));
+  ok(guard.length > 0 && !/whisperReason/.test(guard),
+    "and silence never removes the way to answer", guard.trim().slice(0, 80));
+
+  /*
+    No receipt. "Anchored." was the product confirming its own database at the
+    one moment it has something to say about the person; the drop card is their
+    arithmetic and speaks for itself. The failure still speaks, because it is
+    the only place somebody learns the number went nowhere — asserted together,
+    so removing the receipt cannot quietly take the honesty with it.
+  */
+  const mood = chat.slice(chat.indexOf("async function submitMood"), chat.indexOf("const drop ="));
+  ok(mood.length > 200, `${mood.length} chars of submitMood read`, "an empty slice asserts nothing");
+  // The suite's one stripper, not a fifteenth private copy — check 128 caught
+  // this being written, which is the check doing exactly its job.
+  const code = strip(mood);
+  ok(!/"success"/.test(code), "nothing thanks anybody for answering");
+  ok(/!d\.anchored\) toast\(/.test(code), "and a write that did not land still says so");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
