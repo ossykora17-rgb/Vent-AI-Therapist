@@ -57,10 +57,33 @@ export interface AuditRow {
   tension_after?: number | null;
 }
 
+/*
+  A FINDING CARRIES NAMES AND AN ID. IT USED TO CARRY THE REPLY.
+
+  The doc comment below has said "grader label" since it was written and the
+  code put `n.detail` there, which is the one thing `quality.ts` records
+  undoing for itself: a detail quotes the reply — `recites` prints the
+  sentence read back, `invented` prints the naira figure. `Finding` also
+  carried the whole reply, and `scripts/audit.mjs` printed 88 characters of it
+  and wrote the entire object to `data/audit/<date>.json`.
+
+  That was invisible for as long as the job was dead. Its first successful run
+  — the first one ever to read production, minutes after the module-load bug
+  was fixed — printed three real replies into a **public** GitHub Actions log
+  and uploaded the full objects as a **public** artifact. Fixing a job is what
+  made its leak reachable, which is this repository's oldest shape arriving
+  from the friendliest possible direction.
+
+  So the rule is the one already written for `Verdict.reject` and for
+  `Error.message`: **make the obvious field the safe one.** A grader name says
+  what the product is doing wrong — `diagnosis: 5` is the finding — and carries
+  nothing about anybody. The row id is here so an operator can look the reply
+  up through the authenticated path, which is the only place it should ever be
+  read from.
+*/
 export interface Finding {
   id: string;
-  reply: string;
-  /** Every grader label that fired, worst first. */
+  /** Every grader label that fired, worst first. Names only, never details. */
   problems: string[];
   severity: "fatal" | "major" | "minor";
 }
@@ -145,8 +168,7 @@ export function knownProblems(
     if (worst === "skipped" || worst === null) continue;
     out.push({
       id: r.id,
-      reply: r.ai_reply,
-      problems: notes.filter((n) => n.severity !== "skipped").map((n) => n.detail),
+      problems: notes.filter((n) => n.severity !== "skipped").map((n) => n.grader),
       severity: worst,
     });
   }

@@ -125,9 +125,22 @@ if (rows.length === 0) {
 */
 const known = knownProblems(rows, undefined, all);
 console.log(`broke a rule  ${known.length}`);
+/*
+  Names and an id. Never the reply, and never a grader's detail.
+
+  This printed the severity, two grader *details* and 88 characters of the
+  reply. On a public repository that is a public CI log with 90-day retention,
+  and the report written below carried the whole object into a public
+  artifact. The first run that ever read production did both, minutes after
+  the module-load fix made this code reachable at all.
+
+  What is left is what CLAUDE.md already allows everywhere else: a count, a
+  severity, the graders that fired, and the row id — which is how somebody
+  with database access reads the actual reply, through the authenticated path
+  rather than off a log nobody can delete.
+*/
 for (const f of known.slice(0, 8)) {
-  console.log(`  [${f.severity}] ${f.problems.slice(0, 2).join(" · ")}`);
-  console.log(`         ${f.reply.replace(/\s+/g, " ").slice(0, 88)}`);
+  console.log(`  [${f.severity}] ${f.id} — ${f.problems.join(" · ")}`);
 }
 
 /*
