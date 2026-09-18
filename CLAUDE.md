@@ -2142,21 +2142,29 @@ fails in **both** directions — delete the floor and dead rooms get offered,
 raise it past the lifetime and the door shuts for everybody. Not an assertion
 invented to make a mutation fail; a guard the first probe had stepped over.
 
-**What is still cold, and it is the return leg.** The vent path can send
-somebody to a circle. The circle sends nothing back: the seal's mood, the word
-carried, the word dropped and the drop in points all go to `logPreference`,
-which no-ops in production. A person vents, is offered a room, sits in it,
-drops a word, comes back to `/chat` — and the room has no idea it happened.
-The entry above frames that as lost training data. It is also why the product
-reads as two products: the bridge is one-way by construction.
+**The return leg, which was the last cold component.** The vent path could
+send somebody to a circle. The circle sent nothing back: the seal's mood, the
+word carried, the word dropped and the drop in points all went to
+`logPreference`, which no-ops in production. A person vented, was offered a
+room, sat in it, named a word, came back to `/chat` — and the room had no idea
+it happened. The entry above frames that as lost training data. It was also
+why the product read as two products: the bridge was one-way by construction.
 
-Not built here, and the reason is unchanged — carrying a circle's closing
-reading past the circle is a **new thing this product would hold about
-somebody**, and this file's own test says a retention decision is read by a
-person. Worth writing down beside it: the word they dropped is *their own
-word about themselves*, which is the exact shape of `vent_users.held` — a
-column that already has a page, a button and a destruction path. That is the
-version that needs no new promise. Whether to take it is still not mine.
+**Built, and the paragraph this replaces got the word wrong.** It read *"the
+word they dropped is their own word about themselves, which is the exact shape
+of `vent_users.held`"* — and `held` means *what held*, so the dropped word is
+the one shape that column must never take. The right half of that sentence
+survived: a column that already has a page, a button and a destruction path is
+the version that needs no new promise, which is why this could be built at all
+when every other shape of it is a retention decision. The wrong half is left
+here because it is the mistake a reader is most likely to repeat: the two words
+arrive in the same request, and only one of them is theirs to keep.
+
+The seal now writes `carry` into `vent_users.held`, reads the answer, and says
+which of three things actually happened. The rest of the closing reading — the
+mood, the drop, the dropped word — still goes only to `logPreference` and is
+still recorded nowhere in production, so the efficacy loop below is unchanged
+and the finding above it still stands.
 
 **The brake was bolted to the wheel.** `/api/vent` rate-limits per person and
 does it well — `RATE_PER_MINUTE`, `RATE_PER_DAY`, a higher cap at the edge, and
@@ -2213,6 +2221,89 @@ Four mutations fail check 139: a ceiling that never refuses, one that decides
 without recording, a window that never releases, and the gate moved past the
 billed call. That last one is the one worth keeping — *a ceiling downstream of
 the spend is a counter, not a brake*.
+
+**The return leg, built — and it is `carry`, not `drop`.** The circle now
+sends one thing back: the word a person says they are taking with them lands in
+`vent_users.held`.
+
+The mapping was written the wrong way round twice in conversation before the
+contract settled it. `held` is documented as *"what held, in their own words —
+the other half of the carve"*, and the seal asks two questions: the word you
+take and the word you leave. Writing the **dropped** word into a column meaning
+*what held* hands somebody back the thing they came here to put down.
+
+It needs no new promise, which is the only reason it could be built at all.
+`vent_users.held` exists (0013), renders on `/memory`, has a delete button, and
+dies in `deleteAll` — so *one tap deletes everything, for good* stays true with
+no new table, no new destruction path and no line in the privacy page. Every
+other shape of carrying a circle's close forward is a retention decision; this
+one is a write into a promise already kept. It is also the one thing a circle
+produces that is safe to move: not the transcript, not anybody else's words,
+not a model's summary, but one word the person chose about themselves — the
+contract's *"written only by the person and never by a model"*.
+
+**And the sentence had to change, which is the half that mattered.**
+*"Sealed. Nothing here is kept."* was true for exactly as long as a circle kept
+nothing. The moment one word leaves the room it is false at the moment somebody
+most needs it to be true — this file's opening rule, on the screen a person
+reads after the worst hour of their week. Three branches now, each true: the
+close failed; the close landed and nothing was kept; the close landed and
+*"«carry» is on your Memory page"*.
+
+`seal()` returned `r.ok` — correct while the seal made two promises, and the
+feedback bug's exact shape the moment a third arrived. It reads the body now.
+The check's **first version tested for the text** of that read and a mutation
+returning `{ sealed: r.ok, held: r.ok }` left the `r.json()` lines below as
+dead code and went green. Asserted on the binding instead: `held` must come
+from the parsed body and never from the status. Four mutations fail check 140;
+one of them — dropping `addHeld`'s answer — was caught by **check 87**, which
+already swept that class and fired on its own.
+
+**And none of those four would have caught the failure this feature was most
+likely to have.** Every one of them reads the source. The notes feature had a
+migration, a table, `keepable()`, a refusal message, a page, a delete button
+and checks 83 and 100 — and produced **zero rows in a month**. `held` now has
+exactly the same parts, so the only evidence worth anything is the word going
+in through the seal a person taps and coming back out of the surface their
+Memory page reads, across two routes and a real store with nothing stubbed
+between them. Check 20 does that, in the live block, beside the seal that was
+already there.
+
+The mutation that settles it is a store whose `addHeld` returns `true` and
+writes nothing — every part reporting working, which is the notes bug exactly.
+**Check 140 passes it.** The live seam fails with `nothing came back`, and the
+wrong-word mutation fails it with `Guilt` printed beside the assertion. A
+static check can prove the call is written and the answer is read; it cannot
+prove the row arrived.
+
+**The loop's first real run reached production, then died before a grader
+ran.** Both secrets set, `skip=0`, rows fetched for the first time in
+twenty-eight scheduled runs — and `ERR_MODULE_NOT_FOUND: Cannot find package
+'@anthropic-ai/sdk'` at module load, nine seconds in.
+
+`audit.yml` deliberately runs no `npm ci`; the audit reaches `src/` through the
+same zero-dependency loader as the gate. The SDK import in `audit.mjs` was
+already lazy and below the no-key exit. **`MODEL` was not** — one line at the
+top reading one model id used forty lines *below* that exit, and `providers.ts`
+imports the SDK statically. So the branch whose entire job is *"no key tonight,
+here is what the free graders found"* was unreachable from the only environment
+that needs it. The free half of a job must never depend on the paid half being
+installed, and the one script allowed to spend money is the one most likely to
+forget it.
+
+Check 141 asserts ordering rather than absence — both paid imports may exist,
+and both must sit below the exit. Its own first version then went red on the
+workflow's **own comment**: `# No \`npm ci\`` matched a regex for `npm ci`, so a
+line stating the property being asserted failed the assertion. Fourth
+instrument error in one session, after the ERE pipe, the too-narrow href sweep
+and the text-not-binding check above. It reads the `run:` steps now, with a
+floor, because a filter that finds nothing satisfies any ban by not looking.
+
+**And `git checkout` destroyed an uncommitted fix for the third time**, on a
+*committed* file this time — `scripts/audit.mjs` reverted to HEAD and took the
+repair with it. The rule already written here is not enough: it is not only
+uncommitted files. Back up to the scratchpad before any mutation and restore
+from there, always.
 
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
