@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { carryingWord } from "@/lib/community/carrying";
 import { useComposerHeight } from "@/lib/ui/use-composer-height";
 import { readEventStream } from "@/lib/ui/event-stream";
-import { WeightWhisper } from "@/components/chat/weight-whisper";
+import { PressureTrack } from "@/components/chat/pressure-track";
 import {
   shouldInvite,
   stillTeaching,
@@ -473,6 +473,18 @@ export function VentChat() {
     pause has run, how many offers went by, and whether they are gone. The rule
     itself lives in `whisper.ts` so the suite grades the thing that ships.
   */
+  /*
+    Whether the line may ask the after-question at all.
+
+    Every clause was a JSX guard on the control that no longer exists. They are
+    the same rules and they still hold: a heavy question on the table owns the
+    composer, a crisis turn is the one moment nothing asks anybody for a
+    number, and while the teaching card is asking, the line must not ask over
+    the top of it.
+  */
+  const askingAfter =
+    (askMood || settlingHold) && !teaching && !gated && !offer && !answering;
+
   const whisperReason: WhisperReason | null = shouldInvite({
     pending: askMood,
     words: turnWords,
@@ -799,7 +811,6 @@ export function VentChat() {
 
   /* One word for the reading, used by the closed strip and by the open
      slider, so the two can never disagree about what 67 means. */
-  const pressureWord = pressure > 66 ? "tight" : pressure > 33 ? "some" : "loose";
 
   /*
     What held — the counterweight to the carve, and the only thing in this
@@ -1734,25 +1745,16 @@ export function VentChat() {
                 or be a bug. `aria-label` carries the meaning for anybody not
                 reading the strip.
               */}
-              <label className="ml-auto flex min-w-[160px] flex-1 items-center gap-2">
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={pressure}
-                  onChange={(e) => {
-                    setPressure(Number(e.target.value));
-                    // Touching it is the act that turns 50 from a default
-                    // into an answer. Nothing else can.
-                    setPressureSet(true);
-                  }}
-                  aria-label="Pressure, 0 loose to 100 tight"
-                  // The track reads as weight, not as a form control. See
-                  // input[type="range"] in globals.css.
-                  style={{ "--fill": `${pressure}%` } as React.CSSProperties}
-                  className="h-2 w-full accent-gold"
-                />
-              </label>
+              {/*
+                The slider used to live here, folded behind a chevron.
+
+                A measurement most people never gave, because giving it cost a
+                tap on a control whose label was the only thing saying it
+                existed. It is the track above the box now — always visible,
+                ambient, and the same 0–100 input with the same `pressureSet`
+                rule. This tray keeps the one question the track cannot ask:
+                where in the body.
+              */}
             </div>
           )}
 
@@ -1771,23 +1773,33 @@ export function VentChat() {
               the honest shape for a number nobody has given — the same
               distinction the strip's own words now make.
             */}
+            {/*
+              It answers for this tray, not for the track.
+
+              The dot was driven by `pressureSet` and its opacity by
+              `pressure` — a second readout of the exact fact the mark on the
+              line above now shows positionally, sitting beside a label about
+              the body. A second copy can only ever agree with it or be a bug,
+              which is the sentence this file already wrote about the strip.
+              It reads the body now: hollow until they have said where.
+            */}
             <span
               aria-hidden
               className={cn(
                 "h-1.5 w-1.5 rounded-full",
-                pressureSet ? "bg-gold" : "border border-gold/50",
+                body ? "bg-gold" : "border border-gold/50",
               )}
-              style={pressureSet ? { opacity: 0.35 + (pressure / 100) * 0.65 } : undefined}
             />
-            {!pressureSet
-              // "How tight is it?" is a poem where a number out of ten was
-              // meant, and it was the label on the one control somebody uses
-              // to say how bad it is. The strip already prints the reading
-              // once it exists; before that it should say what it collects.
-              ? "Set the pressure"
-              : body
-                ? `${body} · ${pressureWord}`
-                : pressureWord}
+            {/*
+              The body, and nothing else.
+
+              This read "Set the pressure" and then `body · pressureWord` — a
+              second copy of a reading the track above now shows positionally,
+              in the file whose own comment says a second copy "can only ever
+              agree with it or be a bug". The pressure moved out; the question
+              this tray still owns is where it sits.
+            */}
+            {body ?? "Where is it?"}
             <span aria-hidden className={cn("transition-transform duration-300", trayOpen && "rotate-180")}>
               ⌄
             </span>
@@ -1839,17 +1851,42 @@ export function VentChat() {
             `gated` is the third, and it is not symmetry. A crisis turn is the
             one moment nothing may ask a person for a number.
           */}
-          {(askMood || settlingHold) && !teaching && !gated && !offer && !answering && (
-            <WeightWhisper
-              reason={whisperReason}
-              onPick={(n) => {
-                setSettlingHold(true);
-                window.setTimeout(() => setSettlingHold(false), LINGER_MS);
-                void submitMood(n);
-              }}
-              onIgnore={() => setIgnored((n) => n + 1)}
-            />
-          )}
+          {/*
+            ONE LINE, AND IT IS ALWAYS THERE.
+
+            The weight scale used to be a second control rendered beside the
+            pressure toggle — two horizontal instruments for one axis, twelve
+            pixels apart, in two visual languages. This is that axis: the mark
+            is where they came in, and after a reply the same line takes the
+            answer for where it landed. The distance between the two marks is
+            the drop, watched rather than reported.
+
+            The rule the old guard carried survives as `askingAfter`: what asks
+            for the weight still waits while a heavy question is on the table,
+            while a crisis is open, and while the teaching card is doing the
+            asking. What changed is that waiting no longer removes the control
+            — the line is still a line, and the pressure is still theirs to set.
+          */}
+          <PressureTrack
+            pressure={pressure}
+            pressureSet={pressureSet}
+            onPressure={(v) => {
+              setPressure(v);
+              // Touching it is the act that turns 50 from a default into an
+              // answer. Nothing else can.
+              setPressureSet(true);
+            }}
+            mode={askingAfter || tensionAfter !== null ? "after" : "before"}
+            reason={askingAfter ? whisperReason : null}
+            before={tensionBefore}
+            after={tensionAfter}
+            onPick={(n) => {
+              setSettlingHold(true);
+              window.setTimeout(() => setSettlingHold(false), LINGER_MS);
+              void submitMood(n);
+            }}
+            onIgnore={() => setIgnored((n) => n + 1)}
+          />
 
           <div className="flex items-end gap-2">
             <label htmlFor="vent-input" className="sr-only">
