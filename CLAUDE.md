@@ -2251,6 +2251,23 @@ from the parsed body and never from the status. Four mutations fail check 140;
 one of them — dropping `addHeld`'s answer — was caught by **check 87**, which
 already swept that class and fired on its own.
 
+**And none of those four would have caught the failure this feature was most
+likely to have.** Every one of them reads the source. The notes feature had a
+migration, a table, `keepable()`, a refusal message, a page, a delete button
+and checks 83 and 100 — and produced **zero rows in a month**. `held` now has
+exactly the same parts, so the only evidence worth anything is the word going
+in through the seal a person taps and coming back out of the surface their
+Memory page reads, across two routes and a real store with nothing stubbed
+between them. Check 20 does that, in the live block, beside the seal that was
+already there.
+
+The mutation that settles it is a store whose `addHeld` returns `true` and
+writes nothing — every part reporting working, which is the notes bug exactly.
+**Check 140 passes it.** The live seam fails with `nothing came back`, and the
+wrong-word mutation fails it with `Guilt` printed beside the assertion. A
+static check can prove the call is written and the answer is read; it cannot
+prove the row arrived.
+
 **The loop's first real run reached production, then died before a grader
 ran.** Both secrets set, `skip=0`, rows fetched for the first time in
 twenty-eight scheduled runs — and `ERR_MODULE_NOT_FOUND: Cannot find package

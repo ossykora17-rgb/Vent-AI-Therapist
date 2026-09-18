@@ -5360,6 +5360,31 @@ if (BASE) {
     }, "PATCH").then((r) => r.json());
     is(sealed.drop, tensionDrop(62, 8), "the seal records the drop from their own chair");
 
+    /*
+      THE SEAM, AND THE ONLY REASON `held` IS NOT THE NOTES FEATURE
+
+      Notes had a migration, a table, `keepable()`, a refusal message, a page,
+      a delete button and two static checks — and produced **zero rows in a
+      month**, because nothing had ever fed the real path end to end. The
+      return leg now has all the same parts. This is the difference: the word
+      goes in through the seal a person actually taps and comes back out of
+      the surface their Memory page reads, across two routes and a real store,
+      with nothing stubbed between them.
+
+      Asserted on the **carried** word, and on the dropped one's absence. The
+      seal sends both in one request and the column means *what held*, so an
+      assertion that only checked "something is in there" would pass just as
+      happily on the word they came here to put down.
+    */
+    ok(sealed.held === true, "the seal reports the carried word as kept", `held=${sealed.held}`);
+    const heldBack = await fetch(`${BASE}/api/held?anonId=${two}`).then((r) => r.json());
+    const heldWords = (heldBack.held ?? []).map((h) => h.text);
+    ok(heldWords.includes("Hope"),
+      "and it is there on the surface their Memory page reads",
+      heldWords.join(", ") || "nothing came back");
+    ok(!heldWords.includes("Guilt"),
+      "the word they dropped is not kept — `held` means what held");
+
     // The Guardian's inspection endpoint is not an open relay. It was, and a
     // 1,000-a-day quota that every circle depends on is not worth leaving
     // open to a script.
