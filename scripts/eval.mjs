@@ -3330,8 +3330,29 @@ check("29 The rate limiter knows who it is refusing", () => {
   ok(/history\.length >= 6/.test(route),
     "the long-session upgrade survives, below the limiter, for routing only");
 
-  // And the refusal at the edge is not a closed door.
-  const refusal = route.slice(limitAt, limitAt + 700);
+  /*
+    And the refusal at the edge is not a closed door.
+
+    THE WINDOW WAS THE ANCHOR, AND THE ANCHOR MOVED
+
+    This read `route.slice(limitAt, limitAt + 700)` — the refusal had to sit
+    within seven hundred characters of the limiter. It went red the moment a
+    second rail needed the same sentence and the strings moved into one
+    `rateLimited()` function, which is the fix check 81 asks for applied inside
+    a file where check 81 cannot see.
+
+    The rule was never about distance. It is check 48's finding again, and the
+    check-45 trap beside it: the assertion pinned where the sentence lived
+    rather than what it says, so a correct repair failed it and the wrong
+    response would have been to move the strings back.
+
+    Anchored on the function now, which is strictly stronger: there is one
+    refusal, both rails return it, and the slice cannot drift.
+  */
+  const refusalAt = route.indexOf("function rateLimited(");
+  ok(refusalAt > 0, "the refusal has one implementation",
+    "two rails with two copies is the duplication this replaced");
+  const refusal = route.slice(refusalAt, route.indexOf("\n}", refusalAt));
   /*
     The crisis reply, in whichever language they wrote in.
 
@@ -3351,6 +3372,15 @@ check("29 The rate limiter knows who it is refusing", () => {
     "and an ordinary pause keeps its own voice, which reads like a pause");
   ok(/gated: false/.test(refusal),
     "the crisis lines are offered without locking the room — they were not in crisis, they were refused");
+
+  /*
+    Both rails reach it. The per-person limiter is inside `if (store)` and the
+    per-instance ceiling is not, which is the whole point of the second one —
+    so the refusal a person meets must not depend on which stopped them.
+  */
+  is((route.match(/return rateLimited\(/g) ?? []).length, 2,
+    "and both the per-person limiter and the per-instance ceiling return it",
+    "a rail with its own refusal is how one of them ends up a dead end");
 
   // Commandment 1, still: no paywall vocabulary anywhere a person can read.
   const walk = (dir) =>
@@ -16721,6 +16751,85 @@ await checkAsync("138 The one bridge between the two surfaces can still carry so
     "if a fresh room is refused the bridge is shut for the case it exists for");
   is(late, 0, "a room with two minutes left is not, however many seats it has",
     "a closing door is the `Your turn comes` refusal wearing a clock");
+});
+
+await checkAsync("139 The brake does not depend on the wheel", async () => {
+  /*
+    `/api/vent` rate-limits per person and does it well — per minute, per day,
+    a higher cap at the edge, and a refusal that hands somebody a human rather
+    than "try again in a minute". Two gaps, and both only bite at scale.
+
+    It lives inside `if (store)`. The route degrades to the no-store shape when
+    the database is unreachable, deliberately, and the comment is right that
+    "the reply is worth more than the record" — but `userId` stays null there,
+    so the counting never runs and the model is called anyway. Production
+    answered `Gateway Timeout` on two tables five days ago; in that window
+    every vent was unlimited and no surface said so. The live pass even proves
+    the path: "A vent still gets a reply when the database is refusing · 200".
+    Nothing asserted it was bounded.
+
+    And `anonId` comes from the client, so a per-person limit bounds an honest
+    person and nobody else.
+
+    `allowModelCall` counts what neither can dodge: calls made by this instance
+    in a rolling minute, no identity and no database. Graded here directly
+    rather than through a reimplementation — `countsAsSpend`'s precedent, and
+    the reason the function both decides and records.
+  */
+  const { allowModelCall, callsInWindow, resetCeiling, CALLS_PER_INSTANCE_MINUTE } =
+    await app("src/lib/vent/ceiling.ts");
+
+  resetCeiling();
+  const t0 = Date.now();
+  let allowed = 0;
+  for (let i = 0; i < CALLS_PER_INSTANCE_MINUTE + 25; i++) if (allowModelCall(t0)) allowed++;
+  is(allowed, CALLS_PER_INSTANCE_MINUTE,
+    `the ceiling stops at ${CALLS_PER_INSTANCE_MINUTE} in one minute`,
+    "a counter that never refuses is the state this check exists to end");
+  is(callsInWindow(t0), CALLS_PER_INSTANCE_MINUTE, "and it reports what it counted");
+
+  /*
+    Asking twice must not spend twice. A predicate that decides without
+    recording is one a caller can loop on, which is the failure mode of every
+    limiter written as a pure function beside a separate counter.
+  */
+  resetCeiling();
+  ok(allowModelCall(t0), "one call is allowed");
+  is(callsInWindow(t0), 1, "and asking recorded it",
+    "a predicate that decides without recording can be looped on for free");
+
+  // It is a rolling window, not a bucket that never empties.
+  resetCeiling();
+  for (let i = 0; i < CALLS_PER_INSTANCE_MINUTE; i++) allowModelCall(t0);
+  ok(!allowModelCall(t0 + 59_000), "still refusing inside the window");
+  ok(allowModelCall(t0 + 61_000), "and open again once the minute has passed",
+    "a ceiling that never releases turns one burst into a permanent outage");
+  is(callsInWindow(t0 + 61_000), 1, "with the old minute forgotten");
+
+  /*
+    And the route calls it on the path that spends. A correct predicate nothing
+    calls is the shape of half the findings in CLAUDE.md, so this reads the
+    route rather than trusting the module.
+  */
+  const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
+  ok(/if \(!allowModelCall\(\)\)/.test(route),
+    "the vent route asks before it spends");
+  const gateAt = route.indexOf("allowModelCall()");
+  const callAt = route.indexOf("await generateReply(");
+  ok(gateAt > 0 && gateAt < callAt,
+    "and it asks BEFORE the billed call, not after",
+    "a ceiling downstream of the spend is a counter, not a brake");
+
+  /*
+    The refusal is one sentence, reached by both rails. Check 81 forbids a
+    sentence living in two files and would not have fired on two copies inside
+    one route, which is exactly where the duplicate was about to go.
+  */
+  is((route.match(/Small small — breathe/g) ?? []).length, 1,
+    "and the pause a person reads exists once",
+    "two rails with two copies of one sentence is check 81's bug, inside a file it cannot see");
+  is((route.match(/return rateLimited\(/g) ?? []).length, 2,
+    "with both rails returning it");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────

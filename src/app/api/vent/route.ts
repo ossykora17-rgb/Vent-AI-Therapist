@@ -19,6 +19,7 @@ import { MEMORY_TURNS, memoryFetchSize, selectMemory } from "@/lib/vent/memory";
 import { noModelKeyReply } from "@/lib/vent/fallback";
 import { MAX_TOKENS, classifyModelError, modelFailureReply } from "@/lib/vent/model";
 import { generateReply } from "@/lib/vent/providers";
+import { allowModelCall, callsInWindow } from "@/lib/vent/ceiling";
 import { depthFor, depthBadge } from "@/lib/vent/depth";
 import { assessTurn } from "@/lib/vent/assess";
 import { circleInvite, soundsAlone } from "@/lib/community/invite";
@@ -53,6 +54,35 @@ const RETRY_DEADLINE_MS = 12_000;
 // Depth costs money, so only a real vent reaches it. VENT_MODEL and the
 // failure vocabulary live in @/lib/vent/model so /api/health probes the model
 // the product actually calls, rather than a second copy of the name.
+
+/**
+ * One refusal, two rails.
+ *
+ * The per-person limiter and the per-instance ceiling both end here, because
+ * a sentence a person reads must not live in two places — check 81's rule,
+ * applied inside one file where it would not have fired.
+ *
+ * Never a dead end. Somebody the router keeps calling `edge` is past what this
+ * product can do for them, and the honest answer to that is a human rather
+ * than "try again in a minute", which is the app closing a door on the person
+ * least able to take it. The ordinary refusal keeps its own voice: it is a
+ * pause, and it reads like one.
+ */
+function rateLimited(edge: boolean, language: Parameters<typeof crisisReply>[0]) {
+  return NextResponse.json(
+    edge
+      ? {
+          error: "rate_limited",
+          reply: crisisReply(language),
+          crisis: { ...CRISIS_LINES, gated: false },
+        }
+      : {
+          error: "rate_limited",
+          reply: "Small small — breathe. Try again in a minute.",
+        },
+    { status: 429, headers: { "cache-control": "no-store" } },
+  );
+}
 
 const RATE_PER_MINUTE = 10;
 const RATE_PER_DAY = 100;
@@ -302,19 +332,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
             The ordinary refusal keeps its own voice. It is a pause, and it
             reads like one.
           */
-          return NextResponse.json(
-            edge
-              ? {
-                  error: "rate_limited",
-                  reply: crisisReply(classification.language),
-                  crisis: { ...CRISIS_LINES, gated: false },
-                }
-              : {
-                  error: "rate_limited",
-                  reply: "Small small — breathe. Try again in a minute.",
-                },
-            { status: 429, headers: { "cache-control": "no-store" } },
-          );
+          return rateLimited(edge, classification.language);
         }
 
         // Asking the date is not a vent — `selectMemory` is where that rule
@@ -543,6 +561,28 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
         ),
         { role: "user" as const, content: input.message },
       ];
+      /*
+        THE RAIL THAT DOES NOT DEPEND ON THE STORE
+
+        Everything above this line that limits anything is inside `if (store)`
+        and keys on a client-supplied `anonId`. Both are the right design for
+        an honest person and neither bounds the two shapes that cost money: a
+        database that is refusing — which production did five days ago — and an
+        id that rotates.
+
+        Placed on the primary call only. The failsafe's retry is bounded at one
+        per vent, so the true ceiling is twice this and that is deliberate:
+        refusing a retry would ship the worse reply of the two to somebody who
+        is already having a bad night, to save one call.
+
+        `ceiling.ts` states what this is not — per-instance, useless against a
+        cold-start flood, and Vercel's own rate limiting is the answer there.
+      */
+      if (!allowModelCall()) {
+        console.warn("[vent] instance ceiling", callsInWindow());
+        return rateLimited(verdict.depth === "deep", classification.language);
+      }
+
       const answered = await generateReply({
         system: systemPrompt,
         // What `buildSystemPrompt` guarantees is at the front of what it just

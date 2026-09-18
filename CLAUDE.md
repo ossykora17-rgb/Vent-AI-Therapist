@@ -2158,6 +2158,62 @@ word about themselves*, which is the exact shape of `vent_users.held` — a
 column that already has a page, a button and a destruction path. That is the
 version that needs no new promise. Whether to take it is still not mine.
 
+**The brake was bolted to the wheel.** `/api/vent` rate-limits per person and
+does it well — `RATE_PER_MINUTE`, `RATE_PER_DAY`, a higher cap at the edge, and
+a refusal that hands somebody a human rather than a countdown. Two gaps, and
+neither matters at eight people.
+
+**It lives inside `if (store)`.** The route degrades to the no-store shape when
+the database is unreachable, deliberately, and its comment is right that *"the
+reply is worth more than the record"*. But `userId` stays null on that path, so
+the counting never runs and the model is called anyway. Production answered
+`Gateway Timeout` on two tables five days ago; for that window every vent was
+unlimited. The live pass even proves the path — *"A vent still gets a reply
+when the database is refusing · 200"* — and nothing asserted it was bounded.
+**The limiter is a dependent of the thing most likely to fail under load.**
+
+**And `anonId` comes from the client.** It is the whole credential and it is
+self-asserted, so a per-person limit bounds an honest person and nobody else.
+Rotating the id resets the count.
+
+There is also no global ceiling of any kind: every use of the word *budget* in
+this tree is per-request tokens. Swept and confirmed, which is the only reason
+that sentence is here rather than assumed.
+
+`ceiling.ts` counts what neither gap can dodge — model calls by *this
+instance*, rolling minute, no identity and no database. `allowModelCall` both
+decides and records, which is `countsAsSpend`'s precedent and stops a caller
+looping on a pure predicate for free.
+
+**What it is not is written in the module, not discovered later.** It is
+per-instance, exactly like `cached()`, and on a product where almost every
+request is a cold start it catches nothing. What it bounds is the shape that
+actually costs money: one warm instance taking a sustained flood. A cold-start
+flood is the platform's job, and Vercel's own rate limiting is the honest
+answer there — infrastructure, not code. Defence in depth, named as the shallow
+half.
+
+The gate is on the primary call only. The failsafe's retry is bounded at one
+per vent, so the true ceiling is twice the constant, and that is deliberate:
+refusing a retry ships the worse of two replies to somebody already having a
+bad night, to save one call.
+
+**Check 29 went red on the repair, and the anchor was what was wrong.** It read
+`route.slice(limitAt, limitAt + 700)` — the refusal had to sit within seven
+hundred characters of the limiter. A second rail needs the same sentence, so
+the strings moved into one `rateLimited()` function, which is check 81's fix
+applied inside a file check 81 cannot see. The rule was never about distance;
+the assertion pinned where the sentence lived rather than what it says, so a
+correct repair failed it and the wrong response would have been to move the
+strings back. It anchors on the function now, and asserts **both** rails return
+it — because a rail with its own refusal is how one of them becomes the dead
+end this file opens with.
+
+Four mutations fail check 139: a ceiling that never refuses, one that decides
+without recording, a window that never releases, and the gate moved past the
+billed call. That last one is the one worth keeping — *a ceiling downstream of
+the spend is a counter, not a brake*.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in
