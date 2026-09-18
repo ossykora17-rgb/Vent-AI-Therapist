@@ -2214,6 +2214,72 @@ without recording, a window that never releases, and the gate moved past the
 billed call. That last one is the one worth keeping — *a ceiling downstream of
 the spend is a counter, not a brake*.
 
+**The return leg, built — and it is `carry`, not `drop`.** The circle now
+sends one thing back: the word a person says they are taking with them lands in
+`vent_users.held`.
+
+The mapping was written the wrong way round twice in conversation before the
+contract settled it. `held` is documented as *"what held, in their own words —
+the other half of the carve"*, and the seal asks two questions: the word you
+take and the word you leave. Writing the **dropped** word into a column meaning
+*what held* hands somebody back the thing they came here to put down.
+
+It needs no new promise, which is the only reason it could be built at all.
+`vent_users.held` exists (0013), renders on `/memory`, has a delete button, and
+dies in `deleteAll` — so *one tap deletes everything, for good* stays true with
+no new table, no new destruction path and no line in the privacy page. Every
+other shape of carrying a circle's close forward is a retention decision; this
+one is a write into a promise already kept. It is also the one thing a circle
+produces that is safe to move: not the transcript, not anybody else's words,
+not a model's summary, but one word the person chose about themselves — the
+contract's *"written only by the person and never by a model"*.
+
+**And the sentence had to change, which is the half that mattered.**
+*"Sealed. Nothing here is kept."* was true for exactly as long as a circle kept
+nothing. The moment one word leaves the room it is false at the moment somebody
+most needs it to be true — this file's opening rule, on the screen a person
+reads after the worst hour of their week. Three branches now, each true: the
+close failed; the close landed and nothing was kept; the close landed and
+*"«carry» is on your Memory page"*.
+
+`seal()` returned `r.ok` — correct while the seal made two promises, and the
+feedback bug's exact shape the moment a third arrived. It reads the body now.
+The check's **first version tested for the text** of that read and a mutation
+returning `{ sealed: r.ok, held: r.ok }` left the `r.json()` lines below as
+dead code and went green. Asserted on the binding instead: `held` must come
+from the parsed body and never from the status. Four mutations fail check 140;
+one of them — dropping `addHeld`'s answer — was caught by **check 87**, which
+already swept that class and fired on its own.
+
+**The loop's first real run reached production, then died before a grader
+ran.** Both secrets set, `skip=0`, rows fetched for the first time in
+twenty-eight scheduled runs — and `ERR_MODULE_NOT_FOUND: Cannot find package
+'@anthropic-ai/sdk'` at module load, nine seconds in.
+
+`audit.yml` deliberately runs no `npm ci`; the audit reaches `src/` through the
+same zero-dependency loader as the gate. The SDK import in `audit.mjs` was
+already lazy and below the no-key exit. **`MODEL` was not** — one line at the
+top reading one model id used forty lines *below* that exit, and `providers.ts`
+imports the SDK statically. So the branch whose entire job is *"no key tonight,
+here is what the free graders found"* was unreachable from the only environment
+that needs it. The free half of a job must never depend on the paid half being
+installed, and the one script allowed to spend money is the one most likely to
+forget it.
+
+Check 141 asserts ordering rather than absence — both paid imports may exist,
+and both must sit below the exit. Its own first version then went red on the
+workflow's **own comment**: `# No \`npm ci\`` matched a regex for `npm ci`, so a
+line stating the property being asserted failed the assertion. Fourth
+instrument error in one session, after the ERE pipe, the too-narrow href sweep
+and the text-not-binding check above. It reads the `run:` steps now, with a
+floor, because a filter that finds nothing satisfies any ban by not looking.
+
+**And `git checkout` destroyed an uncommitted fix for the third time**, on a
+*committed* file this time — `scripts/audit.mjs` reverted to HEAD and took the
+repair with it. The rule already written here is not enough: it is not only
+uncommitted files. Back up to the scratchpad before any mutation and restore
+from there, always.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in

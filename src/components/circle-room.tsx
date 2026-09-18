@@ -238,18 +238,44 @@ export function CircleRoom({ id }: { id: string }) {
    * So a failure here loses the mood and the carry/drop, and confidentiality
    * still holds. Saying both at once made a real guarantee share a fate with
    * one that had just failed.
+   *
+   * A THIRD PROMISE ARRIVED, AND IT IS THE ONE THAT CAN BE FALSE BOTH WAYS
+   *
+   *   "held"  the word you carry reached `vent_users.held` and is on your
+   *           Memory page. Depends on this request AND on a second write
+   *           that is allowed to fail without failing the close.
+   *
+   * Which is why "Nothing here is kept" can no longer be said unconditionally.
+   * It was true for as long as a circle kept nothing; the moment one word
+   * leaves the room it is a sentence that would be false at exactly the
+   * moment somebody most needs it to be true. Each branch below says only
+   * what actually happened.
    */
-  async function seal(drop: string): Promise<boolean> {
-    if (mood === null) return false;
+  async function seal(drop: string): Promise<{ sealed: boolean; held: boolean }> {
+    if (mood === null) return { sealed: false, held: false };
     try {
       const r = await fetch(`/api/circles/${id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ anonId: me, mood, carry, drop }),
       });
-      return r.ok;
+      if (!r.ok) return { sealed: false, held: false };
+      /*
+        Read off the body, never off the status.
+
+        This returned `r.ok` and nothing else, which was correct while the seal
+        made exactly two promises. A third arrived with the held route, and a
+        200 says only that the close landed — `addHeld` reports by returning,
+        and the route passes that answer through rather than assuming it. This
+        product has already shipped a thank-you for a rating it dropped by
+        reading the status and never the body; the same function must not do it
+        for a word somebody chose.
+      */
+      const d: unknown = await r.json().catch(() => null);
+      const held = typeof d === "object" && d !== null && (d as { held?: unknown }).held === true;
+      return { sealed: true, held };
     } catch {
-      return false;
+      return { sealed: false, held: false };
     }
   }
 
@@ -835,11 +861,13 @@ export function CircleRoom({ id }: { id: string }) {
                           type="button"
                           onClick={() => {
                             setDropped(w);
-                            void seal(w).then((sealed) =>
+                            void seal(w).then(({ sealed, held }) =>
                               toast(
-                                sealed
-                                  ? "Sealed. Nothing here is kept."
-                                  : "Your close didn't reach us. The room still ends and the transcript still goes.",
+                                !sealed
+                                  ? "Your close didn't reach us. The room still ends and the transcript still goes."
+                                  : held
+                                    ? `Sealed. The words here are gone. "${carry}" is on your Memory page.`
+                                    : "Sealed. Nothing here is kept.",
                                 sealed ? "success" : "info",
                               ),
                             );

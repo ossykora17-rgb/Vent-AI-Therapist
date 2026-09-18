@@ -351,8 +351,54 @@ async function handlePATCH(request: Request, { params }: Params) {
     word_dropped: drop ?? null,
   });
 
+  /*
+    THE RETURN LEG, AND THE ONLY WORD IN A CIRCLE THAT MAY LEAVE IT
+
+    The vent path can send somebody to a circle; the circle sent nothing back.
+    A person vented, was offered a room, sat in it, named a word, and returned
+    to `/chat` where the room had no idea it happened. That is why this reads
+    as two products rather than one, and it is the last cold component.
+
+    **`carry`, never `drop`.** `held` is documented as "what held, in their own
+    words — the other half of the carve", and the seal asks two questions: the
+    word you take and the word you leave. The one worth keeping is the one they
+    are taking. Writing the dropped word into a column meaning "what held" would
+    hand somebody back the thing they came here to put down.
+
+    It needs no new promise. `vent_users.held` already exists (0013), already
+    renders on `/memory`, already has a delete button, and already dies in
+    `deleteAll` — so "one tap deletes everything, for good" stays true without a
+    new table, a new destruction path or a line in the privacy page. That is the
+    whole reason this is the version that could be built: every other shape of
+    carrying a circle's close forward is a retention decision, and this one is a
+    write into a promise already kept.
+
+    It is also the one thing a circle produces that is safe to move. It is not
+    the transcript, not anybody else's words, and not a model's summary — it is
+    one word the person chose about themselves, which is exactly the contract's
+    "written only by the person and never by a model".
+
+    The seal does not fail on it. The close is the promise; this is a bonus,
+    and a database that refuses the held write must not cost somebody the
+    record that their room ended. But the answer is **read** and returned, so
+    the screen can say what actually happened instead of what was intended —
+    `addHeld` reports by returning, which check 87 requires every caller to
+    read.
+  */
+  let held = false;
+  if (carry) {
+    try {
+      const userId = await store.ensureUser(anonId, {});
+      if (userId) held = await store.addHeld(userId, carry);
+    } catch {
+      // A refused write is not a failed seal. Counts only, and none to log:
+      // the kind is already carried by `held: false` in the body below.
+      held = false;
+    }
+  }
+
   return NextResponse.json(
-    { sealed: true, drop: before != null ? tensionDrop(before, mood) : null },
+    { sealed: true, held, drop: before != null ? tensionDrop(before, mood) : null },
     { headers: { "cache-control": "no-store" } },
   );
 }

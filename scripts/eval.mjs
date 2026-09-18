@@ -16832,6 +16832,175 @@ await checkAsync("139 The brake does not depend on the wheel", async () => {
     "with both rails returning it");
 });
 
+check("140 The circle's one word comes home, and the sentence says so", () => {
+  /*
+    THE RETURN LEG, WHICH WAS THE LAST COLD COMPONENT
+
+    The vent path could send somebody to a circle. The circle sent nothing
+    back — the seal went to `logPreference`, which no-ops in production, so a
+    person vented, was offered a room, named a word, and returned to `/chat`
+    where the room had no idea it happened. Two products wearing one name.
+
+    `carry`, never `drop`. `held` is documented as "what held, in their own
+    words — the other half of the carve", and the seal asks two questions: the
+    word you take and the word you leave. Writing the *dropped* word into a
+    column meaning "what held" hands somebody back the thing they came to put
+    down, and this check exists partly because that was written the wrong way
+    round in conversation twice before the contract settled it.
+
+    It needs no new promise: `vent_users.held` already renders on `/memory`,
+    already has a delete button, already dies in `deleteAll`. Every other way
+    of carrying a circle's close forward is a retention decision; this one is a
+    write into a promise already kept.
+  */
+  const route = strip(fs.readFileSync(
+    path.join(ROOT, "src/app/api/circles/[id]/route.ts"), "utf8"));
+
+  ok(/addHeld\(userId, carry\)/.test(route),
+    "the seal writes the carried word, not the dropped one",
+    "`held` means what held them; the drop is what they came to put down");
+  ok(!/addHeld\([^)]*\bdrop\b/.test(route),
+    "and the dropped word never reaches it");
+
+  /*
+    `addHeld` reports by returning — check 87's class. The answer is read into
+    the body so a screen can say what happened rather than what was intended.
+  */
+  ok(/held = await store\.addHeld\(/.test(route),
+    "the answer is read, not dropped",
+    "a write that reports by returning and is not read is check 87's bug");
+  ok(/held,/.test(route) && /sealed: true/.test(route),
+    "and it reaches the response body");
+
+  /*
+    The seal must not fail on it. The close is the promise; the held write is
+    a bonus, and a database refusing it must not cost somebody the record that
+    their room ended.
+  */
+  const sealAt = route.indexOf("let held = false;");
+  const returnAt = route.indexOf("sealed: true", sealAt);
+  ok(sealAt > 0 && returnAt > sealAt, "the held write sits before the response");
+  ok(/catch \{[^}]*held = false;/s.test(route.slice(sealAt, returnAt)),
+    "and a refused write degrades to false rather than throwing",
+    "the close is the promise; this is the bonus");
+
+  /*
+    AND THE SENTENCE, WHICH COULD NOT STAY AS IT WAS
+
+    "Sealed. Nothing here is kept." was true for as long as a circle kept
+    nothing. The moment one word leaves the room it is false at exactly the
+    moment somebody most needs it to be true — CLAUDE.md's opening rule, in
+    the one place a person reads after the worst hour of their week.
+  */
+  const room = strip(fs.readFileSync(
+    path.join(ROOT, "src/components/circle-room.tsx"), "utf8"));
+
+  ok(/held \?/.test(room) || /held$/m.test(room),
+    "the screen branches on whether the word actually landed");
+  const nothingKept = (room.match(/Nothing here is kept/g) ?? []).length;
+  is(nothingKept, 1, "the old sentence survives for the case where it is true",
+    "a circle that kept nothing should still say so");
+  ok(/Memory page/.test(room),
+    "and the case where something was kept says where it went",
+    "keeping a word without telling anybody is the note nobody has seen");
+
+  /*
+    Read off the body, not the status. `seal` returned `r.ok`, which was
+    correct while the seal made two promises and became the feedback bug's
+    exact shape when a third arrived.
+  */
+  /*
+    ASSERTED ON THE DATA FLOW, BECAUSE THE FIRST VERSION TESTED FOR TEXT
+
+    This read `/const d: unknown = await r.json\(\)/` and `/\.held === true/`
+    and called that "reads the body". A mutation returning `{ sealed: r.ok,
+    held: r.ok }` from the line above left both strings sitting underneath as
+    dead code, and the check went green over a seal that had gone back to
+    reading the status — the precise failure it was written to prevent,
+    inside the check written to prevent it.
+
+    What is asserted instead is where `held` comes from: it must be assigned
+    from the parsed body inside `seal`, and must never be assigned from the
+    status. Presence of a line proves nothing; the binding does.
+  */
+  const sealBody = room.slice(room.indexOf("async function seal("),
+    room.indexOf("async function askToBeWoken"));
+  ok(sealBody.length > 200, `seal() read (${sealBody.length} chars)`,
+    "a slice that found nothing makes every assertion below vacuous");
+  ok(/const held =[\s\S]{0,200}\.held === true/.test(sealBody),
+    "`held` is bound from the parsed body",
+    "this product has already shipped a thank-you for a rating it dropped by reading the status");
+  ok(!/held:\s*r\.ok/.test(sealBody) && !/return r\.ok;/.test(sealBody),
+    "and never from the status",
+    "a 200 says the close landed and says nothing about the word");
+});
+
+check("141 The audit's free half does not need the paid half installed", () => {
+  /*
+    THE LOOP'S FIRST REAL RUN DIED BEFORE A SINGLE GRADER RAN
+
+    Both secrets were set, the workflow got past its skip — `skip=0`, rows
+    fetched from production for the first time in twenty-eight scheduled runs —
+    and the process threw `ERR_MODULE_NOT_FOUND: Cannot find package
+    '@anthropic-ai/sdk'` at module load.
+
+    The SDK import was already lazy and below the no-key exit. `MODEL` was not:
+    one line at the top of `audit.mjs` reading one model id used forty lines
+    *below* that exit, and `providers.ts` imports the SDK statically. So the
+    branch whose whole job is "no key tonight, here is what the free graders
+    found" was unreachable from the only environment that needs it.
+
+    `audit.yml` deliberately runs no `npm ci` — the zero-dependency property
+    `npm run gate` is built on. That is correct and it is why this mattered:
+    the free half of this job must never depend on the paid half being
+    installed, and the one script allowed to spend money is the one most likely
+    to forget it.
+
+    Asserted on ordering rather than absence: both paid imports may exist, and
+    both must sit below the exit that returns when there is no key.
+  */
+  const audit = strip(fs.readFileSync(path.join(ROOT, "scripts/audit.mjs"), "utf8"));
+
+  const exitAt = audit.indexOf("no ANTHROPIC_API_KEY");
+  ok(exitAt > 0, "the no-key branch still exists",
+    "without it a night with no key is a crash rather than a report");
+
+  for (const [what, needle] of [
+    ["the SDK", '"@anthropic-ai/sdk"'],
+    ["the model id", 'app("src/lib/vent/providers.ts")'],
+  ]) {
+    const at = audit.indexOf(needle);
+    ok(at > 0, `${what} is imported`);
+    ok(at > exitAt, `and ${what} is imported BELOW the no-key exit`,
+      "a paid dependency above that branch makes the free half unreachable without an install");
+  }
+
+  /*
+    And the workflow still installs nothing, because that is the property this
+    protects. If `npm ci` is ever added the rule above stops being load-bearing
+    and this check should be re-read rather than deleted.
+  */
+  /*
+    And the workflow still installs nothing, because that is the property this
+    protects. If `npm ci` is ever added the rule above stops being load-bearing
+    and this check should be re-read rather than deleted.
+
+    Read off the `run:` steps, not off the file. The first version tested the
+    whole text for `npm ci` and went red on the workflow's own comment — *"No
+    `npm ci`. The audit imports from `src/` through the same zero-dependency
+    loader the gate uses"* — a line that states the property being asserted.
+    Matching the literal instead of the meaning, in a check written about a
+    paid import matching its own file.
+  */
+  const wf = fs.readFileSync(path.join(ROOT, ".github/workflows/audit.yml"), "utf8");
+  const runLines = wf.split("\n").filter((l) => /^\s*(- )?run:/.test(l) || /^\s{8,}\S/.test(l));
+  ok(runLines.length >= 3, `${runLines.length} run lines read`,
+    "a filter that finds nothing satisfies the assertion below by not looking");
+  const installs = runLines.filter((l) => /npm (ci|install)\b/.test(l) && !/^\s*#/.test(l.trim()));
+  is(installs.join(" · "), "", "and no step installs anything",
+    "if this changes, the ordering above is no longer what keeps the free half alive");
+});
+
 // ── report ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, " ");
 let passed = 0;

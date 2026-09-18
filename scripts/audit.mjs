@@ -44,7 +44,6 @@ const LIMIT = Number(process.argv.find((a) => a.startsWith("--limit="))?.split("
 const { knownProblems, flatReplies, parseProposals, auditPrompt } =
   await app("src/lib/vent/audit.ts");
 const { prune, MAX_LEARNED, LEARNED_RULES } = await app("src/lib/vent/learned.ts");
-const { MODEL } = await app("src/lib/vent/providers.ts");
 
 const OUT = path.join(ROOT, "data", "audit");
 const today = new Date().toISOString().slice(0, 10);
@@ -156,6 +155,24 @@ if (DRY || !process.env.ANTHROPIC_API_KEY) {
 }
 
 // ── the one call ────────────────────────────────────────────────────────────
+/*
+  BOTH PAID IMPORTS LIVE BELOW THE EXIT, AND THE SECOND ONE DID NOT
+
+  The SDK import was already lazy and correctly placed. `MODEL` was not: it sat
+  at the top of this file, and `providers.ts` imports `@anthropic-ai/sdk`
+  statically — so reading one model id at the bottom pulled a paid dependency
+  at module load.
+
+  The first real run of this job died on it. Both secrets had just been set,
+  `skip=0`, the rows were fetched from production for the first time in
+  twenty-eight scheduled runs — and the process threw ERR_MODULE_NOT_FOUND
+  before a single free grader ran. The branch above exists precisely so a night
+  with no key still reports what the deterministic graders found, and it was
+  unreachable from the one environment that needs it.
+
+  The free half of this job must never depend on the paid half being installed.
+*/
+const { MODEL } = await app("src/lib/vent/providers.ts");
 const { default: Anthropic } = await import("@anthropic-ai/sdk");
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
