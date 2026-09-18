@@ -2142,21 +2142,29 @@ fails in **both** directions — delete the floor and dead rooms get offered,
 raise it past the lifetime and the door shuts for everybody. Not an assertion
 invented to make a mutation fail; a guard the first probe had stepped over.
 
-**What is still cold, and it is the return leg.** The vent path can send
-somebody to a circle. The circle sends nothing back: the seal's mood, the word
-carried, the word dropped and the drop in points all go to `logPreference`,
-which no-ops in production. A person vents, is offered a room, sits in it,
-drops a word, comes back to `/chat` — and the room has no idea it happened.
-The entry above frames that as lost training data. It is also why the product
-reads as two products: the bridge is one-way by construction.
+**The return leg, which was the last cold component.** The vent path could
+send somebody to a circle. The circle sent nothing back: the seal's mood, the
+word carried, the word dropped and the drop in points all went to
+`logPreference`, which no-ops in production. A person vented, was offered a
+room, sat in it, named a word, came back to `/chat` — and the room had no idea
+it happened. The entry above frames that as lost training data. It was also
+why the product read as two products: the bridge was one-way by construction.
 
-Not built here, and the reason is unchanged — carrying a circle's closing
-reading past the circle is a **new thing this product would hold about
-somebody**, and this file's own test says a retention decision is read by a
-person. Worth writing down beside it: the word they dropped is *their own
-word about themselves*, which is the exact shape of `vent_users.held` — a
-column that already has a page, a button and a destruction path. That is the
-version that needs no new promise. Whether to take it is still not mine.
+**Built, and the paragraph this replaces got the word wrong.** It read *"the
+word they dropped is their own word about themselves, which is the exact shape
+of `vent_users.held`"* — and `held` means *what held*, so the dropped word is
+the one shape that column must never take. The right half of that sentence
+survived: a column that already has a page, a button and a destruction path is
+the version that needs no new promise, which is why this could be built at all
+when every other shape of it is a retention decision. The wrong half is left
+here because it is the mistake a reader is most likely to repeat: the two words
+arrive in the same request, and only one of them is theirs to keep.
+
+The seal now writes `carry` into `vent_users.held`, reads the answer, and says
+which of three things actually happened. The rest of the closing reading — the
+mood, the drop, the dropped word — still goes only to `logPreference` and is
+still recorded nowhere in production, so the efficacy loop below is unchanged
+and the finding above it still stands.
 
 **The brake was bolted to the wheel.** `/api/vent` rate-limits per person and
 does it well — `RATE_PER_MINUTE`, `RATE_PER_DAY`, a higher cap at the edge, and
