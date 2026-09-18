@@ -20,6 +20,7 @@ import { WeightWhisper } from "@/components/chat/weight-whisper";
 import {
   shouldInvite,
   stillTeaching,
+  LINGER_MS,
   WHISPER_IDLE_MS,
   type WhisperReason,
 } from "@/lib/vent/whisper";
@@ -258,6 +259,22 @@ export function VentChat() {
   const [repliedAt, setRepliedAt] = React.useState<number | null>(null);
   const [idleMs, setIdleMs] = React.useState(0);
   const [closing, setClosing] = React.useState(false);
+
+  /*
+    THE SETTLE HAD NEVER ONCE PLAYED, AND ONLY A BROWSER COULD SAY SO.
+
+    `submitMood` clears `askMood`, which unmounted the strip on the same tick
+    as the tap — so the chosen mark never dropped, never thickened, and never
+    faded back. Every constant was asserted, nine mutations failed the policy,
+    and the one thing a person actually experiences was dead code. *Every part
+    working is not the feature working*, found the only way it could be: a
+    screenshot of the moment after the tap, with nothing in it.
+
+    So the strip outlives the answer by exactly `LINGER_MS`. `askMood` still
+    ends the *asking* immediately — this holds the drawing open, and nothing
+    else.
+  */
+  const [settlingHold, setSettlingHold] = React.useState(false);
   const [tensionBefore, setTensionBefore] = React.useState<number | null>(null);
   const [tensionAfter, setTensionAfter] = React.useState<number | null>(null);
   const [crisis, setCrisis] = React.useState<VentResponse["crisis"] | null>(null);
@@ -1822,10 +1839,14 @@ export function VentChat() {
             `gated` is the third, and it is not symmetry. A crisis turn is the
             one moment nothing may ask a person for a number.
           */}
-          {askMood && !teaching && !gated && !offer && !answering && (
+          {(askMood || settlingHold) && !teaching && !gated && !offer && !answering && (
             <WeightWhisper
               reason={whisperReason}
-              onPick={(n) => void submitMood(n)}
+              onPick={(n) => {
+                setSettlingHold(true);
+                window.setTimeout(() => setSettlingHold(false), LINGER_MS);
+                void submitMood(n);
+              }}
               onIgnore={() => setIgnored((n) => n + 1)}
             />
           )}

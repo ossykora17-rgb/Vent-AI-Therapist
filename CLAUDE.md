@@ -2430,6 +2430,36 @@ two cards are enough to teach it, is the fifth question this file says a gate
 can never ask. Nine mutations fail check 143 and not one of them proves a
 person notices the track. That one is read by a person, on a phone, at 2am.
 
+**So it was looked at, and the screenshot found the settle had never played.**
+`submitMood` clears `askMood`, which unmounted the strip on the same tick as
+the tap — the chosen mark never dropped, never thickened, never faded back. The
+brief's whole physical metaphor was dead code behind nine green mutations and a
+suite that had asserted every constant it is made of. **Fifth instance of
+*every part working is not the feature working***, after the notes, the push,
+the bridge and the held route, and the first one caught by an actual browser at
+390px rather than by a check.
+
+Two more came out of the same three screenshots, and neither is a bug a gate
+could hold an opinion about. The prompt was `label-mono`, so *"HOW DOES IT SIT
+IN YOU NOW?"* sat in mono capitals directly under *"SET THE PRESSURE"* and read
+as a second **control caption** — chrome asking for a field, which is precisely
+what this change exists to abolish. And ten identical marks say nothing about
+which end is heavy: a number given blind is not a quiet measurement, it is
+noise in the one signal this product has. Both are fixed in the direction the
+rest of this rule already points — body type for the room's voice, and anchors
+that arrive with the question and leave with it, because a caption that is
+always there is the card again, smaller.
+
+The strip now outlives its own answer by `LINGER_MS` and nothing else changed:
+`askMood` still ends the *asking* on the tap. Check 143 asserts the guard does
+not die with the question, and check 44's sweep had to widen in the same
+commit — it matched guards that *open* on `askMood`, and the correct fix made
+the whisper's guard open on a parenthesis instead, which would have dropped it
+out of the "waits while a question is on the table" rule silently. **Second
+time in two commits that a sweep anchored to a token lost coverage to a correct
+change**, which is the argument for anchoring on the rule rather than on the
+line, made twice in a row by the same check.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in

@@ -178,7 +178,26 @@ export function WeightWhisper({
         the card again, smaller.
       */}
       {reason !== null && settling === null && (
-        <p className="label-mono mt-1 text-ash">{WHISPER_PROMPT}</p>
+        <div className="mt-1 flex items-baseline justify-between gap-3">
+          {/*
+            Body type, not `label-mono`.
+
+            The first version used the mono uppercase label class and a
+            screenshot settled it: "HOW DOES IT SIT IN YOU NOW?" sat directly
+            under "SET THE PRESSURE" and read as a second control caption —
+            chrome asking for a field, which is the exact thing this whole
+            change exists to stop. It is the room's voice or it is a form.
+          */}
+          <p className="text-body text-ash">{WHISPER_PROMPT}</p>
+          {/*
+            Ten identical marks do not say which end is heavy, and a number
+            given blind is worse than no number — it is noise in the one
+            signal this product measures. The card carried these anchors
+            permanently; here they arrive with the question and leave with it,
+            because a caption that is always there is the card again, smaller.
+          */}
+          <p className="label-mono shrink-0 text-ash">heavy · lighter</p>
+        </div>
       )}
     </div>
   );
