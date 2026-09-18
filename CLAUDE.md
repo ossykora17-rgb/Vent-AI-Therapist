@@ -2305,6 +2305,50 @@ repair with it. The rule already written here is not enough: it is not only
 uncommitted files. Back up to the scratchpad before any mutation and restore
 from there, always.
 
+**The job only leaked once it started working, and the commit that fixed it is
+the commit that made the leak reachable.** `audit.yml` had reported success 28
+times without reading a reply: 21 skips with no secrets, then two failures at
+module load. Minutes after that was fixed, run 29 read production for the first
+time — and printed **three real replies into a public GitHub Actions log** and
+uploaded the full `Finding` objects as a **public artifact**. This repository is
+`"private": false`; the log has 90-day retention and the artifact 30.
+
+Two lines did it. `scripts/audit.mjs` printed `f.problems.slice(0, 2)` and 88
+characters of `f.reply`, and the report written to `data/audit/<date>.json` —
+which the workflow uploads — embedded the whole object. `data/` is gitignored
+precisely because it is built from real vents; an artifact upload walks around
+a gitignore without touching it.
+
+**A detail is not a softer version of the reply.** This file already records
+that for `Verdict.reject`: `recites` prints the sentence it read back, which
+here is usually the person's own words handed to them, and `invented` prints
+the naira figure. `Finding.problems` carried `n.detail`, under a doc comment
+that had said *"Every grader label that fired"* since the day it was written.
+The comment was right and the code was not, which is the shape this file has
+recorded more than any other.
+
+Names and an id now, and the id is the point: an operator reads the reply
+through the authenticated path, which is the only place it should ever be read
+from. Check 142 grades it **behaviourally** — a sentinel goes into a reply and
+must not come out of the finding, which covers the stored report too because
+the report embeds these objects verbatim, and covers a future grader whose
+detail starts quoting. It also sweeps the script, because `rows` is in scope
+where it prints and no behavioural guard on `Finding` can see
+`console.log(r.ai_reply)` two lines away. Four mutations fail it: carry the
+reply, carry the detail, print the reply, and walk no console lines.
+
+**And one thing is named rather than changed, because it is a product decision
+with a trigger.** `LearnedRule.found` is documented as *"The reply that caused
+it, in a few words. Evidence, not decoration"* — a 160-character quote from a
+production reply, which lands in `data/audit/<date>.json` and, under `--apply`,
+in `src/lib/vent/learned.ts`, which is committed source in a public repo. It has
+never fired: `LEARNED_RULES` is `[]`, `ANTHROPIC_API_KEY` is unset in CI, and
+`--apply` is deliberately absent from the workflow. The argument for it is
+sound — *"a rule with no reply behind it is a rule the model reasoned its way
+to"* — and it was made before the artifact was public. **Decide it before
+`ANTHROPIC_API_KEY` is set**, because that is the moment the path becomes live,
+and this file's own test says a retention decision is read by a person.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in

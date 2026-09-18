@@ -15555,10 +15555,20 @@ check("125 The nightly audit asks the router what language a row was", () => {
     { id: "b", user_message: "i don't want to talk to him", ai_reply: "That silence is doing something. What would you say if he picked up?", created_at: "2026-01-01", intent_type: "vent" },
   ];
   const found = knownProblems(rows);
-  const language = found.flatMap((f) => f.problems).filter((p) => /Pidgin/i.test(p));
+  /*
+    Asserted on the grader *name*, not on prose inside a detail.
+
+    This read `/Pidgin/i` over `f.problems` while `problems` held grader
+    details — and details quote the reply, which is why they no longer leave
+    this object at all. The name is the stronger anchor anyway: `language` is
+    what fires, and a check matching the sentence a grader happens to write
+    goes green the day somebody rewords it.
+  */
+  const language = found.flatMap((f) => f.problems).filter((p) => p === "language");
   is(language.length, 0,
     "an English message with a contraction is not graded as Pidgin",
-    language.join(" · ") || "`don't` matched the Pidgin perfective and the reply was reported as the wrong language");
+    found.map((f) => `${f.id}:${f.problems.join("+")}`).join(" · ")
+      || "`don't` matched the Pidgin perfective and the reply was reported as the wrong language");
 
   /*
     And the fix is the router rather than a fourth list. `classify` is what
@@ -17024,6 +17034,76 @@ check("141 The audit's free half does not need the paid half installed", () => {
   const installs = runLines.filter((l) => /npm (ci|install)\b/.test(l) && !/^\s*#/.test(l.trim()));
   is(installs.join(" · "), "", "and no step installs anything",
     "if this changes, the ordering above is no longer what keeps the free half alive");
+});
+
+check("142 The audit reports names and ids, never anybody's words", () => {
+  /*
+    THE JOB THAT ONLY LEAKED ONCE IT STARTED WORKING
+
+    `scripts/audit.mjs` printed, for each convicted reply, two grader
+    *details* and 88 characters of the reply itself — and wrote the whole
+    `Finding` object, reply included, to `data/audit/<date>.json`, which
+    `audit.yml` uploads with `actions/upload-artifact`. This repository is
+    public, so that is a public log with 90-day retention and a public
+    artifact.
+
+    None of it had ever happened, because the job died at module load before
+    it could print anything. The commit that fixed that is the commit that
+    made the leak reachable: run 29 read production for the first time and put
+    three real replies on the open internet. A fix is a deployment shape too.
+
+    Details are not a softer version of the reply. `quality.ts` already
+    records this for `Verdict.reject`: `recites` prints the sentence it read
+    back — usually the person's own words handed to them — and `invented`
+    prints the naira figure. The doc comment on `problems` has said "grader
+    label" since it was written; the code put `n.detail` there.
+
+    Graded behaviourally, because that is the only way to know. A sentinel
+    goes into a reply and must not come out of the finding — which covers the
+    stored report too, since the report embeds these objects verbatim, and
+    covers any future grader whose detail starts quoting.
+  */
+  const SENTINEL = "ZEBRAFISH-OKONKWO-42";
+  const probe = knownProblems([{
+    id: "leak-probe",
+    user_message: "work is crushing me and i cannot sleep",
+    ai_reply: `You should just try journaling about ${SENTINEL}. Anyone would feel that way. A third sentence. A fourth one. A fifth.`,
+    created_at: "2026-01-01",
+    intent_type: "vent",
+  }]);
+  ok(probe.length === 1, "the probe reply is convicted",
+    "a finding that never fires carries nothing, and proves nothing");
+  const serialised = JSON.stringify(probe);
+  ok(!serialised.includes(SENTINEL),
+    "and no finding carries a word of the reply it is about",
+    serialised.slice(0, 120));
+  const notNames = probe.flatMap((f) => f.problems).filter((p) => !/^[a-z][a-z_]*$/.test(p));
+  is(notNames.join(" · "), "",
+    "every problem is a grader name, never a sentence",
+    "a detail quotes the reply; a name says what the product did wrong");
+
+  /*
+    And the script, because the finding is not the only thing in scope where
+    it prints. `rows` is right there, so a behavioural guard on `Finding`
+    cannot see `console.log(r.ai_reply)` two lines away.
+  */
+  const script = strip(fs.readFileSync(path.join(ROOT, "scripts/audit.mjs"), "utf8"));
+  const logs = script.split("\n").filter((l) => /console\.(log|warn|error)\(/.test(l));
+  ok(logs.length >= 8, `${logs.length} console lines read`,
+    "a sweep that walks nothing passes loudest");
+  const leaky = logs.filter((l) => /\b(ai_reply|\.reply\b|\.detail\b|user_message)/.test(l));
+  is(leaky.map((l) => l.trim()).join(" · "), "",
+    "and nothing the audit prints reads a reply or a grader detail",
+    "stdout has no delete button, and on a public repository it has no door either");
+
+  /*
+    The report on disk is the same objects plus ids. Asserted so that widening
+    it back — writing rows, or the flat replies rather than their ids — fails
+    here rather than in a public artifact a month later.
+  */
+  ok(/flat:\s*flat\.map\(\(r\)\s*=>\s*r\.id\)/.test(script),
+    "the report stores flat replies by id",
+    "the whole row would carry the vent as well as the reply");
 });
 
 // ── report ─────────────────────────────────────────────────────────────────
