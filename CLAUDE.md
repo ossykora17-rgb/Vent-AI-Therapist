@@ -2512,6 +2512,58 @@ showed nothing on :3001 while `next-server` (pid 774, parent already gone) was
 serving it and `live-checks.sh` correctly refused. `ps -eo pid,ppid,cmd` found
 it in one line. Read the process list, not the socket table.
 
+**Going quiet costs a tactic, not just a row.** The ambient scale asks at most
+three times a sitting and then stops, and this file already states that trade:
+*"a quiet sitting records no anchor and the efficacy loop learns nothing from
+it."* That sentence was about the efficacy loop. It is also about the **next
+reply**, which nobody had noticed.
+
+`behavioral_activation`'s entire predicate is `(c) => (c.mood ?? 10) <= 4`.
+Mood comes from one gesture — somebody answering the weight scale — so a
+sitting where the scale goes unanswered is a sitting where that move cannot be
+selected at all. Counted on the authored corpus with the real router and the
+real selector: it wins **15 of 72** messages at mood ≤ 4 and **0 of 72** when
+the mood is absent. Silence does not only cost a row; it narrows the library
+the next reply is chosen from.
+
+**Three of the four numbers I measured on the way to that were fixture
+artifacts, and the corrections are the useful part.** The first count pinned
+`recentTactics: []`, so it reported `behavioral_activation` winning **29 of
+72 — 40%** and read like a third `exact_mirror`. The three-turn block is real
+and running it dropped that to 15 and took distinct winners from 17 to 28. The
+second still pinned `mood: 3`, which **forces that predicate true on every
+message** — the probe was manufacturing the condition it was measuring. Varying
+mood is what showed the gate is a real gate: at null, 5 and 8 the tactic never
+fires and `deepsearch_pattern` leads at 13 of 72 with a reasonable spread.
+
+So the suspicion was wrong and saying so is the finding: **`rw_lonely` at
+weight 95 and `behavioral_activation` at 78 are both correctly gated**, the
+first behind a router tag and the second behind a reading the person gave. The
+two disasters this file records — `exact_mirror` at 90 and `rogers_never_said`
+at 90 — were ungated members of the base pool, which is the actual shared
+property, and weight was never the thing that made them dangerous. A high
+weight behind a real gate is how a library says *when this fits, it wins*.
+
+The guard is the heartbeat's, and it is copied from the one directly above it.
+That block prints when there are circles and no closes, and its own comment
+names this parallel — *"the same shape as the anchor that could never be
+set"* — and then guards only the circles. The anchor had the excuse of being
+genuinely unreachable when that was written; it is reachable now, and the
+redesign above changed how often it is reached. Zero anchors in a week has two
+readings that look identical from here: nobody had anything to report, or the
+hairline is too quiet to find. It is **not** repaired by making the scale
+louder — that decision was taken deliberately and reversing it on a week of
+silence is fitting the product to the metric. The line only stops the emptiness
+from looking like a result.
+
+Both directions were run before it shipped, in a subprocess with
+`VENT_DATA_DIR` pointed at a scratch store — check 130's trick, for check 130's
+reason. Two vents and no anchor prints `anchors 0/2`; two vents and one anchor
+prints nothing. The first probe reported `new 0 vents` because it wrote
+`{"since": …}` and the file reads `state.last_processed` — a probe that could
+not see what it was looking at, caught by expecting the line and not getting
+it rather than by reading the code.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in
