@@ -514,8 +514,24 @@ and the numbers come from `src/lib/vent/chairs.ts`, which is now the only
 place that knows Tight edge reads 78 — it used to be four places.
 
 Choosing the word you drop seals the circle: the number, the drop and the two
-words go to the preference log, and nothing else does. Not a line of what
-anybody said. It is the only thing that leaves a room.
+words go to the preference log, and the word you **carry** also goes to your
+own Memory page — `vent_users.held`, the column that already holds what held
+you, already renders there, and already has a delete button. Nothing else
+leaves. Not a line of what anybody said, not anybody else's words, not a
+model's summary of the room: one word you chose about yourself, landing in the
+one place this product had already promised to delete on one tap.
+
+That sentence used to end *"it is the only thing that leaves a room"*, which
+was true until the return leg was built and then was not. It is written down
+here rather than quietly corrected, because a promise that goes stale without
+announcing it is the failure this repository is mostly a record of.
+
+And the preference log in that sentence is local-only — `logPreference` returns
+immediately unless `VENT_LOCAL_STORE` is set, because a serverless disk is
+thrown away and writing there would collect training data guaranteed to be
+lost. So on the deployment people actually use, the number and the drop are
+recorded **nowhere**, and the carried word is the only thing a circle close
+produces that survives it.
 
 ### Presence
 

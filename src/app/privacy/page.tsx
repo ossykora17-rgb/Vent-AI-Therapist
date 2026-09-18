@@ -22,6 +22,25 @@ export default function PrivacyPage() {
         We cannot identify you, and neither can anyone who reads the database.
       </p>
 
+      {/*
+        Circles named on the page a person reads, not only in the README.
+
+        The close used to keep nothing at all, so this section did not need to
+        exist. The return leg changed that: one word now crosses out of a room
+        and lands in a column that outlives it. A new thing kept about somebody
+        belongs on the page that lists what is kept about somebody, on the same
+        day it starts being kept — not in a commit message.
+      */}
+      <h2>In a circle</h2>
+      <p>
+        Everything anyone types in a circle is deleted when the circle ends —
+        the whole transcript, and the seats with it. One thing survives, and
+        only because you chose it: the word you say you are carrying out. It
+        goes to your own Memory page, where you can read it and delete it.
+        Nobody else&apos;s words follow you out, and neither does a summary of
+        the room.
+      </p>
+
       <h2>Who can read it</h2>
       <p>
         Row-level security is switched on with no public policies, so the
