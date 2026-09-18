@@ -4969,7 +4969,12 @@ check("44 The Breaking Room is wired the way the module is written", () => {
     this number now, the teaching card and the ambient track, and the rule was
     only ever asserted of one of them. A third would be covered by writing it.
   */
-  const moodGuards = [...chat.matchAll(/\{askMood && ([^(]*?)&& \(/g)].map((m) => m[1]);
+  // Guards that *mention* askMood, not guards that open with it. The whisper's
+  // now reads `{(askMood || settlingHold) && …` so that the settle can outlive
+  // the answer, and a sweep anchored to the first token would have dropped it
+  // silently — the rule un-covered by the shape of a correct fix, which is the
+  // same thing that happened to this check's previous version one commit ago.
+  const moodGuards = [...chat.matchAll(/\{[^\n]*?askMood[^\n]*?&& \(/gm)].map((m) => m[0]);
   ok(moodGuards.length >= 2,
     `${moodGuards.length} guards open on askMood`,
     "a sweep that walks nothing passes loudest — and this one used to walk one line");
@@ -17235,7 +17240,25 @@ check("143 The weight is asked for in the periphery, and refusal ends the asking
     would cost somebody the ability to answer later — agency removed in the
     name of giving it.
   */
-  const guard = chat.slice(chat.indexOf("{askMood && !teaching"), chat.indexOf("<WeightWhisper"));
+  /*
+    THE SETTLE HAD NEVER PLAYED.
+
+    `submitMood` clears `askMood`, so the strip unmounted on the same tick as
+    the tap: the chosen mark never dropped, never thickened, never faded back.
+    Every constant above was asserted and nine mutations failed the policy
+    while the one thing a person experiences was dead code — found by a
+    screenshot of the moment after the tap, with nothing in it.
+
+    No check here can prove a React tree paints. What it can prove is that the
+    strip's guard does not die with the question it answers.
+  */
+  ok(/\(askMood \|\| settlingHold\)/.test(chat),
+    "the strip outlives the answer, or the settle is dead code");
+  ok(/setSettlingHold\(true\)[\s\S]{0,200}?LINGER_MS/.test(chat),
+    "and it is held open for exactly as long as the settle takes",
+    "a hold with no release leaves a scale hanging over the box for ever");
+
+  const guard = chat.slice(chat.indexOf("(askMood || settlingHold)"), chat.indexOf("<WeightWhisper"));
   ok(guard.length > 0 && !/whisperReason/.test(guard),
     "and silence never removes the way to answer", guard.trim().slice(0, 80));
 
