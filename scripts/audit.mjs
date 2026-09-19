@@ -210,9 +210,22 @@ const text = res.content
 
 const { accepted, rejected } = parseProposals(text, today);
 
+/*
+  The accepted rules print in full, because they are the diff: `--apply`
+  writes them into `src/lib/vent/learned.ts` and the prompt carries them to
+  everybody. A rule nobody can read before it ships is the unsupervised loop
+  this whole file exists to refuse.
+
+  The refusals print their reason and not their text. `REJECT` used to carry
+  sixty characters of the model's sentence, which is ordinarily its own words
+  — but `acceptable` now refuses a rule for *quoting*, and that refusal would
+  have printed the quote, into a public log and a public artifact, for the one
+  proposal guaranteed to contain somebody's words. The same shape as
+  `Verdict.reject` printing the reply it convicted.
+*/
 console.log(`\nproposed   ${accepted.length + rejected.length}`);
 for (const a of accepted) console.log(`  ACCEPT  ${a.rule}`);
-for (const r of rejected) console.log(`  REJECT  ${r.why} — ${r.rule.slice(0, 60)}`);
+for (const why of rejected) console.log(`  REJECT  ${why}`);
 console.log(`tokens     in ${res.usage.input_tokens} · out ${res.usage.output_tokens}`);
 
 fs.writeFileSync(

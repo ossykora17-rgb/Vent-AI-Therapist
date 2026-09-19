@@ -85,6 +85,12 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: npm run audit
 
+      # Seven days, not thirty, and the question is CLAUDE.md's own: how long
+      # does this record live, and who reads it in that time? The answer is
+      # "the next morning, if at all" — the durable half is already elsewhere,
+      # because 0019 keeps the grader names on the row and the heartbeat prints
+      # them, so a month of trend survives without this. Thirty is what made
+      # the one leaked report a thirty-day exposure rather than a week's.
       - name: Keep the report
         if: steps.rows.outputs.skip == '0'
         uses: actions/upload-artifact@v4
@@ -92,4 +98,4 @@ jobs:
           name: audit
           path: data/audit/
           if-no-files-found: ignore
-          retention-days: 30
+          retention-days: 7
