@@ -2651,6 +2651,39 @@ prints nothing. The first probe reported `new 0 vents` because it wrote
 not see what it was looking at, caught by expecting the line and not getting
 it rather than by reading the code.
 
+**A second ledger nobody read, going red on every merge.** `Supabase Preview`
+failed on three consecutive main commits with `Remote migration versions not
+found in local migrations directory`, and it was not about the schema:
+`/api/health` reported all 9 tables present, `missingTables: []`,
+`pendingTables: []` throughout. It was a **Supabase branch** named `main`,
+stuck in `MIGRATIONS_FAILED` since 2026-08-23, comparing two things that had
+never agreed.
+
+The database's ledger held **10** rows, all timestamp versions
+(`20260810002130 vent_user_carve_and_held`), applied by hand through the
+dashboard. `supabase/migrations/` holds **21** files, hand-numbered
+`0001`–`0021`. There is no `supabase/config.toml`: this repo has never used
+the Supabase CLI, so the integration was asserting a workflow that does not
+exist here. **One table, one truth** — and there were two, one of them right.
+
+Renaming was not available. The map is not 1:1: three remote rows relate to
+`0014` (`rpc_hardening`, `match_memories_security_invoker`,
+`0014_rpc_hardening_backfill`) and one row covers two files
+(`vent_user_carve_and_held` → `0011` and `0013`). So the ledger was
+**re-recorded, never re-run**: 21 rows inserted to match the directory, the 10
+ad-hoc rows deleted by explicit version, all in one transaction, with the
+originals copied to `supabase_migrations.ledger_backup_20260919` first.
+`live: 21, backed_up: 10`.
+
+Re-running was the option to refuse. The reconciliation the Supabase CLI
+offers — `migration repair --status reverted` — empties the ledger, and the
+next push would have applied all 21 against a live database holding 221
+people's vents. Recording costs nothing and executes nothing; the SQL in those
+files had already run.
+
+Nothing in the product reads `supabase_migrations`. The statement touched that
+schema and no other.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in
