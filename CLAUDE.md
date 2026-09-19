@@ -2201,6 +2201,32 @@ flood is the platform's job, and Vercel's own rate limiting is the honest
 answer there — infrastructure, not code. Defence in depth, named as the shallow
 half.
 
+**That last sentence was reached for, and the arithmetic says it does not
+reach.** There is no firewall configuration on this project — the API answers
+`404 Seawall Config not found` — so somebody was always going to write one, and
+a per-IP rate limit is the obvious shape. It does not bound spend at any
+setting worth having.
+
+Take this file's own numbers rather than new ones: a vent is about 4,200 tokens
+(check 24's 3,600-token prompt ceiling plus `MAX_TOKENS` of 600), and 178 vents
+cost about $2.50 on Sonnet 5 — **1.4 cents a vent**. So 60 requests a minute
+from one address is about $0.84 a minute, $50 an hour, $1,200 a day, from a
+single IP that a firewall is reporting as within limits. Tighten it to a number
+that actually bounds that and it is now low enough to refuse a shared mobile
+NAT pool during a spike, which on a Nigerian product is the ordinary case and
+not the edge one — mobile networks routinely put many subscribers behind one
+public IPv4 address, and this product's actual traffic has never been measured
+for that concentration, which is stated rather than assumed.
+
+**No per-IP number is both safe for a pool and tight enough for a bill.** The
+firewall is worth having against the shapes it is actually good at — a single
+abusive address, a scripted scrape — and it is not the missing half of
+`ceiling.ts`. That half is a bound that survives a cold start, which means
+shared state and a round trip on the path a person is waiting on. It is not
+built here, it is not urgent at eight people, and the reason it is written down
+is that the alternative is somebody setting a firewall rule, reading the word
+*limit*, and believing the spend is bounded.
+
 The gate is on the primary call only. The failsafe's retry is bounded at one
 per vent, so the true ceiling is twice the constant, and that is deliberate:
 refusing a retry ships the worse of two replies to somebody already having a
