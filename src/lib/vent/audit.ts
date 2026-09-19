@@ -290,16 +290,29 @@ export function flatReplies(
  */
 export function parseProposals(text: string, today: string): {
   accepted: LearnedRule[];
-  rejected: Array<{ rule: string; why: string }>;
+  /**
+   * Why each refusal happened. Reasons only, never the text refused.
+   *
+   * This was `{rule, why}`, and both ends of it are public: the reason is
+   * printed to a GitHub Actions log with 90-day retention, and the whole
+   * array is written into `data/audit/<date>.json`, which `audit.yml`
+   * uploads as an artifact. The rule is the model's sentence, so it is
+   * usually harmless — but "usually" is not a property, and the refusal
+   * added below is one where the refused text quotes somebody by
+   * definition. A rejection that prints what it rejected is
+   * `Verdict.reject` again: the one diagnostic that fires when something
+   * goes wrong, writing the fragment out.
+   */
+  rejected: string[];
 } {
   const accepted: LearnedRule[] = [];
-  const rejected: Array<{ rule: string; why: string }> = [];
+  const rejected: string[] = [];
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(text.replace(/^```(?:json)?|```$/g, "").trim());
   } catch {
-    return { accepted, rejected: [{ rule: text.slice(0, 60), why: "not JSON" }] };
+    return { accepted, rejected: ["not JSON"] };
   }
   const list = Array.isArray(parsed) ? parsed : [parsed];
 
@@ -307,27 +320,32 @@ export function parseProposals(text: string, today: string): {
     if (!raw || typeof raw !== "object") continue;
     const { rule, found } = raw as { rule?: unknown; found?: unknown };
     if (typeof rule !== "string") {
-      rejected.push({ rule: String(rule).slice(0, 60), why: "no rule text" });
+      rejected.push("no rule text");
       continue;
     }
     const why = acceptable(rule);
     if (why) {
-      rejected.push({ rule: rule.slice(0, MAX_RULE_CHARS), why });
+      rejected.push(why);
       continue;
     }
     /*
       Evidence is required, and this is not bureaucracy. A rule with no reply
       behind it is a rule the model reasoned its way to rather than observed,
       which is exactly the failure mode of asking a model what it did wrong.
+
+      It is read here and it goes no further. `found` used to be carried onto
+      the accepted rule, where `--apply` wrote it into `src/lib/vent/learned.ts`
+      — committed source in a public repository — and every run wrote it into
+      a public artifact, for a field `learnedBlock` never renders. The gate
+      keeps its input; the record does not.
     */
     if (typeof found !== "string" || found.trim().length < 8) {
-      rejected.push({ rule: rule.slice(0, MAX_RULE_CHARS), why: "no evidence" });
+      rejected.push("no evidence");
       continue;
     }
     accepted.push({
       id: slug(rule),
       rule: rule.trim(),
-      found: found.trim().slice(0, 160),
       added: today,
     });
   }

@@ -2337,8 +2337,10 @@ where it prints and no behavioural guard on `Finding` can see
 `console.log(r.ai_reply)` two lines away. Four mutations fail it: carry the
 reply, carry the detail, print the reply, and walk no console lines.
 
-**And one thing is named rather than changed, because it is a product decision
-with a trigger.** `LearnedRule.found` is documented as *"The reply that caused
+**And one thing was named rather than changed, because it is a product decision
+with a trigger — then the trigger was reached on purpose rather than by
+accident, and the paragraph below it is what was decided.**
+`LearnedRule.found` was documented as *"The reply that caused
 it, in a few words. Evidence, not decoration"* — a 160-character quote from a
 production reply, which lands in `data/audit/<date>.json` and, under `--apply`,
 in `src/lib/vent/learned.ts`, which is committed source in a public repo. It has
@@ -2348,6 +2350,65 @@ sound — *"a rule with no reply behind it is a rule the model reasoned its way
 to"* — and it was made before the artifact was public. **Decide it before
 `ANTHROPIC_API_KEY` is set**, because that is the moment the path becomes live,
 and this file's own test says a retention decision is read by a person.
+
+**Decided, and the gate kept its input while the record lost it.** `found` is
+gone from `LearnedRule`. The argument that put it there is untouched and lives
+where it always did: `parseProposals` still refuses a proposal that cannot point
+at a reply, still reads the quote to decide, and now throws it away — the same
+shape as `classifyModelError` reading a provider's `.body` and discarding it,
+and as `Verdict.reject` carrying grader names. What settled it was one grep
+rather than an argument: `learnedBlock` renders `r.rule` and no other field, so
+`found` reached no prompt, no product and no screen. **A fragment of somebody's
+session, published to two public places, read by nothing.**
+
+**And the same rule had two more sites in the same two files, which is why this
+is one commit and not one edit.** `acceptable()`'s own doc comment has said
+since the day it was written that *"a rule that **quotes** the failure it is
+fixing is how a ban becomes an instruction after one bad parse"* — and the only
+enforcement was `bannedPhrase`, which sees our fifteen phrases and nothing else.
+A rule quoting the **person's** sentence walked past it into committed source
+*and into the prompt*, which is further than `found` ever travelled. A rule
+stated in a comment and implemented nowhere, in the file whose job is holding
+rules: the shape this document records more often than any other.
+
+Double quotes only, and the exclusion is the work. A straight `'` is an
+apostrophe far more often than a quotation mark, so matching it would refuse
+*don't* and *they've* — `\bdon\b` from the other side, the same character
+wearing two jobs. The guard is narrow and says so: an **unquoted paraphrase** of
+somebody's sentence still passes and nothing here can see it. What it closes is
+the shape a model actually writes when it is asked for evidence and puts the
+evidence inside the rule.
+
+The third site is the one that would have published the exact fragment the
+second was written to stop. `REJECT` printed sixty characters of the rule it
+refused — to a public Actions log with 90-day retention and into the uploaded
+artifact — and a refusal for *quoting* carries somebody's words **by
+definition**. `Verdict.reject` a third time, arriving inside the fix for its own
+lesson. `rejected` is `string[]` now, reasons only; the JSON-parse failure that
+returned sixty characters of the model's raw output returns `"not JSON"`; and
+the accepted rules still print in full, because those are the diff `--apply`
+commits and a rule nobody reads before it ships is the unsupervised loop this
+pipeline exists to refuse.
+
+Check 142 covers both halves of the script now and six mutations fail it: carry
+the quote onto the rule, delete the quote guard, widen it onto the apostrophe,
+put the refused text back on the refusal, put it back in the printer, and drop
+the evidence gate. Two of those are worth naming — the apostrophe one fails in
+the *widening* direction, which is the half a careful fix gets wrong, and the
+probe asserts the proposal is **accepted** before checking what it carries,
+because a probe whose input is refused proves nothing about the output.
+
+**The difference from the half above it is that nothing has happened yet.**
+`ANTHROPIC_API_KEY` is unset, `LEARNED_RULES` is `[]`, and no run has ever taken
+this path — where the `Finding` half was found by leaking three real replies
+into a public log minutes after a fix made it reachable. Same file, same
+retention, same rule, one found by reading and one by bleeding.
+
+One instrument note, because it nearly hid a mutation. A Python raw-string
+prefix did not survive into the heredoc, so `r'\u201c'` arrived as a curly
+quote and the mutation matched nothing. It was visible only because every
+mutation here carries `assert s.count(a) == 1` before it writes — a mutation
+that silently applies to nothing is a green suite reported as a caught bug.
 
 **The right question in the shape of a demand.** "BEFORE YOU GO" was a
 full-width card with ten 44px buttons, rendered after **every** vent turn. The

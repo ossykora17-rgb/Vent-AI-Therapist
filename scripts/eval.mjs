@@ -2705,7 +2705,6 @@ check("24 The system prompt has a budget, and every block earns its place", () =
     learned: Array.from({ length: MAX_LEARNED }, (_, i) => ({
       id: `r${i}`,
       rule: "x".repeat(MAX_RULE_CHARS),
-      found: "a reply",
       added: "2026-08-22",
     })),
   });
@@ -9516,7 +9515,7 @@ check("79 The room proposes, the gate decides", () => {
 
   // ── the list stays a list ─────────────────────────────────────────────────
   const many = Array.from({ length: 9 }, (_, i) => ({
-    id: `r${i}`, rule: `rule ${i}`, found: "x", added: `2026-08-0${i + 1}`,
+    id: `r${i}`, rule: `rule ${i}`, added: `2026-08-0${i + 1}`,
   }));
   const kept = prune(many);
   is(kept.length, MAX_LEARNED, `only ${MAX_LEARNED} survive`);
@@ -17106,7 +17105,7 @@ check("141 The audit's free half does not need the paid half installed", () => {
     "if this changes, the ordering above is no longer what keeps the free half alive");
 });
 
-check("142 The audit reports names and ids, never anybody's words", () => {
+check("142 The audit reports names, ids and reasons — never anybody's words", () => {
   /*
     THE JOB THAT ONLY LEAKED ONCE IT STARTED WORKING
 
@@ -17174,6 +17173,71 @@ check("142 The audit reports names and ids, never anybody's words", () => {
   ok(/flat:\s*flat\.map\(\(r\)\s*=>\s*r\.id\)/.test(script),
     "the report stores flat replies by id",
     "the whole row would carry the vent as well as the reply");
+
+  /*
+    AND THE OTHER HALF OF THE SAME SCRIPT, WHICH WAS STILL HOLDING A QUOTE
+
+    `Finding` was the half that had already leaked. The proposals were the half
+    that had not run yet: `LearnedRule.found` carried 160 characters of the
+    reply that produced a rule, into `data/audit/<date>.json` — the artifact —
+    and, under `--apply`, into `src/lib/vent/learned.ts`, which is committed
+    source in a public repository. `learnedBlock` renders `r.rule` and nothing
+    else, so the field reached no prompt, no product and no screen. A fragment
+    of somebody's session, published twice, read by nobody.
+
+    CLAUDE.md names the trigger rather than the date: decide it before
+    `ANTHROPIC_API_KEY` is set, because that is the moment the path becomes
+    live. It is unset, so this is being closed while it is still theory —
+    which is the opposite of how the `Finding` half was found.
+  */
+  const p1 = parseProposals(JSON.stringify([
+    { rule: "Name the amount out loud before asking anything else.", found: `they replied ${SENTINEL}` },
+  ]), "2026-09-19");
+  is(p1.accepted.length, 1, "a proposal with a reply behind it is still accepted",
+    "a probe whose proposal is refused proves nothing about what an accepted one carries");
+  const kept = JSON.stringify(p1.accepted);
+  ok(!kept.includes(SENTINEL), "and the rule it becomes carries no word of that reply", kept);
+  is(parseProposals(JSON.stringify([{ rule: "Name the amount out loud first." }]), "2026-09-19").accepted.length, 0,
+    "while a proposal that points at nothing is still refused",
+    "the gate keeps reading the evidence — it just stops writing it down");
+
+  /*
+    The refusal that makes the printer dangerous, and the apostrophe that must
+    not trip it.
+
+    `acceptable`'s own doc comment has said since it was written that a rule
+    which quotes the failure it fixes is how a ban becomes an instruction. The
+    only enforcement was `bannedPhrase`, which sees our fifteen phrases and not
+    the person's sentence — a rule stated in a comment and implemented nowhere,
+    in the file that holds the rules. Double quotes only, because a straight
+    apostrophe is `\bdon\b` from the other side.
+  */
+  ok(acceptable('Never answer with "i dey feel you, my brother" when they name a number.'),
+    "a rule that quotes is refused outright",
+    "that quote is a fragment of a real reply, and --apply writes rules into public source");
+  is(acceptable("Don't close on a question when they've already answered it."), null,
+    "and an apostrophe is not a quotation mark",
+    "matching a straight quote would refuse don't and they've — the wrong half of the same lesson");
+
+  const p2 = parseProposals(JSON.stringify([
+    { rule: `Never say "${SENTINEL}" back to them.`, found: "it appeared in four replies" },
+  ]), "2026-09-19");
+  is(p2.accepted.length, 0, "so it never becomes a rule");
+  ok(!JSON.stringify(p2.rejected).includes(SENTINEL),
+    "and the refusal does not repeat what it refused",
+    JSON.stringify(p2.rejected));
+
+  /*
+    Where that would have printed. The refusal reason is the whole line now —
+    the accepted rules still print in full, because those are the diff that
+    ships to everybody and a rule nobody reads before it ships is the
+    unsupervised loop this pipeline refuses.
+  */
+  const rejectLine = script.split("\n").filter((l) => /REJECT/.test(l));
+  is(rejectLine.length, 1, "one line prints refusals", "a sweep that walks nothing passes loudest");
+  ok(!/\.rule\b|slice\(/.test(rejectLine[0]),
+    "and it prints the reason, never the text it refused",
+    rejectLine[0].trim());
 });
 
 check("143 The weight is asked for in the periphery, and refusal ends the asking", () => {

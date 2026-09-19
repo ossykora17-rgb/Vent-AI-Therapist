@@ -35,10 +35,30 @@ export interface LearnedRule {
   id: string;
   /** The instruction, as the prompt will carry it. */
   rule: string;
-  /** The reply that caused it, in a few words. Evidence, not decoration. */
-  found: string;
   /** ISO date the audit proposed it. */
   added: string;
+  /*
+    THERE IS NO `found`, AND THE EVIDENCE RULE IT SERVED IS STILL ENFORCED
+
+    This carried 160 characters of the reply that produced the rule, under a
+    comment reading "Evidence, not decoration". The argument was right and it
+    was written before this repository was public: a rule with no reply behind
+    it is a rule the model reasoned its way to, which is the failure mode of
+    asking a model what it did wrong.
+
+    What changed is where the field lands. `LEARNED_RULES` is committed source
+    in a public repo, and `--apply` writes it there; `data/audit/<date>.json`
+    is uploaded by `audit.yml` with `actions/upload-artifact`, also public. So
+    the field was a fragment of somebody's session in two public places — and
+    read by nothing: `learnedBlock` renders `r.rule` and no other field, so it
+    never reached the prompt, the product or a screen.
+
+    The requirement lives in `parseProposals`, which still refuses a proposal
+    that cannot point at a reply and then throws the quote away. Same shape as
+    `classifyModelError` reading a provider's `.body` and discarding it, and
+    as `Verdict.reject` carrying grader names: the gate keeps its input, the
+    record does not.
+  */
 }
 
 /** What the prompt's budget can carry. Raising it means raising that too. */
@@ -78,6 +98,25 @@ export function acceptable(rule: string): string | null {
   const text = rule.trim();
   if (text.length < 12) return "too short to be a rule";
   if (text.length > MAX_RULE_CHARS) return `over ${MAX_RULE_CHARS} characters`;
+
+  /*
+    A rule does not quote, and the paragraph above has said so since this file
+    was written: "a rule that *quotes* the failure it is fixing is how a ban
+    becomes an instruction after one bad parse." The only enforcement was
+    `bannedPhrase` below, which catches a rule quoting one of *our* phrases
+    and nothing else. A rule quoting the **person's** sentence — the one that
+    lands in committed public source, in a public artifact and in the prompt —
+    walked past it. A rule stated in a comment and implemented nowhere, in the
+    file whose job is holding rules.
+
+    Double quotes only. A straight `'` is an apostrophe far more often than a
+    quotation mark here, and matching it would refuse `don't` and `they've` —
+    `\bdon\b` again, from the other side. So the guard is narrow and says so:
+    an unquoted paraphrase of somebody's sentence still passes, and nothing
+    here can see it. What it closes is the shape a model actually writes when
+    it is asked for evidence and puts the evidence in the rule.
+  */
+  if (/["\u201c\u201d\u201e\u00ab\u00bb]/.test(text)) return "quotes something";
 
   const banned = bannedPhrase(text);
   if (banned) return `contains a banned phrase: "${banned.match}"`;
