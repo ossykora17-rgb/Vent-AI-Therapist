@@ -2847,6 +2847,43 @@ product with `/privacy` and `/terms` pages that do exist. Named rather than
 built: an age wall is a product and legal decision, and this file's own test
 says those are read by a person.
 
+**The number itself had never been checked.** This file spends more words on
+the crisis path than on any other single surface — check 17 makes the digits
+impossible to hand-write, check 102 guards the layout, `CRISIS_LINES` exists
+because nine copies once drifted, and a whole entry records that a US hotline
+is a busy tone from Lagos. Every one of those is about *which* number is shown
+and *where*. **None of them asks whether it answers.**
+
+Checked, for the first time: `0806 210 6493` is real — the Suicide Research
+and Prevention Initiative, with a public site at
+`nigeriasuicideprevention.com`. The most important fact in the product is
+correct, and it was correct by somebody's care rather than by anything here.
+
+Two things came out of the check that are worth writing down:
+
+**The service publishes a second line, `0809 210 6493`, and the product shows
+one.** A busy tone at 2am is the likeliest failure this path has, and there is
+no fallback behind it. That is a real gap and **it was not fixed here**, for a
+reason this file already records about iOS haptics: `findahelpline.com` and
+Wikipedia are both blocked by this environment's egress proxy, so the only
+evidence for the sibling number is a search-engine summary. Changing the digits
+somebody dials in the worst hour of their life, on a paraphrase, is the exact
+shape of every unfingerprinted claim in this document. **Confirm it against
+SURPIN directly, then add it** — the constant is already the one place, so it
+is a two-line change once the fact is real.
+
+**And `112` is Nigeria's national emergency number**, with `767` for Lagos,
+while `CRISIS_LINES.emergency` is `199`. 199 is the long-standing line and is
+not wrong; whether the newer 112 belongs beside it is a product decision for
+somebody who knows which one actually connects in Lagos today. Named rather
+than changed, same reason.
+
+The rule this produces is one the file did not have: **a guard that the right
+number is displayed is not a check that the number works.** Everything here
+verifies the plumbing. The fact at the end of the pipe is external, it goes
+stale without announcing it, and it is the one number in this product where
+being wrong is not a bug report.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in
