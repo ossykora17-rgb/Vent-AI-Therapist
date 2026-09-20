@@ -1687,10 +1687,18 @@ check("15k The Carver refuses a summary, and the campfire says its own words", (
   // The parser is the guard. A model that returns a paragraph must not get a
   // paragraph into somebody's memory.
   is(parseCarve("not json at all"), null, "prose is refused");
-  is(parseCarve('{"carve":"","remembers":true}'), null, "an empty carve is refused");
+  /*
+    The rule is that no line ships, not that the object is null. Notes are
+    parsed before the carve is judged now, so a refused line returns
+    `{carve: null, notes}` instead of throwing the notes away with it — the
+    coupling that left production with 0 notes across 59 vents. Asserted on
+    the field, which still fails if a nine-word summary is ever written.
+  */
+  is(parseCarve('{"carve":"","remembers":true}')?.carve ?? null, null,
+    "an empty carve is refused");
   is(parseCarve('{"carve":"something","remembers":false}'), null, "remembers:false is refused");
   is(
-    parseCarve('{"carve":"the user discussed his father diagnosis and family communication issues","remembers":true}'),
+    parseCarve('{"carve":"the user discussed his father diagnosis and family communication issues","remembers":true}')?.carve ?? null,
     null,
     "and a summary over the word limit is refused rather than shipped",
   );
@@ -2407,9 +2415,10 @@ await checkAsync("22 The carve is kept, read back, and erased with them", async 
   is(parseCarve("not json at all"), null, "prose is not a carve");
   is(parseCarve('{"carve":"x","remembers":false}'), null,
     "and a model that says it has nothing is believed");
-  is(parseCarve('{"carve":"","remembers":true}'), null, "an empty carve is no carve");
+  is(parseCarve('{"carve":"","remembers":true}')?.carve ?? null, null,
+    "an empty carve is no carve");
   is(
-    parseCarve('{"carve":"one two three four five six seven eight nine","remembers":true}'),
+    parseCarve('{"carve":"one two three four five six seven eight nine","remembers":true}')?.carve ?? null,
     null,
     "nine words is a summary that got through, and it is refused",
   );
@@ -13256,8 +13265,61 @@ check("107 The Carver can return a note without destroying the carve", () => {
   // Still refuses what it always refused.
   is(parseCarve("no json here at all"), null, "prose alone is still nothing");
   is(parseCarve('{"carve": "x", "remembers": false}'), null, "remembers false is still nothing");
-  is(parseCarve('{"carve": "one two three four five six seven eight nine", "remembers": true}'), null,
+  is(parseCarve('{"carve": "one two three four five six seven eight nine", "remembers": true}')?.carve ?? null,
+    null,
     `over ${CARVE_MAX_WORDS} words is still a summary`);
+
+  /*
+    AND THE OTHER DIRECTION, WHICH THIS CHECK'S TITLE ONLY EVER CLAIMED HALF OF
+
+    "The Carver can return a note without destroying the carve" was true and
+    was one way round. The carve destroying the *notes* was asserted nowhere
+    and implemented nowhere: every rejection in `parseCarve` returned the whole
+    object as null, above `parseNotes`, so a line one word over the cap threw
+    away notes that had already survived `keepable`. The route then repeated
+    it — `if (!carve) return` sat above the only call that writes notes, three
+    lines under a comment promising "notes and no line" was a supported case.
+
+    Production is why it is worth two assertions rather than a sentence: the
+    Carver was eligible on 8 sittings and produced **1 carve and 0 notes**, and
+    `vent_notes` has held 0 rows across 59 vents since the table shipped.
+  */
+  const overCap = parseCarve(JSON.stringify({
+    carve: "one two three four five six seven eight nine",
+    remembers: true,
+    notes: [{ kind: "fact", subject: "brother", detail: "moved to Kano in May" }],
+  }));
+  is(overCap?.carve ?? null, null, "a nine-word line is still refused");
+  is(overCap?.notes?.length, 1,
+    "and the note beside it survives the refusal",
+    "a carve over the cap used to discard notes that were never even parsed");
+  is(overCap?.notes?.[0]?.subject, "brother", "intact, not merely counted");
+
+  // The empty-carve path is the same rule and a different branch.
+  const emptyLine = parseCarve(JSON.stringify({
+    carve: "",
+    remembers: true,
+    notes: [{ kind: "fact", subject: "rent", detail: "due on the 30th" }],
+  }));
+  is(emptyLine?.carve ?? null, null, "an empty line is no line");
+  is(emptyLine?.notes?.length, 1, "and it does not take the notes with it");
+
+  /*
+    The parser is only half the path. The route repeated the coupling, so it is
+    asserted where it ships: the early exit may only fire when there is nothing
+    at all, and `setCarve` must be conditional rather than the gate.
+  */
+  const carveRoute = strip(fs.readFileSync(path.join(ROOT, "src/app/api/carve/route.ts"), "utf8"));
+  ok(carveRoute.length > 500, `${carveRoute.length} chars of the carve route read`,
+    "a sweep that walks nothing passes loudest");
+  const earlyExit = carveRoute.match(/if \s*\(([^)]*)\)\s*\{?\s*\n?\s*return NextResponse\.json\(\{[^}]*nothing_to_carve/);
+  ok(earlyExit, "the nothing-to-carve exit is still there", "it is the honest answer to an empty run");
+  ok(/notes\.length === 0/.test(earlyExit?.[1] ?? ""),
+    "and it only fires when there are no notes either",
+    "above the only call that writes notes, `if (!carve) return` made 'notes and no line' unreachable");
+  ok(/const kept = carve \? await store\.setCarve/.test(carveRoute),
+    "the carve write is conditional, not the gate",
+    "so a refused line no longer decides whether notes are kept");
   is(parseCarve('{"carve": "a b", "remembers": true, "notes": [{"kind": "hard",'), null,
     "a truncated object is null rather than a guess",
     "which is what an undersized ceiling produces, and half a carve is worse than none");
