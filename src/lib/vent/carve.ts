@@ -110,7 +110,15 @@ ${NOTES_INSTRUCTION}
 Output only JSON: {"carve": "your ${CARVE_MAX_WORDS} words", "remembers": true, "notes": []}`;
 
 export interface Carve {
-  carve: string;
+  /**
+   * The line, or null when the model did not produce a usable one.
+   *
+   * Nullable since the audit: every rejection path below used to return the
+   * whole object as `null`, so a carve one word over the cap destroyed notes
+   * that had not even been parsed yet. Production across six weeks: the
+   * Carver was eligible on 8 sittings and produced **1 carve and 0 notes**.
+   */
+  carve: string | null;
   remembers: boolean;
   /**
    * What else is worth remembering, from the same call.
@@ -198,19 +206,51 @@ export function parseCarve(raw: string): Carve | null {
   };
 
   if (remembers !== true) return null;
-  if (typeof carve !== "string") return null;
-
-  const text = carve.trim();
-  if (!text) return null;
-  // Eight words, counted the way a person would count them. A slash-joined
-  // carve — "pops sick / fear of being useless son" — is eight.
-  if (text.split(/\s+/).filter((w) => w !== "/").length > CARVE_MAX_WORDS) return null;
 
   /*
-    The notes are parsed separately and never block the carve. A model that
-    writes a good line and a bad note has still written a good line, and
-    losing it to a fourth array element that named a condition would be the
-    batch failing over its worst member.
+    THE NOTES ARE READ FIRST, AND THAT ORDER IS THE WHOLE FIX
+
+    The comment below used to say "the notes are parsed separately and never
+    block the carve", which was true and was only half the rule. The other
+    half — the carve never blocks the notes — was asserted nowhere and
+    implemented nowhere: every rejection between here and `parseNotes` returned
+    the entire object as `null`, so a carve one word over the cap threw away
+    notes that had not been looked at yet.
+
+    It is the same coupling this repository already fixed once, in this
+    function, for a different reason: the non-greedy extractor that "discarded
+    the carve along with the notes". Same two fields, same direction, opposite
+    end of the parse.
+
+    And the diagnostics could not see it. All three `console.warn`s below sat
+    *under* the word cap, so the failure bucket built to answer "why no notes"
+    was unreachable on the most likely cause of no notes. A bucket with
+    nothing in it, one line above the answer.
+  */
+  const read = parseNotes(notes);
+  if (read.dropped.length > 0) {
+    console.warn(`[carve] notes refused (${read.dropped.length}):`, read.dropped.join(" | "));
+  } else if (read.keep.length === 0 && Array.isArray(notes) && notes.length > 0) {
+    console.warn("[carve] notes array arrived and nothing survived parsing");
+  } else if (!Array.isArray(notes)) {
+    console.warn("[carve] the model returned no notes array at all");
+  }
+
+  const text = typeof carve === "string" ? carve.trim() : "";
+  // Eight words, counted the way a person would count them. A slash-joined
+  // carve — "pops sick / fear of being useless son" — is eight.
+  const overCap =
+    text.split(/\s+/).filter((w) => w !== "/").length > CARVE_MAX_WORDS;
+  if (!text || overCap) {
+    if (overCap) console.warn("[carve] line refused: over the word cap");
+    return { carve: null, remembers: true, notes: read.keep };
+  }
+
+  /*
+    The notes never block the carve either. A model that writes a good line
+    and a bad note has still written a good line, and losing it to a fourth
+    array element that named a condition would be the batch failing over its
+    worst member.
   */
   /*
     And the rejects are said out loud, because "no notes" was unanswerable.
@@ -224,14 +264,6 @@ export function parseCarve(raw: string): Carve | null {
 
     A failure bucket with nothing in it, one field from the answer.
   */
-  const read = parseNotes(notes);
-  if (read.dropped.length > 0) {
-    console.warn(`[carve] notes refused (${read.dropped.length}):`, read.dropped.join(" | "));
-  } else if (read.keep.length === 0 && Array.isArray(notes) && notes.length > 0) {
-    console.warn("[carve] notes array arrived and nothing survived parsing");
-  } else if (!Array.isArray(notes)) {
-    console.warn("[carve] the model returned no notes array at all");
-  }
   return { carve: text, remembers: true, notes: read.keep };
 }
 

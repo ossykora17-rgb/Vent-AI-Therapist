@@ -2770,6 +2770,83 @@ a room that opens on the box and learns the chair from how somebody writes.
 That is a product decision with a real redesign behind it, and shipping it
 unverified at the end of a long session is the one thing this file bans.
 
+**A dispassionate audit, and the feature this file calls fixed has produced
+nothing.** `vent_notes` holds **0 rows**. Not "zero in a month" as the
+postmortem above records — zero across **59 vents from 8 people** since the
+table shipped on 2026-08-24, with the latest vent on 2026-09-18. Three causes
+were found and fixed and the row count never moved.
+
+Counting the whole path found two more blockers, and both sit under comments
+asserting the opposite.
+
+| | |
+| --- | --- |
+| sittings (user × day) | 19 |
+| long enough to carve (≥3 turns) | 14 |
+| **Carver should have fired** (≥3 turns *and* anchored) | **8** |
+| carves produced | **1** |
+| notes produced | **0** |
+
+**The first is a coupling, in the direction nobody wrote down.**
+`parseCarve`'s own comment reads *"the notes are parsed separately and never
+block the carve"* — true, and only half a rule. The other half was implemented
+nowhere: every rejection above it returned the **whole object** as `null`, and
+`parseNotes` ran below them. So a carve one word over `CARVE_MAX_WORDS`
+discarded notes that had not been looked at yet. It is the same two fields and
+the same direction as the non-greedy extractor this file already records as
+*"discarding the carve along with the notes"* — the other end of the same
+function, fixed once, reintroduced by a guard.
+
+And the diagnostics could not see it. All three `console.warn`s explaining
+"why no notes" sat **under** the word cap, so the failure bucket built for this
+exact question was unreachable on its most likely cause. The comment beside
+them reasons carefully about which of *two* causes it is; this is a third, one
+line above the reasoning.
+
+**The second is the route repeating it.** `if (!carve) return … nothing_to_carve`
+sat above the only call that writes notes — three lines under a comment
+promising *"a session can produce a good line and no notes, **or notes and no
+line**"*. The second case was unreachable by construction, which is
+`FORGET_FAILED` again: a documented state that no input could produce.
+
+Notes are parsed first now and survive a refused line; the route's exit fires
+only when there is nothing at all, and `setCarve` is conditional rather than the
+gate. **The word cap is untouched** — a nine-word summary is still refused, and
+the mutation that removes the cap fails check 107, because the risk in fixing a
+coupling is loosening the guard that shares the line with it.
+
+Five mutations fail: return null on rejection, parse notes after the cap, gate
+the route on the carve, make `setCarve` the gate, and stop refusing over the
+cap.
+
+**The trigger is the other half and it is deliberately not changed in the same
+commit.** The Carver fires in exactly one place — inside `submitMood` — so the
+room's entire long-term memory hangs off the gesture **14% of turns** make, and
+6 of 14 eligible sittings never fired it at all. That is a real defect and the
+fix is not obvious: the arc landing shipped hours earlier changes how often
+mood is answered, so moving the trigger now would make both unattributable.
+**Measure the new anchor rate first, then re-plumb.** Changing two things at
+once is how a product learns nothing from either.
+
+**What the audit cleared.** Supabase's security advisors — the tool this file
+says had been "reporting the whole time, to nobody" — return one INFO
+(`circle_push` has RLS on with no policy, which is deny-all and the safe
+direction) and one irrelevant WARN about password protection on a product with
+no passwords. Retention is the surprise: **9 people, 108 vents, a mean of 12
+each, 4 of 9 returning on another day, 2 one-and-done.** That is engagement, and
+it means the thing failing is not the room.
+
+**What is still broken and is not code.** Circles: **19 circles, 16 of them
+holding exactly one person**, 1.16 seats each — *after* the anti-fragmentation
+repair. The Keeper needs `members.length > 1`, so sixteen rooms never started.
+Steering cannot manufacture a second person; this is a liquidity problem and it
+is the one thing in this product that more engineering cannot reach.
+
+And there is **no age gate** anywhere in `src/app`, on a mental-health-adjacent
+product with `/privacy` and `/terms` pages that do exist. Named rather than
+built: an age wall is a product and legal decision, and this file's own test
+says those are read by a person.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in

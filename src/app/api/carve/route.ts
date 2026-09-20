@@ -160,10 +160,29 @@ async function handlePOST(req: Request) {
     return NextResponse.json({ carved: false, reason: "model_unavailable" });
   }
 
-  if (!carve) return NextResponse.json({ carved: false, reason: "nothing_to_carve" });
+  /*
+    "NOTES AND NO LINE" WAS A DOCUMENTED CASE AND AN UNREACHABLE BRANCH
+
+    This read `if (!carve) return … "nothing_to_carve"`, three lines above a
+    comment promising that "a session can produce a good line and no notes, or
+    notes and no line". The second half could never happen: the return sat
+    above the only call that writes notes, so a sitting whose carve was
+    refused lost notes that had already survived `keepable`.
+
+    With `parseCarve` no longer throwing the whole object away, this is the
+    other half of the same repair. A run with nothing at all still answers
+    `nothing_to_carve`; a run with notes and no line now writes the notes and
+    says so.
+
+    Production is the reason it is worth the words: the Carver was eligible on
+    8 sittings and produced 1 carve and 0 notes.
+  */
+  if (!carve && notes.length === 0) {
+    return NextResponse.json({ carved: false, noted: 0, reason: "nothing_to_carve" });
+  }
 
   // The claim comes from the write, not from the model having answered.
-  const kept = await store.setCarve(userId, carve);
+  const kept = carve ? await store.setCarve(userId, carve) : false;
   /*
     The notes, from the same call and never at the cost of the carve.
 
