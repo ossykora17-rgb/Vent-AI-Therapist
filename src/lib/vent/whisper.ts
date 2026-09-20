@@ -29,12 +29,19 @@
  * paying and it is stated rather than hidden: a room that keeps asking after
  * three noes is not ambient, it is nagging with a lower opacity.
  *
- * **The teaching card is why the whisper can be this quiet.** Nobody discovers
- * a 0.15-opacity track on their own. The full card still renders for the first
- * `TEACHING_SITTINGS` anchored sittings, so the gesture is learnt once in the
- * open and ambient forever after. Delete that and this becomes a control with
- * no discovery path — which is the same failure as a refusal nobody can read,
- * wearing an interaction instead of a sentence.
+ * **Discovery is a sentence now, and the card is gone.** That paragraph used
+ * to argue for a teaching card, on the grounds that nobody finds a 0.15-opacity
+ * control on their own. The premise was right and the conclusion was wrong: a
+ * card teaches the control by announcing that the room wants something, which
+ * is the demand this whole file exists to remove, merely drawn twice and then
+ * never again.
+ *
+ * What teaches it instead is the room asking. `arc.ts` decides when a sitting
+ * is landing and the reply's own last question becomes *"Where does it sit now,
+ * against how you walked in?"* — and `asked` lifts the track on that same turn.
+ * So the instrument is discovered at the one moment it has an obvious meaning:
+ * there is a question on the screen and this is the thing that answers it. No
+ * heading, no box, nothing beside the conversation.
  *
  * The policy lives here rather than inside the component because a rule the
  * suite asserts must be imported from the module the product runs — a suite
@@ -50,13 +57,6 @@
 export const WHISPER_MIN = 1;
 export const WHISPER_MAX = 10;
 
-/**
- * Anchored sittings that still get the full card.
- *
- * Two, not one: the first is a surprise and the second is the one somebody
- * recognises. Three would be a form again.
- */
-export const TEACHING_SITTINGS = 2;
 
 /**
  * A pause long enough to mean something, short enough to still be this turn.
@@ -107,7 +107,7 @@ export const WHISPER_PROMPT = "How does it sit in you now?";
  * moment of opacity. Keeping the reason also makes the suite's job possible:
  * a rule that returns true is untestable past "it returned true".
  */
-export type WhisperReason = "long" | "idle" | "closing";
+export type WhisperReason = "asked" | "long" | "idle" | "closing";
 
 export interface WhisperState {
   /** A vent turn has happened and has not been answered on the scale yet. */
@@ -120,6 +120,16 @@ export interface WhisperState {
   ignored: number;
   /** They are leaving — tab hidden, or the session is being closed. */
   closing: boolean;
+  /**
+   * The room's own reply just asked where it sits.
+   *
+   * `arc.ts` decides that server-side and the response says so, because the
+   * room and the instrument have to agree about which turn this is. Two
+   * opinions about one moment is this repository's most-repeated finding, and
+   * a client re-deriving "was that the landing question?" from the reply text
+   * is exactly that shape.
+   */
+  asked: boolean;
 }
 
 /**
@@ -141,6 +151,14 @@ export interface WhisperState {
 export function shouldInvite(s: WhisperState): WhisperReason | null {
   if (!s.pending) return null;
   if (s.ignored >= IGNORES_BEFORE_SILENT) return null;
+  /*
+    First, and it is not a tie-break. Every other reason here is the room
+    deciding somebody looks ready to be asked. This one is the room having
+    just asked, out loud, in the reply above the box — so the instrument is
+    the answer to a question already on the screen rather than a control
+    appearing beside one.
+  */
+  if (s.asked) return "asked";
   if (s.closing) return "closing";
   if (s.words >= WHISPER_LONG_WORDS) return "long";
   if (s.idleMs >= WHISPER_IDLE_MS) return "idle";
@@ -158,14 +176,4 @@ export function inviteSpent(ignored: number): boolean {
   return ignored >= IGNORES_BEFORE_SILENT;
 }
 
-/**
- * Does this sitting still get the full card?
- *
- * `anchored` is how many times this device has answered the scale, ever. It is
- * a count on the device and never a row: what it gates is whether a card is
- * drawn, and a product that phoned home to decide how to draw a card would be
- * keeping something about somebody in order to be subtle at them.
- */
-export function stillTeaching(anchored: number): boolean {
-  return anchored < TEACHING_SITTINGS;
-}
+

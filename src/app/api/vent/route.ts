@@ -8,6 +8,7 @@ import { classify, CRISIS_LINES, crisisReply } from "@/lib/vent/intent";
 import { CARRY_WORDS, OBJECT_IDS, tensionNow } from "@/lib/vent/chairs";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
 import { selectProbe } from "@/lib/vent/probes";
+import { arcProbe, isLanding, saysClosing, typicalWords } from "@/lib/vent/arc";
 import { blendEfficacy, getEfficacy, measurePersonalEfficacy } from "@/lib/vent/efficacy";
 import { findPattern, type Pattern } from "@/lib/vent/pattern";
 import { coverage, COVERAGE_FLOOR } from "@/lib/vent/scan";
@@ -120,6 +121,21 @@ const bodySchema = z.object({
     Tuesday should not.
   */
   allianceSaid: z.boolean().optional(),
+  /*
+    Two flags the client owns, for the same reason `allianceSaid` is one: they
+    are facts about this sitting on this device, and the server has no sitting.
+    Both only ever decide whether a question is *asked*, so a client that lies
+    about them costs itself a question and nobody else anything.
+  */
+  closingAsked: z.boolean().optional(),
+  moodGiven: z.boolean().optional(),
+  /*
+    Something is already on the table — a breaking-point question offered and
+    unanswered, or a crisis screen. This arrives from the client because the
+    breaking question is chosen *below* the probe in this handler, so the
+    server does not yet know. It only ever suppresses an ask.
+  */
+  heavyOpen: z.boolean().optional(),
   message: z.string().trim().min(1).max(4000),
   chairPicked: z.enum(["tight_edge", "sunk", "half_off"]).nullish(),
   bodyTapped: z.enum(["head", "throat", "chest"]).nullish(),
@@ -390,7 +406,28 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
     Free. Fifty regexes over one string, no store and no model call, so it
     behaves identically in the shape with nothing configured.
   */
-  const probe = selectProbe(input.message, recentProbes);
+  /*
+    THE ONE MOMENT THE ROOM ASKS FOR A NUMBER
+
+    `arc.ts` decides whether this sitting is landing, and when it is, the
+    question the reply ends on *is* the weight question. Not a card beside the
+    conversation and not a hairline with a caption — the room's own last
+    sentence, in the slot every reply already fills.
+
+    Detected rather than scheduled, and refused while anything is heavy: a room
+    that starts winding up while somebody is still opening has stopped
+    listening, and it reads worse for wearing the room's voice while doing it.
+  */
+  const landing = isLanding({
+    exchanges: history.length + 1,
+    words: input.message.trim().split(/\s+/).filter(Boolean).length,
+    typicalWords: typicalWords([...history.map((h) => h.user_message), input.message]),
+    moodGiven: input.moodGiven === true,
+    asked: input.closingAsked === true,
+    closingWords: saysClosing(input.message),
+    heavy: input.heavyOpen === true,
+  });
+  const probe = arcProbe(landing, selectProbe(input.message, recentProbes));
 
   /*
     Read once, used twice: the greeting names one of these, and the prompt
@@ -942,6 +979,13 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
         than what the configuration implied. With nothing kept, the claim is
         dropped and only the disclosure half is said.
       */
+      /*
+        The reply just asked where it sits, so the track is the thing to answer
+        on and it lifts. The client is told rather than guessing, because the
+        room and the instrument have to agree about which turn this is — two
+        opinions about one moment is this repo's most-repeated finding.
+      */
+      closing: landing,
       alliance: shouldSayAlliance(history.length + 1, input.allianceSaid === true)
         ? allianceLine(saved, classification.language === "pidgin" ? "pidgin" : "en")
         : null,

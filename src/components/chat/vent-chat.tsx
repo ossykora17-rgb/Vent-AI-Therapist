@@ -19,8 +19,7 @@ import { readEventStream } from "@/lib/ui/event-stream";
 import { PressureTrack } from "@/components/chat/pressure-track";
 import {
   shouldInvite,
-  stillTeaching,
-  LINGER_MS,
+    LINGER_MS,
   WHISPER_IDLE_MS,
   type WhisperReason,
 } from "@/lib/vent/whisper";
@@ -50,41 +49,6 @@ const markAllianceSaid = () => {
   }
 };
 
-/**
- * How many times this device has answered the weight scale.
- *
- * Beside the alliance flag for the same reason and with the same failure mode:
- * a wipe clears the anon id and this together, so somebody starting over is
- * taught the gesture again — which is correct, because for all the room knows
- * they are somebody else.
- *
- * What it gates is whether a *card* is drawn. It is never sent anywhere: a
- * product that asked a server how subtle to be would be keeping a fact about
- * somebody in order to be quiet at them, which is the promise-shaped version
- * of the bug this whole change is fixing.
- *
- * Storage blocked reads as 0, so the full card keeps rendering. That is the
- * safe direction: the failure is a card somebody has seen before, not a
- * hairline control nobody was ever shown.
- */
-const ANCHORED_KEY = "mw-anchored";
-const anchoredCount = () => {
-  try {
-    return Number(localStorage.getItem(ANCHORED_KEY)) || 0;
-  } catch {
-    return 0;
-  }
-};
-const markAnchored = () => {
-  try {
-    localStorage.setItem(ANCHORED_KEY, String(anchoredCount() + 1));
-  } catch {
-    /* ignore */
-  }
-};
-
-type Body = "head" | "throat" | "chest";
-
 interface Line {
   id: number;
   speaker: "you" | "vent";
@@ -93,6 +57,15 @@ interface Line {
 }
 
 interface VentResponse {
+  /**
+   * The reply's own last question was the weight question.
+   *
+   * Decided in `arc.ts` on the server and reported, never re-derived here.
+   * When it is true the track lifts, so the instrument arrives as the answer
+   * to a question already on the screen rather than as a control appearing
+   * beside one.
+   */
+  closing?: boolean;
   intent: "vent" | "factual" | "greeting" | "meta" | "crisis";
   reply: string;
   tactic?: string | null;
@@ -184,7 +157,6 @@ export function VentChat() {
    * pressure, the current reading is legible in one line without opening
    * anything, and the person who wants to move it taps one word.
    */
-  const [trayOpen, setTrayOpen] = React.useState(false);
   /**
    * The carve from the last session that had one, and whether it is showing.
    *
@@ -236,7 +208,6 @@ export function VentChat() {
    * never touched a slider.
    */
   const [pressureSet, setPressureSet] = React.useState(false);
-  const [body, setBody] = React.useState<Body | null>(null);
   const [mood, setMood] = React.useState<number | null>(null);
   const [askMood, setAskMood] = React.useState(false);
 
@@ -253,7 +224,25 @@ export function VentChat() {
     breaking room's `shut`. Three noes tonight is three noes tonight, and
     nothing carries it into next week.
   */
-  const [teaching, setTeaching] = React.useState(true);
+  /*
+    The room asked, so the instrument lights.
+
+    Server-owned: `arc.ts` decides a sitting is landing and the response says
+    `closing`. The client does not re-derive it from the reply text, because
+    the room and the track have to agree about which turn this is and two
+    opinions about one moment is this repository's most-repeated finding.
+  */
+  const [roomAsked, setRoomAsked] = React.useState(false);
+  /*
+    Once a sitting, ever — and a latch rather than the state above, which is
+    per turn because it lights the track and then stops.
+
+    The arc refuses to ask twice, and this is how it knows. A ref and not
+    storage: a sitting is this tab, this visit. Somebody who comes back
+    tomorrow is in a new sitting and the room may ask again, which is the
+    point — it is one reading per sitting, not one per person ever.
+  */
+  const askedOnce = React.useRef(false);
   const [ignored, setIgnored] = React.useState(0);
   const [turnWords, setTurnWords] = React.useState(0);
   const [repliedAt, setRepliedAt] = React.useState<number | null>(null);
@@ -428,12 +417,6 @@ export function VentChat() {
     endRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
   }, [streamed]);
 
-  // Read once on mount. The default is the card — see `teaching` above for
-  // why that is the safe direction rather than the tidy one.
-  React.useEffect(() => {
-    setTeaching(stillTeaching(anchoredCount()));
-  }, []);
-
   /*
     The pause, measured once rather than polled.
 
@@ -483,7 +466,7 @@ export function VentChat() {
     the top of it.
   */
   const askingAfter =
-    (askMood || settlingHold) && !teaching && !gated && !offer && !answering;
+    (askMood || settlingHold) && !gated && !offer && !answering;
 
   const whisperReason: WhisperReason | null = shouldInvite({
     pending: askMood,
@@ -491,6 +474,7 @@ export function VentChat() {
     idleMs,
     ignored,
     closing,
+    asked: roomAsked,
   });
 
   async function send(text: string) {
@@ -505,9 +489,6 @@ export function VentChat() {
     setThinking(true);
     setStreamed("");
     setAskMood(false);
-    // Collapse the tray on send. It is a thing you reach for, not a thing you
-    // sit in front of.
-    setTrayOpen(false);
 
     try {
       const res = await fetch("/api/vent", {
@@ -527,12 +508,19 @@ export function VentChat() {
           // flag rather than a count: clearing the id makes somebody new by
           // construction, and they should hear it again.
           allianceSaid: allianceSaid(),
+          // What the server cannot know: a sitting belongs to this tab. Both
+          // only ever decide whether a question is asked, so the worst a wrong
+          // one costs is a question.
+          closingAsked: askedOnce.current,
+          moodGiven: mood !== null,
+          // A question of ours already on the table, or a crisis screen. The
+          // arc must not start winding a sitting up over the top of either.
+          heavyOpen: offer !== null || answering !== null || gated,
           // Null, not 50, when nobody has said. `tension_before` is written
           // straight from this, and a row with a null before is simply not
           // measurable — which is the correct outcome, and infinitely better
           // than a measurable row that measures nothing.
           pressure: pressureSet ? pressure : null,
-          bodyTapped: body,
           mood,
           chairPicked: opening?.chair ?? null,
           openingObject: opening?.object ?? null,
@@ -629,6 +617,8 @@ export function VentChat() {
         // default — so the drop card drew a number out of the same fiction.
         if (tensionBefore === null && pressureSet) setTensionBefore(pressure);
         setAskMood(true);
+        setRoomAsked(data.closing === true);
+        if (data.closing === true) askedOnce.current = true;
         // The pause is measured from the reply, not from the request: the
         // seconds somebody spends waiting on a model are not a pause, they
         // are a wait, and a control that steps forward during one is
@@ -672,7 +662,6 @@ export function VentChat() {
       queueVent({
         message,
         pressure,
-        bodyTapped: body,
         queuedAt: new Date().toISOString(),
       });
       const offline = typeof navigator !== "undefined" && navigator.onLine === false;
@@ -722,8 +711,7 @@ export function VentChat() {
       their next turn for having hesitated twice.
     */
     setIgnored(0);
-    markAnchored();
-    if (!stillTeaching(anchoredCount())) setTeaching(false);
+    setRoomAsked(false);
     // Shown immediately — the drop is theirs to see whether or not a database
     // agrees. Only the *claim* about saving waits for the server.
     const after = Math.round((10 - value) * 10);
@@ -1501,35 +1489,6 @@ export function VentChat() {
           way round keeps the original rule readable — this card is still the
           one that waits while a heavy question is on the table.
         */}
-        {askMood && teaching && !offer && !answering && (
-          <div className="presence mt-6 p-6 sm:p-8">
-            <p className="nameplate mb-4">Before you go</p>
-            {/* The room asking, so the room's voice. This is not chrome —
-                it is the last thing VENT says before somebody leaves. */}
-            <p className="reply max-w-[42ch]">
-              Where did the weight land? Not how the day was — just this, now,
-              against how you came in.
-            </p>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => submitMood(n)}
-                  aria-label={`${n} out of 10, where 1 is heaviest`}
-                  className="tabular h-11 w-11 rounded-full border border-line/15 text-body font-semibold transition-colors duration-300 hover:border-gold hover:bg-gold hover:text-on-gold"
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-            <p className="label-mono mt-2 flex justify-between max-w-[26rem]">
-              <span>1 · still heavy</span>
-              <span>10 · lighter</span>
-            </p>
-          </div>
-        )}
-
         {askHeld && (
           <div className="presence arrive mt-6 p-6 sm:p-8">
             <p className="nameplate mb-4">One more thing</p>
@@ -1595,7 +1554,10 @@ export function VentChat() {
             to be. Seen in a screenshot, not in the source. */}
         {!thinking && !gated && tool === null && !offer && !answering && (
           <ToolRow
-            showBreathing={shouldOfferBreathing(tag, pressure, body)}
+            // No tapped body any more: the tray that collected it was read by
+            // 2 of 108 vents and cost a permanent caption. Pressure and the
+            // tag still decide this, which is 98% of what it ever did.
+            showBreathing={shouldOfferBreathing(tag, pressure, null)}
             tag={tag}
             onBreathe={() => setTool("breathing")}
             onJournal={() => setTool("journaling")}
@@ -1695,115 +1657,29 @@ export function VentChat() {
       <footer ref={footerRef} className="sticky bottom-0 border-t border-line/10 bg-paper/95 backdrop-blur-glass">
         <div className="mx-auto max-w-[640px] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
           {/*
-            Where it sits and how tight, folded away until asked for.
+            THE LAST PERMANENT CAPTION, REMOVED BY COUNTING
 
-            Both still feed the tactic choice and neither has changed. What
-            changed is that they no longer stand between a person and the box.
-            The current reading is stated in the strip — "chest · tight", or
-            just the pressure word when they have not named a place — so
-            nothing is hidden, only closed.
+            A body tray sat here — `○ WHERE IS IT? ⌄` in mono capitals, above
+            every composer, on every turn, for ever — with head / throat /
+            chest folded behind it. Production says what it bought: **2 of 108
+            vents carry a `body_tapped`.** Under two per cent, in exchange for
+            a line of chrome that every person reads on every turn and that
+            announces, in the product's own typeface, that there is a field to
+            fill in.
 
-            One line, and it reads as a sentence rather than a control: the
-            product's own voice describing what it currently believes, which is
-            also an invitation to correct it. That is the honest framing, since
-            correcting it is exactly what opening the tray does.
+            The same table says what removing chrome is worth. `pressure_value`
+            is on **45 of 108** — 42% — and the only thing that changed for it
+            was being promoted out of a tray onto the line. Folded behind a
+            caption it was a measurement most people never gave; visible and
+            ambient it is the most answered thing here.
+
+            Nothing is lost, and that is why this is a deletion rather than a
+            redesign: `/api/vent` reads `input.bodyTapped ?? classification.body`,
+            so where it sits in the body is *already* derived from their own
+            words by the router. The tap was only ever an override on a reading
+            the room takes anyway — behind the scenes, which is where it
+            belongs.
           */}
-          {trayOpen && (
-            <div id="body-tray" className="mb-3 flex flex-wrap items-center gap-2">
-              {(["head", "throat", "chest"] as const).map((b) => (
-                <button
-                  key={b}
-                  type="button"
-                  onClick={() => setBody(body === b ? null : b)}
-                  aria-pressed={body === b}
-                  className={cn(
-                    "min-h-[44px] rounded-full border px-4 text-label font-mono uppercase tracking-[0.1em] transition-colors duration-300",
-                    body === b
-                      ? "border-gold bg-gold text-on-gold"
-                      : "border-line/15 text-ash",
-                  )}
-                >
-                  {b}
-                </button>
-              ))}
-              {/* "Mid" sat immediately right of HEAD / THROAT / CHEST and read
-                  as a fourth body part — and MID is a real somatic region in
-                  `lib/vent/scan.ts`, so the collision was not only visual. It
-                  is the pressure reading, so it says a pressure word. */}
-              {/*
-                No word beside the slider, and that is not an omission.
-
-                Open, this printed "SOME" next to the track and the strip
-                twenty pixels below printed "SOME" again — the same reading,
-                twice, stacked, in the same typeface. Seen in a screenshot, not
-                in the source, where two components each rendering one label
-                looks perfectly reasonable.
-
-                The strip is the readout: it is visible whether this is open or
-                shut, it sits directly above the box, and it updates live while
-                the thumb is dragged. A second copy can only ever agree with it
-                or be a bug. `aria-label` carries the meaning for anybody not
-                reading the strip.
-              */}
-              {/*
-                The slider used to live here, folded behind a chevron.
-
-                A measurement most people never gave, because giving it cost a
-                tap on a control whose label was the only thing saying it
-                existed. It is the track above the box now — always visible,
-                ambient, and the same 0–100 input with the same `pressureSet`
-                rule. This tray keeps the one question the track cannot ask:
-                where in the body.
-              */}
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setTrayOpen((o) => !o)}
-            aria-expanded={trayOpen}
-            aria-controls="body-tray"
-            className="focusable label-mono mb-2 flex min-h-[32px] items-center gap-1.5 text-ash transition-colors duration-300 hover:text-ink"
-          >
-            {/*
-              Hollow until it means something.
-
-              The dot's opacity was driven by `pressure`, so an untouched
-              slider drew a half-lit dot that reads as a reading. A ring is
-              the honest shape for a number nobody has given — the same
-              distinction the strip's own words now make.
-            */}
-            {/*
-              It answers for this tray, not for the track.
-
-              The dot was driven by `pressureSet` and its opacity by
-              `pressure` — a second readout of the exact fact the mark on the
-              line above now shows positionally, sitting beside a label about
-              the body. A second copy can only ever agree with it or be a bug,
-              which is the sentence this file already wrote about the strip.
-              It reads the body now: hollow until they have said where.
-            */}
-            <span
-              aria-hidden
-              className={cn(
-                "h-1.5 w-1.5 rounded-full",
-                body ? "bg-gold" : "border border-gold/50",
-              )}
-            />
-            {/*
-              The body, and nothing else.
-
-              This read "Set the pressure" and then `body · pressureWord` — a
-              second copy of a reading the track above now shows positionally,
-              in the file whose own comment says a second copy "can only ever
-              agree with it or be a bug". The pressure moved out; the question
-              this tray still owns is where it sits.
-            */}
-            {body ?? "Where is it?"}
-            <span aria-hidden className={cn("transition-transform duration-300", trayOpen && "rotate-180")}>
-              ⌄
-            </span>
-          </button>
 
           {/*
             While a heavy question is open, the box says whose it is.

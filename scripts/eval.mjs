@@ -63,6 +63,7 @@ const { inspectReply, chooseReply, REJECT, RETRY_ONLY, NOTED, UNREACHABLE } =
   await app("src/lib/vent/failsafe.ts");
 const { assessTurn } = await app("src/lib/vent/assess.ts");
 const { gradeReply, JARGON } = await app("src/lib/vent/quality.ts");
+const arc = await app("src/lib/vent/arc.ts");
 const { openingLine, allianceLine, shouldSayAlliance, ALLIANCE_AT } =
   await app("src/lib/vent/intake.ts");
 const { withoutExample, recentOpenings } = await app("src/lib/vent/prompt.ts");
@@ -4990,7 +4991,18 @@ check("44 The Breaking Room is wired the way the module is written", () => {
     ...chat.matchAll(/\{[^\n]*?askMood[^\n]*?&& \(/gm),
     ...chat.matchAll(/askingAfter\s*=\s*[\s\S]{0,200}?;/g),
   ].map((m) => m[0]);
-  ok(moodGuards.length >= 2,
+  /*
+    A fourth shape, and the floor had to come down with it. The card is gone —
+    the weight question is the room's own last sentence now, decided in
+    `arc.ts` — so there is one surface reading `askMood` where there were two.
+
+    One is not a weakened rule, it is the true count, and the floor still does
+    its job: point this sweep at nothing and it reads zero and fails. What
+    protects the rule is the filter below, which requires *every* surface it
+    finds to wait, so a surface added tomorrow is covered without anybody
+    remembering to raise a number.
+  */
+  ok(moodGuards.length >= 1,
     `${moodGuards.length} guards open on askMood`,
     "a sweep that walks nothing passes loudest — and this one used to walk one line");
   const impatient = moodGuards.filter((g) => !/!offer/.test(g) || !/!answering/.test(g));
@@ -17254,8 +17266,8 @@ check("143 The weight is asked for in the periphery, and refusal ends the asking
     that checks its own copy passes while the product regresses.
   */
   const {
-    shouldInvite, inviteSpent, stillTeaching,
-    WHISPER_IDLE_MS, WHISPER_LONG_WORDS, IGNORES_BEFORE_SILENT, TEACHING_SITTINGS,
+    shouldInvite, inviteSpent,
+    WHISPER_IDLE_MS, WHISPER_LONG_WORDS, IGNORES_BEFORE_SILENT,
     WHISPER_MIN, WHISPER_MAX, SETTLE_MS, LINGER_MS,
   } = whisper;
   const at = (over) => ({ pending: true, words: 0, idleMs: 0, ignored: 0, closing: false, ...over });
@@ -17305,9 +17317,28 @@ check("143 The weight is asked for in the periphery, and refusal ends the asking
   is(shouldInvite(at({ words: WHISPER_LONG_WORDS, idleMs: WHISPER_IDLE_MS })), "long",
     "and their reason beats our timer");
 
-  // The card teaches and then gets out of the way.
-  ok(stillTeaching(0) && stillTeaching(TEACHING_SITTINGS - 1), "the first sittings get the card");
-  ok(!stillTeaching(TEACHING_SITTINGS), "and it retires rather than becoming furniture");
+  /*
+    THE CARD IS GONE AND THE ROOM ASKS INSTEAD
+
+    `stillTeaching` and `TEACHING_SITTINGS` were asserted here and they no
+    longer exist. The argument they encoded was right — nobody finds a
+    15%-opacity control on their own — and the conclusion was wrong: a card
+    teaches the control by announcing that the room wants something, which is
+    the demand this whole rule exists to remove, merely drawn twice.
+
+    What teaches it now is the room asking in words. `arc.ts` decides a sitting
+    is landing, the reply's own last question becomes the weight question, and
+    `asked` lifts the track on that turn. So it outranks every other reason:
+    the others are the room guessing somebody looks ready, this one is a
+    question already on the screen with nothing to answer it.
+  */
+  is(shouldInvite(at({ asked: true, closing: true, words: WHISPER_LONG_WORDS, idleMs: WHISPER_IDLE_MS })),
+    "asked",
+    "the room having asked outranks every guess about when to");
+  is(shouldInvite(at({ asked: true, pending: false })), null,
+    "and it still never asks about a turn that is not there");
+  is(shouldInvite(at({ asked: true, ignored: IGNORES_BEFORE_SILENT })), null,
+    "nor after three noes — the room asked, they declined, that is an answer");
 
   // Under the brief's ceilings: the motion finishes inside 400ms, the strip is
   // back to texture inside two seconds.
@@ -17412,6 +17443,150 @@ let passed = 0;
 console.log(`\nMIND WEAVE — eval suite${BASE ? ` (+ live ${BASE})` : ""}`);
 console.log("─".repeat(72));
 
+check("144 The room lands a sitting — the weight question is the room's own, or nobody's", () => {
+  /*
+    WHAT REPLACED A CARD, AND WHY SHRINKING THE CARD WAS NEVER THE FIX
+
+    "BEFORE YOU GO" became a teaching card and then a hairline with a caption,
+    and it was still an object that appears *beside* the conversation to ask
+    for something. A form drawn quietly is a form. So the question moved into
+    the only place it can be invisible: the room's own last sentence, in the
+    question slot every vent reply already fills.
+
+    Everything below is graded against `arc.ts` itself, because the route
+    imports that module and a suite checking its own copy passes while the
+    product regresses.
+  */
+  const { isLanding, phaseOf, arcProbe, LANDING_PROBE, typicalWords,
+          saysClosing, tapering, LAND_NOT_BEFORE } = arc;
+  const at = (over) => ({
+    exchanges: LAND_NOT_BEFORE, words: 6, typicalWords: 60,
+    moodGiven: false, asked: false, closingWords: false, heavy: false, ...over,
+  });
+
+  // ── the refusals, which are the whole safety of this ────────────────────
+  ok(isLanding(at({})), "a sitting with a shape, tapering off, lands");
+  is(isLanding(at({ heavy: true })), false,
+    "but never while something heavy is open",
+    "winding up a sitting mid-disclosure is the card's crime wearing the room's voice");
+  is(isLanding(at({ asked: true })), false, "never twice in one sitting");
+  is(isLanding(at({ moodGiven: true })), false, "never after they have already said");
+  is(isLanding(at({ exchanges: LAND_NOT_BEFORE - 1 })), false,
+    "and never before the sitting has a middle");
+
+  /*
+    Detected, never scheduled. A fixed turn number would be the card again with
+    a timer on it — the same demand, arriving on somebody else's clock.
+  */
+  is(isLanding(at({ exchanges: 40, words: 200, typicalWords: 60 })), false,
+    "a long sitting alone never lands it — they are still writing");
+  is(isLanding(at({ words: 200, typicalWords: 60, closingWords: true })), true,
+    "their own goodbye does, whatever the length");
+
+  // ── the taper, and the message that is short because they are short ─────
+  ok(tapering(6, 60), "a six-word line after sixty-word ones is tapering");
+  is(tapering(6, 4), false,
+    "somebody whose every message is four words has no habit to taper from",
+    "otherwise a terse person is asked for a number on their fourth turn");
+  is(tapering(40, 60), false,
+    "and forty words after sixty is still writing, not leaving");
+
+  /*
+    Median, not mean. One very long message is exactly what a hard sitting
+    looks like, and a mean would let it drag the baseline up until every later
+    message read as leaving.
+  */
+  is(typicalWords(["a b c", "a b c", "a b c", ...Array(1).fill("w ".repeat(400))]), 3,
+    "one enormous message does not move the habit");
+  is(typicalWords([]), 0, "and nothing said is no habit at all");
+
+  /*
+    `ok` is deliberately not a closing word: "ok so my boss called me" opens a
+    vent, and a room that read that as leaving would ask for a number on the
+    first sentence of the worst thing somebody has to say. `fine` is out for
+    the reason `probes.ts` files it under PERFORM.
+  */
+  ok(saysClosing("anyway, thanks for this"), "a goodbye is read as one");
+  ok(saysClosing("make i go rest small"), "in either language this room speaks");
+  is(saysClosing("ok so my boss called me again today"), false,
+    "and an opening is never read as a goodbye");
+  is(saysClosing("i'm fine, it's nothing"), false, "nor is performing fine");
+
+  // ── the question replaces one, never adds one ───────────────────────────
+  const ordinary = { id: "x", ask: "What would you call it?" };
+  is(arcProbe(false, ordinary).id, "x", "an ordinary turn keeps its own question");
+  is(arcProbe(true, ordinary).id, LANDING_PROBE.id,
+    "and a landing turn swaps it — the reply ends on one question either way",
+    "appending would push every landing reply one sentence over the cap");
+  is(arcProbe(true, null).id, LANDING_PROBE.id, "even when nothing else was chosen");
+
+  /*
+    Unreachable from the ordinary pool, and this is a guard rather than a
+    formality: moved into PROBES it would become a candidate on every turn —
+    the card again, asked at random, with nothing to say it had happened.
+  */
+  is(PROBES.some((p) => p.id === LANDING_PROBE.id), false,
+    "the landing question is not an ordinary candidate");
+  is(LANDING_PROBE.fits("anything at all"), false, "and cannot be selected by a message");
+  ok(LANDING_PROBE.process === true,
+    "it is safe for somebody in the loop",
+    "it asks where they are, which cannot be answered by thinking harder about the thing");
+
+  /*
+    The sharpest one. This sentence is now something the room *says*, so it has
+    to survive the room's own graders — the same ones that would reject it if a
+    model had written it. A question the failsafe would refuse is a question
+    this product may not ask either.
+  */
+  const said = "i have been carrying this all week and i am tired";
+  const landingCase = { id: "arc", message: said, intent: "vent", language: "en", probes: "" };
+  const graded = gradeReply(landingCase, LANDING_PROBE.ask, { said });
+  const refused = graded.filter((f) => f.severity === "fatal" || f.severity === "major");
+  is(refused.map((f) => f.grader).join(" · "), "",
+    "the room's own closing question passes the room's own graders",
+    "a question the failsafe would reject is one this product may not ask either");
+  ok(checkMessage(LANDING_PROBE.ask, "share").ok,
+    "and it would be allowed in a circle too",
+    "the rulebook next door is a second opinion this sentence should not fail");
+
+  /*
+    ── counting, in check 123's shape ──────────────────────────────────────
+    A detector narrowed until it reaches nobody is dead code with a green tick
+    over it; widened until it reaches everybody is the card with extra steps.
+    Measured on the authored corpus rather than on invented sentences.
+  */
+  const rows = fs.readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+    .trim().split("\n").map((l) => JSON.parse(l));
+  ok(rows.length >= 50, `${rows.length} corpus messages read`,
+    "a sweep that walks nothing passes loudest");
+  /*
+    The habit is the corpus's own median, not a number typed here. Pinning it
+    at 60 is what produced the first reading of this bound — 62 of 72, a
+    detector firing on two-thirds of everything — and the fault was the probe
+    manufacturing the condition it was measuring, which is the same mistake
+    that once reported `behavioral_activation` winning 40% of the corpus by
+    pinning `mood: 3`.
+  */
+  const habit = typicalWords(rows.map((r) => r.input));
+  ok(habit > 0, `the corpus habit is ${habit} words`, "a median of nothing measures nothing");
+  const lands = rows.filter((r) => isLanding(at({
+    words: r.input.trim().split(/\s+/).length,
+    typicalWords: habit,
+    closingWords: saysClosing(r.input),
+  })));
+  ok(lands.length > 0, `${lands.length}/${rows.length} of the corpus would land`,
+    "a detector that reaches nobody never asks, and the efficacy signal is gone");
+  ok(lands.length < rows.length / 2,
+    `${lands.length}/${rows.length} is not most of them`,
+    "a detector that reaches everybody is the card again, asked on every turn");
+
+  // Phases exist and are derived, not stored.
+  is(phaseOf(at({ closingWords: true })), "landing", "a landing sitting knows it");
+  is(phaseOf(at({ exchanges: 1, closingWords: false, words: 60 })), "opening",
+    "and an opening one does too");
+});
+
+
 for (const r of results) {
   const good = r.failed.length === 0;
   if (good) passed++;
@@ -17427,6 +17602,7 @@ console.log("─".repeat(72));
   footer reads the same on a clean run — and a run that spent anything says so
   and fails, which is the half that never existed.
 */
+
 const spent = outbound.length === 0
   ? "0 tokens · 0 model calls"
   : `${outbound.length} OUTBOUND CALL${outbound.length === 1 ? "" : "S"} — ${[...new Set(outbound)].join(", ")}`;

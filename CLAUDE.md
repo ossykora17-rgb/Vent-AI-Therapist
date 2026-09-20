@@ -2684,6 +2684,81 @@ files had already run.
 Nothing in the product reads `supabase_migrations`. The statement touched that
 schema and no other.
 
+**The card was the wrong object, not the wrong size.** "BEFORE YOU GO" was a
+full-width card; then the teaching state for two sittings with a hairline after
+it; then a hairline with a caption. Three shapes, each quieter than the last,
+and every one of them **beside** the conversation — its own box, its own
+heading, announcing that the room wants something. A form drawn at 15% opacity
+is a form. Shrinking it was answering the wrong question for three commits.
+
+So the question moved into the only place it can be invisible: **the room's own
+last sentence.** Every vent reply already ends on a question — that is the reply
+contract, and `probeBlock` is the slot it fills. On the turn `arc.ts` decides a
+sitting is landing, the question filling that slot *is* the weight question.
+Same sentence count, same voice, same place on the screen. Nothing pops.
+
+**It costs nothing in the prompt, and that was a hard constraint rather than a
+nicety.** Check 24 measures the heaviest assembly at exactly 3,600 against a
+3,600 ceiling. The arc adds no block and no sentence: it swaps which probe fills
+a slot already paid for. An arc that needed a paragraph would have had to delete
+one, and that is a different commit.
+
+**The threshold was invented and the corpus killed it.** `SHORT_TAIL_WORDS = 12`
+— "short enough to be a goodbye rather than a thought" — reached **62 of 72**
+messages. One measurement nobody had taken explains it: **the median message in
+this product is eleven words.** Twelve was not a short tail, it was the typical
+thing a person writes here. A detector that fires on the median is
+`exact_mirror` at 90 wearing the room's voice, so nobody can even tell they are
+being asked. There is no absolute ceiling now — tapering is relative to their
+own habit and a constant only says when there is a habit to be relative to.
+
+**And the first reading of that bound was a fixture artifact, for the second
+time in this file.** The probe pinned `typicalWords: 60` and so manufactured the
+condition it was measuring — the same mistake as pinning `mood: 3` and reporting
+`behavioral_activation` at 40%. Measured against the corpus's own median the
+detector reaches **5 of 72**, and the corpus is 72 *opening* messages, so that
+is a floor on the real rate rather than an estimate of it.
+
+**The last permanent caption went the same way, by counting.** A body tray sat
+above every composer for ever — `○ WHERE IS IT? ⌄` in mono capitals — with head
+/ throat / chest behind it. Production: **`body_tapped` on 2 of 108 vents.**
+Under two per cent, in exchange for a line of chrome every person reads on every
+turn that announces there is a field to fill in.
+
+The same table says what removing chrome is worth. `pressure_value` is on **45
+of 108** and the only thing that ever changed for it was being promoted out of a
+tray onto the line. Folded behind a caption it was a measurement most people
+never gave; ambient and visible it is the most answered thing here. `chair_picked`,
+still behind a card, is **2 of 108**.
+
+Nothing was lost, which is why it is a deletion and not a redesign:
+`/api/vent` reads `input.bodyTapped ?? classification.body`, so where it sits in
+the body was *already* derived from their own words. The tap was an override on
+a reading the room takes anyway — behind the scenes, which is where it belongs.
+
+**Verified on the wire, because ten green mutations prove nothing about a
+seam.** Four turns through the real route against a real store, nothing stubbed:
+`closing` false, false, false, **true** on *"anyway thanks"*, and false again on
+the same message with `closingAsked` set. The refusal to ask twice is the half
+that protects somebody, and it is the half a static check cannot reach.
+
+**Two findings this change did not act on, both named with their numbers.**
+
+The reply in the screenshot that started this ended mid-sentence on *"First
+you"* — and it is **history, not a live bug**: 5 of 99 stored replies end
+mid-clause and the most recent is 2026-09-11, against a latest vent of
+2026-09-18. The fix has held for a week. Counting first is what stopped a day
+being spent there.
+
+And the front door is still a form. `/chat` opens on *"Question 1 of 3 — which
+chair is you today?"* before a person can type a word, which is the most
+spoon-feeding object left in the product and the first thing anybody meets.
+`chair_picked` at 2 of 108 is what it collects. It is once per device and
+skippable, so it is smaller than the per-turn card — but the honest version is
+a room that opens on the box and learns the chair from how somebody writes.
+That is a product decision with a real redesign behind it, and shipping it
+unverified at the end of a long session is the one thing this file bans.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in

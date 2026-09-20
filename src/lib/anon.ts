@@ -20,7 +20,13 @@ export function anonId(): string {
 export interface QueuedVent {
   message: string;
   pressure: number;
-  bodyTapped: string | null;
+  /*
+    Optional since the tray that set it was removed: production had it on 2 of
+    108 vents, and `/api/vent` derives the same reading from their words with
+    `input.bodyTapped ?? classification.body`. A queued vent that carries
+    nothing here is answered exactly as a live one is.
+  */
+  bodyTapped?: string | null;
   queuedAt: string;
 }
 
