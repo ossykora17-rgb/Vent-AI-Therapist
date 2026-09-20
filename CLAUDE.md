@@ -121,6 +121,17 @@ damaged, because the remote checked — which is the only reason the failure was
 visible at all, and exactly the position every unfingerprinted claim in this
 file was in before it cost something.
 
+**It was learnt twice.** PR #217 was merged after a 409 on
+`126c1331e37ae1fc3f4b19f11d0d3e8b3a4a3f37` — first eight characters real, the
+remaining thirty-two invented, against a true head of
+`126c1331a9af18b2824664c3792fda262a958469`. The paragraph above was written to
+stop exactly this and did not, because a remembered prefix *feels* like a
+fingerprint: it matches the first thing you check. The rule is not "start from
+the real SHA", it is **fetch the whole value at the moment you use it** — and
+the tell is that the merge tool never needs a SHA you typed, only one an API
+returned. Nothing was damaged again, and again the only reason is that the
+remote checks. Two of this file's findings are now about the same field.
+
 ## Rules that are not preferences
 
 **Silence beats a guess.** Flavour below its confidence floor says nothing
