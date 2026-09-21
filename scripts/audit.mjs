@@ -267,8 +267,8 @@ if (!APPLY) {
   What a lighter prompt cannot tell you is whether the rule still bites inside
   a fuller one, and that is stated rather than assumed away.
 */
-const { fitnessOf, sampleCases } = await app("src/lib/vent/fitness.ts");
-const { isImprovement } = await app("src/lib/vent/learned.ts");
+const { fitnessOf, sampleCases, reachesTheModel } = await app("src/lib/vent/fitness.ts");
+const { isImprovement, FITNESS_MIN_CASES } = await app("src/lib/vent/learned.ts");
 const { classify } = await app("src/lib/vent/intent.ts");
 const { selectTactic } = await app("src/lib/vent/tactics.ts");
 const { groundNow } = await app("src/lib/vent/grounding.ts");
@@ -286,13 +286,42 @@ const { MAX_TOKENS } = await app("src/lib/vent/model.ts");
 const FITNESS_MAX_CALLS = 96;
 
 const ground = groundNow();
-const examples = sampleCases(
-  fs
-    .readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((l) => JSON.parse(l)),
-);
+/*
+  Filtered before it is sampled, and asked rather than assumed.
+
+  `reachesTheModel` keeps only what the product would actually send: crisis,
+  greeting, factual and meta are answered locally and for free, and a crisis
+  reaching a model is the one thing `quality.ts` calls fatal. Filtering after
+  sampling would quietly return fewer than twelve; filtering first keeps the
+  sample the size it says it is.
+
+  All 72 rows are vents today — measured, not assumed — so this changes nothing
+  now and is the guard for the day somebody adds a crisis example to a corpus
+  that exists to exercise the room.
+*/
+const eligible = fs
+  .readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+  .split("\n")
+  .filter(Boolean)
+  .map((l) => JSON.parse(l))
+  .filter((ex) => reachesTheModel(ex.input));
+
+if (eligible.length < FITNESS_MIN_CASES) {
+  /*
+    Said out loud rather than left to fail closed on its own. With too few
+    cases `isImprovement` refuses every candidate for ever, and a gate that
+    silently refuses everything is indistinguishable from a gate that is
+    working — the emptiness stops looking like a result, which is the rule the
+    heartbeat already applies to a week with no anchors.
+  */
+  console.log(
+    `\nfitness  only ${eligible.length} of the corpus reach a model, ` +
+      `below the floor of ${FITNESS_MIN_CASES} — nothing can be measured, so nothing is merged.\n`,
+  );
+  process.exit(0);
+}
+
+const examples = sampleCases(eligible);
 
 /*
   Built in a loop rather than a `.map`, because each case's `recentTactics`
@@ -316,17 +345,37 @@ for (const [i, ex] of examples.entries()) {
     pressure: null,
     duality: null,
     mood: null,
+    /*
+      One simulated sitting, not twelve cold opens, and that is a choice.
+
+      Measured over the twelve sampled cases: `ventCount: 0` with no recent
+      tactics selects **2** distinct moves out of forty-five, feeding the block
+      alone takes it to **8**, and `ventCount` climbing changes nothing on top
+      of that. So the block is doing all the work and the turn counter is
+      carried for coherence — claiming turn one while remembering three
+      previous turns is the incoherent mix, not either honest end of it.
+
+      Both arms share all of it, so none of this changes what a delta means. It
+      changes how much of the library a rule is measured against, which is the
+      only reason to prefer one fiction over the other.
+    */
     ventCount: i,
     recentTactics: corpus.slice(-3).map((r) => r.tactic.id),
   };
   corpus.push({
-    // The language is asked for, never typed. Four detectors have disagreed
-    // about this question in this repository and every one cost a false
-    // finding; `classify` is the one that decided every production row.
+    /*
+      Both fields are asked for, and one of them used to be typed.
+
+      The language came from `classify` — the repair this repository has made
+      four times — and `intent` was written out as `"vent"` three lines below
+      it, in the same object literal. See `reachesTheModel`: a typed intent is
+      a wrong reading of the reply and, worse, a bill for a path the product
+      never takes.
+    */
     case: {
       id: `fit-${i}`,
       message: ex.input,
-      intent: "vent",
+      intent: classification.intent,
       language: classification.language === "pidgin" ? "pidgin" : "en",
       probes: "",
     },

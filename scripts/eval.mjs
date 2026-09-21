@@ -17699,7 +17699,7 @@ check("144 The room lands a sitting — the weight question is the room's own, o
 
 
 // ── 145. the fitness gate: a rule is measured, or it is not merged ─────────
-const { fitnessOf, sampleCases, FITNESS_CASES } = await app("src/lib/vent/fitness.ts");
+const { fitnessOf, sampleCases, FITNESS_CASES, reachesTheModel } = await app("src/lib/vent/fitness.ts");
 
 check("145 A proposed rule is measured against the prompt without it, or refused", () => {
   /*
@@ -17926,6 +17926,33 @@ check("145 A proposed rule is measured against the prompt without it, or refused
     `${new Set(built.map((b) => b.tactic)).size} distinct tactics across ${built.length} cases`,
     "a fitness run that only ever carries two moves measures the rule against two moves");
 
+  // ── nothing is measured on a path the product never takes ──────────────
+  /*
+    THE LANGUAGE WAS ASKED FOR AND THE INTENT WAS TYPED, THREE LINES APART
+
+    Both fields of `GoldenCase` describe what the router decided. The harness
+    read `classify` for one and wrote `intent: "vent"` by hand for the other,
+    in the same object literal — the fourth-Pidgin-detector repair, applied to
+    one sibling and not the other.
+
+    The wrong reading is the smaller half. The product answers crisis,
+    greeting, factual and meta locally and for free, and a crisis reaching a
+    model is the one thing `quality.ts` calls **fatal** — so a fitness run that
+    paid for them would be buying replies on a path that does not exist, with a
+    crisis message.
+  */
+  ok(reachesTheModel("rent is due and i am tired of everything"),
+    "an ordinary vent is worth measuring");
+  ok(!reachesTheModel("i want to kill myself"),
+    "a crisis message is never sent to a model by a fitness run",
+    "the product answers it locally, and a crisis reaching a model is fatal");
+  ok(!reachesTheModel("hi"), "and neither is a greeting — the free paths stay free");
+
+  const eligible = examples.filter((ex) => reachesTheModel(ex.input));
+  ok(eligible.length >= FITNESS_CASES,
+    `${eligible.length} of ${examples.length} authored rows reach a model`,
+    "below FITNESS_CASES there is nothing to sample and every rule is refused for ever");
+
   // ── and the caller, read off the script that ships ──────────────────────
   /*
     A correct gate nothing calls is the shape of half the findings in
@@ -17934,6 +17961,21 @@ check("145 A proposed rule is measured against the prompt without it, or refused
     file actually says.
   */
   const audit = strip(fs.readFileSync(path.join(ROOT, "scripts/audit.mjs"), "utf8"));
+
+  ok(/reachesTheModel\(ex\.input\)/.test(audit),
+    "the script filters the corpus to what the product would actually send");
+  ok(audit.indexOf("reachesTheModel(ex.input)") < audit.indexOf("sampleCases("),
+    "and it filters BEFORE it samples",
+    "filtering after sampling quietly returns fewer than twelve cases");
+  ok(/intent: classification\.intent/.test(audit),
+    "the case's intent is asked for, not typed");
+  ok(!/intent: "vent"/.test(audit),
+    "and no intent is written out by hand anywhere in the script",
+    "the language is asked for three lines away; a typed sibling is the same bug");
+  ok(/eligible\.length < FITNESS_MIN_CASES/.test(audit),
+    "a corpus too small to measure says so rather than refusing everything in silence",
+    "a gate that silently refuses every candidate looks exactly like one that works");
+
   ok(/isImprovement\(fitness\)/.test(audit), "--apply asks whether the candidate improved",
     "without this the gate is a module nothing calls");
   ok(/fitnessOf\(pairs\)/.test(audit), "and it measures rather than assuming a fitness");
