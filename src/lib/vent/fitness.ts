@@ -1,4 +1,5 @@
 import { gradeReply, type Finding, type GoldenCase } from "./quality";
+import { classify } from "./intent";
 import type { Fitness } from "./learned";
 
 /**
@@ -174,4 +175,35 @@ export function sampleCases<T>(all: readonly T[], take = FITNESS_CASES): T[] {
   if (all.length <= take) return [...all];
   const step = all.length / take;
   return Array.from({ length: take }, (_, i) => all[Math.floor(i * step)]);
+}
+
+/**
+ * The cases a fitness run may spend on, asked rather than assumed.
+ *
+ * THE LANGUAGE WAS ASKED FOR AND THE INTENT WAS TYPED, THREE LINES APART
+ *
+ * The harness built every case with `language` from `classify` — the repair
+ * this repository has now made four times — and `intent: "vent"` written out
+ * by hand in the same object literal. Both halves of `GoldenCase` describe what
+ * the router decided; one of them was asking and the other was declaring.
+ *
+ * It costs two things, and the second is the one that matters. A non-vent case
+ * labelled `vent` is graded as a vent, which is a wrong reading. But the
+ * product never sends crisis, greeting, factual or meta to a model at all —
+ * they are answered locally and for free, and a crisis reaching a model is the
+ * one thing `quality.ts` calls **fatal**. So a fitness run that paid for them
+ * would be buying replies on a path that does not exist, and doing it with a
+ * crisis message.
+ *
+ * Nothing is wrong today: all 72 authored rows classify as `vent`, measured
+ * rather than assumed. That is luck with a shelf life — the corpus exists to
+ * exercise the room and a crisis example is an obvious thing to add to it — and
+ * it is the same luck `providers.ts` had about URLs before check 128.
+ *
+ * Both fields come from the classifier now, so the two cannot disagree, and
+ * there is no list of intents here to go stale: what the product answers for
+ * free is what it does not send, and this asks.
+ */
+export function reachesTheModel(message: string): boolean {
+  return classify(message).intent === "vent";
 }

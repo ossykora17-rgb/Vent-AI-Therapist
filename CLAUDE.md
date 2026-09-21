@@ -1192,13 +1192,60 @@ changes how much of the library a rule is measured against. Same shape as
 pinning `mood: 3` and reporting `behavioral_activation` at forty per cent, and
 found the same way: by printing the number instead of assuming it.
 
-**The bill, measured rather than estimated.** The prompts built for the twelve
-sampled cases run 1,456–1,563 words, so a candidate costs 24 calls at roughly
-2,000 tokens in and at most 600 out — about **$0.24** on Sonnet 5's $2/$10 per
-million, and under a dollar for a night that proposes three. The budget is 96
-calls and a candidate that cannot be measured inside it is **refused, not
-merged**: running out of money must fail closed, not fall back to the behaviour
-this block replaced.
+**The bill, measured — and the first measurement of it was a word count.**
+That sentence said "1,456–1,563 words, so roughly 2,000 tokens in". Words times
+a remembered ratio is the shape rule 7 bans, and it was eleven per cent low.
+Measured with check 24's own estimator, which is the one number in this
+repository allowed to say what a prompt costs: **2,138–2,329 tokens** per call,
+**53,200** across the 24 calls a candidate takes. At Sonnet 5's $2/$10 per
+million that is **$0.25 at the 600-token output ceiling and about $0.12 at the
+reply lengths this room actually produces** — under a dollar for a night that
+proposes three either way, so nothing downstream changes and the method still
+had to.
+
+The budget is 96 calls and a candidate that cannot be measured inside it is
+**refused, not merged**: running out of money must fail closed, not fall back to
+the behaviour this block replaced.
+
+**And the recheck found the language asked for and the intent typed, three
+lines apart, in the same object literal.** `GoldenCase` has two fields
+describing what the router decided. The harness read `classify` for
+`language` — the repair this file records four times — and wrote `intent:
+"vent"` by hand directly beneath it.
+
+The wrong reading is the smaller half. The product answers crisis, greeting,
+factual and meta locally and for free, and a crisis reaching a model is the one
+thing `quality.ts` calls **fatal** — so a fitness run that paid for those would
+be buying replies on a path that does not exist, with a crisis message. Both
+fields come from the classifier now and the corpus is filtered by
+`reachesTheModel` **before** it is sampled, because filtering after quietly
+returns fewer than twelve.
+
+All 72 authored rows classify as `vent` today — measured, not assumed — so this
+changed nothing and is the guard for the day somebody adds a crisis example to a
+corpus whose whole job is exercising the room. Luck with a shelf life, the same
+luck `providers.ts` had about URLs before check 128. And a corpus too small to
+sample now **says so** rather than refusing every candidate in silence, because
+a gate that silently refuses everything looks exactly like one that works.
+
+**The other recheck finding was a fiction that bought nothing, until it was
+counted.** The corpus build carried `ventCount: i` beside a heavily documented
+`recentTactics`, undocumented. Measured over the twelve sampled cases:
+`ventCount: 0` with no recent tactics selects **2** distinct moves out of
+forty-five, feeding the block alone takes it to **8**, and the turn counter
+changes nothing on top of that. So the block does all the work. It was kept
+anyway and written down, because claiming turn one while remembering three
+previous turns is the incoherent mix rather than either honest end of it — one
+simulated sitting is a choice, twelve cold opens is a choice, and both arms
+share it either way.
+
+**And the claim that this change needed no live pass was checked rather than
+asserted.** CLAUDE.md says to run `npm run live-checks` before pushing anything
+that touches a rule with a copy on the wire, and the fitness gate touches no
+route, page or user-facing string. Run anyway: **16 · 16 · 12 · 4** across the
+store, unconfigured, failing-store and half-applied-schema shapes, with the live
+suite at 155/155 and 4,265 assertions. The claim was right, which is not the
+reason to have skipped it.
 
 ## When not to automate
 
