@@ -71,8 +71,10 @@ const { PROBES, selectProbe, probeBlock, isBroad } = await app("src/lib/vent/pro
 const { parseNotes, keepable, notesBlock, NOTE_KINDS, MAX_IN_PROMPT, MAX_SUBJECT, MAX_DETAIL, CONDITIONS,
         NOTES_ASKED, NOTES_INSTRUCTION } =
   await app("src/lib/vent/notes.ts");
-const { acceptable, prune, learnedBlock, MAX_LEARNED, MAX_RULE_CHARS, LEARNED_RULES } =
-  await app("src/lib/vent/learned.ts");
+const {
+  acceptable, prune, learnedBlock, MAX_LEARNED, MAX_RULE_CHARS, LEARNED_RULES,
+  isImprovement, totalDelta, FITNESS_MIN_CASES,
+} = await app("src/lib/vent/learned.ts");
 const { RPC_CONTRACT, TABLE_CONTRACT } = await app("src/lib/store/contract.ts");
 const { HELD_CAP, BREAKING_CAP } = await app("src/lib/store/types.ts");
 const { measurePersonalEfficacy, blendEfficacy, PERSONAL_SPAN } =
@@ -17143,15 +17145,62 @@ check("141 The audit's free half does not need the paid half installed", () => {
   ok(exitAt > 0, "the no-key branch still exists",
     "without it a night with no key is a crash rather than a report");
 
-  for (const [what, needle] of [
-    ["the SDK", '"@anthropic-ai/sdk"'],
-    ["the model id", 'app("src/lib/vent/providers.ts")'],
-  ]) {
-    const at = audit.indexOf(needle);
-    ok(at > 0, `${what} is imported`);
-    ok(at > exitAt, `and ${what} is imported BELOW the no-key exit`,
+  /*
+    AND THE LIST OF PAID IMPORTS IS DERIVED, BECAUSE A HAND-WRITTEN ONE HAD A
+    HOLE THE MOMENT THIS FILE GREW A THIRD
+
+    This named two: the SDK and `providers.ts`. Then the fitness gate imported
+    `prompt.ts`, which reaches `research.ts`, which imports the SDK statically
+    — a third paid import that the hand-written pair could never have seen.
+    It happened to be placed correctly; nothing here would have said so if it
+    had not been. "Derive the list, or the list is the bug", in the check whose
+    whole subject is an import in the wrong place.
+
+    What makes an import paid is not its name. It is whether the module it
+    pulls reaches a package that `npm ci` would have had to install, and the
+    workflow runs no `npm ci`. So the graph is walked.
+  */
+  const pkgsOf = (entry) => {
+    const seen = new Set();
+    const pkgs = new Set();
+    const stack = [entry];
+    while (stack.length) {
+      const f = stack.pop();
+      if (seen.has(f) || !fs.existsSync(f)) continue;
+      seen.add(f);
+      const text = strip(fs.readFileSync(f, "utf8"));
+      for (const m of text.matchAll(/^import[^\n]*?from\s+"([^"]+)"|^import\s+"([^"]+)"/gm)) {
+        const spec = m[1] ?? m[2];
+        if (spec.startsWith("./")) stack.push(path.join(path.dirname(f), spec.slice(2)) + ".ts");
+        else if (spec.startsWith("@/")) stack.push(path.join(ROOT, "src", spec.slice(2)) + ".ts");
+        else if (!spec.startsWith("node:")) pkgs.add(spec);
+      }
+    }
+    // `server-only` is a build-time marker the loader neutralises at resolve,
+    // so it is not a thing `npm ci` has to have installed for this to run.
+    pkgs.delete("server-only");
+    return pkgs;
+  };
+
+  const loaded = [...audit.matchAll(/app\("(src\/[^"]+)"\)/g)].map((m) => ({
+    spec: m[1],
+    at: m.index,
+  }));
+  ok(loaded.length >= 4, `${loaded.length} app() imports read out of audit.mjs`,
+    "a sweep that walks nothing passes loudest");
+
+  const paid = loaded.filter((l) => pkgsOf(path.join(ROOT, l.spec)).size > 0);
+  ok(paid.length >= 1, `${paid.length} of them reach a package npm would install`,
+    "if none do, this check is no longer measuring anything and should be re-read");
+  for (const l of paid) {
+    ok(l.at > exitAt, `${l.spec} is imported BELOW the no-key exit`,
       "a paid dependency above that branch makes the free half unreachable without an install");
   }
+
+  const sdk = audit.indexOf('"@anthropic-ai/sdk"');
+  ok(sdk > 0, "the SDK is imported directly too");
+  ok(sdk > exitAt, "and the direct SDK import is BELOW the no-key exit",
+    "the dynamic import is the one that threw ERR_MODULE_NOT_FOUND on run 29");
 
   /*
     And the workflow still installs nothing, because that is the property this
@@ -17646,6 +17695,276 @@ check("144 The room lands a sitting — the weight question is the room's own, o
   is(phaseOf(at({ closingWords: true })), "landing", "a landing sitting knows it");
   is(phaseOf(at({ exchanges: 1, closingWords: false, words: 60 })), "opening",
     "and an opening one does too");
+});
+
+
+// ── 145. the fitness gate: a rule is measured, or it is not merged ─────────
+const { fitnessOf, sampleCases, FITNESS_CASES } = await app("src/lib/vent/fitness.ts");
+
+check("145 A proposed rule is measured against the prompt without it, or refused", () => {
+  /*
+    WHAT THIS CLOSES, AND WHY `acceptable()` WAS NEVER IT
+
+    `--apply` merged whatever the nightly model proposed, as long as
+    `acceptable()` did not refuse it on shape — short enough, concrete enough,
+    does not reopen a house rule. That is a spelling check standing where a
+    fitness function belongs. It cannot say whether a rule makes one reply
+    better, and nothing else could either, so a rule reached everybody who uses
+    this on the strength of a model's opinion of its own output.
+
+    Every published version of reflective prompt evolution has a scorer in that
+    slot: the reflection proposes and the score decides. A generation with no
+    score is a random walk with a changelog, which is the drift `learned.ts`
+    opens by describing and had no defence against.
+
+    Graded here rather than in the script. The measurement is paid and lives
+    below the no-key exit in `audit.mjs`; the arithmetic over two sets of
+    replies is free and pure and lives in `fitness.ts`, so this grades the
+    function the script calls instead of a copy of it. `countsAsSpend` is the
+    precedent — a predicate re-implemented at a call site is a predicate no
+    check is grading.
+  */
+  const c = (i) => ({
+    id: `f${i}`,
+    message: "rent is due and i am tired of everything",
+    intent: "vent",
+    language: "en",
+    probes: "",
+  });
+  // Two replies differing in one grader: the second names a mechanism without
+  // unpacking it, which is the sentence `jargon` exists for.
+  const clean = "That has been sitting on you a while. What is the part you have not said out loud?";
+  const jargony = "You are experiencing internalized instrumentalization. What have you not said out loud?";
+  // A rule that fires in BOTH arms, so a grader that does not move has
+  // something to be left out of. Without one, "no zeroes in the record" is an
+  // assertion about a record that never had a zero in it — the probe in the
+  // wrong window, which is how the first version of this check let a mutation
+  // keeping the zeroes walk straight through.
+  const advice = "You should just take a walk and try to sleep earlier.";
+  const pairs = (without, withIt, n = 10) =>
+    Array.from({ length: n }, (_, i) => ({
+      case: c(i), said: c(i).message,
+      without: `${advice} ${without}`, with: `${advice} ${withIt}`,
+    }));
+
+  // ── the arithmetic ──────────────────────────────────────────────────────
+  const better = fitnessOf(pairs(jargony, clean));
+  is(better.cases, 10, "every pair is counted");
+  ok(totalDelta(better) < 0, `total ${totalDelta(better)} is negative`,
+    "negative is fewer graders fired, which is the whole sign convention");
+  ok(better.delta.jargon < 0, "and the grader that actually moved is the one named",
+    "a delta that cannot say which promise improved is a score, not evidence");
+
+  const worse = fitnessOf(pairs(clean, jargony));
+  ok(totalDelta(worse) > 0, "the same pair reversed is a regression",
+    "if the sign does not flip, this is measuring something other than the rule");
+
+  /*
+    Graders that did not move are left out. This object is committed into
+    `learned.ts` by `--apply`, so a wall of zeroes is noise in a public file and
+    the record is what changed. It is also why this field may be written there
+    at all, one field after `found` was deleted for not being: grader names and
+    integers, and nothing of anybody's.
+  */
+  const bothArms = gradeReply(c(0), `${advice} ${clean}`, { tokensSpent: true, said: c(0).message });
+  ok(bothArms.length > 0, `${bothArms.length} graders fire on both arms alike`,
+    "with nothing firing in both, the assertion below is about a record that never had a zero in it");
+  ok(
+    Object.values(better.delta).every((d) => d !== 0),
+    `${Object.keys(better.delta).length} graders in the record, none of them zero`,
+    "a grader that did not move is not evidence, and this string lands in a public file",
+  );
+  ok(
+    Object.keys(better.delta).every((k) => /^[a-z_]+$/.test(k)),
+    "and every key is a grader name rather than a sentence",
+    "a detail quotes the reply, which here is usually the person's own words",
+  );
+  is(JSON.stringify(fitnessOf(pairs(clean, clean)).delta), "{}",
+    "two identical arms move nothing at all");
+
+  // ── a grader that cannot tell the arms apart is not evidence ────────────
+  /*
+    This block used to assert that `skipped` findings were excluded, and it
+    asserted it of a guard that could not fire: both arms of a pair are billed
+    identically by construction, so a grader that did not run fires in both or
+    in neither and cancels. The mutation pass is what said so — deleting the
+    guard changed nothing any check could see. The property that is actually
+    load-bearing is the cancellation, so that is what is graded.
+  */
+  const unbilled = gradeReply(c(0), clean, { tokensSpent: false });
+  ok(unbilled.some((f) => f.severity === "skipped"),
+    `a reply with no model call behind it is graded ${unbilled[0].grader}/skipped`,
+    "if nothing is ever skipped, the sentence in fitness.ts is describing nothing");
+  ok(
+    !Object.keys(better.delta).some((g) => unbilled.some((f) => f.grader === g)),
+    `no grader common to both arms survives into the record (${Object.keys(better.delta).join(", ")})`,
+    "a grader that fired the same on both sides says nothing about the rule",
+  );
+
+  // ── the dominance test ──────────────────────────────────────────────────
+  /*
+    Not an average. A rule that removes four `jargon` findings and introduces
+    one `diagnosis` has a better total and is a strictly worse product — a
+    clinical label is not something a person can un-hear, which is why
+    `diagnosis` is fatal and sits in the failsafe's rejection set. Summing
+    first and judging second is exactly how four small wins buy one of those.
+  */
+  const f = (delta, cases = FITNESS_MIN_CASES) => ({ cases, delta });
+  ok(isImprovement(f({ jargon: -3 })), "a rule that only ever helps is kept");
+  ok(!isImprovement(f({ jargon: -4, diagnosis: 1 })),
+    "a rule trading four jargon findings for one diagnosis is refused",
+    "its total is -3, so an average would have merged it");
+  ok(!isImprovement(f({})), "a rule that moved nothing is not an improvement");
+  ok(!isImprovement(undefined), "and an unmeasured rule is never an improvement",
+    "absent evidence is the state this gate exists to refuse, not a pass");
+  ok(!isImprovement(f({ jargon: -3 }, FITNESS_MIN_CASES - 1)),
+    `fewer than ${FITNESS_MIN_CASES} cases is noise wearing a number`);
+  ok(FITNESS_CASES > FITNESS_MIN_CASES,
+    `${FITNESS_CASES} cases measured against a floor of ${FITNESS_MIN_CASES}`,
+    "a run sitting on its own floor cannot afford to lose a case to a transport error");
+
+  // ── the frontier, which is what prune keeps now ─────────────────────────
+  /*
+    Three slots and a queue is a list that forgets its best rule the moment a
+    fourth arrives. An unscored rule ranks as zero, which is the load-bearing
+    default: proven beats assumed, assumed beats a regression, and recency is
+    the tie-break rather than the rank — so with nothing scored this returns
+    exactly what it always returned.
+  */
+  const r = (id, d, added) => ({
+    id, rule: "x", added,
+    ...(d === null ? {} : { fitness: { cases: FITNESS_MIN_CASES, delta: { advice: d } } }),
+  });
+  is(
+    prune([
+      r("old", null, "2026-01-01"), r("best", -5, "2026-01-02"),
+      r("new", null, "2026-01-04"), r("good", -2, "2026-01-03"),
+    ]).map((x) => x.id).join(","),
+    "best,good,new",
+    "the measured rules win their slots and the newest unmeasured one takes what is left",
+  );
+  is(
+    prune([
+      r("a", null, "2026-01-01"), r("b", null, "2026-01-02"),
+      r("c", null, "2026-01-03"), r("d", null, "2026-01-04"),
+    ]).map((x) => x.id).join(","),
+    "d,c,b",
+    "and with nothing measured it is still the newest three, exactly as before",
+  );
+
+  // ── the sample, where held-out is the load-bearing word ─────────────────
+  /*
+    The candidate was proposed from flat production replies, so measuring it on
+    those same replies is fitting the rule to its own sample — `earned_worth`
+    weighted on a sample of three, which this repository has already paid for.
+    The authored corpus is the set the rule has never seen.
+  */
+  const spread = sampleCases([...Array(72).keys()]);
+  is(spread.length, FITNESS_CASES, "the sample is the size it says it is");
+  is(JSON.stringify(spread), JSON.stringify(sampleCases([...Array(72).keys()])),
+    "and it is deterministic, so a re-run of the same candidate means something");
+  ok(spread[spread.length - 1] > 60, `it reaches row ${spread[spread.length - 1]} of 72`,
+    "the first twelve rows of a hand-written file are twelve rows one person wrote in one sitting");
+  is(sampleCases([1, 2, 3]).length, 3, "a corpus smaller than the sample is taken whole");
+
+  // ── the seam, which is the only part a static check can reach ──────────
+  /*
+    EVERY PART WORKING IS NOT THE FEATURE WORKING — FOR THE SIXTH TIME
+
+    The notes had a migration, a table, a refusal, a page and two checks, and
+    produced zero rows in a month. The push had a table, two routes, a service
+    worker and a destruction path, and never rang. This gate has a module, a
+    caller, a mutation pass and everything above — and the one failure that
+    would make all of it worthless is the two arms building the *same prompt*,
+    in which case every delta is sampler noise and the gate reads as working.
+
+    The model calls cannot be made here; the prompts can. Both arms are built
+    through the real builder, over the real corpus, with the real classifier
+    and the real selector — which is the whole of what `audit.mjs` does before
+    it spends anything.
+  */
+  const examples = fs
+    .readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+    .split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const ground = groundNow();
+  const rule = { id: "probe", rule: "Name the mechanism in their own words before any question.", added: "2026-09-21" };
+
+  const sampled = sampleCases(examples);
+  is(sampled.length, FITNESS_CASES, `${sampled.length} real cases built through the real builder`);
+
+  const built = [];
+  for (const [i, ex] of sampled.entries()) {
+    const classification = classify(ex.input);
+    const ctx = {
+      ...classification, message: ex.input, pressure: null, duality: null, mood: null,
+      ventCount: i, recentTactics: built.slice(-3).map((b) => b.tactic),
+    };
+    const tactic = selectTactic(ctx);
+    const of = (learned) => buildSystemPrompt({
+      grounding: ground, classification, tactic, ctx, memory: [], message: ex.input, learned,
+    });
+    built.push({ tactic: tactic.id, without: of([]), with: of([rule]) });
+  }
+
+  ok(built.every((b) => b.with !== b.without), "the two arms never build the same prompt",
+    "identical arms make every delta sampler noise, and the gate reads as working");
+  ok(built.every((b) => b.with.includes(rule.rule)), "the rule under test reaches the with-arm",
+    "learnedBlock renders r.rule, and a candidate of the wrong shape would render nothing");
+  ok(built.every((b) => !b.without.includes(rule.rule)), "and never reaches the without-arm");
+  ok(
+    built.every((b) => b.with.startsWith(STABLE_PREFIX)) && built.every((b) => b.without.startsWith(STABLE_PREFIX)),
+    "both arms still start on the cacheable prefix, byte for byte",
+  );
+  /*
+    The three-turn block is fed from the run itself. Left empty it never fires,
+    one weight wins repeatedly, and twelve cases came back carrying **two**
+    tactics out of forty-five — measured, not suspected. Both arms share the
+    tactic either way, so this does not change what a delta means; it changes
+    how much of the library the rule is measured against.
+  */
+  ok(new Set(built.map((b) => b.tactic)).size >= 5,
+    `${new Set(built.map((b) => b.tactic)).size} distinct tactics across ${built.length} cases`,
+    "a fitness run that only ever carries two moves measures the rule against two moves");
+
+  // ── and the caller, read off the script that ships ──────────────────────
+  /*
+    A correct gate nothing calls is the shape of half the findings in
+    CLAUDE.md. The merge used to be `prune([...accepted, ...LEARNED_RULES])`,
+    and the only thing standing between this and that line again is what the
+    file actually says.
+  */
+  const audit = strip(fs.readFileSync(path.join(ROOT, "scripts/audit.mjs"), "utf8"));
+  ok(/isImprovement\(fitness\)/.test(audit), "--apply asks whether the candidate improved",
+    "without this the gate is a module nothing calls");
+  ok(/fitnessOf\(pairs\)/.test(audit), "and it measures rather than assuming a fitness");
+  ok(/prune\(\[\.\.\.kept, \.\.\.LEARNED_RULES\]\)/.test(audit),
+    "and the merge is fed what survived, never what was proposed",
+    "prune([...accepted, ...]) is the line this check was written for");
+  ok(!/prune\(\[\.\.\.accepted/.test(audit), "the old unmeasured merge is gone");
+  ok(/kept\.length === 0/.test(audit),
+    "a night where nothing measured better merges nothing",
+    "falling back to the proposals when the gate refuses them all is failing open");
+  ok(!/technique:/.test(audit),
+    "and the fitness run never asks research() for a technique",
+    "research() is a paid web search, and a run quietly buying one per case is the suite's typed zero again");
+  /*
+    And the spread above is asserted of the *script*, not only of the copy
+    built here. A suite that checks its own construction passes while the
+    thing regresses — the oldest rule in CLAUDE.md, and the block above is
+    exactly the shape that breaks it.
+  */
+  ok(
+    /replyTo\(row, \[\]\)/.test(audit) && /replyTo\(row, \[candidate\]\)/.test(audit),
+    "the script's own two arms are the empty list and the candidate",
+    "the seam block above builds its own arms, so only this sees the script building one",
+  );
+  ok(/recentTactics: corpus\.slice\(-3\)/.test(audit),
+    "the fitness run feeds the three-turn block from its own run",
+    "empty, one weight wins repeatedly and twelve cases carry two tactics out of forty-five");
+  const groundAt = audit.indexOf("const ground = groundNow()");
+  ok(groundAt > 0 && audit.indexOf("groundNow()", groundAt + 26) === -1,
+    "grounding is read once for the whole run",
+    "it carries a millisecond ISO, so a second read makes the arms differ by more than the rule");
 });
 
 

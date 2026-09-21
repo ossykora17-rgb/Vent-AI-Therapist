@@ -37,6 +37,16 @@ export interface LearnedRule {
   rule: string;
   /** ISO date the audit proposed it. */
   added: string;
+  /**
+   * What it did to the corpus when it was measured, or absent.
+   *
+   * Optional on purpose. A rule can arrive without a measurement — somebody
+   * hand-writes one — and an unscored rule ranks as a delta of zero, so a rule
+   * *proven* to help beats an assumed one and nothing silently outranks a
+   * measurement by being newer. Every rule `--apply` merges carries one,
+   * because the gate below refuses the merge otherwise.
+   */
+  fitness?: Fitness;
   /*
     THERE IS NO `found`, AND THE EVIDENCE RULE IT SERVED IS STILL ENFORCED
 
@@ -59,6 +69,68 @@ export interface LearnedRule {
     as `Verdict.reject` carrying grader names: the gate keeps its input, the
     record does not.
   */
+}
+
+/**
+ * What a candidate rule did to the corpus, measured against itself.
+ *
+ * WHY A DELTA AND NOT A SCORE
+ *
+ * An absolute score is not comparable across runs: a different sample, a
+ * different day and a different model checkpoint all move it, so ranking
+ * Monday's rule against Friday's would be comparing two measurements of two
+ * different things. A **paired** delta — the same cases, the same model, the
+ * same minute, once with the rule and once without — is the quantity that
+ * survives being compared later.
+ *
+ * Negative is fewer findings, which is better. The sign is counter-intuitive
+ * once and correct for ever after, because what is being counted is graders
+ * that fired.
+ */
+export interface Fitness {
+  /** Corpus cases scored, both with and without the rule, in one run. */
+  cases: number;
+  /** Per-grader change. Negative is fewer findings; better. */
+  delta: Readonly<Record<string, number>>;
+}
+
+/**
+ * Cases below which a delta is noise wearing a number.
+ *
+ * Eight. Not tuned — there is no labelled set to tune against — but it is the
+ * floor at which a single flaky reply cannot decide the whole verdict, and it
+ * is stated rather than left implicit. A candidate measured on fewer is
+ * refused rather than believed.
+ */
+export const FITNESS_MIN_CASES = 8;
+
+/** Graders that fired more, minus graders that fired less. */
+export function totalDelta(f: Fitness | undefined): number {
+  if (!f) return 0;
+  return Object.values(f.delta).reduce((n, d) => n + d, 0);
+}
+
+/**
+ * Is this a Pareto improvement, rather than a better average?
+ *
+ * THE DOMINANCE TEST IS THE WHOLE POINT, AND AN AVERAGE WOULD NOT DO IT
+ *
+ * A rule that removes four `jargon` findings and introduces one `diagnosis`
+ * has a better total and is a strictly worse product: this file's neighbours
+ * spend paragraphs on why a clinical label is not something a person can
+ * un-hear. Summing first and judging second hides exactly that trade.
+ *
+ * So the test is dominance — **no grader may get worse**, and at least one
+ * must get better. It is what GEPA means by keeping a Pareto frontier rather
+ * than the best scalar, applied where this product's objectives actually live:
+ * the fourteen graders, each of which is a separate promise.
+ */
+export function isImprovement(f: Fitness | undefined): boolean {
+  if (!f) return false;
+  if (f.cases < FITNESS_MIN_CASES) return false;
+  const deltas = Object.values(f.delta);
+  if (deltas.some((d) => d > 0)) return false;
+  return deltas.some((d) => d < 0);
 }
 
 /** What the prompt's budget can carry. Raising it means raising that too. */
@@ -152,7 +224,24 @@ export function learnedBlock(rules: readonly LearnedRule[] = LEARNED_RULES): str
 }
 
 /**
- * The newest three, oldest dropped.
+ * The best three, worst dropped — and it used to be the newest three.
+ *
+ * WHAT WAS WRONG WITH RECENCY
+ *
+ * Three slots and a queue is a list that forgets its best rule the moment a
+ * fourth arrives. The loop this feeds is reflective prompt evolution, and
+ * every published version of that keeps a frontier of what *scored*, not a
+ * window of what is recent — a generation that throws away its champion is
+ * not evolution, it is drift with a changelog.
+ *
+ * Rank is `totalDelta` ascending, because negative is fewer findings. An
+ * **unscored rule ranks as zero**, which is the load-bearing default: a rule
+ * proven to help outranks an assumed one, an assumed one outranks nothing, and
+ * a proven regression cannot exist here because `--apply` refuses to merge a
+ * candidate that is not a Pareto improvement.
+ *
+ * Recency is the tie-break and not the rank, so with nothing scored this
+ * returns exactly what it always returned.
  *
  * Exported and pure so the audit's merge step and the eval suite agree about
  * what "keep the best three" means — the alternative is the script having its
@@ -160,6 +249,10 @@ export function learnedBlock(rules: readonly LearnedRule[] = LEARNED_RULES): str
  */
 export function prune(rules: readonly LearnedRule[]): LearnedRule[] {
   return [...rules]
-    .sort((a, b) => (a.added < b.added ? 1 : a.added > b.added ? -1 : 0))
+    .sort((a, b) => {
+      const byFitness = totalDelta(a.fitness) - totalDelta(b.fitness);
+      if (byFitness !== 0) return byFitness;
+      return a.added < b.added ? 1 : a.added > b.added ? -1 : 0;
+    })
     .slice(0, MAX_LEARNED);
 }
