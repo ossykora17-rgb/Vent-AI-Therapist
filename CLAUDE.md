@@ -32,6 +32,34 @@ npm run rlhf       # ratings → data/dpo.jsonl, and what is losing
 is safe. It has zero dependencies, so a fresh `git worktree` runs the whole
 suite with no `npm install`. Keep it that way.
 
+**That sentence was false until check 146 was written, and it is the oldest
+shape in this file arriving in its own first paragraph.** A fresh worktree died
+on `ERR_MODULE_NOT_FOUND` before a single check ran: `research.ts` imports
+`@anthropic-ai/sdk` statically and `eval.mjs` loads it at the top. Verified
+across four commits, two of them older than the change that found it — the
+property had been false for as long as that import existed. It looked fine from
+everywhere anybody stands, because `node_modules` was simply there. *The suite
+tests the shape its author is standing in*, and the author always has an
+install; the one person it was written for — somebody handed a finding and the
+`git worktree add` line the heartbeat prints next to it — is the one person who
+could not run it.
+
+Exactly one package was missing, measured by resolving every bare specifier the
+suite reaches and printing what failed. `app-imports.mjs` resolves a package for
+real and stubs only what is absent, so an installed repository behaves exactly
+as it always did. **The stub throws on use**, because a silent one would let a
+check that reached for a model see a no-op and report green — a check passing by
+not looking, in the file that decides what every other check can see. And the
+footer names what it ran without, so a worktree run is legible rather than
+merely green, while an installed run appends nothing and stays byte-identical to
+what check 131 grades.
+
+The alternative was making `research.ts` import lazily, which is the lesson
+check 141 enforces on `audit.mjs`. Not taken: `research()` is awaited on the
+path a person is waiting on, so a dynamic import buys a first-call cost on the
+vent route to fix a property of the test harness — and the loader covers the
+next static importer as well as the one that exists today.
+
 **It is not the only opinion, and this sentence used to say it was.** CI also
 runs `npm run lint`, `npx tsc --noEmit` and `next build`, and the gate runs
 none of the three — it cannot, because every one of them is an install and

@@ -17,7 +17,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { app, ROOT } from "./app-imports.mjs";
+import { app, ROOT, stubbed } from "./app-imports.mjs";
 
 const { classify } = await app("src/lib/vent/intent.ts");
 const { groundNow } = await app("src/lib/vent/grounding.ts");
@@ -18010,6 +18010,124 @@ check("145 A proposed rule is measured against the prompt without it, or refused
 });
 
 
+// ── 146. the gate really does run without an install ───────────────────────
+/*
+  The async half, hoisted: `check` takes a synchronous callback, and the branch
+  being graded is a dynamic import. Done here so the assertions below read as
+  assertions rather than as a try/catch pyramid.
+*/
+const missing = await (async () => {
+  const before = stubbed.size;
+  let mod = null;
+  try {
+    mod = await import("@vent/this-package-does-not-exist");
+  } catch {
+    /* mod stays null, and the first assertion below is the one that says so */
+  }
+  const trap = (f) => {
+    try {
+      f();
+      return "no error";
+    } catch (e) {
+      return e.message;
+    }
+  };
+  const out = {
+    mod,
+    before,
+    after: stubbed.size,
+    named: stubbed.has("@vent/this-package-does-not-exist"),
+    used: mod ? trap(() => mod.default()) : "never imported",
+    read: mod ? trap(() => void mod.default.anything) : "never imported",
+  };
+  /*
+    The probe takes its own name back out.
+
+    Its first run printed `@vent/this-package-does-not-exist not installed,
+    stubbed` into the footer of an **installed** run — the check's own
+    instrument falsifying the property the check asserts two lines down, which
+    is the suite writing to `.data/external.json` again. The delta is captured
+    above, so nothing is lost by cleaning up, and the footer goes back to
+    naming only what the product actually ran without.
+  */
+  stubbed.delete("@vent/this-package-does-not-exist");
+  return out;
+})();
+const installedSdk = (await import("@anthropic-ai/sdk")).default;
+
+check("146 The suite runs with no node_modules, and says so when it did", () => {
+  /*
+    THE CLAIM WAS IN THE FIRST PARAGRAPH OF CLAUDE.MD AND IT WAS FALSE
+
+    "`npm run gate` ... has zero dependencies, so a fresh `git worktree` runs
+    the whole suite with no `npm install`. Keep it that way." The heartbeat
+    prints that instruction to whoever it hands a finding to, next to the
+    `git worktree add` line they are meant to run.
+
+    A worktree with no `node_modules` died on `ERR_MODULE_NOT_FOUND` before a
+    single check ran: `research.ts` imports `@anthropic-ai/sdk` statically and
+    `eval.mjs` loads it at the top. Checked across four commits, two of them
+    older than the change that found it — the property had been false for as
+    long as that import existed, and it looked fine from inside the repository
+    because `node_modules` was simply there. The oldest shape in this file: the
+    suite tests the shape its author is standing in, and the author always has
+    an install.
+
+    Exactly one package was missing, measured rather than guessed. The loader
+    resolves a bare specifier for real and stubs only what is absent.
+  */
+  const loader = strip(fs.readFileSync(path.join(ROOT, "scripts/app-imports.mjs"), "utf8"));
+
+  /*
+    Graded behaviourally, on the branch that actually fires. A check that only
+    ran where `node_modules` exists would be asserting about the shape it is
+    standing in, which is the bug above wearing the check written for it.
+  */
+  ok(missing.mod !== null, "a package that is not installed still imports",
+    "without this the suite cannot start in a worktree, which is the whole claim");
+  ok(missing.after === missing.before + 1, "and the run records that it stubbed one",
+    "a run that differs from an installed one in silence is the dishonest skip");
+  ok(missing.named, "by name, recorded at the moment it was stubbed",
+    "read after the cleanup below this is always false — the window matters");
+
+  /*
+    THE STUB THROWS, AND THAT IS THE WHOLE OF THE CARE IN IT
+
+    A silent stub would let a check that reached for a model see a no-op and
+    report green — a check passing by not looking, in the file that decides
+    what every other check can see. Importing is free; using is an error.
+  */
+  ok(/not installed/.test(missing.used), `using it throws: ${JSON.stringify(missing.used)}`,
+    "a stub that answers calls is a fake model, and a fake model is a green check over nothing");
+  ok(/not installed/.test(missing.read), "and so does reading a property off it",
+    "the SDK is used as `new Anthropic(...)` and `client.messages.create` — both are reads first");
+
+  /*
+    And a package that IS installed resolves to the real one, so a repository
+    with `node_modules` behaves exactly as it always did. Without this half the
+    fix could stub everything and every check would grade a proxy.
+  */
+  ok(!stubbed.has("@anthropic-ai/sdk") || typeof installedSdk === "function",
+    "an installed package is not stubbed here",
+    "if this run stubbed the SDK too, every check that touches the product is grading a proxy");
+
+  // Only ERR_MODULE_NOT_FOUND is caught; any other resolve failure is real.
+  ok(/e\?\.code !== "ERR_MODULE_NOT_FOUND"/.test(loader) && /throw e/.test(loader),
+    "and every other resolve failure is left to throw",
+    "swallowing them would turn a broken import into a silent proxy");
+
+  // The footer names it, so a worktree run is legible rather than merely green.
+  const ev = strip(fs.readFileSync(path.join(ROOT, "scripts/eval.mjs"), "utf8"));
+  ok(/stubbed\.size === 0 \? "" :/.test(ev),
+    "an installed run appends nothing, so the footer stays byte-identical",
+    "check 131's whole subject is that footer being a measurement rather than a sentence");
+  ok(/not installed, stubbed/.test(ev), "and a worktree run says what it ran without");
+  ok(!stubbed.has("@vent/this-package-does-not-exist"),
+    "and this check's own probe left no trace in what the footer reports",
+    "an instrument that changes the thing it measures is the suite writing to .data again");
+});
+
+
 for (const r of results) {
   const good = r.failed.length === 0;
   if (good) passed++;
@@ -18029,7 +18147,18 @@ console.log("─".repeat(72));
 const spent = outbound.length === 0
   ? "0 tokens · 0 model calls"
   : `${outbound.length} OUTBOUND CALL${outbound.length === 1 ? "" : "S"} — ${[...new Set(outbound)].join(", ")}`;
-console.log(`${passed}/${total} PASS · ${results.reduce((n, r) => n + r.asserts.length, 0)} assertions · ${spent}\n`);
+/*
+  And a run with no `node_modules` says so rather than looking identical.
+
+  The loader stubs a package it cannot resolve, so the suite runs in a fresh
+  worktree — which is the property CLAUDE.md claims and did not have. An
+  installed run stubs nothing and this appends nothing, so the footer is
+  byte-identical to what it has always printed; a worktree run names what it
+  did without. Same rule as the workflows that write a step summary when they
+  skip: a skip is only honest if it is legible where somebody looks.
+*/
+const without = stubbed.size === 0 ? "" : ` · ${[...stubbed].join(", ")} not installed, stubbed`;
+console.log(`${passed}/${total} PASS · ${results.reduce((n, r) => n + r.asserts.length, 0)} assertions · ${spent}${without}\n`);
 if (outbound.length > 0) {
   console.log("The suite is supposed to cost nothing. Something in it reached the network.\n");
 }
