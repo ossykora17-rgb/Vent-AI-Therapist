@@ -660,6 +660,7 @@ own copy passes while the product regresses.
 | Reject and regenerate, before anybody reads it | `src/lib/vent/failsafe.ts` |
 | One move from outside, per pressure, cached | `src/lib/vent/research.ts` |
 | What the audit proposed and the gate kept | `src/lib/vent/learned.ts` |
+| What a proposed rule did to the corpus, measured | `src/lib/vent/fitness.ts` |
 | Intent routing, crisis, meta-vs-vent, injection | `src/lib/vent/intent.ts` |
 | The turn's verdict, computed not asked for | `src/lib/vent/assess.ts` |
 | 45 tactics, 3-turn block, somatic gate | `src/lib/vent/tactics.ts` |
@@ -1081,6 +1082,123 @@ is made of, and read as if they did. `sections()` now does the join, the dead
 entries are gone, and check 114 asserts the blank line on the built prompt
 rather than on the joiner — because the joiner was never the part that was
 wrong.
+
+**`acceptable()` was a spelling check standing where a fitness function
+belongs.** `--apply` merged whatever the nightly model proposed, as long as the
+rule was short enough, concrete enough and did not reopen a house rule. Nothing
+anywhere asked whether it made a single reply better — so a rule reached
+everybody who uses this on the strength of a model's opinion of its own output,
+which is the failure mode of asking a model what it did wrong. Every published
+version of reflective prompt evolution has a scorer in that slot: the
+reflection proposes and the *score* decides. A generation with no score is a
+random walk with a changelog, which is the drift `learned.ts` opens by
+describing and had no defence against.
+
+Every candidate is now answered twice on twelve held-out cases — same model,
+same minute, same cases, once with the rule in the prompt and once without —
+and `isImprovement` refuses anything that is not a **Pareto improvement across
+every grader**. Not an average: a rule that removes four `jargon` findings and
+introduces one `diagnosis` has a better total and is a strictly worse product,
+because a clinical label is not something a person can un-hear. Summing first
+and judging second is exactly how four small wins buy one of those.
+
+**Held-out is the load-bearing word.** The candidate was proposed from flat
+production replies, so measuring it on those same replies is fitting the rule
+to its own sample — `earned_worth` weighted on a sample of three, already paid
+for once. The authored corpus is the set the rule has never seen. Sampled by
+position rather than the first twelve, because the first twelve rows of a
+hand-written file are twelve rows one person wrote in one sitting.
+
+**And `prune` keeps the frontier instead of the queue.** Three slots ranked by
+recency is a list that forgets its best rule the moment a fourth arrives. An
+unscored rule ranks as zero, which is the load-bearing default: proven beats
+assumed, assumed beats a regression, recency is the tie-break rather than the
+rank — so with nothing scored it returns exactly what it always returned, and
+the existing assertion stayed green without being touched.
+
+**What it cannot do is remove the sampler, and that is stated rather than
+glossed.** `providers.ts` records that non-default sampling parameters are a
+**400** on this model — "not a degraded reply, a refused request" — so
+temperature cannot be pinned and two identical prompts do not give two
+identical replies. Some of every delta is noise and the only lever is more
+cases. That is survivable in exactly one direction, which is why the test is
+dominance: noise mostly produces a **false refusal**, costing a re-run, while a
+false accept costs one neutral rule in one of three slots, in a diff the gate
+runs against and a person reads. The asymmetry is the design, not an accident
+of it.
+
+The measurement is paid, so it lives below the no-key exit in `audit.mjs`. The
+arithmetic over two sets of replies is free and pure and lives in `fitness.ts`,
+so check 145 grades the function the script calls rather than a copy of it —
+`countsAsSpend`'s precedent, for `countsAsSpend`'s reason.
+
+**And check 141's list of paid imports was hand-written, so it had a hole the
+moment this file grew a third.** It named the SDK and `providers.ts`. The
+fitness gate imports `prompt.ts`, which reaches `research.ts`, which imports
+the SDK statically — a third paid import the pair could never have seen. It
+happened to be placed correctly and nothing here would have said so if it had
+not been. *Derive the list, or the list is the bug*, inside the check whose
+whole subject is an import in the wrong place. The graph is walked now: what
+makes an import paid is not its name, it is whether the module it pulls reaches
+a package `npm ci` would have had to install, and `audit.yml` runs no `npm ci`.
+
+**The mutation pass deleted a guard I had just written, and it was right to.**
+`fitnessOf` carried a rule excluding `skipped` findings, with a paragraph on
+why counting a grader that did not run would make an unbilled arm look worse
+than a billed one. True, and unreachable: both arms of a pair are billed
+identically by construction — the harness calls the model twice inside one
+`try` and drops the whole pair if either throws — so a skipped grader fires in
+both or in neither and cancels to zero. Deleting it changed nothing any check
+could see. A guard that cannot fire is worse than an absence, because a comment
+above it now claims a property nothing holds; what replaced it is the sentence,
+and the note that the day one arm can be billed and the other not, this needs a
+per-arm flag.
+
+**Two of the check's own probes were in the wrong window before the mutations
+found them**, which is the third time in this file. "No zeroes in the record"
+was asserted of a record that never had a zero in it, because no grader fired
+in both arms — the mutation keeping the zeroes walked straight through until
+both replies carried the same advice line. *Put the probe where the damage is*,
+the HEAD-request lesson again.
+
+**And the whole thing was run end to end before it shipped, because every part
+working is not the feature working — for the sixth time.** The notes had a
+migration, a table, a refusal, a page and two checks and produced zero rows in
+a month; the push had a table, two routes, a service worker and a destruction
+path and never rang. This gate has a module, a caller, thirteen mutations and
+thirty-seven assertions, and the one failure that would make all of it
+worthless is the two arms building the **same prompt** — in which case every
+delta is sampler noise and the gate reads as working.
+
+There is no `ANTHROPIC_API_KEY` in the environment this was written in, so the
+two calls could not be made against Anthropic. Everything else could: a
+Messages-API-shaped server on loopback, `ANTHROPIC_BASE_URL` pointed at it, the
+real SDK, the real prompts, the real graders, the real merge — `broken-store`'s
+discipline, nothing inside the script stubbed. Both paths ran. A candidate
+whose arms graded identically printed `nothing moved` and merged nothing; a
+candidate whose without-arm was jargon printed `jargon -12` over 12 cases and
+24 calls, wrote itself into `learned.ts` carrying its fitness, and **check 79
+went red on it** — the gate refusing a rule the script merged, which is the
+whole architecture in one line. The one byte not exercised is Anthropic
+accepting the call shape, and that shape is copied verbatim from
+`providers.ts`, which is answering in production today.
+
+**One measurement changed the code rather than confirming it.** The first
+corpus build left `recentTactics` empty, so the three-turn block never fired,
+one weight won repeatedly, and twelve cases came back carrying **two** distinct
+tactics out of forty-five. Fed from the run itself it is **eight**. Both arms
+share the tactic either way, so this does not change what a delta means — it
+changes how much of the library a rule is measured against. Same shape as
+pinning `mood: 3` and reporting `behavioral_activation` at forty per cent, and
+found the same way: by printing the number instead of assuming it.
+
+**The bill, measured rather than estimated.** The prompts built for the twelve
+sampled cases run 1,456–1,563 words, so a candidate costs 24 calls at roughly
+2,000 tokens in and at most 600 out — about **$0.24** on Sonnet 5's $2/$10 per
+million, and under a dollar for a night that proposes three. The budget is 96
+calls and a candidate that cannot be measured inside it is **refused, not
+merged**: running out of money must fail closed, not fall back to the behaviour
+this block replaced.
 
 ## When not to automate
 

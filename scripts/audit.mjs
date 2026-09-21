@@ -239,8 +239,169 @@ if (!APPLY) {
   process.exit(0);
 }
 
+// ── the fitness gate: measured, or not merged ───────────────────────────────
+/*
+  `acceptable()` is a spelling check standing where a fitness function belongs.
+  It can say a rule is short, concrete and does not reopen a house rule. It
+  cannot say whether the rule makes one reply better, and until this block
+  existed nothing could — a rule reached everybody on the strength of a model's
+  opinion of its own output.
+
+  So every candidate is answered twice on twelve held-out cases: once with the
+  rule in the prompt, once without, same model, same minute, same cases. The
+  graders are free and deterministic, and `isImprovement` refuses anything that
+  is not a Pareto improvement across all of them.
+
+  THE HELD-OUT SET IS THE POINT. These candidates were proposed from flat
+  production replies, so measuring them on those same replies is fitting the
+  rule to its own sample — `earned_worth` on a sample of three, which this
+  repository has already paid for. The authored corpus is the set the rule has
+  never seen.
+
+  ARMS DIFFER BY EXACTLY ONE BLOCK. One `groundNow()` for the whole run, one
+  classification and one tactic per case, shared by both arms — grounding
+  carries a millisecond ISO, so calling it twice would make the two prompts
+  differ by more than the thing being measured. `technique` is deliberately
+  absent: `research()` is a paid web search, and a fitness run that quietly
+  bought one per case would be the eval suite's typed `0 model calls` again.
+  What a lighter prompt cannot tell you is whether the rule still bites inside
+  a fuller one, and that is stated rather than assumed away.
+*/
+const { fitnessOf, sampleCases } = await app("src/lib/vent/fitness.ts");
+const { isImprovement } = await app("src/lib/vent/learned.ts");
+const { classify } = await app("src/lib/vent/intent.ts");
+const { selectTactic } = await app("src/lib/vent/tactics.ts");
+const { groundNow } = await app("src/lib/vent/grounding.ts");
+const { buildSystemPrompt } = await app("src/lib/vent/prompt.ts");
+const { MAX_TOKENS } = await app("src/lib/vent/model.ts");
+
+/**
+ * A ceiling on the bill, not a suggestion — `quality.mjs`'s precedent.
+ *
+ * Four candidates at twelve cases and two arms. A night that proposes more
+ * than the budget can measure refuses the remainder rather than merging them:
+ * an unmeasured rule is the exact thing this block exists to stop, so running
+ * out of budget must fail closed and not fall back to the old behaviour.
+ */
+const FITNESS_MAX_CALLS = 96;
+
+const ground = groundNow();
+const examples = sampleCases(
+  fs
+    .readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l)),
+);
+
+/*
+  Built in a loop rather than a `.map`, because each case's `recentTactics`
+  reads the tactics the previous ones chose — and `.map` hands the callback the
+  *source* array, so a self-referencing map reads the raw JSON rows and quietly
+  gets nothing.
+
+  It is not tidiness. With `recentTactics` empty the three-turn block never
+  fires, one high-weighted entry wins repeatedly, and twelve cases came back
+  carrying **two** distinct tactics out of forty-five — the same shape as
+  pinning `mood: 3` and reporting `behavioral_activation` at forty per cent.
+  Both arms share the tactic either way, so this does not change what a delta
+  means; it changes how much of the library the rule is measured against.
+*/
+const corpus = [];
+for (const [i, ex] of examples.entries()) {
+  const classification = classify(ex.input);
+  const ctx = {
+    ...classification,
+    message: ex.input,
+    pressure: null,
+    duality: null,
+    mood: null,
+    ventCount: i,
+    recentTactics: corpus.slice(-3).map((r) => r.tactic.id),
+  };
+  corpus.push({
+    // The language is asked for, never typed. Four detectors have disagreed
+    // about this question in this repository and every one cost a false
+    // finding; `classify` is the one that decided every production row.
+    case: {
+      id: `fit-${i}`,
+      message: ex.input,
+      intent: "vent",
+      language: classification.language === "pidgin" ? "pidgin" : "en",
+      probes: "",
+    },
+    said: ex.input,
+    tactic: selectTactic(ctx),
+    classification,
+    ctx,
+  });
+}
+
+let fitnessCalls = 0;
+async function replyTo(row, learned) {
+  const system = buildSystemPrompt({
+    grounding: ground,
+    classification: row.classification,
+    tactic: row.tactic,
+    ctx: row.ctx,
+    memory: [],
+    message: row.ctx.message,
+    learned,
+  });
+  fitnessCalls++;
+  const r = await client.messages.create({
+    model: MODEL.anthropic,
+    max_tokens: MAX_TOKENS,
+    thinking: { type: "disabled" },
+    system,
+    messages: [{ role: "user", content: row.ctx.message }],
+  });
+  return r.content.filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+}
+
+console.log(`\nfitness    ${corpus.length} held-out cases, two arms, budget ${FITNESS_MAX_CALLS} calls`);
+
+const kept = [];
+for (const candidate of accepted) {
+  if (fitnessCalls + corpus.length * 2 > FITNESS_MAX_CALLS) {
+    console.log(`  REFUSE  ${candidate.id} — no call budget left to measure it`);
+    continue;
+  }
+  const pairs = [];
+  for (const row of corpus) {
+    try {
+      // Both arms inside one try: half a pair is not a pair, and keeping the
+      // survivor would compare a reply against nothing.
+      const without = await replyTo(row, []);
+      const withIt = await replyTo(row, [candidate]);
+      pairs.push({ case: row.case, said: row.said, without, with: withIt });
+    } catch (e) {
+      // A kind, never a message — an SDK throw carries the provider's
+      // response body on `.message`, and this prints to a public log.
+      console.log(`  (dropped a pair: ${e?.status ?? e?.name ?? "error"})`);
+    }
+  }
+  const fitness = fitnessOf(pairs);
+  const moved = Object.entries(fitness.delta)
+    .sort((a, b) => a[1] - b[1])
+    .map(([g, d]) => `${g} ${d > 0 ? "+" : ""}${d}`)
+    .join(" · ");
+  if (isImprovement(fitness)) {
+    kept.push({ ...candidate, fitness });
+    console.log(`  KEEP    ${candidate.id} — ${fitness.cases} cases · ${moved}`);
+  } else {
+    console.log(`  REFUSE  ${candidate.id} — ${fitness.cases} cases · ${moved || "nothing moved"}`);
+  }
+}
+console.log(`fitness calls ${fitnessCalls} (budget ${FITNESS_MAX_CALLS})`);
+
+if (kept.length === 0) {
+  console.log("\nnothing measured better than the prompt without it — nothing merged.\n");
+  process.exit(0);
+}
+
 // ── the merge, which is a diff somebody can revert ──────────────────────────
-const merged = prune([...accepted, ...LEARNED_RULES]);
+const merged = prune([...kept, ...LEARNED_RULES]);
 const file = path.join(ROOT, "src/lib/vent/learned.ts");
 const src = fs.readFileSync(file, "utf8");
 const body = `export const LEARNED_RULES: readonly LearnedRule[] = ${JSON.stringify(merged, null, 2)};`;
@@ -253,6 +414,6 @@ if (start < 0) {
 }
 fs.writeFileSync(file, src.slice(0, start) + body + src.slice(end));
 console.log(
-  `\nmerged ${accepted.length} into learned.ts (${merged.length}/${MAX_LEARNED} kept).` +
+  `\nmerged ${kept.length} measured into learned.ts (${merged.length}/${MAX_LEARNED} kept).` +
     "\nrun `npm run gate` — it decides, not this script.\n",
 );
