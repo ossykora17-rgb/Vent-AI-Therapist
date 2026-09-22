@@ -1450,6 +1450,34 @@ because it matched as a **substring** — the `role="radio"` /
 different checks written hours after re-reading the entry about it. Anchor both
 ends, every time.
 
+**And the endpoint written to watch for silence caught its own author in ten
+minutes.** `countMemory` shipped reading `.from("vent_users").select("user_id",
+…)` — and `vent_users` is keyed by **`id`**; `user_id` is what `vents` uses to
+point at it. PostgREST refused it, the store threw, and production answered
+`peopleWithCarve: null`.
+
+That is the select-list bug this file already records — *"every read of `vents`
+asked for a column named `" user_id"`... invisible for months because every
+caller sat in a try/catch that degrades quietly"* — arriving with a different
+cause and the same shape. The difference is the whole argument for the design
+one paragraph up: the original hid for months; this one was visible on the
+first fetch, because **the field reports `null` rather than a confident zero**.
+A failed read that says so is a bug with a ten-minute life.
+
+**Nothing could have caught it, and that was the real finding.** Check 16 reads
+every select list the store writes and asserts one thing about them: that they
+carry no whitespace. `FULL_CONTRACT` is validated against the DDL, and every
+*other* select was never asked the only question that matters — **do these
+columns exist on that table?** It pairs `.from("t")` with the literal
+`.select("…")` that follows it now and checks each column against the parsed
+migrations, with a floor. Three mutations fail it, and the first is the exact
+line that shipped.
+
+Literal selects only, stated as a limit rather than left to be discovered:
+`FULL_SELECT` and its siblings are constants the older sweep already covers,
+and an embedded `table(col)` select is a different grammar this must not
+pretend to parse.
+
 ## When not to automate
 
 The heartbeat applies a four-condition test per finding: does it repeat, is it

@@ -1912,6 +1912,43 @@ check("16 The store asks PostgREST for something it can parse", () => {
     }
   }
 
+  /*
+    AND EVERY SELECT THE STORE WRITES, AGAINST THE TABLE IT WRITES IT ON
+
+    The sweep above validated `FULL_CONTRACT` and the one below validated that
+    no select list carries whitespace. Neither asked the only question that
+    matters about a select list: **do these columns exist on that table?**
+
+    It shipped a live bug within the hour. `countMemory` read
+    `.from("vent_users").select("user_id", …)` and `vent_users` is keyed by
+    `id` — `user_id` is what `vents` uses to point at it. PostgREST answered an
+    error, the store threw, and production reported `peopleWithCarve: null`.
+
+    That is the select-list bug this file already records — *"every read of
+    `vents` asked for a column named `" user_id"`"* — arriving with a different
+    cause and the same shape, on the endpoint added to watch for exactly this
+    kind of silence. It was visible in ten minutes only because that field
+    reports null rather than zero; the original was invisible for months
+    because every caller degraded quietly.
+
+    Literal selects only. `FULL_SELECT` and friends are constants the sweep
+    above already covers, and an embedded `table(col)` select is a different
+    grammar that this must not pretend to parse.
+  */
+  const pairs = [...store.matchAll(
+    new RegExp(`\\.from\\("(${IDENT})"\\)[\\s\\S]{0,80}?\\.select\\(\\s*"([^"()*]*)"`, "g"),
+  )];
+  ok(pairs.length >= 5, `${pairs.length} literal select lists paired with their table`,
+    "a sweep that walks nothing passes loudest, and this one found a live bug on its first run");
+  for (const [, table, list] of pairs) {
+    const known = defined[table];
+    if (!ok(Array.isArray(known), `${table} is a table a migration creates`)) continue;
+    const invented = list.split(",").map((c) => c.trim()).filter((c) => c && !known.includes(c));
+    ok(invented.length === 0,
+      `every column ${table} is asked for exists on it`,
+      invented.length ? `${table}: ${invented.join(", ")}` : undefined);
+  }
+
   for (const [table, cols] of Object.entries(FULL_CONTRACT)) {
     const known = defined[table];
     if (!ok(Array.isArray(known), `${table} is created by a migration`)) continue;
