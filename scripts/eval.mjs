@@ -18393,6 +18393,21 @@ check("148 What the room is holding is reported, and it is counts only", () => {
     "and the finding never fires on a reading that never arrived");
 
   /*
+    BOTH ZEROES, BECAUSE THE FIRST VERSION WATCHED ONE
+
+    It fired on `peopleWithCarve === 0`. Production answered
+    `peopleWithCarve: 1, notes: 0` on the first deploy that could read them,
+    so the finding was silent over the exact number this endpoint exists for:
+    `vent_notes` at zero is what motivated every line of it, and the condition
+    had been written about carves. *A justification covers what it argued
+    about, and nothing standing beside it.*
+  */
+  ok(/memory\.peopleWithCarve, /.test(hb) && /memory\.notes, /.test(hb),
+    "both holdings are watched, not just the one the condition was written on");
+  ok(/no_\$\{kind\}s/.test(hb), "and the finding names which of them is empty",
+    "0 notes and 0 carves are different defects — one is the Carver refused, one is the Carver never firing");
+
+  /*
     The floor is why this does not cry wolf. Below it, zero carves is a quiet
     week rather than a defect — and an endpoint that alarms about a working
     deployment is how somebody learns to stop reading it, which this file
