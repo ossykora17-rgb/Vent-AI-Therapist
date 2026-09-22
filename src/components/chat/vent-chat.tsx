@@ -243,6 +243,14 @@ export function VentChat() {
     point — it is one reading per sitting, not one per person ever.
   */
   const askedOnce = React.useRef(false);
+  /*
+    One compression per sitting, whichever door it comes through.
+
+    A ref rather than state because nothing renders from it: a re-render
+    triggered by "we have already carved" would be a re-render announcing the
+    thing this is careful never to announce.
+  */
+  const harvested = React.useRef(false);
   const [ignored, setIgnored] = React.useState(0);
   const [turnWords, setTurnWords] = React.useState(0);
   const [repliedAt, setRepliedAt] = React.useState<number | null>(null);
@@ -618,7 +626,12 @@ export function VentChat() {
         if (tensionBefore === null && pressureSet) setTensionBefore(pressure);
         setAskMood(true);
         setRoomAsked(data.closing === true);
-        if (data.closing === true) askedOnce.current = true;
+        if (data.closing === true) {
+          askedOnce.current = true;
+          // The room has decided this sitting is ending. That is the signal
+          // the carve should always have hung off — see `harvest`.
+          harvest();
+        }
         // The pause is measured from the reply, not from the request: the
         // seconds somebody spends waiting on a model are not a pause, they
         // are a wait, and a control that steps forward during one is
@@ -700,6 +713,61 @@ export function VentChat() {
     }
   }
 
+  /*
+    THE ONE PLACE THE ROOM COMPRESSES A SITTING, AND IT USED TO HAVE ONE DOOR
+
+    `vent_notes` holds **zero rows** — not "zero this month", zero across every
+    vent since the table shipped — and `vent_users.carve` holds one, against
+    108 vents from 9 people. Three causes were found and fixed inside
+    `parseCarve` and the route, and the count never moved, because none of them
+    was the reason. The reason is here: this fired in exactly one place, inside
+    `submitMood`, so the room's entire long-term memory hung off a gesture that
+    **2 of 108 turns** produce.
+
+    Every part of that feature works. A migration, a table, `keepable()`, a
+    refusal message, a page, a delete button, checks 83 and 100 — and a trigger
+    almost nobody pulls. *Every part working is not the feature working*, for
+    the seventh time in this repository, and the sixth of those was a
+    measurement nobody could reach.
+
+    **The arc already knows.** `isLanding()` reads a sitting winding down — a
+    message short against their own habit, or words that end a conversation —
+    and the server returns it as `closing`. That is the room's own reading that
+    this is ending, computed every turn, free, and already the thing that
+    decides the weight question. It is a strictly better signal than "they
+    tapped a number", which the ambient track lets them do on any turn at all.
+
+    So the landing is the trigger and the mood is the fallback, and this runs
+    **once per sitting** whichever arrives first. Not twice: `vent_users.carve`
+    is one column and a second call would overwrite a good line with another
+    line to buy the same column, which is the kind of spend the credit section
+    exists to refuse.
+
+    ATTRIBUTION, WITHOUT A NEW COLUMN
+
+    CLAUDE.md asks that this not be changed in a way that makes the arc's own
+    effect unreadable. It is not: `submitMood` is the only writer of
+    `tension_after`, so a carve on a sitting with **no anchor** can only have
+    come from the landing, and a carve on an anchored sitting could be either.
+    The new path's contribution is a query over columns that already exist. A
+    `trigger` column would be a new thing this product keeps about somebody for
+    a question two existing columns already answer.
+
+    Unawaited and silent, exactly as before: nothing on this screen changes
+    whether it lands, the server refuses it below three exchanges and anywhere
+    near a crisis turn, and a carve announced would be the product promising to
+    remember — the one thing `WHAT YOU NEVER PROMISE` forbids.
+  */
+  function harvest() {
+    if (harvested.current) return;
+    harvested.current = true;
+    void fetch("/api/carve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ anonId: anonId() }),
+    }).catch(() => {});
+  }
+
   async function submitMood(value: number) {
     setMood(value);
     setAskMood(false);
@@ -770,28 +838,9 @@ export function VentChat() {
       toast("Noted here — not saved.", "info");
     }
 
-    /*
-      The carve, fired and forgotten.
-
-      Rating the mood is the one unambiguous "this session is over" signal
-      this product gets, and it is the only moment there is something whole
-      enough to compress. Its own request rather than part of the PATCH
-      above, because that one is a person tapping a number and watching for
-      the drop — a model call hung off it would put five seconds between the
-      tap and the answer.
-
-      Deliberately unawaited and deliberately silent. Nothing on this screen
-      changes whether it succeeds or fails, nobody is told it happened, and
-      the server refuses it outright below three exchanges or anywhere near a
-      crisis turn. A carve that never happens costs nothing; a carve
-      announced would be the product promising to remember, which is the one
-      thing `WHAT YOU NEVER PROMISE` forbids.
-    */
-    void fetch("/api/carve", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ anonId: anonId() }),
-    }).catch(() => {});
+    // The mood is a signal that the sitting is over, and it is the weaker of
+    // the two. See `harvest`.
+    harvest();
   }
 
   const drop =

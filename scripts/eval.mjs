@@ -18128,6 +18128,90 @@ check("146 The suite runs with no node_modules, and says so when it did", () => 
 });
 
 
+// ── 147. the room compresses a sitting, and it had one door ────────────────
+check("147 The carve fires when the sitting lands, not only when a number is tapped", () => {
+  /*
+    THE ZERO THAT THREE FIXES DID NOT MOVE
+
+    `vent_notes` holds **zero rows** — not zero this month, zero across every
+    vent since the table shipped — and `vent_users.carve` holds one, against
+    108 vents from 9 people. Three causes were found inside `parseCarve` and
+    the route and every one of them was real; the count never moved, because
+    none of them was the reason.
+
+    The reason was the trigger. It fired in exactly one place, inside
+    `submitMood`, so the room's entire long-term memory hung off a gesture
+    **2 of 108** turns produce. A migration, a table, `keepable()`, a refusal,
+    a page, a delete button and checks 83 and 100 — behind a door almost nobody
+    opens. *Every part working is not the feature working*, for the seventh
+    time here.
+
+    `isLanding()` is the better signal and it already existed: the room's own
+    reading that a sitting is winding down, computed every turn, free, and
+    already deciding the weight question. The landing is the trigger now and
+    the mood is the fallback.
+  */
+  const chat = strip(fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8"));
+
+  /*
+    Two doors, derived rather than named. Counting the calls is what fails when
+    somebody deletes one of them — asserting that `harvest` merely exists is
+    the shape that let the old trigger sit unquestioned.
+  */
+  const calls = [...chat.matchAll(/(?<!function )\bharvest\(\)/g)].length;
+  ok(calls >= 2, `${calls} call sites reach the carve`,
+    "one door is the bug this check is named after");
+  ok(/function harvest\(\)/.test(chat), "and they all reach the same one");
+
+  /*
+    And it is the only way out. A third path posting to the route directly
+    would walk around the once-guard and buy a second model call for one
+    column — so the count of POSTs to the carve route is the assertion, not
+    the presence of the function.
+  */
+  /*
+    The write is the bare path in quotes; the read carries a query string and
+    lives in a template literal, so the two forms do not collide. The first
+    version of this subtracted one count from the other and the read never
+    matched the write pattern at all — an assertion doing arithmetic on a
+    number that was always zero. Count the thing being guarded.
+  */
+  const writes = [...chat.matchAll(/["'`]\/api\/carve["'`]/g)].length;
+  const reads = [...chat.matchAll(/\/api\/carve\?/g)].length;
+  ok(reads >= 1, `${reads} read of the carve route, so both forms are present to tell apart`);
+  is(writes, 1, `exactly one write to the carve route`,
+    "a second writer walks around the once-guard and pays twice for one column");
+
+  // The landing is a trigger, and it is the one the arc computes.
+  const at = chat.indexOf('data.closing === true');
+  ok(at > 0, "the client still reads the arc's landing off the response");
+  ok(/harvest\(\)/.test(chat.slice(at, at + 400)),
+    "and a landing sitting compresses itself",
+    "this is the whole repair — without it the carve is back to one door");
+
+  // Once per sitting, and the guard is a ref rather than state.
+  ok(/if \(harvested\.current\) return;/.test(chat),
+    "it runs once per sitting whichever door it came through",
+    "vent_users.carve is one column; a second call overwrites a good line to buy the same column");
+  ok(/const harvested = React\.useRef\(false\)/.test(chat),
+    "and the guard renders nothing",
+    "state here would re-render to announce the thing this never announces");
+
+  /*
+    ATTRIBUTION WITHOUT A NEW COLUMN
+
+    CLAUDE.md asks that the arc's own effect stay readable rather than being
+    confounded by this. It is: `submitMood` is the only writer of
+    `tension_after`, so a carve on a sitting with no anchor can only have come
+    from the landing. The question two existing columns answer does not get a
+    third.
+  */
+  const routes = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
+  ok(!/trigger/i.test(strip(routes).match(/tension_after[\s\S]{0,200}/)?.[0] ?? ""),
+    "and nothing new is kept about anybody to say which door it was");
+});
+
+
 for (const r of results) {
   const good = r.failed.length === 0;
   if (good) passed++;
