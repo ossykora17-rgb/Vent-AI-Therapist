@@ -167,6 +167,36 @@ export interface Store {
    * caller has to answer that question again before using this.
    */
   recentVentsAcross(limit: number): Promise<VentRow[]>;
+
+  /**
+   * How much the room is actually holding, across everybody. Counts only.
+   *
+   * WHY THIS EXISTS AT ALL
+   *
+   * `vent_notes` produced **zero rows** for its whole life and
+   * `vent_users.carve` produced **one**, against 108 vents. The trigger was
+   * the reason and it is repaired — the carve now fires when the arc says a
+   * sitting is landing, not only when somebody taps a number — and the note
+   * that repair ends on is *"the only evidence worth anything here is
+   * `vent_notes` going above zero in production. That is the number to read
+   * first when traffic resumes."*
+   *
+   * Nothing reported that number. A fix whose verdict lives in a query
+   * somebody has to remember to run is the shape this repository keeps
+   * recording: a measurement that is unreachable rather than merely empty.
+   * `/api/heartbeat` is where counts live, so this is what it reads.
+   *
+   * Counts and nothing else — never a carve, never a note's subject, never an
+   * id. That is the property that makes the heartbeat safe to leave open, and
+   * it is the same rule the stdout policy states one file over.
+   *
+   * **`peopleWithCarve`, not `carves`**, and check 126 is the reason. A carve
+   * is `vent_users.carve` — one text column, one per person, ever — so a field
+   * called `carves` is the sticky header's *"4 earlier carves"* bug wearing an
+   * operator endpoint. The honest quantity is how many people are holding one.
+   * Notes are legitimately plural: `listNotes` returns an array.
+   */
+  countMemory(): Promise<{ peopleWithCarve: number; notes: number }>;
   listVents(userId: string, limit: number): Promise<VentRow[]>;
 
   insertVent(vent: NewVent): Promise<void>;

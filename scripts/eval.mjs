@@ -18275,6 +18275,100 @@ check("147 The carve fires when the sitting lands, not only when a number is tap
 });
 
 
+// ── 148. the room says what it is holding ──────────────────────────────────
+const { MEMORY_FLOOR } = await app("src/lib/vent/efficacy.ts");
+
+check("148 What the room is holding is reported, and it is counts only", () => {
+  /*
+    THE NUMBER THE LAST FIX SAID TO READ FIRST, THAT NOTHING REPORTED
+
+    `vent_notes` produced zero rows for its whole life and `vent_users.carve`
+    produced one, against 108 vents. The trigger was the reason and it is
+    repaired — and that repair ends on a sentence: *"the only evidence worth
+    anything here is `vent_notes` going above zero in production. That is the
+    number to read first when traffic resumes."*
+
+    Nothing reported it. A verdict living in a query somebody has to remember
+    to run is a measurement that is unreachable rather than merely empty,
+    which is the shape this endpoint already names for circles with no closes
+    and for a week with no anchors. It reports it now.
+  */
+  const hb = strip(fs.readFileSync(path.join(ROOT, "src/app/api/heartbeat/route.ts"), "utf8"));
+  const types = strip(fs.readFileSync(path.join(ROOT, "src/lib/store/types.ts"), "utf8"));
+
+  ok(/countMemory\(\): Promise</.test(types), "the store can be asked what it holds");
+  /*
+    Anchored on the closing brace, because the first version matched as a
+    substring: adding `; sample: string` to the return type left it green.
+    Third time today that an unanchored pattern let a widening through — the
+    `role="radio"` / `role="radiogroup"` disease, which is the one shape this
+    repository records more often than any other.
+  */
+  ok(/peopleWithCarve: number; notes: number \}>;/.test(types),
+    "and the answer is two integers and nothing else",
+    "a method that can return a carve is a method that can leak one from a route with no token");
+
+  /*
+    `peopleWithCarve`, not `carves`, and check 126 is the reason rather than
+    taste: a carve is one text column per person, ever, so a field called
+    `carves` is the sticky header's "4 earlier carves" bug wearing an operator
+    endpoint. Asserted here so the name cannot drift back — check 126 sweeps
+    `src` and would catch it, and a rule worth two checks is one that already
+    cost something once.
+  */
+  ok(!/\bcarves\b/i.test(hb), "the endpoint does not pluralise a one-per-person column");
+  ok(/peopleWithCarve/.test(hb), "it counts the people holding one");
+
+  // Both backends answer it, or one deployment shape reports a number the
+  // other cannot — the oldest failure in this repository.
+  for (const f of ["supabase-store.ts", "file-store.ts"]) {
+    const src = strip(fs.readFileSync(path.join(ROOT, "src/lib/store", f), "utf8"));
+    ok(/async countMemory\(/.test(src), `${f} implements it`,
+      "a contract one backend answers is a number that changes with the deployment");
+  }
+
+  /*
+    Counts only, and asserted on what the query asks for rather than on the
+    comment above it. `head: true` means the row count comes back in a header
+    and no row is transferred — which matters beyond speed here, because a
+    select would pull every carve and every note subject into a route that has
+    no token on it.
+  */
+  const sb = strip(fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8"));
+  const body = sb.slice(sb.indexOf("async countMemory("), sb.indexOf("async countMemory(") + 1200);
+  is((body.match(/head: true/g) ?? []).length, 2,
+    "both counts are head-only, so no row is transferred",
+    "a select here reads everybody's carve into an endpoint anybody can fetch");
+  ok(!/\.select\(\s*["']\*/.test(body), "and neither asks for every column");
+
+  /*
+    A FAILED READ IS NOT A ZERO
+
+    A store that refuses this must not take the report down — the counts above
+    already arrived. But a zero standing in for a question that was never
+    answered is the green-light-over-a-broken-road bug, so the flag decides
+    and the field goes null rather than reporting a confident nothing.
+  */
+  ok(/memoryRead \? memory\.peopleWithCarve : null/.test(hb),
+    "a read that failed reports null rather than zero",
+    "zero and 'could not ask' are different answers and only one of them is about the product");
+  ok(/if \(memoryRead && /.test(hb),
+    "and the finding never fires on a reading that never arrived");
+
+  /*
+    The floor is why this does not cry wolf. Below it, zero carves is a quiet
+    week rather than a defect — and an endpoint that alarms about a working
+    deployment is how somebody learns to stop reading it, which this file
+    records happening three times in three days.
+  */
+  ok(typeof MEMORY_FLOOR === "number" && MEMORY_FLOOR > 0,
+    `the finding waits for ${MEMORY_FLOOR} sittings before calling silence a defect`);
+  ok(new RegExp(`vents\\.length >= MEMORY_FLOOR`).test(hb),
+    "and the route reads the constant rather than a number typed beside it",
+    "an integer in two places is the bug check 86 and check 132 both exist for");
+});
+
+
 for (const r of results) {
   const good = r.failed.length === 0;
   if (good) passed++;

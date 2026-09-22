@@ -191,6 +191,14 @@ export class FileStore implements Store {
     ).length;
   }
 
+  async countMemory(): Promise<{ peopleWithCarve: number; notes: number }> {
+    const db = this.read();
+    return {
+      peopleWithCarve: db.users.filter((u) => u.carve != null && u.carve !== "").length,
+      notes: (db.notes ?? []).length,
+    };
+  }
+
   private byUserDesc(userId: string): VentRow[] {
     return this.read()
       .vents.filter((v) => v.user_id === userId)

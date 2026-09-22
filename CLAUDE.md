@@ -1395,6 +1395,61 @@ same escape: **`git checkout` destroying an uncommitted fix, wearing the
 mutation harness's clothes.** Pin the fix into the backup *before* re-running,
 not after.
 
+**The number the last fix said to read first was a number nothing reported.**
+The carve's trigger repair ends on *"the only evidence worth anything here is
+`vent_notes` going above zero in production. That is the number to read first
+when traffic resumes."* `/api/heartbeat` reported `vents`, `anchored`,
+`meanDrop`, `findings` and `learned`, and not that. A verdict living in a query
+somebody has to remember to run is a measurement that is **unreachable rather
+than merely empty** — which is the phrase this endpoint already uses for
+circles with no closes and for a week with no anchors, applied to the two
+fields the last two commits exist to move.
+
+`countMemory()` is two integers and cannot be anything else. `head: true` on
+both counts, so the row count arrives in a header and no row is transferred —
+which matters past speed, because a select would pull every carve and every
+note subject into a route with **no token on it**. That is the property that
+keeps the heartbeat open, and it is asserted on the query rather than on the
+comment above it.
+
+**`peopleWithCarve`, not `carves`, and check 126 caught it rather than a
+reviewer.** A carve is one text column per person, ever, so a field called
+`carves` is the sticky header's *"4 earlier carves"* bug wearing an operator
+endpoint. The check also flagged a **local variable** named `carves` inside the
+store, and the tempting fix — widen the sweep to string literals only, since
+its own comment says it is about what a person reads — would have weakened a
+guard to admit the code that broke it, and un-covered bare JSX text on the way.
+The variable was renamed instead. *An assertion can defend the bug*; so can a
+convenient reading of one.
+
+**A failed read is not a zero.** A store that refuses this must not take the
+report down — the counts above already arrived — but a zero standing in for a
+question nobody managed to ask is the green-light-over-a-broken-road bug, so
+the field is `null` and the finding does not fire. And the finding waits for
+`MEMORY_FLOOR` sittings, because an endpoint that alarms about a working
+deployment is how somebody learns to stop reading it, which this file records
+happening three times in three days.
+
+**`MEMORY_FLOOR` lives in `efficacy.ts` for `isTotalOutage`'s reason.** The
+route imports `next/server`, which the suite's loader cannot resolve, so a
+constant declared there is a constant no check can read. The first version was
+declared in the route, and the package stub added two commits earlier handed
+back `undefined` rather than throwing — the check asserted *"the finding waits
+for undefined sittings"* and went red. That is the stub doing exactly what it
+promises, naming what it ran without in the footer, and it is also the half of
+that mechanism worth watching: a **named import** from a stubbed module
+resolves to nothing quietly, where a property access on its default throws.
+
+Verified on the wire off a running server: `{"vents":500,"anchored":39,
+"peopleWithCarve":0,"notes":0,...,"findings":[{"kind":"memory_empty","count":500,
+"why":"500 vents and not one carve — the room is holding nothing across
+sessions"}]}`. Seven mutations fail check 148, and the seventh is the lesson of
+the day: adding `; sample: string` to the return type left the assertion green,
+because it matched as a **substring** — the `role="radio"` /
+`role="radiogroup"` disease, for the **third time in one session**, in three
+different checks written hours after re-reading the entry about it. Anchor both
+ends, every time.
+
 ## When not to automate
 
 The heartbeat applies a four-condition test per finding: does it repeat, is it

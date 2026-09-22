@@ -89,6 +89,40 @@ export class SupabaseStore implements Store {
     return (data as number | null) ?? 0;
   }
 
+  async countMemory(): Promise<{ peopleWithCarve: number; notes: number }> {
+    /*
+      `head: true` with an exact count: the row count comes back in the
+      Content-Range header and no row is transferred. That matters here
+      beyond speed — a select would pull every carve and every note subject
+      into a route with no token on it, and the whole reason this endpoint
+      can stay open is that it never holds content long enough to leak it.
+
+      `not("carve", "is", null)` rather than counting `vent_users`: a person
+      with a row and no carve is the ordinary state, and counting them would
+      report the userbase as memory.
+    */
+    /*
+      `holding`, not `carves`, and that is check 126 rather than taste. The
+      sweep reads identifiers as well as strings, so a local called `carves`
+      is flagged by the guard whose entire subject is that word — and widening
+      the check to admit it would be weakening a rule to fit the code that
+      broke it. A carve is one per person; this counts the people.
+    */
+    const holding = await this.db
+      .from("vent_users")
+      .select("user_id", { count: "exact", head: true })
+      .not("carve", "is", null);
+    const notes = await this.db
+      .from("vent_notes")
+      .select("id", { count: "exact", head: true });
+    // `ok` for its throw, then the count. Written on separate lines because
+    // the compact version was a comma operator, which is a clever way to make
+    // the next reader wonder whether the error was checked at all.
+    ok("countMemory.holding", holding);
+    ok("countMemory.notes", notes);
+    return { peopleWithCarve: holding.count ?? 0, notes: notes.count ?? 0 };
+  }
+
   async recentVents(userId: string, limit: number): Promise<VentRow[]> {
     const data = ok("recentVents", await this.db
       .from("vents")
