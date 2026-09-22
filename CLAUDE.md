@@ -1331,6 +1331,70 @@ The notes feature had every part working and produced nothing for a month, so
 the only evidence worth anything here is `vent_notes` going above zero in
 production. **That is the number to read first when traffic resumes.**
 
+**The front door was a form, and it collected two per cent.** `/chat` opened
+on *"Question 1 of 3 — which chair is you today?"* before a person could type a
+word — once per device, skippable, and the first thing anybody ever met. The
+entry above already names it: *"the most spoon-feeding object left in the
+product"*, deferred because a redesign shipped unverified at the end of a long
+session is the one thing this file bans.
+
+It is deleted rather than redesigned, and the counts are the whole argument.
+`chair_picked` sits on **2 of 108** vents. `pressure_value` sits on **45 of
+108**, and the only thing that ever changed for it was being promoted out of a
+tray onto the line. The form's main output was the opening tension reading, and
+the pressure track gives that directly, to twenty-two times as many people,
+without asking a question first. Same call as the body tray, which went at
+`body_tapped` 2/108.
+
+**The difference from the body tray is stated rather than glossed.** That
+deletion lost nothing, because `/api/vent` reads `input.bodyTapped ??
+classification.body` and the room took the reading anyway. Nothing derives the
+chair, so the honest sentence is that the chair becomes **absent** rather than
+derived — which is what it already was on 106 of 108 rows. A derived chair is a
+real idea and it is not that commit: it would be a fourth detector in a
+repository whose most-repeated bug is detectors that disagree, and it needs a
+count behind it before it decides anybody's reading, for the reason `arc.ts`
+refuses to phase-filter the tactic library.
+
+**The capability is not deleted with the form, and the asymmetry is on
+purpose.** `openingBlock` renders null on absence — the path almost every row
+already took — and check 21 still grades it in full. The route still accepts
+the four fields and the client sends them as explicit `null` rather than going
+quiet, because *asked and absent* and *nobody remembered* are different states
+and `PENDING_OK` already draws that line elsewhere.
+
+**Three checks went red and every one was anchored to the old world.** Check 21
+required the client to keep what the form collected. Check 63 asserted
+`is(setters.length, 2)` — *"exactly two things can mark the reading as given —
+onboarding, and the slider"* — which is check 126's trap exactly: an integer
+describing the world in the check guarding the one number this product claims
+about itself. The rule was never the integer, it was *a third would be
+somewhere quietly deciding on the person's behalf*, so it is a bound now plus
+the shape "quietly" would actually take — a setter inside an effect, firing
+without anybody touching anything. And check 109 held *nothing onboarding asks
+for is collected and then dropped*, which is vacuous when nothing is collected;
+a vacuous check passes by not looking, so it was replaced with the stronger
+half rather than deleted: **nothing stands between a person and the box.**
+
+Check 21's vocabulary rule was repaired by **derivation** rather than by
+re-pointing it. It read `onboarding.tsx` by name and asserted that screen used
+the shared chair table; the rule — chair tensions lived in four files once — is
+why `chairs.ts` exists, and the circle lobby and circle room still render it.
+It sweeps every `.tsx` that mentions the vocabulary now, with a floor, because
+a hand-written list of the screens showing a chair is how the fourth copy got
+in the first time.
+
+**Two instrument errors, and both are the same lesson twice in an hour.** The
+composer assertion was `/inputRef/`, and a mutation renaming it `inputRefX`
+walked straight through — a substring satisfying the rule, `role="radio"`
+matching `role="radiogroup"` again, written an hour after re-reading that
+entry. It asserts `ref={inputRef}` now, which is the wiring rather than a name.
+And the mutation runner's own `restore()` overwrote the repair before it was
+copied to the backup, so a re-run tested the old assertion and reported the
+same escape: **`git checkout` destroying an uncommitted fix, wearing the
+mutation harness's clothes.** Pin the fix into the backup *before* re-running,
+not after.
+
 ## When not to automate
 
 The heartbeat applies a four-condition test per finding: does it repeat, is it
