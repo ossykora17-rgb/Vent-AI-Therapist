@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
 import { containsAdvice } from "@/lib/circles/rules";
 import { supabaseUrlPath } from "@/lib/env";
-import { efficacyNote, measureEfficacy, PRE_FIX_DEFAULT } from "@/lib/vent/efficacy";
+import { efficacyNote, measureEfficacy, MEMORY_FLOOR, PRE_FIX_DEFAULT } from "@/lib/vent/efficacy";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -184,10 +184,60 @@ export async function GET() {
     });
   }
 
+  /*
+    WHAT THE ROOM IS ACTUALLY HOLDING, AND WHY IT IS REPORTED HERE
+
+    The carve's trigger was repaired because `vent_notes` had produced zero
+    rows for its whole life, and that repair ends on a sentence: *"the only
+    evidence worth anything here is `vent_notes` going above zero in
+    production. That is the number to read first when traffic resumes."*
+
+    Nothing reported it. A verdict that lives in a query somebody has to
+    remember to run is a measurement that is unreachable rather than merely
+    empty — the shape this endpoint already names for circles with no closes
+    and for a week with no anchors. So it is counted here, where the counts
+    live.
+
+    Never content: `countMemory` returns two integers and cannot return a
+    carve or a note's subject. That is what keeps this route safe with no
+    token on it.
+  */
+  let memory = { peopleWithCarve: 0, notes: 0 };
+  let memoryRead = true;
+  try {
+    memory = await store.countMemory();
+  } catch {
+    /*
+      A store that refuses this must not take the whole report down. The
+      counts above came back, and reporting them beside a memory reading that
+      never arrived is better than a 503 — but a zero that is really a failure
+      is the green-light-over-a-broken-road bug, so the flag says which it is
+      rather than letting the number speak for a question it did not answer.
+    */
+    memoryRead = false;
+  }
+
+  /*
+    The finding fires on vents without memory, and only once there are enough
+    sittings for the absence to mean anything. Below that floor zero carves is
+    a quiet week, not a defect, and a heartbeat that cries wolf about a working
+    deployment is how somebody learns to stop reading it.
+  */
+  if (memoryRead && vents.length >= MEMORY_FLOOR && memory.peopleWithCarve === 0) {
+    findings.push({
+      kind: "memory_empty",
+      count: vents.length,
+      why: `${vents.length} vents and not one carve — the room is holding nothing across sessions`,
+      skill: "data-quality",
+    });
+  }
+
   return NextResponse.json(
     {
       vents: vents.length,
       anchored: withDrop.length,
+      peopleWithCarve: memoryRead ? memory.peopleWithCarve : null,
+      notes: memoryRead ? memory.notes : null,
       meanDrop: meanDrop === null ? null : Number(meanDrop.toFixed(1)),
       findings,
       // What the selector has learned from this same window, as a sentence.

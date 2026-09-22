@@ -7,7 +7,6 @@ import Link from "next/link";
 import { RoomHeader } from "@/components/room-header";
 import { useToast } from "@/components/ui/toast";
 import { FeedbackFab } from "@/components/feedback-fab";
-import { Onboarding, hasOnboarded, type OnboardingResult } from "@/components/onboarding";
 import { Breathing, Journaling, ToolRow, shouldOfferBreathing } from "@/components/tools";
 import { anonId, queueVent } from "@/lib/anon";
 
@@ -280,7 +279,6 @@ export function VentChat() {
   const [persisted, setPersisted] = React.useState<boolean | null>(null);
   const [tag, setTag] = React.useState<string | null>(null);
   const [tool, setTool] = React.useState<"breathing" | "journaling" | null>(null);
-  const [showOnboarding, setShowOnboarding] = React.useState(false);
   const [invite, setInvite] = React.useState<VentResponse["circleInvite"]>(null);
   /* Thanksgiving: asked on the way out, every seventh anchored sitting. */
   const [askHeld, setAskHeld] = React.useState(false);
@@ -302,15 +300,8 @@ export function VentChat() {
   const [offer, setOffer] = React.useState<BreakingOffer | null>(null);
   const [answering, setAnswering] = React.useState<BreakingOffer | null>(null);
   const [shut, setShut] = React.useState(false);
-  const [opening, setOpening] = React.useState<{
-    chair: string | null;
-    object: string | null;
-    carrying: string | null;
-    putDown: string | null;
-  } | null>(null);
 
   React.useEffect(() => {
-    if (!hasOnboarded()) setShowOnboarding(true);
   }, []);
 
   /*
@@ -346,47 +337,36 @@ export function VentChat() {
     };
   }, []);
 
-  function completeOnboarding(r: OnboardingResult) {
-    setShowOnboarding(false);
-    // The chair is their opening tension reading — the drop is measured from it.
-    setPressure(r.tension);
-    setPressureSet(true);
-    setTensionBefore(r.tension);
+  /*
+    THE FRONT DOOR WAS A FORM, AND IT COLLECTED ALMOST NOTHING
 
-    /*
-      The other three answers, which used to end here.
+    `/chat` opened on "Question 1 of 3 — which chair is you today?" before a
+    person could type a word. Three questions, once per device, skippable —
+    and the first thing anybody ever met.
 
-      This function read `r.tension` and let `object`, `carry` and `drop` fall
-      out of scope — so a person picked the shape of the thing, named what
-      they were carrying and what they came to put down, and the room opened
-      as though nobody had spoken. Thirty seconds of the least-defended things
-      anybody says here, collected and discarded in the same breath.
+    What it collected: `chair_picked` on **2 of 108** vents. The same table
+    says what removing chrome is worth — `pressure_value` sits at **45 of
+    108**, and the only thing that ever changed for it was being promoted out
+    of a tray onto the line. The form's main output was the opening tension
+    reading, and the pressure track gives that directly, to twenty-two times
+    as many people, without asking a question first.
 
-      Held in state, not in localStorage, and that is deliberate. It is true
-      for this sitting. A word somebody tapped three weeks ago is not what
-      they are carrying tonight, and asserting it would be the same class of
-      wrong as a stale exchange rate: better to know nothing than to state
-      something that has quietly stopped being true.
-    */
-    /*
-      The chair travels too, and it is the field this repair missed the first
-      time.
+    So this is a deletion and not a redesign, which is the same call the body
+    tray got: *"○ WHERE IS IT? ⌄"* was removed at `body_tapped` 2/108 because
+    the route already read the body from their own words. Here nothing derives
+    the chair, so the honest statement is that the chair becomes **absent**
+    rather than derived — and absent is what it already was on 106 of 108
+    rows.
 
-      The comment above records `object`, `carry` and `drop` falling out of
-      scope and being rescued. The chair was not rescued with them, because it
-      looked handled — `r.tension` is derived from it two lines up, so the
-      *number* survived and the *choice* did not.
+    A derived chair is a real idea and it is not this commit. It would be a
+    fourth detector in a repository whose most-repeated bug is detectors that
+    disagree, and it needs a count behind it before it decides anybody's
+    reading — the same reason `arc.ts` refuses to phase-filter the tactic
+    library. Shipping an unmeasured classifier at the end of a long session is
+    the one thing this file bans.
 
-      Production says what that cost: `vents.chair_picked` is null on all 186
-      rows, so the chain this product calls chair → tension → drop has only
-      ever recorded the middle term. The training pipeline's `[CHAIR:x]` tag
-      has never once fired, and nothing can ask whether people who sit on the
-      tight edge drop further than people half off the seat.
-    */
-    setOpening({ chair: r.chair, object: r.object, carrying: r.carry, putDown: r.drop });
-
-    requestAnimationFrame(() => inputRef.current?.focus());
-  }
+    What the room does instead is open on the box.
+  */
 
   const nextId = React.useRef(0);
   const endRef = React.useRef<HTMLDivElement>(null);
@@ -530,10 +510,21 @@ export function VentChat() {
           // than a measurable row that measures nothing.
           pressure: pressureSet ? pressure : null,
           mood,
-          chairPicked: opening?.chair ?? null,
-          openingObject: opening?.object ?? null,
-          openingCarrying: opening?.carrying ?? null,
-          openingPutDown: opening?.putDown ?? null,
+          /*
+            The four fields the front door used to fill.
+
+            Nothing sends them now: the form that did is gone, and the route
+            still accepts them because the thing that would feed them next is
+            a reading taken from somebody's words rather than a question asked
+            before they can type. Sent as null explicitly rather than omitted,
+            so the wire says "asked and absent" instead of going quiet — the
+            distinction `PENDING_OK` draws between a feature that is off and a
+            field nobody remembered.
+          */
+          chairPicked: null,
+          openingObject: null,
+          openingCarrying: null,
+          openingPutDown: null,
         }),
       });
 
@@ -1089,7 +1080,6 @@ export function VentChat() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      {showOnboarding && <Onboarding onDone={completeOnboarding} />}
       {/*
         Nothing to rate yet.
 

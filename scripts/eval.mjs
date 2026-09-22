@@ -2316,10 +2316,23 @@ check("21 The door's answers reach the room, and personality has one home", () =
     "the opening fields are enums on the wire, never free text");
   ok(/opening: \{/.test(route), "and the route actually hands them to the prompt");
 
+  /*
+    These two assertions read the client and they are gone with the door.
+
+    They required `setOpening(` and `openingCarrying: opening?.` — the front
+    door keeping its answers and sending them. `/chat` collects nothing before
+    the box now (check 109), so a rule that the client must keep what the form
+    collected is a rule about a form that does not exist.
+
+    Everything above this line stays, and that is the point: `openingBlock` is
+    a capability with no caller, not a deleted one. It renders null on absence,
+    which is the path 106 of 108 rows already took, and the day a reading feeds
+    it the block is graded exactly as it is here.
+  */
   const chat = fs.readFileSync(
     path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
-  ok(/setOpening\(/.test(chat), "the client keeps what onboarding collected");
-  ok(/openingCarrying: opening\?\./.test(chat), "and sends it with the vent");
+  ok(!/setOpening\(/.test(chat), "and the client no longer collects it before the box",
+    "the front door was a form and this is the assertion that used to require one");
 
   // ── one home for personality ────────────────────────────────────────────
   //
@@ -2353,13 +2366,31 @@ check("21 The door's answers reach the room, and personality has one home", () =
     "no module outside the provider chain hardcodes a model id",
     hardcoded.join(", ") || undefined);
 
-  // And the vocabulary the screen shows is the vocabulary the server reads.
-  const onboarding = fs.readFileSync(
-    path.join(ROOT, "src/components/onboarding.tsx"), "utf8");
-  ok(/from "@\/lib\/vent\/chairs"/.test(onboarding) && /OBJECTS/.test(onboarding),
-    "onboarding renders the shared table rather than its own copy");
-  ok(!/heavy_stone["']\s*,\s*["']Heavy stone/.test(onboarding),
-    "the object labels are not duplicated in the component");
+  /*
+    And the vocabulary the screen shows is the vocabulary the server reads.
+
+    This named `onboarding.tsx` — one file, by hand — and went red the day that
+    file was deleted, over a rule the surviving screens honour perfectly. The
+    rule was never about that component: chair tensions lived in four files
+    once, which is why `chairs.ts` exists at all, and the circle lobby and the
+    circle room still render the same table.
+
+    Swept off the filesystem now, with a floor, because a hand-written list of
+    the screens that show a chair is exactly how the fourth copy got in.
+  */
+  const surfaces = walkTs(path.join(ROOT, "src"))
+    .filter((f) => f.endsWith(".tsx"))
+    .map((f) => [f, fs.readFileSync(f, "utf8")])
+    .filter(([, src]) => /CHAIRS\b|CHAIR_QUESTION|OBJECTS\b/.test(strip(src)));
+  ok(surfaces.length >= 2,
+    `${surfaces.length} screens render the chair vocabulary`,
+    "a sweep that walks nothing passes loudest — if this is 0 the assertions below say nothing");
+  for (const [f, src] of surfaces) {
+    ok(/from "@\/lib\/vent\/chairs"/.test(src),
+      `${path.basename(f)} renders the shared table rather than its own copy`);
+    ok(!/heavy_stone["']\s*,\s*["']Heavy stone/.test(src),
+      `${path.basename(f)} does not duplicate the object labels`);
+  }
 });
 
 // ── 22. the carve is kept, read back, and erased with them ────────────────
@@ -7907,10 +7938,34 @@ check("63 The arrival reading is a reading, or it is nothing", () => {
   /*
     Two events may turn the default into a reading, and only two.
   */
+  /*
+    THIS WAS `is(setters.length, 2)` AND IT WENT STALE EXACTLY AS PREDICTED
+
+    Two events could turn the default into a reading: onboarding and the
+    slider. The front door was deleted at `chair_picked` 2/108, so there is
+    one — and the check went red over a screen that honours the rule perfectly.
+    Check 126's trap, in the check that guards the one number this product
+    claims about itself: the integer was a description of the world and the
+    rule was never about the integer.
+
+    The rule is *a third would be somewhere quietly deciding on the person's
+    behalf*. So what is asserted is a bound and the shape that "quietly" would
+    actually take — a setter inside an effect, firing without anybody touching
+    anything. One control today, at most two if the slider ever grows a
+    sibling, and never one that runs on mount.
+  */
   const setters = [...client.matchAll(/setPressureSet\(true\)/g)];
-  is(setters.length, 2,
-    "exactly two things can mark the reading as given — onboarding, and the slider",
-    "a third would be somewhere quietly deciding on the person's behalf");
+  ok(setters.length >= 1, `${setters.length} control can mark the reading as given`,
+    "none at all means the slider stopped recording that it was touched");
+  ok(setters.length <= 2, `${setters.length} is not a crowd`,
+    "a third would be somewhere deciding on the person's behalf");
+  for (const m of setters) {
+    const before = client.slice(Math.max(0, m.index - 600), m.index);
+    const opens = (before.match(/React\.useEffect\(/g) ?? []).length;
+    const closes = (before.match(/\}, \[/g) ?? []).length;
+    ok(opens <= closes, "and none of them runs on mount rather than on a gesture",
+      "a reading set by an effect is the default wearing an answer, which is this check's whole subject");
+  }
 
   /*
     And nothing downstream reconstructs it. `tensionBefore` fell back to
@@ -13420,72 +13475,80 @@ check("108 A migration cannot drop a function that is not there", () => {
     "passing this check by deleting the drop would be worse than the bug");
 });
 
-check("109 Nothing onboarding asks for is collected and then dropped", () => {
+check("109 The front door collects nothing, and the room opens on the box", () => {
   /*
-    Thirty seconds of the least-defended things anybody says here — which
-    chair, which object, what they are carrying, what they came to put down —
-    and the room has twice opened as though nobody had spoken.
+    WHAT THIS CHECK USED TO HOLD, AND WHY THE RULE MOVED
 
-    `completeOnboarding` read `r.tension` and let the rest fall out of scope.
-    That was found and repaired for `object`, `carry` and `drop`, and the
-    comment recording the repair is still there and still reads as true. The
-    chair was not repaired with them, because it *looked* handled: `r.tension`
-    is derived from the chair two lines up, so the number survived and the
-    choice did not.
+    It held *nothing onboarding asks for is collected and then dropped* —
+    written because `completeOnboarding` read `r.tension` and let `object`,
+    `carry` and `drop` fall out of scope, and then because the chair was
+    missed a second time in the repair that rescued the other three.
 
-    Production: `vents.chair_picked` null on all 186 rows, and
-    `vent_users.chair_picked` set for one person of eight. The chain this
-    product calls chair → tension → drop has only ever recorded the middle
-    term, and the training pipeline's `[CHAIR:x]` tag has never fired.
+    The door is gone. `/chat` opened on "Question 1 of 3 — which chair is you
+    today?" before a person could type a word, and it collected `chair_picked`
+    on **2 of 108** vents. The same table says what removing chrome is worth:
+    `pressure_value` sits at **45 of 108**, and the only thing that ever
+    changed for it was being promoted out of a tray onto the line. The form's
+    main output was the opening tension reading and the pressure track gives
+    that directly, to twenty-two times as many people, without asking first.
 
-    Half a repair is more dangerous than none, because the comment above it now
-    says the problem is handled. So this asserts the whole shape rather than
-    the field that was missed: every answer `OnboardingResult` carries has to
-    reach the vent, and a sixth question added tomorrow fails the build until
-    it does.
+    A rule about collecting-then-dropping is vacuous when nothing is
+    collected, and a vacuous check is one that passes by not looking. So the
+    rule is replaced rather than deleted, and what replaces it is the stronger
+    half: **nothing stands between a person and the box.**
   */
-  const onboarding = strip(fs.readFileSync(path.join(ROOT, "src/components/onboarding.tsx"), "utf8"));
   const chat = strip(fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8"));
 
-  const shape = onboarding.match(/interface OnboardingResult \{([\s\S]*?)\n\}/);
-  ok(shape, "OnboardingResult still declares what onboarding collects",
-    "a sweep that finds nothing passes loudest");
-  const answers = [...(shape?.[1] ?? "").matchAll(/^\s*(\w+)\s*[?:]/gm)].map((m) => m[1]);
-  ok(answers.length >= 5, `there are onboarding answers to trace (${answers.join(", ")})`,
-    "five questions were asked; the count is the point");
+  ok(!fs.existsSync(path.join(ROOT, "src/components/onboarding.tsx")),
+    "the front door component is gone rather than merely unrendered",
+    "an unrendered component is dead code and the next person will wire it back");
+  ok(!/hasOnboarded|showOnboarding|<Onboarding/.test(chat),
+    "and nothing in the chat gates on having onboarded");
 
   /*
-    `tension` is the one answer that legitimately does not travel under its own
-    name — it is written to `tension_before` through the pressure control, and
-    check 84 covers that path. Named here so it is an exemption somebody chose
-    rather than a gap nobody noticed.
+    The composer is what a new person meets. Asserted on the input the room is
+    built around rather than on the absence of a gate, because "no gate" is
+    satisfied just as well by a screen with nothing on it at all.
   */
-  const carriedAsPressure = new Set(["tension"]);
-  const body = chat.slice(chat.indexOf("body: JSON.stringify({"), chat.indexOf("openingPutDown") + 60);
-  ok(/anonId/.test(body) && /message/.test(body), "the vent POST body was found",
-    "slicing to the wrong window is how three of this suite's checks read a comment instead of code");
+  /*
+    Anchored on the wiring rather than on a name.
 
-  const held = chat.match(/const \[opening, setOpening\] = React\.useState<\{([\s\S]*?)\}/);
-  for (const answer of answers) {
-    if (carriedAsPressure.has(answer)) continue;
-    ok(new RegExp(`r\\.${answer}\\b`).test(chat),
-      `${answer} is read off the onboarding result`,
-      "collected and discarded in the same breath is the bug this check exists for");
-  }
-  ok(/chair/.test(held?.[1] ?? ""), "the chair is held for the sitting",
-    "state rather than localStorage — a word tapped three weeks ago is not tonight's");
-  ok(/chairPicked:\s*opening\?\.chair/.test(body),
-    "and the chair reaches the vent row",
-    "chair_picked was null on all 186 production rows while the column, the route and the pipeline tag all existed");
+    The first version was `/inputRef/`, and a mutation renaming it to
+    `inputRefX` walked straight through — a substring satisfying the rule, the
+    same disease as `role="radio"` matching `role="radiogroup"`, in an
+    assertion written an hour after re-reading that. What it asserts now is
+    that the composer is *attached to* the ref the room focuses, which is what
+    "the room opens on the box" actually means.
+  */
+  ok(/<textarea/.test(chat), "the room still opens on something to type in");
+  ok(/ref=\{inputRef\}/.test(chat), "and the box is the thing the room focuses",
+    "a textarea nothing focuses is a box somebody still has to go and find");
 
   /*
-    And the route still accepts it. A client that sends a field the schema
-    rejects fails the whole request, which is a worse outcome than the silence
-    this check exists to end.
+    THE CAPABILITY IS NOT DELETED, AND THAT ASYMMETRY IS DELIBERATE
+
+    `openingBlock` renders null on absence — the path 106 of 108 rows already
+    took — and check 21 still grades it in full. The chair becomes **absent**
+    rather than derived, which is what it already was on almost every row.
+
+    A derived chair is a real idea and it is not this commit: it would be a
+    fourth detector in a repository whose most-repeated bug is detectors that
+    disagree, and it needs a count behind it before it decides anybody's
+    reading. The day something feeds these fields, every one of them must
+    still reach the vent — which is the half of the old rule that survives,
+    and it is asserted on the wire rather than on a form.
   */
   const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
-  ok(/chairPicked:\s*z\.enum/.test(route), "the route's schema accepts it",
-    "zod strips nothing — an unexpected field is a 422 and no reply at all");
+  const fields = ["chairPicked", "openingObject", "openingCarrying", "openingPutDown"];
+  for (const f of fields) {
+    ok(new RegExp(`${f}\\b`).test(route), `${f} is still a field the route accepts`,
+      "deleting the contract is a different decision from deleting the form");
+    ok(new RegExp(`${f}:\\s*null`).test(chat), `and the client sends ${f} as an explicit null`,
+      "going quiet loses the difference between asked-and-absent and nobody-remembered");
+  }
+  ok(/openingBlock/.test(strip(fs.readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8"))),
+    "and the block that would render them is intact",
+    "if this goes, the fields above are a contract with nothing behind it");
 });
 
 check("110 The road from production to training carries what is on it", () => {
@@ -18209,6 +18272,100 @@ check("147 The carve fires when the sitting lands, not only when a number is tap
   const routes = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
   ok(!/trigger/i.test(strip(routes).match(/tension_after[\s\S]{0,200}/)?.[0] ?? ""),
     "and nothing new is kept about anybody to say which door it was");
+});
+
+
+// ── 148. the room says what it is holding ──────────────────────────────────
+const { MEMORY_FLOOR } = await app("src/lib/vent/efficacy.ts");
+
+check("148 What the room is holding is reported, and it is counts only", () => {
+  /*
+    THE NUMBER THE LAST FIX SAID TO READ FIRST, THAT NOTHING REPORTED
+
+    `vent_notes` produced zero rows for its whole life and `vent_users.carve`
+    produced one, against 108 vents. The trigger was the reason and it is
+    repaired — and that repair ends on a sentence: *"the only evidence worth
+    anything here is `vent_notes` going above zero in production. That is the
+    number to read first when traffic resumes."*
+
+    Nothing reported it. A verdict living in a query somebody has to remember
+    to run is a measurement that is unreachable rather than merely empty,
+    which is the shape this endpoint already names for circles with no closes
+    and for a week with no anchors. It reports it now.
+  */
+  const hb = strip(fs.readFileSync(path.join(ROOT, "src/app/api/heartbeat/route.ts"), "utf8"));
+  const types = strip(fs.readFileSync(path.join(ROOT, "src/lib/store/types.ts"), "utf8"));
+
+  ok(/countMemory\(\): Promise</.test(types), "the store can be asked what it holds");
+  /*
+    Anchored on the closing brace, because the first version matched as a
+    substring: adding `; sample: string` to the return type left it green.
+    Third time today that an unanchored pattern let a widening through — the
+    `role="radio"` / `role="radiogroup"` disease, which is the one shape this
+    repository records more often than any other.
+  */
+  ok(/peopleWithCarve: number; notes: number \}>;/.test(types),
+    "and the answer is two integers and nothing else",
+    "a method that can return a carve is a method that can leak one from a route with no token");
+
+  /*
+    `peopleWithCarve`, not `carves`, and check 126 is the reason rather than
+    taste: a carve is one text column per person, ever, so a field called
+    `carves` is the sticky header's "4 earlier carves" bug wearing an operator
+    endpoint. Asserted here so the name cannot drift back — check 126 sweeps
+    `src` and would catch it, and a rule worth two checks is one that already
+    cost something once.
+  */
+  ok(!/\bcarves\b/i.test(hb), "the endpoint does not pluralise a one-per-person column");
+  ok(/peopleWithCarve/.test(hb), "it counts the people holding one");
+
+  // Both backends answer it, or one deployment shape reports a number the
+  // other cannot — the oldest failure in this repository.
+  for (const f of ["supabase-store.ts", "file-store.ts"]) {
+    const src = strip(fs.readFileSync(path.join(ROOT, "src/lib/store", f), "utf8"));
+    ok(/async countMemory\(/.test(src), `${f} implements it`,
+      "a contract one backend answers is a number that changes with the deployment");
+  }
+
+  /*
+    Counts only, and asserted on what the query asks for rather than on the
+    comment above it. `head: true` means the row count comes back in a header
+    and no row is transferred — which matters beyond speed here, because a
+    select would pull every carve and every note subject into a route that has
+    no token on it.
+  */
+  const sb = strip(fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8"));
+  const body = sb.slice(sb.indexOf("async countMemory("), sb.indexOf("async countMemory(") + 1200);
+  is((body.match(/head: true/g) ?? []).length, 2,
+    "both counts are head-only, so no row is transferred",
+    "a select here reads everybody's carve into an endpoint anybody can fetch");
+  ok(!/\.select\(\s*["']\*/.test(body), "and neither asks for every column");
+
+  /*
+    A FAILED READ IS NOT A ZERO
+
+    A store that refuses this must not take the report down — the counts above
+    already arrived. But a zero standing in for a question that was never
+    answered is the green-light-over-a-broken-road bug, so the flag decides
+    and the field goes null rather than reporting a confident nothing.
+  */
+  ok(/memoryRead \? memory\.peopleWithCarve : null/.test(hb),
+    "a read that failed reports null rather than zero",
+    "zero and 'could not ask' are different answers and only one of them is about the product");
+  ok(/if \(memoryRead && /.test(hb),
+    "and the finding never fires on a reading that never arrived");
+
+  /*
+    The floor is why this does not cry wolf. Below it, zero carves is a quiet
+    week rather than a defect — and an endpoint that alarms about a working
+    deployment is how somebody learns to stop reading it, which this file
+    records happening three times in three days.
+  */
+  ok(typeof MEMORY_FLOOR === "number" && MEMORY_FLOOR > 0,
+    `the finding waits for ${MEMORY_FLOOR} sittings before calling silence a defect`);
+  ok(new RegExp(`vents\\.length >= MEMORY_FLOOR`).test(hb),
+    "and the route reads the constant rather than a number typed beside it",
+    "an integer in two places is the bug check 86 and check 132 both exist for");
 });
 
 

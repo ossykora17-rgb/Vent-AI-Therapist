@@ -299,3 +299,25 @@ export async function getEfficacy(store: EfficacySource | null): Promise<Efficac
 
   return inFlight;
 }
+
+/**
+ * Sittings below which an empty memory is a quiet week rather than a defect.
+ *
+ * Ten. Not tuned — there is nothing to tune against — but stated rather than
+ * left implicit, and low enough that the zero this was written for (108 vents,
+ * zero notes) would have fired inside the first fortnight.
+ *
+ * IT LIVES HERE AND NOT IN THE ROUTE, FOR `isTotalOutage`'S REASON
+ *
+ * `/api/heartbeat` imports `next/server`, which this suite's loader cannot
+ * resolve — so a constant declared there is a constant no check can read. The
+ * first version was declared in the route, and the suite's own package stub
+ * handed back `undefined` for it rather than failing: the check asserted *"the
+ * finding waits for undefined sittings"* and went red, which is the stub doing
+ * exactly what it promises (name what it ran without) and a named import
+ * quietly resolving to nothing, which is the half worth watching for.
+ *
+ * A rule kept where nothing can exercise it is the reason `contract.ts` holds
+ * the transport rule instead of the route.
+ */
+export const MEMORY_FLOOR = 10;
