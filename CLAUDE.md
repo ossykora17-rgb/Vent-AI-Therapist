@@ -1275,6 +1275,62 @@ store, unconfigured, failing-store and half-applied-schema shapes, with the live
 suite at 155/155 and 4,265 assertions. The claim was right, which is not the
 reason to have skipped it.
 
+**The zero that three fixes did not move, and the reason was the door.**
+`vent_notes` holds **zero rows** and `vent_users.carve` holds **one**, against
+108 vents from 9 people. Three causes were found inside `parseCarve` and the
+route, every one of them real, and the count never moved — because none of them
+was the reason.
+
+The reason was the trigger. The carve fired in exactly one place, inside
+`submitMood`, so the room's entire long-term memory hung off a gesture that
+**2 of 108** turns produce. A migration, a table, `keepable()`, a refusal
+message, a page, a delete button and checks 83 and 100, behind a door almost
+nobody opens. *Every part working is not the feature working*, for the
+**seventh** time in this file.
+
+**`isLanding()` already knew, and it was already free.** The arc reads a
+sitting winding down — a message short against their own habit, or words that
+end a conversation — and the route returns it as `closing`. That is the room's
+own reading that this is ending, computed every turn, and already the thing
+that decides the weight question. It is strictly better than *they tapped a
+number*, which the ambient track lets somebody do on any turn at all. The
+landing is the trigger now and the mood is the fallback, once per sitting
+whichever arrives first — not twice, because `vent_users.carve` is one column
+and a second call would overwrite a good line to buy the same column.
+
+**Attribution, without a new column.** CLAUDE.md asked that this not be changed
+in a way that makes the arc's own effect unreadable, and it is not:
+`submitMood` is the only writer of `tension_after`, so a carve on a sitting
+with **no anchor** can only have come from the landing. The new path's
+contribution is a query over two columns that already exist. A `trigger` column
+would be a new thing this product keeps about somebody to answer a question the
+schema already answers.
+
+**The deadlock this resolves is worth naming**, because the rule it steps
+around is this file's own. The entry above says *"measure the new anchor rate
+first, then re-plumb"* — and `/api/heartbeat` reads `vents: 108`, identical to
+the audit three days earlier, so **there have been no vents at all since the
+arc shipped**. The measurement that rule waits for cannot exist until somebody
+uses the product, and nobody will accrue memory while the door stays shut. The
+rule was right about attribution and it assumed traffic; the derivation above
+is what satisfies it without one.
+
+**Verified on the wire, four turns through the real route against a real
+store:** `closing` false, false, false, **true** on *"anyway thanks"* — the
+exact condition the client now hangs the carve on — and `POST /api/carve`
+answering `{"carved":false,"reason":"no_key"}`, which is the route reached and
+refusing cleanly rather than throwing. Five mutations fail check 147: delete
+the landing trigger, delete the once-guard, make the guard state instead of a
+ref, add a second writer that walks around it, and stop compressing on the
+mood.
+
+**Two things this cannot prove, stated rather than implied.** That a browser
+actually calls it — that is the settle bug's lesson and it needs a real phone.
+And that a row arrives, which needs a model key this environment does not have.
+The notes feature had every part working and produced nothing for a month, so
+the only evidence worth anything here is `vent_notes` going above zero in
+production. **That is the number to read first when traffic resumes.**
+
 ## When not to automate
 
 The heartbeat applies a four-condition test per finding: does it repeat, is it
