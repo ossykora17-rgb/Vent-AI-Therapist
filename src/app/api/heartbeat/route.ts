@@ -223,13 +223,36 @@ export async function GET() {
     a quiet week, not a defect, and a heartbeat that cries wolf about a working
     deployment is how somebody learns to stop reading it.
   */
-  if (memoryRead && vents.length >= MEMORY_FLOOR && memory.peopleWithCarve === 0) {
-    findings.push({
-      kind: "memory_empty",
-      count: vents.length,
-      why: `${vents.length} vents and not one carve — the room is holding nothing across sessions`,
-      skill: "data-quality",
-    });
+  /*
+    EITHER ZERO, AND THE FIRST VERSION ONLY WATCHED ONE OF THEM
+
+    This fired on `peopleWithCarve === 0`. Production answered
+    `peopleWithCarve: 1, notes: 0` on the first deploy that could read them —
+    so the finding stayed silent over the exact number the endpoint was built
+    for. `vent_notes` at zero is what motivated every line of this, and the
+    condition was written about carves.
+
+    That is the failure this file names as *a justification covers what it
+    argued about, and nothing standing beside it*: the argument was about
+    notes, the implementation was about carves, and adjacency carried it.
+
+    Named per kind rather than rolled into one count, because *"0 notes"* and
+    *"0 carves"* are different defects with different causes — the first is the
+    Carver's output being refused, the second is the Carver never firing — and
+    a finding that cannot say which is a bucket with nothing in it.
+  */
+  for (const [kind, n, what] of [
+    ["carve", memory.peopleWithCarve, "not one person is holding a carve"],
+    ["note", memory.notes, "not one note"],
+  ] as const) {
+    if (memoryRead && vents.length >= MEMORY_FLOOR && n === 0) {
+      findings.push({
+        kind: `no_${kind}s`,
+        count: vents.length,
+        why: `${vents.length} vents and ${what} — the room is holding nothing across sessions`,
+        skill: "data-quality",
+      });
+    }
   }
 
   return NextResponse.json(

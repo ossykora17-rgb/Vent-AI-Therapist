@@ -1450,6 +1450,24 @@ because it matched as a **substring** — the `role="radio"` /
 different checks written hours after re-reading the entry about it. Anchor both
 ends, every time.
 
+**And the finding watched one of the two zeroes.** It fired on
+`peopleWithCarve === 0`. Production answered `peopleWithCarve: 1, notes: 0` on
+the first deploy that could read them — so it stayed **silent over the exact
+number the endpoint was built for**. `vent_notes` at zero is what motivated
+every line of this, and the condition had been written about carves.
+
+*A justification covers what it argued about, and nothing standing beside it*:
+the argument was notes, the implementation was carves, and adjacency carried it
+across. Both are watched now and the finding **names which**, because `0 notes`
+and `0 carves` are different defects — the first is the Carver's output being
+refused, the second is the Carver never firing — and one that cannot say which
+is a bucket with nothing in it.
+
+Read off production after the repair: **`peopleWithCarve: 1, notes: 0` against
+108 vents from 9 people.** That is this file's own claim, confirmed from the
+endpoint rather than from the paragraph that made it, and it is the baseline
+the trigger repair will be measured against.
+
 **And the endpoint written to watch for silence caught its own author in ten
 minutes.** `countMemory` shipped reading `.from("vent_users").select("user_id",
 …)` — and `vent_users` is keyed by **`id`**; `user_id` is what `vents` uses to
