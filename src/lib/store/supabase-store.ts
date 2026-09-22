@@ -110,7 +110,7 @@ export class SupabaseStore implements Store {
     */
     const holding = await this.db
       .from("vent_users")
-      .select("user_id", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .not("carve", "is", null);
     const notes = await this.db
       .from("vent_notes")
