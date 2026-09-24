@@ -4,7 +4,6 @@ import { researchBlock, type Technique } from "./research";
 import { learnedBlock, type LearnedRule } from "./learned";
 import { notesBlock, type Note } from "./notes";
 import { probeBlock, type Probe } from "./probes";
-import { objectLabel, objectReads } from "./chairs";
 import type { Pattern } from "./pattern";
 import { scan, scanBlock } from "./scan";
 import { aimedAtTheMachine, type Classification } from "./intent";
@@ -406,70 +405,88 @@ most valuable thing they will ever type here. Hold still and let it land.`;
  * onboarding is always open and a person who pressed Escape has told you
  * something too.
  */
-export interface Opening {
-  object?: string | null;
-  carrying?: string | null;
-  putDown?: string | null;
-}
+/*
+  THE OPENING BLOCK IS GONE, AND THE RETURN LEG IS WHAT REPLACED IT
+
+  `Opening` and `openingBlock` rendered what the front-door form collected:
+  which chair, which object, what you were carrying, what you came to put down.
+  The form was deleted at `chair_picked` **2 of 108**, and the route kept
+  accepting the fields "for the day a reading feeds it". Nothing ever did.
+
+  Fifty-eight tokens of a **3,600-token hard ceiling** were reserved for a
+  block no request can populate — a price nobody pays, in the most expensive
+  real estate this product has. The budget check measured the heaviest turn at
+  3,599 of 3,600 once `heldBlock` was counted, which is one token of headroom
+  and not a state to ship; CLAUDE.md's rule is that whoever raises that number
+  should have deleted something.
+
+  This is the deletion, and it is the same trade stated as a product argument:
+  the **guessed** version of "what are you carrying" was three taps off a list
+  before anybody had spoken, and the **earned** version is one word somebody
+  chose after an hour in a circle. `heldBlock` is that word. The vocabulary
+  itself stays in `chairs.ts` — `voice.ts` reads `OBJECTS` and `CARRY_WORDS`
+  for the ban on *"you chose the tight knot"*, and circles still ask the chair
+  question on two screens.
+*/
 
 /**
- * The first thing known about somebody, and the last thing that should be
- * read back to them.
+ * How many held words the prompt carries.
  *
- * Onboarding asks three questions that are close to the bone — what shape is
- * it, what are you carrying, what did you come to put down — and until now
- * every one of those answers was discarded by `completeOnboarding` the
- * instant it was given. The room asked who you were and then opened as
- * though nobody had spoken. That is not a missing feature; it is the product
- * forgetting something in front of the person who just said it.
- *
- * It goes in as aim, not as content. Same discipline as `patternBlock`: the
- * moment a model repeats "you said you're carrying guilt", the person is
- * being read their own form back and the room becomes an office.
- *
- * And it is explicitly marked low-fidelity, which matters more here than
- * anywhere else in this prompt. These came off a list of six words. The
- * thing somebody is actually here about is very often not on a list of six
- * words, so the typed message outranks the tap, always. Treating a tap as a
- * confession is how you end up confidently addressing the wrong wound.
+ * Two, against `HELD_CAP`'s five. These are single words — "guilt",
+ * "tiredness" — so the gap is not about cost: a room that opens by listing
+ * five things somebody once said about themselves is reciting a file back at
+ * them, which is the failure `MAX_IN_PROMPT` caps notes at three for. The
+ * newest two are the ones a person would still recognise.
  */
-export function openingBlock(o?: Opening | null): string | null {
-  if (!o) return null;
-  const reads = objectReads(o.object);
-  const lines = [
-    reads && `They picked the ${objectLabel(o.object)?.toLowerCase()} — ${reads}.`,
-    o.carrying && `Off a list of six, the word they chose for what they are carrying was ${o.carrying.toLowerCase()}.`,
-    o.putDown && `The one they came to put down was ${o.putDown.toLowerCase()}.`,
-  ].filter(Boolean);
-  if (lines.length === 0) return null;
-
-  /*
-    The caveat came off: CONTEXT_RULES rule 3 already says every assembled line
-    was inferred or tapped and may simply be wrong. Two wordings of one rule
-    is the exact duplication those shared rules were written to delete, and it
-    was still sitting in the block they govern.
-  */
-  return `HOW THEY WALKED IN\n${lines.join("\n")}`;
-}
+export const HELD_IN_PROMPT = 2;
 
 /**
- * The carve, read back at the top of the next session.
+ * The word they took out of a circle, handed back to the room they return to.
  *
- * `memoryBlock` gives the model six verbatim paragraphs, which is a
- * transcript. This is one line, and it is a different kind of knowing: the
- * thing they would recognise at 2am, in the words they used, carried across
- * the gap between sessions.
+ * THE RETURN LEG WAS BUILT AND THE PROMPT NEVER READ IT
  *
- * It is aim, exactly like the pattern and the opening. A model that says
- * "last time you told me your dad is sick" has turned a memory into a receipt
- * and told the person they are a file with a history. What it is for is that
- * the second session does not start from zero — the ground has been covered,
- * so the first question can land one layer under where it otherwise would.
+ * The circle's seal writes `carry` into `vent_users.held`. That shipped with a
+ * migration, a store method whose answer is read, a route, the Memory page, a
+ * delete button, a destruction path in `deleteAll`, three branches of honest
+ * closing copy, four mutations, and a live seam in check 20 proving the row
+ * actually arrives. `getHeld` had exactly two callers: `/api/held`, which
+ * draws the Memory page, and the store implementations.
  *
- * And it is explicitly disposable. It was written by a model about somebody
- * rather than by them, which makes it the one thing in this prompt most
- * likely to be subtly wrong, and the least defensible to insist on.
+ * So the word was stored, and shown to them, and the room they came back to
+ * had no idea. CLAUDE.md calls that commit *"the return leg, which was the
+ * last cold component"* and *"why the product read as two products: the bridge
+ * was one-way by construction"* — and the bridge stayed one-way, one function
+ * call short, with every part working. **Eighth time in this file.**
+ *
+ * WHY THIS IS THE SAFEST THING IN THE PROMPT
+ *
+ * It needs no new promise, which is the same reason the seal could write it at
+ * all: the column exists, renders on `/memory`, has a button, and dies in
+ * `deleteAll`. And it is the one thing a circle produces that is safe to move —
+ * not the transcript, not anybody else's words, not a model's summary, but one
+ * word the person chose about themselves. The contract's own sentence:
+ * *"written only by the person and never by a model."*
+ *
+ * Handing somebody their own word back is also the most useful move available
+ * here — the asymmetry check 105 asserts about `CONDITIONS`, where a reply may
+ * return a word they chose and a note may not write one.
+ *
+ * The silence rule is `carveBlock`'s, verbatim and for its reason: they can
+ * clear it in one tap, so it is not something to lean on out loud.
  */
+export function heldBlock(held: readonly { text: string }[] = []): string | null {
+  const keep = held
+    .map((h) => h.text?.trim())
+    .filter((t): t is string => Boolean(t))
+    .slice(0, HELD_IN_PROMPT);
+  if (keep.length === 0) return null;
+  return [
+    "WHAT THEY SAID HELD — their own words, closing a circle:",
+    ...keep.map((t) => `- ${t}`),
+    "Never name it out loud. They can clear it in one tap.",
+  ].join("\n");
+}
+
 export function carveBlock(carve?: string | null): string | null {
   if (!carve?.trim()) return null;
 
@@ -606,8 +623,6 @@ export interface BuildPromptArgs {
   pattern?: Pattern | null;
   /** Their message, so the scan can be built from it. */
   message?: string;
-  /** What onboarding collected, for the session it was collected in. */
-  opening?: Opening | null;
   /** Eight words from the last session that had one. Null is the common case. */
   carve?: string | null;
   /**
@@ -631,6 +646,14 @@ export interface BuildPromptArgs {
    * transcript. Capped in `notesBlock`, and `loss` never reaches the model.
    */
   notes?: readonly Note[];
+  /**
+   * What they said held, closing a circle. Their words, never a model's.
+   *
+   * Optional and defaulting to empty, so every existing caller keeps working
+   * and simply carries nothing — which is what they all did before this
+   * existed, including the route, for the whole life of the column.
+   */
+  held?: readonly { text: string }[];
   /**
    * The question to go after, selected against their own words.
    *
@@ -721,11 +744,11 @@ export function buildSystemPrompt({
   turnsToday = null,
   pattern = null,
   message,
-  opening = null,
   carve = null,
   technique = null,
   learned,
   notes = [],
+  held = [],
   probe = null,
 }: BuildPromptArgs): string {
   const state = [
@@ -796,8 +819,8 @@ export function buildSystemPrompt({
       notesBlock(notes),
       threadBlock(openThread(memory)),
       carveBlock(carve),
+      heldBlock(held),
       patternBlock(pattern),
-      openingBlock(opening),
     ].some(Boolean)
       ? CONTEXT_RULES
       : null,
@@ -805,8 +828,10 @@ export function buildSystemPrompt({
     // than a description, and rule 2 says the context aims the one question.
     threadBlock(openThread(memory)),
     carveBlock(carve),
+    // Beside the carve because it is the same kind of thing: one line of
+    // theirs, from a sitting that has ended, under the same silence rule.
+    heldBlock(held),
     patternBlock(pattern),
-    openingBlock(opening),
     flavourBlock(flavour),
     // Before the tactic, because it is background the tactic is chosen
     // against — and after the context rules, because "use it only if it fits

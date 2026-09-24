@@ -24,7 +24,7 @@ const { groundNow } = await app("src/lib/vent/grounding.ts");
 const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS, ALL_TACTICS, nothingCanMove, caughtWatchingSelf } =
   await app("src/lib/vent/tactics.ts");
 const { buildFlavour } = await app("src/lib/flavour/profile.ts");
-const { flavourBlock, openingBlock, carveBlock, memoryBlock } = await app("src/lib/vent/prompt.ts");
+const { flavourBlock, carveBlock, memoryBlock, heldBlock, HELD_IN_PROMPT } = await app("src/lib/vent/prompt.ts");
 const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/vent/chairs.ts");
 const { selectMemory, MEMORY_TURNS } = await app("src/lib/vent/memory.ts");
@@ -2301,75 +2301,27 @@ check("18 Nothing pinned to the bottom lands on the crisis line", () => {
 // Nothing could have failed that. The answers were collected, the screen
 // worked, the types were right, and the data went nowhere. So: the wiring
 // itself is the assertion.
-check("21 The door's answers reach the room, and personality has one home", () => {
-  is(openingBlock(null), null, "no onboarding answers means no block at all");
-  is(openingBlock({}), null, "and neither does an empty one — Escape is always available");
-
-  const full = openingBlock({
-    object: "tight_knot",
-    carrying: "Guilt",
-    putDown: "Tiredness",
-  });
-  ok(/tangled/.test(full), "the object carries how it behaves, not just its name");
-  ok(/guilt/.test(full) && /tiredness/.test(full), "both words reach the prompt");
-  // The recite ban and "their words win" are stated once, in CONTEXT_RULES,
-  // for all three assembled blocks — so they are asserted on the assembled
-  // prompt rather than on this block.
-  const withOpening = buildSystemPrompt({
-    grounding: { date: "8 August 2026", time: "05:30", iso: "2026-08-08", lines: [] },
-    classification: { intent: "vent", realWorldTag: null, language: "en", body: null },
-    tactic: ALL_TACTICS[0], ctx: { ...base }, memory: [],
-    opening: { object: "tight_knot", carrying: "Guilt", putDown: "Tiredness" },
-  });
-  ok(/NEVER THE FILE/.test(withOpening),
-    "and the model is forbidden from reading the form back to them");
-  ok(/THEIR SENTENCE OUTRANKS/.test(withOpening),
-    "and what they type outranks what they tapped");
+check("21 What the room carries across sessions is earned, and personality has one home", () => {
   /*
-    Asserted on the assembled prompt, not on the block.
+    WHAT THIS CHECK USED TO HOLD, AND WHY THE FIRST HALF IS GONE
 
-    `openingBlock` used to end with its own two-line caveat — "tapped rather
-    than written, and the only thing you know about them" — which is a second
-    wording of CONTEXT_RULES rule 3, the rule written specifically to delete
-    the near-duplicate prose those three blocks were each carrying. It came
-    out; the statement did not. It reaches the model through the shared rules,
-    which render whenever any block they govern does, so what has to be true
-    is that the *prompt* says it — and that is what this now checks.
+    It held *the door's answers reach the room*: `openingBlock` rendered which
+    chair, which object, what you were carrying and what you came to put down,
+    and this graded every line of it.
+
+    The door was deleted at `chair_picked` **2 of 108**, and the block was kept
+    "for the day a reading feeds it". Nothing ever did — and it was holding
+    **58 tokens of a 3,600-token hard ceiling**, in the most expensive real
+    estate this product has. The budget check measured 3,599 of 3,600 once the
+    return leg's block was counted, which is one token of headroom, so the rule
+    CLAUDE.md states applied: whoever raises that number should have deleted
+    something.
+
+    The replacement is not nothing. `heldBlock` carries the word somebody chose
+    after an hour in a circle, where this carried three taps off a list before
+    anybody had spoken — the earned version of the same question. Check 149
+    grades it the way this graded the block it replaces.
   */
-  ok(/inferred, tapped off a\s*\n?\s*list|may simply\s*\n?\s*be wrong/.test(withOpening),
-    "the low fidelity of a six-word list is stated, not hidden",
-    "a tap treated as a confession is how you confidently address the wrong wound");
-
-  // A partial answer is the normal case, not an error case.
-  const partial = openingBlock({ object: null, carrying: "Anger", putDown: null });
-  ok(partial && /anger/.test(partial), "one answer is enough to be worth something");
-  ok(partial && !/undefined|null/.test(partial), "and the absent ones say nothing at all");
-
-  // The wire carries ids. This is the only field on /api/vent whose contents
-  // reach a system prompt as prose, so a free-text version would be a client
-  // writing into the model's instructions.
-  const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
-  ok(/openingObject: z\.enum\(/.test(route) && /openingCarrying: z\.enum\(/.test(route),
-    "the opening fields are enums on the wire, never free text");
-  ok(/opening: \{/.test(route), "and the route actually hands them to the prompt");
-
-  /*
-    These two assertions read the client and they are gone with the door.
-
-    They required `setOpening(` and `openingCarrying: opening?.` — the front
-    door keeping its answers and sending them. `/chat` collects nothing before
-    the box now (check 109), so a rule that the client must keep what the form
-    collected is a rule about a form that does not exist.
-
-    Everything above this line stays, and that is the point: `openingBlock` is
-    a capability with no caller, not a deleted one. It renders null on absence,
-    which is the path 106 of 108 rows already took, and the day a reading feeds
-    it the block is graded exactly as it is here.
-  */
-  const chat = fs.readFileSync(
-    path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
-  ok(!/setOpening\(/.test(chat), "and the client no longer collects it before the box",
-    "the front door was a form and this is the assertion that used to require one");
 
   // ── one home for personality ────────────────────────────────────────────
   //
@@ -2749,6 +2701,13 @@ check("24 The system prompt has a budget, and every block earns its place", () =
     message,
     opening: { object: "tight_knot", carrying: "Guilt", putDown: "Tiredness" },
     carve: "pops sick / fear of being useless son",
+    /*
+      The held words count against the ceiling, or the ceiling is not the
+      ceiling — this check's own rule about `probeBlock`, applied to the block
+      added after it. Sized from `HELD_IN_PROMPT` rather than a hand-typed
+      pair, so the measurement cannot drift from what the block renders.
+    */
+    held: Array.from({ length: HELD_IN_PROMPT }, () => ({ text: "tiredness" })),
     /*
       The lookup counts against the ceiling, or the ceiling is not the ceiling.
 
@@ -13562,30 +13521,44 @@ check("109 The front door collects nothing, and the room opens on the box", () =
     "a textarea nothing focuses is a box somebody still has to go and find");
 
   /*
-    THE CAPABILITY IS NOT DELETED, AND THAT ASYMMETRY IS DELIBERATE
+    AND WHAT THE ROOM CARRIES INSTEAD IS EARNED RATHER THAN DECLARED
 
-    `openingBlock` renders null on absence — the path 106 of 108 rows already
-    took — and check 21 still grades it in full. The chair becomes **absent**
-    rather than derived, which is what it already was on almost every row.
+    This block used to assert the opposite: that the route still accepted the
+    four fields the form had filled, and that the client sent explicit nulls,
+    because *asked and absent* and *nobody remembered* are different states.
+    That was right while the capability was worth keeping.
 
-    A derived chair is a real idea and it is not this commit: it would be a
-    fourth detector in a repository whose most-repeated bug is detectors that
-    disagree, and it needs a count behind it before it decides anybody's
-    reading. The day something feeds these fields, every one of them must
-    still reach the vent — which is the half of the old rule that survives,
-    and it is asserted on the wire rather than on a form.
+    It was not. Nothing fed those fields in the whole time they survived the
+    form, and `openingBlock` held **58 tokens of a 3,600-token hard ceiling**
+    for a shape no request could produce — a price nobody pays, in the most
+    expensive real estate this product has.
+
+    What replaced it is the same question, earned: `heldBlock` carries the word
+    somebody chose after an hour in a circle, where the form took three taps
+    off a list before anybody had spoken. So the rule is not "the contract
+    survives", it is **the room's cross-session context comes from what they
+    did, never from what they declared on the way in**.
   */
+  const prompt = strip(fs.readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8"));
   const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
-  const fields = ["chairPicked", "openingObject", "openingCarrying", "openingPutDown"];
-  for (const f of fields) {
-    ok(new RegExp(`${f}\\b`).test(route), `${f} is still a field the route accepts`,
-      "deleting the contract is a different decision from deleting the form");
-    ok(new RegExp(`${f}:\\s*null`).test(chat), `and the client sends ${f} as an explicit null`,
-      "going quiet loses the difference between asked-and-absent and nobody-remembered");
+  ok(!/openingBlock/.test(prompt), "the block the form fed is gone, not merely unfed",
+    "58 tokens of a hard ceiling reserved for a shape no request can produce");
+  for (const f of ["openingObject", "openingCarrying", "openingPutDown"]) {
+    ok(!new RegExp(`${f}\\b`).test(route), `${f} is gone from the route too`,
+      "a field nothing sends and nothing renders is a contract with nothing behind it");
+    ok(!new RegExp(`${f}\\b`).test(chat), `and from the client`);
   }
-  ok(/openingBlock/.test(strip(fs.readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8"))),
-    "and the block that would render them is intact",
-    "if this goes, the fields above are a contract with nothing behind it");
+  /*
+    `chairPicked` stays, and the difference is the point. It is a column write
+    that `/api/profile` and `/api/circles` genuinely feed — the chair question
+    is still asked on two circle screens — so the column has real writers. The
+    three fields above had none anywhere, and cost prompt budget on top.
+  */
+  ok(/chairPicked/.test(route), "the chair column keeps its writer",
+    "circles still ask it on two screens; this is a column, not a prompt block");
+
+  // And the earned replacement is wired, which check 149 grades in full.
+  ok(/heldBlock/.test(prompt), "what the room carries across sessions is what they earned");
 });
 
 check("110 The road from production to training carries what is on it", () => {
@@ -18418,6 +18391,109 @@ check("148 What the room is holding is reported, and it is counts only", () => {
   ok(new RegExp(`vents\\.length >= MEMORY_FLOOR`).test(hb),
     "and the route reads the constant rather than a number typed beside it",
     "an integer in two places is the bug check 86 and check 132 both exist for");
+});
+
+
+// ── 149. the word a circle sent back reaches the room it came back to ──────
+check("149 The return leg reaches the prompt, not only the Memory page", () => {
+  /*
+    EVERY PART WORKING IS NOT THE FEATURE WORKING — FOR THE EIGHTH TIME
+
+    The circle's seal writes `carry` into `vent_users.held`. That shipped with
+    a migration, a store method whose answer is read, a route, the Memory page,
+    a delete button, a destruction path in `deleteAll`, three branches of
+    honest closing copy, four mutations, and a live seam in check 20 proving
+    the row actually arrives.
+
+    `getHeld` had exactly two callers: `/api/held`, which draws the Memory
+    page, and the store implementations. So the word was stored, and shown to
+    them, and **the room they came back to had no idea.** CLAUDE.md calls that
+    commit "the return leg, which was the last cold component" and "why the
+    product read as two products: the bridge was one-way by construction" —
+    and the bridge stayed one-way, one function call short.
+
+    It is the same shape as the notes producing zero rows for a month and the
+    push that never rang, with the part missing being the only one that
+    changes what a person reads.
+  */
+  ok(typeof heldBlock === "function", "the block exists");
+  is(heldBlock([]), null, "nobody who has closed no circle carries a block at all",
+    "a heading over an empty list is weight for nothing, on a 3,600-token ceiling");
+  is(heldBlock(), null, "and neither does a caller that passes nothing");
+  is(heldBlock([{ text: "   " }]), null, "whitespace is not a word somebody said");
+
+  const one = heldBlock([{ text: "guilt" }]);
+  ok(one && /guilt/.test(one), "their word reaches the prompt");
+  /*
+    The silence rule is `carveBlock`'s, verbatim and for its reason: they can
+    clear it in one tap, so a room that leans on it out loud is promising
+    something the delete button can take away mid-sentence.
+  */
+  ok(one && /one tap/.test(one), "under the same silence rule the carve carries",
+    "never name it out loud — they can clear it, and the room must not have leaned on it");
+
+  /*
+    Capped, and derived from the constant rather than counted by hand. Five are
+    stored; a room that opens by listing five things somebody once said about
+    themselves is reciting a file back at them.
+  */
+  const many = heldBlock(Array.from({ length: HELD_IN_PROMPT + 3 }, (_, i) => ({ text: `w${i}` })));
+  is((many.match(/^- /gm) ?? []).length, HELD_IN_PROMPT,
+    `at most ${HELD_IN_PROMPT} reach the prompt`,
+    "HELD_CAP is 5 and a prompt that lists all of them is reading a file back");
+
+  /*
+    BOTH SITES, AND THE SECOND ONE IS THE EASY MISS
+
+    `buildSystemPrompt` renders context blocks twice: once inside a
+    `.some(Boolean)` that decides whether CONTEXT_RULES renders at all, and
+    once for real. Wiring only the second hands somebody the block *without*
+    the rules that govern how context is used — and the only person that
+    happens to is somebody whose held word is their sole context, which is
+    exactly who this feature is for.
+  */
+  const promptSrc = strip(fs.readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8"));
+  is((promptSrc.match(/heldBlock\(held\)/g) ?? []).length, 2,
+    "it is wired into the CONTEXT_RULES guard as well as the render",
+    "the guard decides whether the rules that govern context render at all");
+
+  // And the route actually fetches it, which is the call that did not exist.
+  const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
+  ok(/store\.getHeld\(userId\)/.test(route), "the vent route asks the store for it",
+    "this is the function call the whole return leg was short of");
+  ok(/held: heldWords/.test(route), "and passes it to the prompt");
+  ok(/\.catch\(\(\) => \[\]\)/.test(route.slice(route.indexOf("getHeld"), route.indexOf("getHeld") + 120)),
+    "a store failure opens the session knowing less rather than not opening",
+    "the same degradation its two neighbours already take");
+
+  /*
+    THE BUDGET, WHICH IS THE HALF THAT COST SOMETHING
+
+    Check 24 caps the heaviest assembly at 3,600 and it is not slack: adding
+    this took it to **3,599 of 3,600**, one token of headroom. CLAUDE.md's rule
+    is that whoever raises that number should have deleted something, so the
+    unfed `openingBlock` went — 58 tokens reserved for a shape no request can
+    produce since the front door was deleted.
+
+    Asserted as the property rather than as the integer: the block counts
+    against the ceiling at all. An integer here is check 126's trap, and the
+    ceiling itself is check 24's to hold.
+  */
+  const evalSrc = fs.readFileSync(path.join(ROOT, "scripts/eval.mjs"), "utf8");
+  /*
+    The window is the heaviest assembly itself, from its opening brace to the
+    line that measures it — not a fixed number of characters from the start.
+    The first version sliced 2,000 and the comment above the field pushed it
+    out: a probe in the wrong window, which is the mistake this suite has now
+    made often enough to stop guessing at spans.
+  */
+  const from = evalSrc.indexOf("const heaviest = buildSystemPrompt({");
+  const heaviest = evalSrc.slice(from, evalSrc.indexOf("const tokens = Math.round", from));
+  ok(heaviest.length > 200, `${heaviest.length} characters of the heaviest assembly read`,
+    "a window that found nothing satisfies the assertion below by not looking");
+  ok(/held: Array\.from\(\{ length: HELD_IN_PROMPT/.test(heaviest),
+    "and it counts against the prompt budget, sized from the constant",
+    "a block that renders on a real vent and not in that measurement is outside the budget");
 });
 
 

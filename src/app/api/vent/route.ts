@@ -5,7 +5,7 @@ import { getStore, type Store, type VentRow } from "@/lib/store";
 import { isModelConfigured } from "@/lib/env";
 import { answerFactual, groundNow } from "@/lib/vent/grounding";
 import { classify, CRISIS_LINES, crisisReply } from "@/lib/vent/intent";
-import { CARRY_WORDS, OBJECT_IDS, tensionNow } from "@/lib/vent/chairs";
+import { tensionNow } from "@/lib/vent/chairs";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
 import { selectProbe } from "@/lib/vent/probes";
 import { arcProbe, isLanding, saysClosing, typicalWords } from "@/lib/vent/arc";
@@ -154,9 +154,6 @@ const bodySchema = z.object({
     Nullish throughout: Escape is always available on that screen, and
     somebody who skipped has answered nothing rather than answered wrong.
   */
-  openingObject: z.enum(OBJECT_IDS as unknown as [string, ...string[]]).nullish(),
-  openingCarrying: z.enum(CARRY_WORDS as unknown as [string, ...string[]]).nullish(),
-  openingPutDown: z.enum(CARRY_WORDS as unknown as [string, ...string[]]).nullish(),
 });
 
 type Input = z.infer<typeof bodySchema>;
@@ -436,6 +433,17 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
   */
   const greetCarve = store && userId ? await store.getCarve(userId).catch(() => null) : null;
   const greetNotes = store && userId ? await store.listNotes(userId).catch(() => []) : [];
+  /*
+    The word a circle sent back, fetched beside the other two.
+
+    `getHeld` had two callers — `/api/held`, which draws the Memory page, and
+    the store — so the seal wrote it, the page showed it, and the room they
+    returned to had no idea. The bridge this product calls its return leg was
+    one function call short of existing. Same `.catch` as its neighbours: a
+    failure inside the store opens a session knowing less rather than not
+    opening at all.
+  */
+  const heldWords = store && userId ? await store.getHeld(userId).catch(() => []) : [];
 
   // ── 3. Free paths. No model call — this is the credit policy in code. ───
   const factual =
@@ -537,15 +545,11 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
       less rather than not opening at all.
     */
     notes: greetNotes,
+    held: heldWords,
     // One of fifty, chosen against their own words and blocked for three
     // turns. Null means the message offered no handle at all, and the prompt
     // then carries no question line rather than a blank one.
     probe,
-    opening: {
-      object: input.openingObject,
-      carrying: input.openingCarrying,
-      putDown: input.openingPutDown,
-    },
   });
 
   let reply: string;
