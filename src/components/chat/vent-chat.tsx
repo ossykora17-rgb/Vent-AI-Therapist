@@ -510,21 +510,6 @@ export function VentChat() {
           // than a measurable row that measures nothing.
           pressure: pressureSet ? pressure : null,
           mood,
-          /*
-            The four fields the front door used to fill.
-
-            Nothing sends them now: the form that did is gone, and the route
-            still accepts them because the thing that would feed them next is
-            a reading taken from somebody's words rather than a question asked
-            before they can type. Sent as null explicitly rather than omitted,
-            so the wire says "asked and absent" instead of going quiet — the
-            distinction `PENDING_OK` draws between a feature that is off and a
-            field nobody remembered.
-          */
-          chairPicked: null,
-          openingObject: null,
-          openingCarrying: null,
-          openingPutDown: null,
         }),
       });
 

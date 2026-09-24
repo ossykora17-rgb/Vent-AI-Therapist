@@ -1496,6 +1496,76 @@ Literal selects only, stated as a limit rather than left to be discovered:
 and an embedded `table(col)` select is a different grammar this must not
 pretend to parse.
 
+**The return leg was built and the prompt never read it.** The circle's seal
+writes `carry` into `vent_users.held`. That shipped with a migration, a store
+method whose answer is read, a route, the Memory page, a delete button, a
+destruction path in `deleteAll`, three branches of honest closing copy, four
+mutations, and a live seam in check 20 proving the row actually arrives.
+
+`getHeld` had exactly **two callers**: `/api/held`, which draws the Memory
+page, and the store implementations. So the word was stored, and shown to them,
+and the room they came back to had no idea. This file calls that commit *"the
+return leg, which was the last cold component"* and *"why the product read as
+two products: the bridge was one-way by construction"* — and the bridge stayed
+one-way, **one function call short**, with every part working. **Eighth time.**
+
+**Wired into both sites, and the second one is the easy miss.**
+`buildSystemPrompt` renders context blocks twice: once inside a `.some(Boolean)`
+that decides whether `CONTEXT_RULES` renders at all, and once for real. Wiring
+only the render hands somebody the block *without* the rules that govern how
+context is used — and the only person that happens to is somebody whose held
+word is their sole context, which is exactly who this is for.
+
+**And it had to pay by removal, because the ceiling is not slack.** Check 24
+measured the heaviest turn at **3,599 of 3,600** — one token — and this file's
+own rule is that whoever raises that number should have deleted something. The
+deletion was `openingBlock`: **58 tokens** reserved for a shape no request can
+produce since the front door went at `chair_picked` 2/108. A price nobody pays,
+in the most expensive real estate this product has. Arithmetic, all measured:
+3,599 − 58 + 36 = **3,577, headroom 23**.
+
+It is also the same trade stated as a product argument. The **guessed** version
+of *what are you carrying* was three taps off a list before anybody had spoken;
+the **earned** version is one word somebody chose after an hour in a circle.
+The vocabulary itself stays in `chairs.ts` — `voice.ts` reads `OBJECTS` and
+`CARRY_WORDS` for the ban on *"you chose the tight knot"*, and circles still ask
+the chair question on two screens. `chairPicked` stays on the vent route too,
+and the difference is the point: it is a **column** write that `/api/profile`
+and `/api/circles` genuinely feed, where the three `opening*` fields had no
+writer anywhere and cost prompt budget on top.
+
+**The budget assertion caught its own author, which is the part worth keeping.**
+Check 149 asserts that the new block *counts against the ceiling* — check 24's
+own rule about `probeBlock`, applied to the block added after it — and it went
+red, because an earlier script had aborted before writing the fixture into the
+heaviest assembly. So the block really was outside the budget and the suite
+really did say so. Without that assertion the measurement would have read 3,541
+and looked like headroom that did not exist.
+
+Two checks went red on the deletion and both were right. Check 21 graded
+`openingBlock` in full and check 109 asserted the route still accepted the four
+fields — the exact rule written two days earlier, kept for *"the day a reading
+feeds it"*. Nothing ever did. Both were replaced rather than repointed: 21 is
+about personality having one home, and 109's second half is now the rule that
+succeeded it — **the room's cross-session context comes from what they did,
+never from what they declared on the way in.**
+
+Verified on the wire, four calls against a real store: a vent, `POST /api/held`
+answering `{"saved":true}`, the GET returning
+`{"held":[{"text":"tiredness","at":"…"}]}`, and the next vent answering **200**
+— the turn that now carries it. Seven mutations fail check 149: wire only the
+render and not the guard, stop fetching it, remove the cap, drop the silence
+line, render a heading over an empty list, stop counting it against the ceiling,
+and let a store failure take the session down.
+
+**What that does not prove, stated rather than implied.** The route's fetch and
+its pass are asserted off the source; the block is graded behaviourally; the GET
+proves the store returns the row for that person. What no check here reaches is
+the assembled prompt of a live turn carrying it — `/api/vent` imports
+`next/server`, so the suite's loader cannot build the route, and the prompt is
+not on any response. The chain is covered on both sides and at the join, and
+that sentence is the honest shape of it.
+
 ## When not to automate
 
 The heartbeat applies a four-condition test per finding: does it repeat, is it
