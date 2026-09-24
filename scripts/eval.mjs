@@ -15453,12 +15453,20 @@ check("122 A reply that is correct and incomprehensible is a failed reply", () =
     sentence made of their words still carries their words; the hold carries
     nobody's.
   */
-  const fs2 = fs.readFileSync(path.join(ROOT, "src/lib/vent/failsafe.ts"), "utf8");
-  ok(/RETRY_ONLY = new Set\(\["language", "jargon"\]\)/.test(fs2),
-    "it buys a retry and never the authored line");
-  ok(!/REJECT = new Set\(\[[^\]]*"jargon"/s.test(fs2),
-    "and is not in the rejection set",
-    "an opaque reply is not a harmful one, and the two tiers mean different things");
+  /*
+    Asserted on the membership rather than on the set's text. The first version
+    read `RETRY_ONLY = new Set(["language", "jargon"])` character for character
+    and went red the day a third grader joined the tier — a correct change
+    failing an assertion pinned to a line instead of to a rule, which is check
+    44's finding and check 29's, arriving here for the third time.
+
+    The rule never mentioned how many members the tier has. It says where
+    `jargon` lives: a retry, and not the rejection set.
+  */
+  ok(RETRY_ONLY.has("jargon"), "it buys a retry",
+    "a grader in neither tier is one the failsafe silently ignores");
+  ok(!REJECT.has("jargon"), "and never the authored line",
+    "the hold is generic, so it loses to an opaque reply made of their words");
 });
 
 check("123 The rule underneath 'I am not enough' has a move of its own", () => {
@@ -18781,6 +18789,195 @@ check("150 The age gate states, never collects — and never closes on a number"
   ok(/survived/.test(out), "and neither writer throws either");
 });
 
+
+// ── 151. the room does not decide what is inside somebody ──────────────────
+check("151 The room does not tell somebody what they feel", () => {
+  /*
+    WHAT THIS CLOSES, AND WHAT IT IS NOT ALLOWED TO COST
+
+    `invented` catches a person nobody mentioned and a figure nobody gave;
+    `diagnosis` catches a clinical label. Every one of those is a fact about the
+    *world*. Sixteen graders and not one asked the other question: whether the
+    room told somebody what is inside them.
+
+    Production, all 108 replies: **four assert a feeling and three name one the
+    person never used** — "you're exhausted", "you're terrified", and
+    "you're abandoned" on a Pidgin turn. The fourth says "you're trapped" to
+    somebody who had written that they were trapped, which is their own word
+    handed back and is the best move this room makes.
+
+    Measured before it was tiered, which `fused` was not and which this file
+    names as the thing `earned_worth` looked like before it shipped.
+  */
+  const said = (msg, reply) =>
+    gradeReply({ message: msg, intent: "vent", language: "en" }, reply,
+      { tokensSpent: true, said: msg }).filter((f) => f.grader === "presumed");
+
+  const fires = (msg, reply, why) =>
+    ok(said(msg, reply).length === 1, why, `silent on: ${reply}`);
+  const silent = (msg, reply, why) =>
+    ok(said(msg, reply).length === 0, why, `fired on: ${reply}`);
+
+  const rent = "rent is due and i have nothing left";
+
+  // ── it fires on the three production shapes ──────────────────────────────
+  fires(rent, "You're exhausted and it shows.", "a feeling they never named is caught");
+  fires("my boss shouted at me again", "You're terrified of what comes next.",
+    "and so is the second");
+  fires("she no call me since", "You're abandoned.",
+    "and the third, which arrived on a Pidgin turn");
+
+  /*
+    ── THEIR OWN WORD, IN EITHER LANGUAGE ───────────────────────────────────
+
+    The first version of this grader tested whether the reply's feeling word
+    appeared in what they wrote. It flagged one authored row out of 72 and
+    reading it killed the design: the person wrote "i dey fear say i go end up
+    like my papa" and the reply answered "You're afraid of becoming him" —
+    their word, their sentence, returned in the other language.
+
+    So a "did they say this word" test is a **register test in disguise**, and
+    it fails hardest on exactly the people this product is built for. These
+    four are the assertion that the families carry Naija, not a second list
+    somewhere that can drift out of step with the first.
+  */
+  silent("i dey fear say i go end up like my papa", "You're afraid of becoming him.",
+    "Pidgin fear licenses English afraid");
+  silent("i don tire for this work", "You're exhausted and it shows.",
+    "don tire licenses exhausted");
+  silent("i vex die", "You're angry, and it has somewhere to go.",
+    "vex licenses angry");
+  silent("e pain me well well", "You're hurt by it.", "e pain licenses hurt");
+  silent("i feel trapped in this job", "You're trapped and you know it.",
+    "and English theirs is theirs — production's fourth assertion");
+
+  /*
+    ── A READING THEY CAN REFUSE IS NOT A VERDICT ───────────────────────────
+
+    Reflective listening is this room's whole method. A grader that could not
+    tell "you must be exhausted" from "that sounds exhausting" would delete it.
+
+    The comment in `quality.ts` used to claim every hedged form was outside
+    "by construction rather than by exclusion list", and the probe run an hour
+    later said otherwise: **"I imagine you're exhausted" fired**, because the
+    hedge sits in front of the frame and the frame matched anyway. A guarantee
+    a comment claimed and the code did not have — the shape this repository
+    records more often than any other, in a comment written that hour.
+  */
+  silent(rent, "That sounds exhausting.", "a hedged reading is offered, not decided");
+  silent(rent, "I imagine you're exhausted.", "and so is a named inference");
+  silent(rent, "It seems like you're terrified.", "and so is seems");
+  silent(rent, "Maybe you're terrified of the call.", "and so is maybe");
+
+  /*
+    And the hedge is scoped to its own clause, which is the half that would
+    have rotted quietly: a grader excusing everything after one "sounds like"
+    is a grader somebody turns off by opening with one.
+  */
+  fires(rent, "That sounds hard. You're terrified.",
+    "a hedge excuses its own clause and nothing standing after it");
+
+  /*
+    ── AND THE MOVE THIS PRODUCT IS FOR ─────────────────────────────────────
+
+    Naming the mechanism is the most valuable sentence this room writes, and it
+    carries feeling words. It is not `you are <feeling>`, so nothing here looks
+    at it — asserted rather than assumed, because a grader that flattened this
+    would cost more than the bug it fixes.
+  */
+  silent(rent, "The not-knowing is doing the work of guilt here.",
+    "naming a mechanism is untouched");
+  silent(rent, "You're checking the balance daily.", "and so is behaviour");
+  silent(rent, "Are you exhausted?", "and so is a question");
+
+  /*
+    ── NO EVIDENCE, NO OPINION ──────────────────────────────────────────────
+
+    Inside the `said` block for `diagnosis`'s reason, and it is stronger here:
+    the whole grader is the distinction between "you said you were exhausted"
+    and "you are exhausted", and with nothing to compare against it cannot
+    make it. Fail open on the second opinion.
+  */
+  is(gradeReply({ message: rent, intent: "vent", language: "en" },
+    "You're exhausted and it shows.", { tokensSpent: true })
+      .filter((f) => f.grader === "presumed").length, 0,
+    "with no record of what they wrote, it does not guess");
+
+  /*
+    ── THE CORPUS IS THE INSTRUMENT ─────────────────────────────────────────
+
+    Four candidate graders have been killed by this file flagging hand-written
+    replies. This one is run against all 72 and must flag none — the same
+    instrument, pointed at the newest grader, with a floor so an empty read
+    cannot satisfy it by not looking.
+  */
+  const corpus = fs.readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+    .trim().split("\n").map((l) => JSON.parse(l));
+  ok(corpus.length >= 50, `${corpus.length} authored replies read`,
+    "a corpus that parsed to nothing flags nothing and passes loudest");
+  const flagged = corpus.filter((r) => said(r.input, r.full_integration).length > 0);
+  is(flagged.length, 0, "and it flags none of the authored corpus",
+    flagged.slice(0, 2).map((r) => r.full_integration.slice(0, 60)).join(" · "));
+
+  /*
+    ── TWO BOUNDS, CHECK 123'S SHAPE ────────────────────────────────────────
+
+    A negative case cannot tell "fits a family" from "fits everybody". A
+    predicate narrowed until it reaches nobody fails the floor; widened until
+    it reaches every second-person sentence, it fails the ceiling. Run over
+    the corpus's own replies with the feeling word swapped in, so the ceiling
+    is measured against real sentences rather than invented ones.
+  */
+  const reach = corpus.filter((r) => said("nothing at all", `You're terrified. ${r.full_integration}`).length > 0);
+  ok(reach.length >= corpus.length * 0.9,
+    `the frame reaches ${reach.length}/${corpus.length} when the feeling is asserted`,
+    "a predicate narrowed until it matches nothing passes every negative case");
+  const everyone = corpus.filter((r) => said(r.input, r.full_integration).length > 0);
+  ok(everyone.length <= corpus.length * 0.1,
+    `and ${everyone.length}/${corpus.length} when it is not`,
+    "a predicate matching every reply is exact_mirror at 90 wearing a grader");
+
+  /*
+    ── AND IT DOES NOT SHARE A SUBJECT WITH `diagnosis` ─────────────────────
+
+    Two detectors disagreeing about one question is this repository's
+    most-repeated bug. `CONDITIONS` owns clinical vocabulary; a word in both
+    lists would be two graders grading one sentence, in opposite tiers.
+  */
+  const qsrc = strip(fs.readFileSync(path.join(ROOT, "src/lib/vent/quality.ts"), "utf8"));
+  const famBlock = qsrc.slice(qsrc.indexOf("const FEELING_FAMILIES"), qsrc.indexOf("const HEDGED"));
+  ok(famBlock.length > 300, `${famBlock.length} characters of the families read`,
+    "a slice that found nothing satisfies the assertion below by not looking");
+  /*
+    The leading alphabetic run, rather than stripping the regex metacharacters
+    out of it. The first version did the latter with one escaping level too
+    many — a pattern expecting two backslashes against a value holding one — so
+    the family name "anxiet" plus its metacharacters reduced to "anxietw",
+    nothing could ever match, and this loop satisfied its ban by not looking. A
+    mutation smuggling a clinical word into a feeling family walked straight
+    through it.
+
+    A prefix needs no escaping to be right, which is the whole point: the
+    failure above was a property of how the pattern was written, and there is
+    no pattern here to write wrongly.
+  */
+  let overlapChecked = 0;
+  for (const c of CONDITIONS) {
+    const bare = (/^[a-z]+/i.exec(c) ?? [""])[0];
+    if (bare.length < 4) continue;
+    overlapChecked++;
+    ok(!famBlock.includes(bare), `no feeling family claims "${bare}"`,
+      "diagnosis owns the clinical words and the two tiers disagree about them");
+  }
+  ok(overlapChecked >= 10, `${overlapChecked} condition families compared`,
+    "a loop that reduced every name to nothing bans nothing and passes loudest");
+
+  // And the tier it lands in, read off the set rather than off its text.
+  ok(RETRY_ONLY.has("presumed"), "it buys a second call",
+    "asking again gets the observation underneath the presumption");
+  ok(!REJECT.has("presumed"), "and never the authored line",
+    "a reply that presumes is still made of their words; the hold is made of nobody's");
+});
 
 for (const r of results) {
   const good = r.failed.length === 0;
