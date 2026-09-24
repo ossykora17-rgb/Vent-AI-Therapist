@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { flushQueue, readQueue } from "@/lib/anon";
+import { AWAY_MS, BUILD, BUILD_HEADER, isStale, safeToReload } from "@/lib/update";
 import { useToast } from "@/components/ui/toast";
 
 /**
@@ -15,13 +16,65 @@ export function ServiceWorkerRegistrar() {
     if (!("serviceWorker" in navigator)) return;
     // Registering after load keeps it off the critical path.
     const onLoad = () => {
-      navigator.serviceWorker.register("/sw.js").catch(() => {
+      // Per build, so a new deploy is a new worker and its activation clears
+      // the last build's cache. See the comment on `CACHE` in `public/sw.js`.
+      navigator.serviceWorker.register(`/sw.js?v=${encodeURIComponent(BUILD)}`).catch(() => {
         // A failed registration only costs offline support, not the app.
       });
     };
     if (document.readyState === "complete") onLoad();
     else window.addEventListener("load", onLoad, { once: true });
     return () => window.removeEventListener("load", onLoad);
+  }, []);
+
+  /*
+    A window that has been running an old build since before the last deploy.
+
+    `src/lib/update.ts` has the whole argument. In short: the founder saw a
+    card deleted from the code days earlier, in an installed window that had
+    never reloaded, and nothing here ever asked the server whether it had
+    moved on. So on coming back to the window after being away, it asks —
+    and reloads only if the sitting is over and nothing is typed, because the
+    thread on screen lives only in memory and a reload is its loss.
+
+    "Away" is focus as well as visibility. A desktop app window left behind
+    other windows is still "visible" to the browser, so a check on
+    `visibilitychange` alone would never fire for the exact window it exists
+    for.
+  */
+  React.useEffect(() => {
+    let awayAt: number | null = null;
+    let checking = false;
+    const leave = () => {
+      if (awayAt === null) awayAt = Date.now();
+    };
+    const back = async () => {
+      if (document.visibilityState === "hidden" || awayAt === null || checking) return;
+      const awayMs = Date.now() - awayAt;
+      awayAt = null;
+      if (awayMs < AWAY_MS) return;
+      checking = true;
+      try {
+        const r = await fetch("/", { method: "HEAD", cache: "no-store" });
+        const drafted = Array.from(document.querySelectorAll("textarea")).some((t) => t.value.trim() !== "");
+        if (isStale(BUILD, r.headers.get(BUILD_HEADER)) && safeToReload({ awayMs, drafted })) {
+          window.location.reload();
+        }
+      } catch {
+        // Offline or refused: no answer is not a new build. Ask again next time.
+      } finally {
+        checking = false;
+      }
+    };
+    const onVisibility = () => (document.visibilityState === "hidden" ? leave() : void back());
+    window.addEventListener("blur", leave);
+    window.addEventListener("focus", back);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("blur", leave);
+      window.removeEventListener("focus", back);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
   React.useEffect(() => {

@@ -3628,6 +3628,56 @@ cleanly, changed nothing, and reported an escape. The other was real — cutting
 was an imperative and none needed the table. *"A little self-care might help"*
 would have walked through the rule written to stop it. Fifteen of fifteen now.
 
+**The founder saw a card deleted days earlier, and the product could not
+update the window he was looking at.** A screenshot of the installed app showed
+"BEFORE YOU GO" — whose only trace left in `main` is the postmortem comments
+describing its deletion, `git grep` confirming it. The shipped code could not
+render it. The window could, because it was still running JavaScript loaded
+before the deploy: an installed app stays open for days, `/chat` never
+navigates, and nothing on the page ever asked whether the server had moved on.
+**Every fix since that window opened was invisible to the one person looking**,
+and would have been to every tester who installed it — which is the whole
+"you said it was handled" argument, arriving from the delivery layer rather
+than the code.
+
+Two faults made it permanent. `public/sw.js` named its cache `"mw-v1"` and never
+changed it across a deploy, so the activate handler — which deletes every cache
+but the current one — never deleted anything. And the page registered the same
+`/sw.js` on every build, so an old page could not learn of a new one by asking
+again. Next's own skew handling does not reach it either: with a `deploymentId`
+it hard-reloads on a *client-side navigation* (its `self-hosting.md`), and
+somebody sitting in `/chat` never navigates.
+
+**The fix is shaped by one fact: the thread on screen lives only in memory.**
+The chat opens on a blank room and fetches the carve, never the transcript, so
+a reload *is* the loss of the conversation somebody is in the middle of. Every
+response now carries its build as `x-build`, set in `next.config.mjs` from the
+same value the bundle is stamped with and derived exactly as `/api/health`
+derives `commit`. On coming back to the window the page sends one `HEAD` — no
+route of its own, no database, no model — and reloads only when the build moved
+**and** the window was away thirty minutes **and** nothing is typed. "Away" is
+focus as well as visibility, because a desktop app window left behind other
+windows is still "visible" to the browser — which was the founder's window.
+The worker is registered per build, so a new build is a new worker and its
+activation clears the last one's cache.
+
+**Proven in a real browser across two real builds, because a static check
+cannot see a window update.** Build A served, the chat opened, the server
+swapped to build B under the still-open page: away ten minutes, no reload;
+away thirty-one with a sentence half-typed, no reload; away thirty-one with the
+box empty, reloaded onto B, age gate not asked again. And the probe was wrong
+once before it was right: the first run read the worker **mid-install** and
+reported both caches alive under the old controller. A lifecycle trace showed
+the mechanism completing in three seconds, and the re-run with a patient probe
+measured it end to end: `controller=v=bbbbbbb caches=mw-bbbbbbb(3)`, the
+offline page precached, no 4xx anywhere. Ten mutations fail check 153.
+
+**What this cannot fix, stated rather than implied.** A window installed from a
+Vercel *deployment* URL — the kind a PR's preview comment links to — is pinned
+to that deployment for ever, and its own server will always agree it is
+current. The production alias is `vent-ai-therapist.vercel.app`; an app
+installed from anywhere else never sees a deploy.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in
