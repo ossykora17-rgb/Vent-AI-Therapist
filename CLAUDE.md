@@ -3475,6 +3475,89 @@ the room with no flash; *"under 18"* gives the refusal carrying
 `/circles` is gated; `/memory`, `/history`, `/privacy`, `/terms` and `/` are
 not. Ten mutations fail checks 109 and 150 between them.
 
+**Sixteen graders and not one asked whether the room decided what is inside
+somebody.** A grounding protocol was handed over to be integrated, and the first
+useful thing was to check it against the code rather than build from it. Six of
+its seven clauses already have enforcement here, and the mapping is worth
+keeping because it is what stops a second parallel system: source hierarchy is
+the context blocks and `MEMORY_TURNS`; uncertainty is *silence beats a guess*
+and `CONFIDENCE_FLOOR`; tool-first is `research.ts` and `sources.ts`; the
+internal check is the failsafe; memory discipline is already the strongest of
+them — `voice.ts:413` calls *"I remember you mentioned…"* **the worst failure
+available here**, and `heldBlock` ends on *"Never name it out loud."*
+
+One clause had nothing behind it: *never invent what the user must be feeling
+beyond what they have expressed.* `invented` catches a person nobody mentioned
+and a figure nobody gave; `diagnosis` catches a clinical label. All three are
+facts about the **world**. Nothing asked the other question.
+
+Measured before it was built, and again before it was tiered. Of 108 production
+replies, **four assert a feeling and three name one the person never used** —
+"you're exhausted", "you're terrified", and "you're abandoned" on a Pidgin turn.
+The fourth is "you're trapped" to somebody who wrote that they were trapped,
+which is their own word handed back and is the best move in the room. `presumed`
+is `major` and sits in `RETRY_ONLY` with its own argument rather than
+`jargon`'s: being told what you feel is not harmful the way advice or a label
+is — it is the specific thing that makes a person stop talking, because a
+listener who has already decided is not listening. Worth a second call; never
+worth the authored line, because a reply that presumes is still made of *their*
+words and the hold is made of nobody's.
+
+**The design died on its first corpus run, and that is the finding.** The first
+version asked whether the reply's feeling word appeared in what they wrote. One
+authored row flagged out of 72, and reading it settled the shape: the person
+wrote **"i dey fear say i go end up like my papa"** and the reply answered
+"You're afraid of becoming him". Their word, their sentence, returned in the
+other language — and a word-identity test called it an invention.
+
+So **a "did they say this word" test is a register test in disguise**, and it
+fails hardest on exactly the people this product is for. `FEELING_FAMILIES`
+carries `don tire`, `vex` and `e pain` inside the families rather than in a
+second list, because the most-repeated bug here is two detectors disagreeing
+about one question and the one they disagree about most is this one.
+
+**And the comment claimed a guarantee the code did not have, an hour after it
+was written.** It said every hedged form was outside "by construction rather
+than by exclusion list" — and the probe said **"I imagine you're exhausted"
+fires**, because the hedge sits in front of the frame and the frame matches
+anyway. `HEDGED` is the implementation, scoped to the **clause** rather than a
+character window, so "That sounds hard. You're terrified." still fires: a hedge
+excuses what it is attached to and nothing standing after it.
+
+**Three instrument errors on the way, and all three are this file's own traps
+arriving somewhere new.**
+
+*`\b` is a backspace in Postgres.* The production count came back **zero**, and
+zero was wrong. Postgres ARE spells a word boundary `\y`; `\b` is backspace —
+the exact trap this file records about U+0008 in `intent.ts`, in a different
+engine. It was caught only because the floor was measured before the zero was
+believed: 108 replies, 53 second-person, 13 carrying a feeling word. A zero
+under a probe nobody validated is the oldest bug here.
+
+*An assertion that reduced every name to nothing.* The check forbidding a
+clinical word from entering a feeling family stripped `CONDITIONS` with one
+escaping level too many, so `anxiet\w*` became `anxietw`, nothing could match,
+and a mutation smuggling `anxiet` into a family walked straight through. It
+takes the leading alphabetic run now — a prefix needs no escaping to be right,
+which is the point, since the failure was a property of how the pattern was
+written.
+
+*And a regex inside a block comment closed it.* The repair's own explanation
+quoted the pattern, the quote contained `*` followed by `/`, and the comment
+ended there. Same class as check 135 failing on its postmortem quoting the
+banned line.
+
+**Check 122 was pinned to a literal and a correct change failed it**, for the
+third time after checks 44 and 29. It read `RETRY_ONLY = new Set(["language",
+"jargon"])` character for character, so a third member going into the tier
+turned it red. The rule never mentioned how many members the tier has; it says
+where `jargon` lives. It reads the set now.
+
+Eleven mutations fail check 151, and two are the ones worth keeping: swapping
+families back to word identity reproduces the register bug, and widening the
+hedge from the clause to the whole reply makes one "sounds like" excuse
+everything after it.
+
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a
 circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in

@@ -122,6 +122,80 @@ const INVENTED_SUM =
   /(?:₦|\bNGN\s*)\s?\d[\d,.]*\s*(?:k|m|million|thousand)?\b|\b\d[\d,.]*\s*(?:naira|dollars?|usd|pounds)\b/i;
 
 /**
+ * Feelings, by family, with the Naija surface forms in the same list.
+ *
+ * WHY FAMILIES AND NOT WORDS — MEASURED, NOT REASONED
+ *
+ * The first version tested whether the reply's feeling word appeared in what
+ * they wrote. It flagged exactly one authored reply out of 72, and reading it
+ * killed the design: the person wrote **"i dey fear say i go end up like my
+ * papa"** and the reply answered "You're afraid of becoming him". Their word,
+ * their sentence, returned in the other language — and a word-identity test
+ * called it an invention.
+ *
+ * So a "did they say this word" test is a **register test in disguise**, and it
+ * fails hardest on exactly the people this product is built for. `don tire`
+ * licenses "exhausted"; `vex` licenses "angry"; `e pain me` licenses "hurt".
+ * That is why the Pidgin forms sit inside the families rather than in a second
+ * list somewhere — this repository's most-repeated bug is two detectors that
+ * disagree about the same question, and the one they disagree about most is
+ * this one.
+ *
+ * Deliberately no clinical vocabulary. `CONDITIONS` owns that and `diagnosis`
+ * grades it; a word in both would be two graders with one subject, which is the
+ * shape `quality.ts` already records undoing for itself.
+ */
+const FEELING_FAMILIES: ReadonlyArray<readonly [RegExp, RegExp]> = [
+  [/fear|afraid|scared|terrified/i, /fear|afraid|scared|frighten|terrif|dread/i],
+  [/angry|furious/i, /angr|anger|furious|rage|enraged|\bvex/i],
+  [/ashamed/i, /asham|shame|humiliat|embarrass|disgrace/i],
+  [/guilty/i, /guilt/i],
+  [/exhausted|drained|tired/i, /exhaust|tired|drain|weary|worn out|don tire|\btire\b/i],
+  [/lonely/i, /lonely|lonel|isolat|\balone\b|no person/i],
+  [/devastated|heartbroken/i, /grief|griev|devastat|heartbroken|mourn/i],
+  [/hopeless|helpless|trapped/i, /hopeless|helpless|powerless|trapped|stuck|no way out/i],
+  [/overwhelmed/i, /overwhelm|too much|drowning|choke/i],
+  [/numb/i, /numb|\bempty\b|\bflat\b/i],
+  [/betrayed|abandoned/i, /betray|abandon|let me down|left me/i],
+  [/worthless/i, /worthless|useless|not enough/i],
+  [/resentful|bitter/i, /resent|bitter|grudge/i],
+  [/frustrated/i, /frustrat|annoy/i],
+  [/hurt/i, /hurt|\bpain|wound|e pain/i],
+];
+
+/**
+ * The frames that *assert* an interior state, and the hedges are the work.
+ *
+ * "You must be exhausted" decides what is inside somebody. "That sounds
+ * exhausting" offers a reading they can refuse. Reflective listening is this
+ * room's whole method and a grader that could not tell those apart would delete
+ * it.
+ *
+ * This comment used to end "every hedged form is outside by construction rather
+ * than by exclusion list", and the probe that ran an hour later says otherwise:
+ * **"I imagine you're exhausted" fired.** The hedge sits in front of the frame
+ * and the frame matches anyway, so "by construction" was a guarantee the code
+ * did not have — written into the file that records, more often than anything
+ * else, a rule stated in a comment and implemented nowhere.
+ *
+ * `HEDGED` is the implementation, and it is scoped to the **sentence** rather
+ * than to a character window on purpose: "That sounds hard. You're terrified."
+ * must still fire. A hedge excuses the clause it is attached to and nothing
+ * standing after it.
+ *
+ * Naming a *mechanism* is also outside it, and that matters more than the
+ * hedges: "the not-knowing is doing the work of guilt" is the most valuable
+ * sentence this product writes, and it carries a feeling word. It is not
+ * `you are <feeling>`, so nothing here looks at it.
+ */
+/** Marks a reading as offered rather than decided. Sentence-scoped. */
+const HEDGED =
+  /\b(?:i imagine|i wonder|i'?d guess|my guess|maybe|perhaps|probably|sounds? like|sounding|seems?|seemed|feels? like|could be|might be|if|is it|unless|as if|almost as though)\b/i;
+
+const PRESUMES =
+  /\b(?:you must (?:be|feel|have felt)|you'?re|you are|you feel|that must (?:be|feel)|i know you(?:'?re| are)?)\s+(?:so |really |very |clearly |obviously )?([a-z]+)/gi;
+
+/**
  * One anchored pattern per condition family, built once.
  *
  * Compiled at module load rather than inside the grader: this runs on every
@@ -451,6 +525,49 @@ export function gradeReply(
       const named = reply.match(pattern);
       if (named && !pattern.test(source)) {
         add("diagnosis", "fatal", `named a condition they never used: "${named[0]}"`);
+        break;
+      }
+    }
+
+    /*
+      A feeling they never named.
+
+      `invented` catches a person nobody mentioned and a figure nobody gave.
+      `diagnosis` catches a clinical label. All three of those are facts about
+      the *world*. Nothing here had ever asked the other question: whether the
+      room told somebody what is inside them.
+
+      Production, all 108 replies: four assert a feeling and **three name one
+      the person never used** — "you're exhausted", "you're terrified", and
+      "you're abandoned" on a Pidgin turn. The fourth says "you're trapped" to
+      somebody who wrote that they were trapped, which is their own word handed
+      back and is the best move in the room.
+
+      Major and in `RETRY_ONLY`, and the argument is its own rather than
+      `jargon`'s standing next to it. Being told what you feel is not harmful
+      the way advice or a label is; it is the specific thing that makes a person
+      stop talking, because a listener who has already decided is not listening.
+      That is worth a second call — asking again reliably gets the observation
+      underneath the presumption. It is not worth the authored line: a reply
+      that presumes is still built out of *their* words, and the hold is built
+      out of nobody's.
+
+      Inside the `said` block for `diagnosis`'s reason, and it is a stronger
+      reason here. With no evidence this cannot tell "you said you were
+      exhausted" from "you are exhausted", and the whole grader is that
+      distinction. No evidence, no opinion.
+    */
+    for (const [feeling, family] of FEELING_FAMILIES) {
+      PRESUMES.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = PRESUMES.exec(reply)) !== null) {
+        if (!feeling.test(m[1])) continue;
+        if (family.test(source)) continue;
+        // The clause this sits in, back to the last sentence break — a hedge
+        // excuses what it is attached to and nothing standing after it.
+        const clause = reply.slice(0, m.index).split(/(?<=[.!?\u2014])\s+/).pop() ?? "";
+        if (HEDGED.test(clause)) continue;
+        add("presumed", "major", `told them what they feel: "${m[0]}"`);
         break;
       }
     }

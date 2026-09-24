@@ -132,7 +132,27 @@ export const REJECT = new Set([
   their words; the hold carries nobody's. Retry, and if the retry is opaque too,
   keep what the model wrote.
 */
-export const RETRY_ONLY = new Set(["language", "jargon"]);
+/*
+  `presumed` joins them, and the argument is its own rather than adjacent —
+  which is the mistake this file records twice, where one sentence about length
+  carried two other graders into a tier on the strength of standing beside them.
+
+  A reply that says "you're terrified" to somebody who never wrote it has
+  decided what is inside them. That is not harmful the way advice or a clinical
+  label is, and nobody can un-hear either of those; this one is smaller and more
+  corrosive. It is the exact move that makes a person stop talking, because a
+  listener who has already decided is not listening — and the room's whole
+  claim is that it is listening.
+
+  Worth a second call: asking again gets the observation underneath the
+  presumption, which is usually the better sentence anyway. Not worth the
+  authored line, for `jargon`'s reason arrived at separately — a reply that
+  presumes is still made of *their* words, and the hold is made of nobody's.
+
+  Measured before it was tiered, which `fused` was not: three of 108 production
+  replies, one of them on a Pidgin turn.
+*/
+export const RETRY_ONLY = new Set(["language", "jargon", "presumed"]);
 
 /**
  * Computed here, deliberately not acted on. Named rather than merely absent,
