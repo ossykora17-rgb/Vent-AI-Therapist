@@ -1,5 +1,5 @@
 import { gradeReply, type GoldenCase } from "./quality";
-import { REPLY_SENTENCE_CAP } from "./voice";
+import { askedForSkill, REPLY_SENTENCE_CAP } from "./voice";
 import { wasAuthored } from "./tactics";
 
 /**
@@ -78,18 +78,17 @@ import { wasAuthored } from "./tactics";
 
 /** Grader labels worth spending a second call to avoid. */
 /*
-  `generic_task` joined this list last, and it is the only member that reads
-  the person's message as well as the reply.
+  `errand` replaced `generic_task` here, and it no longer reads the message.
 
-  "Your job is not to fix. Your job is to understand." A coping task nobody
-  asked for is the single most common way this room stops being a therapy
-  office and becomes a wellness app, and it is objectively visible in the text
-  — which is the test for whether a rule belongs in a gate at all. The
-  exemption lives in `askedForSkill`: if they asked, it is not an offence, and
-  the grader never fires.
+  "Your job is not to fix. Your job is to understand." A task handed to
+  somebody is the single most common way this room stops being a room and
+  becomes a wellness app, and it is objectively visible in the text — which is
+  the test for whether a rule belongs in a gate at all. It used to be exempt
+  when they asked for one; the founder's spec made it absolute, and
+  `askedForSkill` now shapes the retry note instead of cancelling the grader.
 */
 export const REJECT = new Set([
-  "advice", "promise", "generic", "generic_task", "invented", "recites", "empty",
+  "advice", "promise", "generic", "errand", "invented", "recites", "empty",
   /*
     `diagnosis` is the newest and the least arguable.
 
@@ -257,7 +256,7 @@ export function inspectReply(c: GoldenCase, reply: string, said?: string): Verdi
 
   return {
     reject: [...new Set(bad.map((f) => f.grader))].join(" · "),
-    correction: correctionFor(bad.map((f) => f.grader), c.language),
+    correction: correctionFor(bad.map((f) => f.grader), c.language, askedForSkill(c.message)),
     authoredIsBetter: bad.some((f) => REJECT.has(f.grader)),
   };
 }
@@ -305,7 +304,7 @@ export function chooseReply(
  * from being an instruction. So the note names the rule that was broken and
  * says nothing about the words that broke it.
  */
-function correctionFor(graders: string[], wroteIn: GoldenCase["language"]): string {
+function correctionFor(graders: string[], wroteIn: GoldenCase["language"], asked = false): string {
   const seen = new Set(graders);
   const lines = ["THAT LAST ATTEMPT WAS REJECTED BEFORE ANYBODY SAW IT. Again, and:"];
   if (seen.has("advice")) {
@@ -317,16 +316,23 @@ function correctionFor(graders: string[], wroteIn: GoldenCase["language"]): stri
   if (seen.has("generic")) {
     lines.push("- That was a sentence that fits any conversation on earth. Say something only this person's message could produce.");
   }
-  if (seen.has("generic_task")) {
+  if (seen.has("errand")) {
     /*
       Says what to do instead, not what was done wrong.
 
       Every other line here names a rule; this one has to replace a habit, and
       a correction that only forbids leaves the model with a hole where its
-      closing move was. The replacement is the actual instruction — go back to
-      what they said and take one more thing out of it.
+      closing move was. The replacement is the room's own move: show them the
+      loop and what it costs, then one question.
+
+      Two versions, because the likeliest reason a model hands over a task is
+      that somebody asked for one — and "they did not ask" would be false to
+      exactly that person. `askedForSkill` used to cancel the grader; it now
+      decides which sentence the retry reads.
     */
-    lines.push("- They did not ask for anything to do. Delete the task. Ask about the part of their message you skipped.");
+    lines.push(asked
+      ? "- They asked what to do. Do not answer with a task, a step or an exercise: say what the asking is doing for them, then one question."
+      : "- Nothing for them to do — no task, step, exercise or plan. Show them the loop they are in and what it costs, then one question.");
   }
   if (seen.has("recites")) {
     lines.push("- Do not narrate the record. Their sentence, said back, is listening; a count is a database talking.");

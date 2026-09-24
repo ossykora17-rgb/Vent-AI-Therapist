@@ -122,7 +122,7 @@ const MI: Probe[] = [
     opens: "their own case for change, in their own mouth",
     fits: on(CHANGE) },
   { id: "mi_confidence", school: "mi", weight: 80,
-    ask: "If you decided tonight, zero to ten, how sure are you that you could? What would move it up one?",
+    ask: "Zero to ten, how sure are you that this can change at all — and why is it not lower?",
     opens: "the gap between wanting and believing",
     fits: on(CHANGE) },
   { id: "mi_desire", school: "mi", weight: 78,

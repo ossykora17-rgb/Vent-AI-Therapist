@@ -1,5 +1,5 @@
 import { containsAdvice } from "@/lib/circles/rules";
-import { askedForSkill, BANNED_PHRASES, FILE_LANGUAGE, genericTask, REPLY_SENTENCE_CAP } from "./voice";
+import { BANNED_PHRASES, errand, FILE_LANGUAGE, REPLY_SENTENCE_CAP } from "./voice";
 import { coverage, COVERAGE_FLOOR } from "./scan";
 import { CONDITIONS } from "./notes";
 import { PIDGIN_GRAMMAR, PIDGIN_LEXICAL } from "./intent";
@@ -415,27 +415,29 @@ export function gradeReply(
   }
 
   /*
-    A task that fits anybody, handed to somebody who did not ask for one.
+    Anything handed to them to do — and this block used to say the opposite.
 
-    "If your reply could be sent to any human on earth, it failed."
+    It read *"a task that fits anybody, handed to somebody who did not ask for
+    one"*, the only grader here whose verdict depended on the message: "try a
+    breathing exercise" was a failure until somebody typed "what should I do",
+    and then it was the answer. The founder's spec overruled that — "you never
+    assign external tasks, behavioral homework, or micro-errands of any kind" —
+    so the exemption is gone and the grader reads the reply alone. Somebody who
+    asks what to do is answered with what the asking is doing, which is a move
+    the room can make and a task is not.
 
-    The only grader in this file whose verdict depends on the *message* as well
-    as the reply, and that is the rule rather than an inconsistency: "try a
-    breathing exercise" is a failure right up until somebody types "what should
-    I do", and then it is the answer to the question. A ban with no exemption
-    would make the room refuse the one request it is qualified to grant, so the
-    exemption is read from their own words — `askedForSkill` — and not from a
-    setting or a turn count.
+    Fatal, beside `advice`, because it is the same offence in a smaller coat:
+    the room deciding it knows what somebody should do next. Production carried
+    one in 18 of 113 English replies before this landed.
 
-    Major rather than fatal, alongside `generic`, and for the same reason: it
-    is the voice leaking, not a promise broken or advice reaching somebody. The
-    failsafe still spends a retry on it, because the whole point is that nobody
-    reads it.
+    Named `errand` rather than kept as `generic_task`, because the old name
+    would now be false about half of what it catches — an aimed task is not a
+    generic one, and a name that lies is how the next reader misfiles a finding.
+    Rows written before the rename still carry the old name in `rejected_by`;
+    that is history, and it stays true about the rule that produced it.
   */
-  if (!askedForSkill(c.message)) {
-    const task = genericTask(reply);
-    if (task) add("generic_task", "major", `a task that fits anybody: "${task.match}" — ${task.why}`);
-  }
+  const task = errand(reply);
+  if (task) add("errand", "fatal", `handed them something to do: "${task.match}" — ${task.why}`);
 
   /*
     A person or a sum of money that nobody ever mentioned.

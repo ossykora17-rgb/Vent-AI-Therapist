@@ -9,9 +9,7 @@ import type { Classification, RealWorldTag } from "./intent";
 export type TacticFamily =
   | "validation"
   | "cognitive"
-  | "somatic"
   | "duality"
-  | "behavioral"
   | "narrative"
   | "relational"
   /*
@@ -238,7 +236,6 @@ const SELF_CRITIC = /\b(useless|stupid|failure|worthless|i'?m bad|i no good|weak
 const PARTS = /\b(part of me|one side|half of me|i want to but|i wan but)\b/;
 const AVOIDANT = /\b(i'?m fine|it'?s fine|nothing|idk|i don'?t know|no be anything)\b/;
 const HOPELESS = /\b(no point|hopeless|why bother|nothing go change|e no go better)\b/;
-const WITHDRAW = /\b(stay in|lock myself|no wan see anybody|hide)\b|\b(isolat|withdraw)/;
 const ANGER = /\b(angry|vex|furious|mad|pissed|rage)\b/;
 
 /*
@@ -342,7 +339,7 @@ const TACTICS: Tactic[] = [
     family: "validation",
     instruction:
       "Mirror their exact two strongest words back, then name where they are holding it. e.g. \"Choke. And you dey hold am for chest make e no show.\"",
-    hold: "Say the two heaviest words again, out loud. Then name where in the body they sit.",
+    hold: "Two words in what you wrote are carrying more than the rest. Where in your body are they sitting right now?",
     fits: (c) => c.ventCount <= 1 || c.pressure !== null && c.pressure > 60,
     weight: (c) => (c.ventCount <= 1 ? 90 : 40),
     // Saying their own words back promises nothing and fixes nothing.
@@ -417,25 +414,6 @@ const TACTICS: Tactic[] = [
     holdsWhenNothingMoves: true,
   },
   {
-    id: "postpone_the_loop",
-    family: "observing",
-    /*
-      Metacognitive therapy's actual move, and the counter-intuitive one:
-      the treatment for rumination is not better processing, it is less.
-      Not suppression — postponement. The thought is allowed, it simply is
-      not allowed *now*, and the belief that it must be handled immediately
-      is the thing being tested.
-
-      A named window matters. "Stop thinking about it" is a rule nobody can
-      keep and failing it becomes fresh evidence against themselves.
-    */
-    instruction:
-      "Do not solve it and do not explore it. Give them a time to think about it that is not now — a named window tomorrow, ten or fifteen minutes, and this exact worry is welcome in it. Make clear it is not banned, only postponed, and that nothing is lost by waiting because the thinking will keep. e.g. \"Park am. Tomorrow 7pm, fifteen minutes, e go still dey there.\"",
-    hold: "Not tonight. Tomorrow, fifteen minutes, and it will still be there.",
-    fits: (c) => caughtWatchingSelf(c.message) && c.ventCount >= 1,
-    weight: () => 80,
-  },
-  {
     id: "felt_sense",
     family: "observing",
     /*
@@ -451,8 +429,22 @@ const TACTICS: Tactic[] = [
     instruction:
       "Take them under the words. Ask what the thing in their body is like before it has a name — its shape, weight, temperature, whether it moves. If they answer with a label like 'anxiety' or 'stress', gently say that is the word for it and ask what it is actually like. Never interpret what the sensation means. e.g. \"No be the name. Wetin e resemble — heavy? sharp? e dey move?\"",
     hold: "Before the word for it: what is it like in there? Shape, weight, does it move?",
-    fits: (c) => caughtWatchingSelf(c.message),
-    weight: (c) => (c.body ? 88 : 76),
+    /*
+      And the body's move, since `body_map_drop_set` was retired.
+
+      The drop set answered "my chest is tight" with an instruction to breathe;
+      the no-errands rule retired it, and for a commit nothing answered a named
+      body at all — "chest + high pressure" went to `double_standard`, the room
+      changing the subject on the one thing they had located. This tactic is
+      what the spec asks for there: stay with what the body is doing and ask
+      about it. So it takes the drop set's gate and its exact weights — 88 when
+      the pressure is high, 72 when it is not — and keeps its own for the
+      trigger it was written for. Same selection pressure on the same turns; a
+      question where an instruction was.
+    */
+    fits: (c) => c.body !== null || caughtWatchingSelf(c.message),
+    weight: (c) =>
+      caughtWatchingSelf(c.message) ? (c.body ? 88 : 76) : c.pressure !== null && c.pressure > 70 ? 88 : 72,
     holdsWhenNothingMoves: true,
   },
   {
@@ -471,8 +463,8 @@ const TACTICS: Tactic[] = [
     // against" is a clipboard talking; ask what has actually held up and what
     // they already survived, then hand them one smaller true sentence.
     instruction:
-      "Take the exact sentence they just said to themselves and hold it up. Ask what has actually happened so far that backs it, and what they have already survived that says otherwise. Then give them one smaller, truer sentence to carry instead of the big one. Never say 'evidence for and against' — that is a clipboard talking.",
-    hold: "Take the sentence you said to yourself. Find one smaller one that is still true.",
+      "Take the exact sentence they just said to themselves and hold it up. Ask what has actually happened so far that backs it, and what they have already survived that says otherwise. Then ask them for the smaller, truer sentence that is still standing — theirs to find, never yours to hand over. Never say 'evidence for and against' — that is a clipboard talking.",
+    hold: "The sentence you said to yourself is bigger than what has actually happened. What is a smaller one that is still true?",
     fits: has(CATASTROPHE),
     weight: () => 78,
   },
@@ -490,7 +482,7 @@ const TACTICS: Tactic[] = [
     family: "cognitive",
     instruction:
       "Put a number on it: if the worst actually lands, one to ten, how bad — and are they still standing at the end of that sentence? Ask it plainly, not as an exercise.",
-    hold: "Put a number on the worst case, one to ten. Then say whether you are still standing.",
+    hold: "If the worst case lands, how bad is it, one to ten — and are you still standing at the end of that sentence?",
     fits: has(CATASTROPHE),
     weight: () => 68,
   },
@@ -499,56 +491,39 @@ const TACTICS: Tactic[] = [
     family: "cognitive",
     instruction:
       "Turn it outward: if their closest friend said this about themselves, what would they tell them?",
-    hold: "Say it again as if your closest friend said it about themselves. Then answer them.",
+    hold: "If your closest friend said that about themselves, what would you tell them?",
     fits: has(SELF_CRITIC),
     weight: () => 82,
   },
 
-  // ── Somatic — ONLY when the body was mentioned or pressure is high ───────
-  {
-    id: "body_map_drop_set",
-    family: "somatic",
-    instruction:
-      "Name the exact place they said, then one drop set: 4 secs inhale, 6 secs exhale, drop the shoulder. Tell them to do it now.",
-    hold: "Four seconds in, six out, drop the shoulder. Once, now, before the next sentence.",
-    fits: (c) => c.body !== null,
-    weight: (c) => (c.pressure !== null && c.pressure > 70 ? 88 : 72),
-    // The body is still carrying it. Breathing is care, not a solution.
-    holdsWhenNothingMoves: true,
-  },
-  {
-    id: "grounding_54321",
-    family: "somatic",
-    instruction:
-      "5 things you see, 4 you touch, 3 you hear, 2 you smell, 1 you taste — have them call it out now.",
-    hold: "Five you can see, four you can touch, three you can hear. Out loud, now.",
-    fits: has(/\b(panic|numb|blank|floating|not real|idk|i don'?t know)\b|\b(dissociat)/),
-    weight: () => 80,
-    // Numb and blank *is* acute grief. This is the move written for it.
-    holdsWhenNothingMoves: true,
-  },
-  {
-    id: "progressive_squeeze",
-    family: "somatic",
-    instruction:
-      "Clench the fist 5 secs, release, notice the difference — then do it for the shoulder.",
-    hold: "Fist tight for five, then let go. Notice the difference. That is the whole task.",
-    fits: (c) => (c.pressure ?? 0) > 70,
-    weight: () => 66,
-    // Purely physical. Claims nothing about the situation at all.
-    holdsWhenNothingMoves: true,
-  },
-  {
-    id: "orienting",
-    family: "somatic",
-    instruction:
-      "Look slowly left, slowly right — where did the eye want to rest? Is that place safe?",
-    hold: "Look slow to the left, slow to the right. Where did your eyes want to stop?",
-    fits: has(/\b(anxious|on edge|jumpy|can'?t settle|watching|scared)\b/),
-    weight: () => 64,
-    // Where do the eyes want to rest. Nothing is being solved.
-    holdsWhenNothingMoves: true,
-  },
+  /*
+    ── WHERE THE SOMATIC AND BEHAVIORAL FAMILIES WENT ──────────────────────
+
+    Nine tactics were retired together, by one rule: "You never assign
+    external tasks, behavioral homework, or micro-errands of any kind" — the
+    founder's spec, which overruled this library's older line that generic was
+    the offence and task was not.
+
+    Every one of the nine *was* a task, which is why none was rewritten. A
+    process-level version of the drop-set breath is not a drop set, and keeping
+    the id over a different move would make the efficacy loop score one tactic
+    under another's name:
+
+      behavioral  micro_action, opposite_action, behavioral_activation, micro_loop
+      somatic     body_map_drop_set, grounding_54321, progressive_squeeze, orienting
+      observing   postpone_the_loop — a scheduled worry window is an experiment
+
+    The body is not abandoned. `felt_sense` stays, and it is what the spec asks
+    for: a question about what the sensation is like, never an instruction to
+    change it. The nothing-can-move pool went from fourteen to ten and every
+    survivor is a presence move.
+
+    The cost is written down rather than discovered. `grounding_54321` was the
+    answer to panic, numbness and "not real"; the room now stays with that
+    instead of walking somebody through it. And at mood ≤ 4,
+    `behavioral_activation` won 15 of 72 authored messages — those turns now go
+    to the rest of the library.
+  */
 
   // ── Duality — two parts pulling ─────────────────────────────────────────
   {
@@ -565,7 +540,7 @@ const TACTICS: Tactic[] = [
     family: "duality",
     instruction:
       "Find the young part carrying the rule — \"if I don't perform I'm not loved\" — and ask how old it is.",
-    hold: "Find the rule you have been keeping. Then ask how old you were when you learned it.",
+    hold: "There is a rule you have been keeping. How old were you when you learned it?",
     fits: has(/\b(prove|earn|not enough|never good enough|since i was)\b|\b(perform)/),
     weight: () => 76,
   },
@@ -573,41 +548,10 @@ const TACTICS: Tactic[] = [
     id: "two_chair",
     family: "duality",
     instruction:
-      "Put the fear in the chair opposite. What does it say? Have them answer it out loud.",
-    hold: "Put the fear in the chair across from you. Let it talk first. Then answer it.",
+      "Put the fear in the chair opposite. What does it say? Have them answer it here, in their own words.",
+    hold: "If the fear sat across from you and spoke first, what would it say — and what would you say back?",
     fits: has(/\b(stuck|two minds|can'?t decide|torn|i dey confuse)\b/),
     weight: () => 72,
-  },
-
-  // ── Behavioral — stuck, needs one tiny win ──────────────────────────────
-  {
-    id: "micro_action",
-    family: "behavioral",
-    instruction:
-      "One micro action, ten words or fewer, doable in under a minute. e.g. \"Send one text: 'I go late small.'\" Tell them to do it now.",
-    hold: "One thing, under a minute, doable now. Ten words or fewer. Then go and do it.",
-    // "procrastinating" is the only form anybody writes it in, and
-    // `procrastinat\b` could never match it.
-    fits: has(/\b(avoid|putting off|haven'?t|can'?t start|no fit start)\b|\b(procrastinat)/),
-    weight: () => 80,
-  },
-  {
-    id: "opposite_action",
-    family: "behavioral",
-    instruction:
-      "DBT opposite action — they want to withdraw, so send them out the door for 30 seconds.",
-    hold: "Thirty seconds outside the door. Not an hour, not a plan. Thirty seconds.",
-    fits: has(WITHDRAW),
-    weight: () => 82,
-  },
-  {
-    id: "behavioral_activation",
-    family: "behavioral",
-    instruction:
-      "Ask which chair they are in today, then one thing that would make them stand up out of it.",
-    hold: "Say which chair you are in today. Then one thing that would get you standing.",
-    fits: (c) => (c.mood ?? 10) <= 4,
-    weight: () => 78,
   },
 
   // ── Narrative + real world ──────────────────────────────────────────────
@@ -663,25 +607,14 @@ const TACTICS: Tactic[] = [
     id: "future_self",
     family: "cognitive",
     instruction:
-      "Ask what the version of them that already has clarity on this would do in the next two hours. Not 'it will be fine' — they can smell that. The one who already solved it exists; what is that one doing before tonight?",
-    hold: "The version of you that already has clarity on this — what is that one doing in the next two hours?",
+      "Ask what the version of them that already has clarity on this can see that they cannot yet. Not 'it will be fine' — they can smell that. Ask what that one sees, never what that one would do: a plan is homework, and this room hands out none.",
+    hold: "The version of you that already has clarity on this — what does that one see that you cannot yet?",
     // Stuck, not distraught. This asks somebody to move, and asking a person
     // in freefall to move is a demand dressed as a question.
     fits: (c) =>
       (c.pressure ?? 50) < 80 &&
       (HOPELESS.test(c.message.toLowerCase()) || /\b(stuck|don'?t know|idk|i no know)\b/.test(c.message.toLowerCase())),
     weight: () => 76,
-  },
-  {
-    id: "micro_loop",
-    family: "behavioral",
-    instruction:
-      "Close on one repeatable loop, shaped as a trigger and an action: 'when [the thing that starts it], I will [one small action].' Name the trigger. Make the action small enough that they will actually do it tonight. One loop — never a list. Repetition is what changes a groove; insight is gone by morning.",
-    hold: "One loop to carry out: when the thing starts tonight, you do one small thing. Name both before you go.",
-    // Late in a session, when something has actually been named — a loop
-    // handed over before anybody has said what they came to say is homework.
-    fits: (c) => c.ventCount >= 2,
-    weight: (c) => 64 + Math.min(c.ventCount * 2, 14),
   },
   {
     id: "here_and_now",
@@ -833,7 +766,7 @@ const TACTICS: Tactic[] = [
     */
     instruction:
       "Do not argue with the sentence. Put one inch between them and it: they are not the thing they said, they are the one having the thought that they are. Say it back with that gap in it, in their own words, once. Never explain the technique, never use the word 'defusion' or 'thought' as jargon.",
-    hold: "You are not that sentence. You are the person hearing it. Say it again with 'I notice' in front.",
+    hold: "You are not that sentence. You are the one hearing it — so how long has it been saying that to you?",
     fits: has(SELF_CRITIC),
     weight: () => 80,
   },
@@ -892,7 +825,7 @@ const TACTICS: Tactic[] = [
     */
     instruction:
       "They said nothing changes. Find the hour it was five per cent less bad — not a good day, just less bad — and make them tell you what was different about it. Who was there, what time, what they had eaten. Specifics only; a vague 'sometimes it's better' is not an exception and does not count.",
-    hold: "Find one hour this week it was even slightly less heavy. What was different about that hour?",
+    hold: "Was there one hour this week that was even slightly less heavy — and what was different about it?",
     fits: has(HOPELESS),
     weight: () => 80,
   },

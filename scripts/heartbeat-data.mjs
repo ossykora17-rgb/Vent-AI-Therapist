@@ -357,13 +357,13 @@ if (newCircles.length > 0 && closes.length === 0) {
   looking like a result, which is the only thing the circles guard above
   claims to do either.
 
-  It also carries a coupling worth knowing when this fires: `mood` is the whole
-  predicate for `behavioral_activation` — `(c) => (c.mood ?? 10) <= 4` — so a
-  sitting where nobody answers the scale is a sitting where that move cannot be
-  selected at all. Measured on the authored corpus: it wins 15 of 72 messages
-  when the mood is 4 or below and **0 of 72** when the mood is absent. Silence
-  here does not only cost a row; it narrows the library the next reply is
-  chosen from.
+  It used to carry a coupling as well: `mood` was the whole predicate for
+  `behavioral_activation`, so a sitting where nobody answered the scale was one
+  where that move could not be selected — 15 of 72 authored messages at mood ≤ 4,
+  0 of 72 with no mood. That tactic was retired by the no-errands spec, and no
+  tactic reads `mood` now (swept, not assumed), so silence here costs the row
+  and nothing else. The paragraph stays so the next person who wires a tactic
+  to `mood` knows the scale's silence will start gating the library again.
 */
 const anchored = newVents.filter((v) => v.tension_after != null);
 if (newVents.length > 0 && anchored.length === 0) {

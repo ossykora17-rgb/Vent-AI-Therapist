@@ -242,7 +242,16 @@ export function bannedPhrase(text: string): { match: string; why: string } | nul
  * answer to the question. A ban that cannot be lifted would make the room
  * refuse the one request it is qualified to grant — see `askedForSkill`.
  *
- * WHAT IT DELIBERATELY DOES NOT CATCH
+ * WHAT IT USED TO DELIBERATELY NOT CATCH, AND WHY THAT IS NOW `errand()`'S JOB
+ *
+ * This table is still the vocabulary of tasks that fit anybody, and it is still
+ * read first. What changed is the rule around it: the room hands out no task at
+ * all now — generic or aimed, asked for or not — and `errand()` below is the
+ * one detector every surface asks. The paragraph that follows is kept because
+ * it is the argument that was *overruled*, not a mistake: the aimed version of
+ * a clinical move really is better than the generic one. The founder's spec
+ * decided that neither belongs in this room, and a record of what was given up
+ * is worth more than a tidy file.
  *
  * The tactic library's own moves, and this was the test that told me the list
  * was drawn in the right place rather than merely drawn. `body_map_drop_set`
@@ -321,6 +330,82 @@ export function genericTask(text: string): { match: string; why: string } | null
   for (const { re, why } of GENERIC_TASKS) {
     const m = text.match(re);
     if (m) return { match: m[0], why };
+  }
+  return null;
+}
+
+/**
+ * Anything handed to them to do. Generic or aimed, asked for or not.
+ *
+ * THE RULE, AND WHERE IT CAME FROM
+ *
+ * "You never assign external tasks, behavioral homework, or micro-errands of
+ * any kind" — the founder's spec, and it overrules this file's older line that
+ * generic was the offence and task was not. The room's moves are its own:
+ * reflect, name the process keeping them stuck, name their part in it without
+ * blame, stay with the moment, show what the current solution costs, ask one
+ * question. None of those is an instruction to the person, so the test is the
+ * grammar of the sentence rather than the quality of the advice.
+ *
+ * Production said how often, before this was written: 18 of 113 English
+ * replies carried one — seven of them "…tonight, you can / try…", which is
+ * the spec's own example, and six "say it … out loud", which is a hold from
+ * this library read back verbatim. It was not the model misbehaving. The
+ * system prompt's first engine told it to close on "one small repeatable
+ * thing … small enough that they will actually do it tonight."
+ *
+ * WHAT IS LEFT OUT ON PURPOSE
+ *
+ * The conversation continuing. "Tell me", "say more", "go on", "go back to",
+ * "take your time", and a bare "name it" or "say it" in a room whose only
+ * channel is the box they are typing in — those ask for the next sentence
+ * *here*, which is the one thing this room is for. "Say it out loud", "say it
+ * to her" and "say it again as if" leave the conversation, and are in.
+ *
+ * "Call it what it is" is naming, not dialling, and "make you go" is English
+ * causative everywhere except the front of a sentence, where it is Pidgin's
+ * command — the `make you` collision this repository has already paid for.
+ * And "just go" is not here at all: "you just go quiet" is English, and it hit
+ * an English production row the one time it was tried.
+ *
+ * The safety floor is not a move and is not graded here: the crisis lines and
+ * the age gate's referral to a trusted adult are what the room does when it is
+ * the wrong place to be, not what it says to somebody inside a conversation.
+ */
+const ERRAND_VERBS =
+  "write|jot|text|call|message|ring|send|go|take|drink|eat|sleep|breathe|walk|try|start|stop|make|set|schedule|list|spend|watch|put|leave|plan|book|reach out|drop|unclench|relax|rest|place|press|count|close|notice|imagine|picture|remind yourself|ask yourself|let yourself|allow yourself|give yourself|practi[cs]e|find|pick|choose|repeat|tell|talk";
+const CLAUSE = String.raw`(?:^|[.!?:;]\s+|—\s*|\n\s*)(?:and |then |now |just |first,? |so )?`;
+const ERRAND_FRAMES: ReadonlyArray<readonly [string, RegExp]> = [
+  /*
+    Two exclusions the corpus forced, both shapes this repository has paid for.
+    "Rest is being held hostage by a belief" opens on a verb that is a noun,
+    and a copula straight after it says so. And "Make we leave the why tonight"
+    is Pidgin's hortative — `make we / I / e / dem` — which this file keeps in
+    `PIDGIN_GRAMMAR` on purpose and which `fused` already exempts by name.
+  */
+  ["an instruction", new RegExp(`${CLAUSE}(?:${ERRAND_VERBS})\\b(?! me\\b| more\\b| on\\b| back\\b| your time\\b| it what\\b| we\\b| i\\b| e\\b| dem\\b| us\\b|'s\\b|\\s+(?:is|was|isn't|wasn't|has|had|feels|felt|becomes|keeps|can|could|will|won't|would|does|doesn't|comes|sounds|seems)\\b)`, "i")],
+  ["something to say out loud", /\b(?:say|repeat|read) (?:it|that|them|this|those|the \w+(?: \w+)?)\b[^.?!]{0,30}\b(?:out loud|aloud|to yourself)\b/i],
+  ["an exercise", /\bsay it (?:again )?(?:with|as if|as though)\b/i],
+  ["something for later", /\b(?:tonight|tomorrow|this week|next time|before (?:you )?(?:bed|sleep)|when you get home|in the morning|over the weekend)\b[^.?!]{0,50}\b(?:you (?:can|could|might|should|will)|try|do one|write|call|text)\b/i],
+  ["a suggestion", /\b(?:you (?:could|might want to|may want to) (?:try|write|call|text|tell|take|go|start|make|put|reach|talk)|it (?:might|may|could) help to|how about (?:you|trying)|why not (?:try|write|call|tell))\b/i],
+  ["a step", /\bone (?:small |tiny |little )?(?:step|thing to do|action|thing to try)\b|\b(?:next|small|first|tiny) step\b/i],
+  ["a plan", /\bwhat(?:'s| is) (?:one|the) (?:small(?:est)? |next |first |earliest )?(?:thing|step|hour)\b[^?]{0,40}\byou (?:could|can|will|might|would) (?:do|stop|take|try|change|start|drop|tell|say|give)\b|\bwhat (?:could|will|can) you do (?:tonight|tomorrow|next|about)\b/i],
+  /*
+    At the front of a clause only. "You no dey talk to anybody for house" is
+    the room handing their own sentence back — the best move it has — and an
+    unanchored match read it as an instruction to go and find somebody.
+  */
+  ["somebody to contact", new RegExp(`${CLAUSE}(?:(?:reach out to|talk to|text|call|message|ring) (?:someone|somebody|a friend|a person|anybody|anyone)|say (?:it|that|this) to (?:her|him|them|your \\w+))\\b`, "i")],
+  ["a Pidgin instruction", new RegExp(`\\babeg (?:go|try|drink|rest|call|text|sleep|waka|write)\\b|${CLAUSE}make you (?:go|try|call|text|drink|rest|sleep|write|waka)\\b`, "i")],
+];
+
+/** The first thing this text hands them to do, or null. */
+export function errand(text: string): { match: string; why: string } | null {
+  const generic = genericTask(text);
+  if (generic) return generic;
+  for (const [what, re] of ERRAND_FRAMES) {
+    const m = text.match(re);
+    if (m) return { match: m[0].trim(), why: `hands them ${what}` };
   }
   return null;
 }
@@ -493,8 +578,8 @@ ${REPLY_SENTENCE_CAP} short sentences, maximum, and one is often right. No metap
 lecture, no preamble, and never the same opening two turns running.
 
 Four parts reflecting what they actually said to one part asking, and zero
-parts advice they did not ask for. If they ask for advice you may give it;
-until then their sentence is the material and there is nothing to improve.
+parts advice or tasks — nothing to do after this, even when they ask; then
+the asking is the material, and there is nothing to improve.
 `;
 
 /*
