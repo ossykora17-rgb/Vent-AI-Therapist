@@ -42,7 +42,7 @@ const { noModelKeyReply } = await app("src/lib/vent/fallback.ts");
 const { MIN_AGE, AGE_KEY, ageSnapshot, ageServerSnapshot, confirmAge, forgetAge, subscribeAge } =
   await app("src/lib/age.ts");
 const { BANNED_PHRASES, FILE_LANGUAGE, bannedPhrase, REPLY_SENTENCE_CAP, NO_MEMORY_LINE, OFFICE_RULES, PRODUCT_LINE,
-        GENERIC_TASKS, genericTask, askedForSkill } =
+        GENERIC_TASKS, genericTask, askedForSkill, errand } =
   await app("src/lib/vent/voice.ts");
 const { openThread, threadBlock } = await app("src/lib/vent/prompt.ts");
 const { aimedAtTheMachine, PIDGIN_GRAMMAR, PIDGIN_LEXICAL, REAL_WORLD_TAGS, themePattern } = await app("src/lib/vent/intent.ts");
@@ -363,11 +363,21 @@ check("3  thought_record is warm, not a clipboard", () => {
 
 // ── 4. the body gate ───────────────────────────────────────────────────────
 check("4  Somatic work stays locked until the body is named", () => {
+  /*
+    The rule outlived its tactic. `body_map_drop_set` answered a named body
+    with "four seconds in, six out"; the no-errands spec retired it and every
+    other somatic exercise, and for one run nothing answered a named body at
+    all — this check caught "chest + high pressure" going to `double_standard`,
+    the room changing the subject on the one thing they had located. The body
+    still gets the turn; what it gets now is a question, never an instruction.
+  */
   const cold = selectTactic({ ...base, body: null, pressure: 30, recentTactics: [] });
-  ok(cold.family !== "somatic", "no breathing exercise at somebody who never mentioned a body", cold.id);
+  ok(cold.id !== "felt_sense", "no body move at somebody who never mentioned a body", cold.id);
 
   const named = selectTactic({ ...base, body: "chest", pressure: 85, recentTactics: [] });
-  is(named.id, "body_map_drop_set", "chest + high pressure goes to the body map");
+  is(named.id, "felt_sense", "chest + high pressure goes to the body — asked about");
+  ok(!errand(named.hold) && !/\b(?:inhale|exhale|seconds? in)\b/i.test(named.instruction),
+    "and never told what to do", "the drop set was retired for exactly this");
 });
 
 // ── 5. real-world tools stay concrete ──────────────────────────────────────
@@ -643,7 +653,14 @@ check("10 The pipelines filter, dedup, reweight and score preferences", () => {
     replies need writing in Pidgin by someone who speaks it, which is not a
     job for a gate.
   */
-  is(num("language"), 5, "a Pidgin vent answered in English never becomes a training pair");
+  /*
+    Still five rows, and still none reaches training — one of them also hands
+    its reader an errand, and since the no-errands spec the tally names the
+    fatal grader rather than the major one. The drop is the rule; the label is
+    which rule it broke first.
+  */
+  is(num("language") + num("errand"), 5, "a Pidgin vent answered in English never becomes a training pair");
+  is(num("errand"), 1, "and the one that also handed over a task is counted under that");
   is(num("exact duplicate"), 1, "the exact repeat goes");
   is(num("near duplicate"), 1, "and the one-word-different repeat goes");
 
@@ -1513,9 +1530,20 @@ check("15h The engines run in the prompt and are never taught to anybody", () =>
     message: "i don't know and i'm tired",
   });
 
-  ok(/fires together, wires together/i.test(prompt), "the repetition engine is in the prompt");
-  ok(/trigger and an action/i.test(prompt), "shaped as an implementation intention, not a goal");
-  ok(/one per session/i.test(prompt), "and one loop, never a list");
+  /*
+    Engine one used to be "what fires together, wires together": close on a
+    trigger and an action "small enough that they will actually do it
+    tonight". That sentence is the reason production carried seven "…tonight,
+    try…" replies — the prompt was assigning homework in the room's own
+    constitution. The no-errands spec replaced it with the move it allows:
+    make the loop visible, and what it costs.
+  */
+  ok(/show them the loop/i.test(prompt), "the loop engine is in the prompt");
+  ok(/what it costs/i.test(prompt), "and it shows the cost rather than prescribing a fix");
+  ok(/one loop\. never a list/i.test(prompt), "one loop, never a list");
+  ok(!/trigger and an action|actually do it tonight|when [^"]{0,30}, I will/i.test(prompt),
+    "and nothing in the prompt still asks for an implementation intention");
+  ok(!/next two hours/i.test(prompt), "the future self is asked what it sees, never what it would do");
 
   ok(/already has clarity/i.test(prompt), "the future-self move is there");
   ok(/that is denial and they can smell it/i.test(prompt), "and it is fenced off from toxic positivity");
@@ -1547,9 +1575,18 @@ check("15h The engines run in the prompt and are never taught to anybody", () =>
 // than no tactic: it looks implemented and never runs.
 check("15i The three engines are selectable, and none of them is orphaned", () => {
   const ids = new Set(ALL_TACTIC_IDS);
-  for (const id of ["iterated_game", "future_self", "micro_loop"]) {
+  /*
+    Two engines are tactics now. The third, `micro_loop`, closed on "when
+    [the thing], I will [one small action]" — an implementation intention,
+    which is homework by definition, and this check's own assertion below used
+    to say "never on turn one — that would be homework" without noticing it was
+    homework on every other turn too. Retired by the no-errands spec, and
+    asserted absent so it cannot return quietly.
+  */
+  for (const id of ["iterated_game", "future_self"]) {
     ok(ids.has(id), `${id} is in the library`);
   }
+  ok(!ids.has("micro_loop"), "and the homework engine is gone");
 
   // Family is where one-shot thinking does the most damage: you cannot walk
   // away from a mother the way you walk away from a deal.
@@ -1566,6 +1603,7 @@ check("15i The three engines are selectable, and none of them is orphaned", () =
 
   const future = ALL_TACTICS.find((t) => t.id === "future_self");
   ok(/already has clarity/i.test(future.instruction), "the future-self move asks the right question");
+  ok(/never what that one would do/i.test(future.instruction), "what it sees, never what it would do");
   ok(/can smell that/i.test(future.instruction), "and is fenced off from 'it will be fine'");
   // Asking somebody in freefall to move is a demand dressed as a question.
   ok(
@@ -1573,10 +1611,6 @@ check("15i The three engines are selectable, and none of them is orphaned", () =
     "and it does not fire at somebody in freefall",
   );
 
-  const loop = ALL_TACTICS.find((t) => t.id === "micro_loop");
-  ok(/trigger and an action/i.test(loop.instruction), "the loop is a trigger and an action");
-  ok(/One loop — never a list/i.test(loop.instruction), "one, never a list");
-  ok(!loop.fits({ ...base, ventCount: 0 }), "and never on turn one — that would be homework");
 
   // Reachability, swept rather than assumed. A weight change elsewhere could
   // orphan any of these and nothing would say so.
@@ -1598,7 +1632,7 @@ check("15i The three engines are selectable, and none of them is orphaned", () =
       }
     }
   }
-  for (const id of ["iterated_game", "future_self", "micro_loop"]) {
+  for (const id of ["iterated_game", "future_self"]) {
     ok(seen.has(id), `${id} is actually reachable, not just present`);
   }
 });
@@ -3778,10 +3812,16 @@ check("33 A stem still matches the tense people write in", () => {
     And the tactic gates, which fail silently rather than loudly: a gate that
     never opens looks exactly like a tactic that lost the weight contest.
   */
+  /*
+    The two rows here were `micro_action` and `opposite_action`, both retired by
+    the no-errands spec. `ifs_parts` gates on the stem `perform`, which is the
+    same shape they guarded — a word people write as "performing" — so the rule
+    keeps a live gate to hold rather than an empty list to pass over.
+  */
   const GATED = [
-    ["i have been procrastinating on it for a month", "micro_action"],
-    ["i keep isolating myself from everybody", "opposite_action"],
+    ["i keep performing for everybody at work", "ifs_parts"],
   ];
+  ok(GATED.length > 0, "the gate sweep has something to open");
   for (const [message, wanted] of GATED) {
     const eligible = ALL_TACTICS.filter((t) => t.fits({
       kind: "vent", crisis: false, realWorldTag: null, body: null, language: "en",
@@ -6071,7 +6111,9 @@ check("47 The one who is already watching is not handed a mirror", () => {
   // The three moves exist, and are their own family — filing them under
   // "cognitive" would put them next to the moves they replace.
   const observing = ALL_TACTICS.filter((t) => t.family === "observing").map((t) => t.id);
-  for (const id of ["insight_is_not_change", "postpone_the_loop", "felt_sense"]) {
+  // `postpone_the_loop` left this family: a scheduled worry window is an experiment.
+  ok(!observing.includes("postpone_the_loop"), "the assigned worry window is retired");
+  for (const id of ["insight_is_not_change", "felt_sense"]) {
     ok(observing.includes(id), `${id} is in the observing family`);
   }
 
@@ -9949,7 +9991,9 @@ check("82 The room reads its own reply before anybody else does", () => {
     And the ones that are NOT grounds for a second call, asserted because a
     retry list that grows quietly is a bill that grows quietly.
   */
-  is(rejects("Rent past you. The breath went with it. Which came first. Say it plain. Then stop."), null,
+  // The fixture ended "Then stop." — an instruction, which the no-errands rule
+  // now rejects on its own. This line is about length, so it carries none.
+  is(rejects("Rent past you. The breath went with it. Which came first. Say it plain. That is enough."), null,
     "a reply over the sentence cap is a note, not a retry",
     "length is a finding for the audit — it does not justify a second billed call");
 
@@ -10494,47 +10538,68 @@ check("86 Nobody is handed a task that would fit anybody", () => {
   const TASK_REPLY = "Try a breathing exercise before bed.";
   ok(inspectReply(vent, TASK_REPLY).reject,
     "a task nobody asked for is rejected before anybody reads it");
-  is(inspectReply({ ...vent, message: `${vent.message} — what should i do` }, TASK_REPLY).reject, null,
-    "and the same sentence is allowed to somebody who asked",
-    "the exemption is the difference between a therapy office and a room that will not answer");
+  /*
+    This used to assert the opposite — "the same sentence is allowed to
+    somebody who asked", with the exemption called "the difference between a
+    therapy office and a room that will not answer". The founder's spec
+    overruled it: "you never assign external tasks ... of any kind", and the
+    room answers somebody who asks what to do with what the asking is doing.
+    `askedForSkill` still reads the request — it now decides which sentence the
+    retry is given, because "they did not ask" would be false to that person.
+  */
+  const asked = { ...vent, message: `${vent.message} — what should i do` };
+  ok(inspectReply(asked, TASK_REPLY).reject,
+    "and the same sentence is refused to somebody who asked, too");
 
   const note = inspectReply(vent, TASK_REPLY).correction;
-  ok(note && /did not ask/i.test(note), "the retry is told why");
+  ok(note && /nothing for them to do/i.test(note), "the retry is told why");
+  const askedNote = inspectReply(asked, TASK_REPLY).correction;
+  ok(askedNote && /they asked what to do/i.test(askedNote),
+    "and somebody who asked is not told they did not",
+    "a retry note that is false about the person is the refusal this file opens with");
+  is(errand(askedNote), null, "and neither note hands the model a task to pass on");
   is(genericTask(note), null,
     "and the note names no task it is about",
     "a correction that repeats the failure is one bad parse from being an instruction");
 
   /*
-    THE ASSERTION THIS WHOLE CHECK EXISTS FOR
+    THE ASSERTION THIS CHECK EXISTED FOR — OVERRULED, AND KEPT AS A RECORD
 
-    The generic version and the surgical version of one clinical move fall on
-    opposite sides of the list, and nothing was special-cased for it.
-    `body_map_drop_set` says "four seconds in, six out, drop the shoulder" —
-    breathing, aimed at the exact place in the body they named, selected
-    because they named it. "Try a breathing exercise" is the same technique
-    with the person removed from it.
-
-    If this assertion ever fails, the list has stopped describing *generic* and
-    started describing *breathing*, and it is the list that is wrong.
+    It held that the generic and the surgical version of one clinical move fall
+    on opposite sides of the list: `body_map_drop_set`'s "four seconds in, six
+    out, drop the shoulder" survived the ban because it was aimed at the body
+    they named, and "if this assertion ever fails ... it is the list that is
+    wrong." The founder's spec overruled the premise rather than the list —
+    "You never assign external tasks, behavioral homework, or micro-errands of
+    any kind", exercises named — and retired the drop set with every other
+    somatic exercise. What holds now is the stronger half: nothing in the
+    library tells somebody how to breathe or move, and the body's move is a
+    question.
   */
-  const drop = ALL_TACTICS.find((t) => t.id === "body_map_drop_set");
-  ok(drop && /breath|inhale|exhale|seconds? in/i.test(`${drop.instruction} ${drop.hold}`),
-    "the library's own breathing move is still a breathing move");
-  is(genericTask(drop.hold), null,
-    "and it survives the ban, because it is aimed at what they said",
-    "the same move, tied to their body, is the reason the ban is drawn on 'generic' and not on 'task'");
+  ok(!ALL_TACTICS.some((t) => t.id === "body_map_drop_set"), "the drop set is retired");
+  const exercising = ALL_TACTICS
+    .filter((t) => /\b(?:inhale|exhale|seconds? in|drop the shoulder|clench|breathe)\b/i.test(`${t.instruction} ${t.hold ?? ""}`))
+    .map((t) => t.id);
+  is(exercising.join(","), "", "no tactic tells somebody how to breathe or move");
 
   /*
     Nothing we wrote hands over one either — and this is load-bearing rather
     than tidy. `inspectReply` exempts authored lines by design (see check 82),
-    so an authored `hold` carrying a generic task is a rejection that ships
-    anyway, through the one door the failsafe leaves open. Check 76 makes the
-    identical argument for the banned phrases; this is that argument applied to
-    the table that came after it.
+    so an authored `hold` carrying a task is a rejection that ships anyway,
+    through the one door the failsafe leaves open.
+
+    It asked `genericTask` until the no-errands spec, and that is the sweep a
+    grader-only fix would have left behind: reject the model's aimed errand,
+    fall back to a hold carrying one, and ship it. Six production replies read
+    "say it … out loud" — `exact_mirror`'s hold, word for word. So it asks the
+    detector every reply is graded by.
   */
-  const unsafe = ALL_TACTICS.filter((t) => t.hold && genericTask(t.hold)).map((t) => t.id);
-  is(unsafe.join(","), "", "no authored fallback hands over one",
-    "the failsafe exempts our own strings — an authored generic task is the one that reaches somebody");
+  const unsafe = ALL_TACTICS.filter((t) => t.hold && errand(t.hold)).map((t) => t.id);
+  ok(ALL_TACTICS.filter((t) => t.hold).length > 20, "there are holds to read",
+    "a sweep over no holds passes loudest");
+  is(unsafe.join(","), "", "no authored fallback hands over anything to do",
+    "the failsafe exempts our own strings — an authored errand is the one that reaches somebody");
+
 
   const files = [];
   const walk = (dir) => {
@@ -10592,7 +10657,15 @@ check("86 Nobody is handed a task that would fit anybody", () => {
   ok(!/micro action they can do/i.test(speaks),
     "the standing instruction to close on a micro action is gone",
     "it made an unasked-for task the default closing move of every reply");
-  ok(/Understanding is the job/.test(speaks) && /unless they asked/.test(speaks),
+  /*
+    This asserted "unless they asked" — the exemption, *present* — and stayed
+    green through the whole no-errands change, because the prompt's HOW YOU
+    SPEAK line still carried it after every other permission had been found
+    and flipped. A check guarding a rule by requiring the sentence that
+    contradicts it: the prompt was telling the model the old rule every turn.
+  */
+  ok(!/unless they asked/.test(speaks), "and no exemption for asking survives in the prompt");
+  ok(/Understanding is the job/.test(speaks) && /even when they ask/.test(speaks),
     "and extraction is what stands in its place",
     "RULE 2: your job is not to fix, your job is to understand");
 
@@ -10606,7 +10679,9 @@ check("86 Nobody is handed a task that would fit anybody", () => {
   const built = buildSystemPrompt({
     grounding: groundNow(),
     classification: classify("i no fit start anything today"),
-    tactic: ALL_TACTICS.find((t) => t.id === "micro_action"),
+    // Whatever the selector really picks for this message — `micro_action` was
+    // named here until the no-errands spec retired it.
+    tactic: selectTactic({ ...base, message: "i no fit start anything today", recentTactics: [] }),
     ctx: { message: "i no fit start anything today", pressure: 60, ventCount: 2, recentTactics: [] },
     memory: [],
     message: "i no fit start anything today",
@@ -10623,12 +10698,14 @@ check("86 Nobody is handed a task that would fit anybody", () => {
     and the one this repository has broken most often.
   */
   const quality = fs.readFileSync(path.join(ROOT, "src/lib/vent/quality.ts"), "utf8");
-  ok(/genericTask/.test(quality) && /askedForSkill/.test(quality),
-    "the grader imports both halves");
+  ok(/\berrand\b/.test(quality.slice(0, quality.indexOf("export"))),
+    "the grader imports the one detector");
+  ok(!/askedForSkill\(/.test(quality),
+    "and no longer lets asking cancel it");
   ok(/from "\.\/voice"/.test(quality.slice(0, quality.indexOf("export"))),
     "from the table the product is built from");
   const failsafe = fs.readFileSync(path.join(ROOT, "src/lib/vent/failsafe.ts"), "utf8");
-  ok(/"generic_task"/.test(slice(failsafe, "const REJECT", 200)),
+  ok(/"errand"/.test(slice(failsafe, "const REJECT", 200)),
     "and the failsafe spends a retry on it",
     "a grader nobody acts on is a grader that runs in a paid command nobody runs");
 
@@ -15057,7 +15134,20 @@ check("119 The reply that reached somebody is graded, sentence by sentence", () 
     for the drop set: aimed is fine, generic is not.
   */
   const aimed = "Write down the one it keeps returning to, on paper, next to the bed. Not to solve it.";
-  is(genericTask(aimed), null, "and the aimed version of the same move still passes",
+  /*
+    OVERRULED, AND KEPT HERE AS THE RECORD OF WHAT WAS GIVEN UP.
+
+    The argument above is sound clinical reasoning and it lost to a product
+    decision: "You never assign external tasks, behavioral homework, or
+    micro-errands of any kind." The generic table below stays narrow — that is
+    still what "a task that fits anybody" means — and `errand()`, which every
+    surface now asks, refuses the aimed version as well. This row reads "the
+    aimed version of the same move still passes" and passed after the rule
+    changed, which is an assertion defending a rule the product no longer has.
+  */
+  ok(errand(aimed), "and the room refuses the aimed version too",
+    "the no-errands spec: aimed is still a task");
+  is(genericTask(aimed), null, "while the generic table stays narrow",
     "banning the paper rather than the emptiness would delete a correctly targeted CBT-I move");
   is(bannedPhrase(aimed), null, "by name as well as by table");
 
@@ -18977,6 +19067,137 @@ check("151 The room does not tell somebody what they feel", () => {
     "asking again gets the observation underneath the presumption");
   ok(!REJECT.has("presumed"), "and never the authored line",
     "a reply that presumes is still made of their words; the hold is made of nobody's");
+});
+
+// ── 152. the room hands nobody anything to do ─────────────────────────────
+check("152 The room hands nobody anything to do — not a task, a step, or an exercise", () => {
+  /*
+    WHAT THIS HOLDS
+
+    "You never assign external tasks, behavioral homework, or micro-errands of
+    any kind." The founder's spec, overruling this repository's older line that
+    generic was the offence and task was not.
+
+    Production had carried it in 18 of 113 English replies — seven of them
+    "…tonight, you can / try…", which is the spec's own example, and six "say
+    it … out loud", `exact_mirror`'s hold read back word for word. It was not
+    the model misbehaving. Four sentences in the system prompt told it to:
+    engine one's habit loop "small enough that they will actually do it
+    tonight", engine two's "next two hours", the body rule licensing breathing
+    instructions, and two separate "unless they asked" exemptions.
+
+    A rule like this lives or dies at four seams, and each is asserted: the
+    detector reads the grammar correctly, every surface the room speaks
+    through is clean, the prompt no longer asks for it, and the failsafe
+    rejects it with a note that is true about the person.
+  */
+
+  // ── the detector: what it catches, and what it must leave alone ──────────
+  const CATCHES = [
+    ["Write down the one it keeps returning to, on paper, next to the bed.", "the aimed version the old rule defended"],
+    ["Say the two heaviest words again, out loud.", "the hold production read back six times"],
+    ["The map can go away tonight. Tomorrow, fifteen minutes, it'll still be there and you can look.", "a scheduled worry window"],
+    ["Tonight, try one thing before bed.", "the spec's own example"],
+    ["Four seconds in, six out. Breathe.", "a breathing exercise"],
+    ["What's the smallest thing you could stop for one day?", "a to-do in question form"],
+    ["Talk to someone tonight.", "somebody to contact"],
+    ["Say it again as if your closest friend said it.", "an exercise dressed as speech"],
+    ["Make you go rest small.", "Pidgin's command, at the front of a sentence"],
+    ["Abeg drink water.", "a Pidgin errand anywhere"],
+    /*
+      The one row no imperative frame can catch. The first mutation pass cut
+      `errand()` off from the generic table and every row above still failed on
+      its own grammar, so the suite passed — a generic task phrased as a
+      suggestion rather than a command would have walked through the rule
+      written to stop it.
+    */
+    ["A little self-care might help.", "a generic task with no imperative in it — only the table sees it"],
+  ];
+  for (const [text, why] of CATCHES) {
+    ok(errand(text), `caught: "${text.slice(0, 44)}…"`, why);
+  }
+  /*
+    The exclusions are the work, and three of them were found by the corpus
+    flagging a reply that was right — each a shape this repository has already
+    paid for: a verb used as a noun, Pidgin's hortative, and the room handing
+    somebody's own sentence back.
+  */
+  const LEAVES = [
+    ["Tell me more.", "the conversation continuing"],
+    ["Say more about the part with your mother.", "asking for the next sentence here"],
+    ["Name the one underneath the anger.", "a question in a room whose only channel is the box"],
+    ["Call it what it is: grief.", "naming, not dialling"],
+    ["Take your time.", "not an instruction"],
+    ["Rest is being held hostage by a belief that everything depends on you.", "a noun subject"],
+    ["Make we leave the why tonight.", "Pidgin's hortative — `make we`, kept on purpose"],
+    ["And you no dey talk to anybody for house, so na you and am alone every night.", "their own sentence handed back"],
+    ["Does that make you go quiet?", "English causative, not Pidgin command"],
+    ["You just go numb when he calls.", "`just go` is English"],
+    ["What happens in your chest when you read that back?", "the room's move"],
+    ["If your closest friend said that about themselves, what would you tell them?", "an imagined reply, answered here"],
+  ];
+  for (const [text, why] of LEAVES) {
+    is(errand(text), null, `left alone: "${text.slice(0, 44)}…"`, why);
+  }
+
+  // ── every surface the room speaks through, derived ───────────────────────
+  const holds = ALL_TACTICS.filter((t) => t.hold);
+  ok(holds.length > 20, `${holds.length} holds read`, "a sweep over nothing passes loudest");
+  is(holds.filter((t) => errand(t.hold)).map((t) => t.id).join(","), "",
+    "no hold hands over anything — the failsafe exempts authored lines, so this is the door");
+
+  ok(PROBES.length > 40, `${PROBES.length} probes read`);
+  is(PROBES.filter((p) => errand(p.ask)).map((p) => p.id).join(","), "",
+    "no probe asks for a plan", "`mi_confidence` asked 'if you decided tonight'");
+
+  const corpus = fs.readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+    .trim().split("\n").map((l) => JSON.parse(l));
+  ok(corpus.length >= 50, `${corpus.length} authored replies read`);
+  is(corpus.filter((r) => errand(r.full_integration)).length, 0,
+    "the examples the room learns from hand over nothing",
+    "ten did before this — the corpus is the instrument, so it moved with the rule");
+
+  /*
+    The library's two errand families are gone rather than renamed — keeping an
+    id over a different move would make the efficacy loop score one tactic
+    under another's name.
+  */
+  const families = new Set(ALL_TACTICS.map((t) => t.family));
+  ok(!families.has("behavioral") && !families.has("somatic"),
+    "the homework and exercise families are retired", [...families].join(","));
+  for (const id of ["micro_action", "micro_loop", "behavioral_activation", "opposite_action",
+    "progressive_squeeze", "grounding_54321", "orienting", "body_map_drop_set", "postpone_the_loop"]) {
+    ok(!ALL_TACTICS.some((t) => t.id === id), `${id} is retired`);
+  }
+  ok(ALL_TACTICS.filter((t) => t.holdsWhenNothingMoves).length >= 8,
+    "and the pool for somebody who cannot move is still a pool",
+    "all four somatic tactics sat in it; grief must not be left with nothing");
+
+  // ── the prompt stopped asking for it ─────────────────────────────────────
+  const prompt = buildSystemPrompt({
+    grounding: groundNow(), classification: classify("i no fit sleep, my mind dey run"),
+    tactic: ALL_TACTICS[0], ctx: { ...base }, memory: [], message: "i no fit sleep, my mind dey run",
+  });
+  for (const [re, what] of [
+    [/you may give it/i, "the advice exemption in OFFICE_RULES"],
+    [/unless they asked/i, "the exemption in HOW YOU SPEAK"],
+    [/actually do it tonight|trigger and an action/i, "engine one's habit loop"],
+    [/next two hours/i, "engine two's plan"],
+    [/Only use a breathing or body instruction/i, "the body rule's licence"],
+  ]) {
+    ok(!re.test(prompt), `the prompt no longer carries ${what}`);
+  }
+  ok(/even when they ask/i.test(prompt), "and it says so where the model reads it");
+
+  // ── the failsafe acts on it, and tells the truth about the person ─────────
+  ok(REJECT.has("errand") && !REJECT.has("generic_task"), "a reply that hands one over is rejected");
+  const q = { id: "e", message: "my mind dey run and i no fit sleep", intent: "vent", language: "en", probes: "" };
+  const bad = "Write down the one it keeps returning to, on paper, next to the bed.";
+  ok(inspectReply(q, bad).reject, "the aimed version is rejected before anybody reads it");
+  ok(/nothing for them to do/i.test(inspectReply(q, bad).correction),
+    "and the retry is told what to do instead");
+  ok(/they asked what to do/i.test(inspectReply({ ...q, message: `${q.message} — what should i do` }, bad).correction),
+    "and somebody who asked is told the asking is the material, not that they did not ask");
 });
 
 for (const r of results) {

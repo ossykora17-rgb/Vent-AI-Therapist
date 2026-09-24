@@ -691,7 +691,7 @@ own copy passes while the product regresses.
 | What a proposed rule did to the corpus, measured | `src/lib/vent/fitness.ts` |
 | Intent routing, crisis, meta-vs-vent, injection | `src/lib/vent/intent.ts` |
 | The turn's verdict, computed not asked for | `src/lib/vent/assess.ts` |
-| 45 tactics, 3-turn block, somatic gate | `src/lib/vent/tactics.ts` |
+| 36 tactics, 3-turn block, body asked about, never instructed | `src/lib/vent/tactics.ts` |
 | Memory: vents only, six-turn cap | `src/lib/vent/memory.ts` |
 | The office across sessions, and no diagnosis | `src/lib/vent/notes.ts` |
 | What it worked out, shown and deletable | `src/app/api/notes/route.ts` |
@@ -3557,6 +3557,76 @@ Eleven mutations fail check 151, and two are the ones worth keeping: swapping
 families back to word identity reproduces the register bug, and widening the
 hedge from the clause to the whole reply makes one "sounds like" excuse
 everything after it.
+
+**The room was told to hand out homework, in its own constitution.** The
+founder's spec: *"You never assign external tasks, behavioral homework, or
+micro-errands of any kind"*, with exercises named. It overrules this file's
+older line — *generic is the offence, task is not* — and the argument that lost
+is kept where it stood in `voice.ts` and check 119, marked overruled, because
+the aimed version of a clinical move really is better than the generic one and
+a record of what was given up is worth more than a tidy file.
+
+Production said how often before anything changed: **18 of 113 English
+replies** handed somebody something to do — seven *"…tonight, you can / try…"*,
+the spec's own example, and six *"say it … out loud"*, which is `exact_mirror`'s
+hold read back word for word. Counted in the database with verbs from a closed
+list, never text.
+
+It was not the model misbehaving. **Five sentences in the prompt asked for
+it**: engine one's habit loop *"small enough that they will actually do it
+tonight"*, engine two's *"what is that one doing in the next two hours"*, the
+body rule's licence for breathing instructions, *"If they ask for advice you may
+give it"* in `OFFICE_RULES`, and *"Nothing for them to do unless they asked"*
+in HOW YOU SPEAK. The last was found only because check 86 asserted it
+**present** — `/unless they asked/` — and stayed green through the whole
+change: a check guarding a rule by requiring the sentence that contradicts it.
+All five are flipped, and the heaviest assembly went from 3,577 tokens to
+**3,571**.
+
+**The holds are the door a grader-only fix leaves open.** `inspectReply`
+exempts authored lines by design, so the failsafe rejects the model's errand,
+falls back to a hold — and fifteen of 45 holds were exercises. The sweep
+guarding that door asked `genericTask`, which passes an aimed task by
+construction. It asks `errand()` now, and all 36 holds pass it.
+
+**Nine tactics retired rather than renamed** — `micro_action`,
+`opposite_action`, `behavioral_activation`, `micro_loop`, `body_map_drop_set`,
+`grounding_54321`, `progressive_squeeze`, `orienting`, `postpone_the_loop` —
+because a process-level drop set is not a drop set, and keeping the id over a
+different move would make the efficacy loop score one tactic under another's
+name. Two families went with them. Check 4 caught the cost on the first run:
+**"chest + high pressure" went to `double_standard`**, the room changing the
+subject on the one thing somebody had located. `felt_sense` takes the body now,
+with the drop set's exact gate and weights — the same selection pressure on the
+same turns, a question where an instruction was.
+
+The costs are written down rather than discovered: `grounding_54321` was the
+answer to panic, numbness and "not real", and the room now stays with that
+instead of walking somebody through it; and `behavioral_activation` won 15 of 72
+authored messages at mood ≤ 4, which now go to the rest of the library.
+
+**The corpus killed three of the detector's first shapes, and all three were
+shapes this file has already paid for.** *"**Rest** is being held hostage"* — a
+verb used as a noun subject. *"**Make we** leave the why tonight"* — Pidgin's
+hortative, which `fused` already exempts by name: `make you` from the other
+side. And *"you no dey **talk to anybody** for house"* — the room handing
+somebody's own sentence back, the best move it has, read as an instruction to go
+and find somebody. The other seven flags were real and were rewritten, and one
+rewrite introduced `advice` — *"what would you **have to** feel"* — caught only
+because every rewrite was graded, and the pre-existing `language` findings on
+four of them were attributed by grading the originals rather than assumed.
+
+Scope, stated: this governs the private room. The circle Keeper's eight exported
+lines carry none. UI copy stays on `genericTask`, because a *"Try again"* button
+is not a move, and the crisis lines and the age gate's referral are the safety
+floor rather than something the room says inside a conversation.
+
+**The mutation pass had two escapes, and they were two different things.** One
+was the instrument: a probe that renamed a frame instead of removing it applied
+cleanly, changed nothing, and reported an escape. The other was real — cutting
+`errand()` off from the generic table left every row green, because every row
+was an imperative and none needed the table. *"A little self-care might help"*
+would have walked through the rule written to stop it. Fifteen of fifteen now.
 
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a

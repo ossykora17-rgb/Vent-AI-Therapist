@@ -41,10 +41,16 @@ check("no tactic repeats inside a 3-turn window", violations === 0, `violations=
 console.log(`  sequence: ${picked.join(" -> ")}`);
 
 const noBody = selectTactic({ ...base, body: null, pressure: 30, recentTactics: [] });
-check("no somatic tactic without a body mention", noBody.family !== "somatic", `got ${noBody.id}`);
+// The somatic family was retired by the no-errands spec — every member was an
+// exercise — so "never somatic" is vacuous now. The rule it guarded is that
+// nothing about the body fires at somebody who never mentioned one.
+check("no body move without a body mention", noBody.id !== "felt_sense", `got ${noBody.id}`);
 
 const withBody = selectTactic({ ...base, body: "chest", pressure: 85, recentTactics: [] });
-check("body + high pressure selects the body map", withBody.id === "body_map_drop_set", `got ${withBody.id}`);
+// A second copy of eval.mjs check 4, in the file the gate runs and eval does
+// not — repaired there first and caught here by the gate, which is the third
+// mechanism CLAUDE.md records. The body is asked about now, never instructed.
+check("body + high pressure is asked about, never instructed", withBody.id === "felt_sense", `got ${withBody.id}`);
 
 const econ = selectTactic({ ...base, realWorldTag: "economy", recentTactics: [] });
 check("economy tag routes to its own coping tool", econ.id === "rw_economy", `got ${econ.id}`);
