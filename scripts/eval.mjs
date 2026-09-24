@@ -37,6 +37,10 @@ const { guardianVerdict, THRESHOLD } = await app("src/lib/external/guardian.ts")
 // The campfire's own lines, imported once so no check keeps a copy of them.
 const { MYCELIUM: MYCELIUM_RULE } = await app("src/lib/circles/rules.ts");
 const { noModelKeyReply } = await app("src/lib/vent/fallback.ts");
+// The age flag: the read, the cache, the write and the forget, all in one
+// importable module so check 150 exercises them instead of grepping for them.
+const { MIN_AGE, AGE_KEY, ageSnapshot, ageServerSnapshot, confirmAge, forgetAge, subscribeAge } =
+  await app("src/lib/age.ts");
 const { BANNED_PHRASES, FILE_LANGUAGE, bannedPhrase, REPLY_SENTENCE_CAP, NO_MEMORY_LINE, OFFICE_RULES, PRODUCT_LINE,
         GENERIC_TASKS, genericTask, askedForSkill } =
   await app("src/lib/vent/voice.ts");
@@ -13492,6 +13496,27 @@ check("109 The front door collects nothing, and the room opens on the box", () =
     collected, and a vacuous check is one that passes by not looking. So the
     rule is replaced rather than deleted, and what replaces it is the stronger
     half: **nothing stands between a person and the box.**
+
+    AND THAT SENTENCE IS NO LONGER TRUE, WHICH THIS CHECK FOUND OUT LAST
+
+    An age gate now stands there. It is a full-screen wall in front of `/chat`
+    and `/circles`, and when it shipped the suite reported **157/157** — this
+    check among them, because it read `vent-chat.tsx` and grepped for
+    `hasOnboarded|showOnboarding|<Onboarding`. The wall is one file up, in
+    `page.tsx`, under a different name.
+
+    A check anchored to names rather than to the rule, walking past the exact
+    object it exists to stop. "Anchor on the rule, not the line", found by the
+    thing it was written about.
+
+    So what is true is the narrower and stronger rule, and it is the one that
+    actually distinguishes this from the door that was deleted: **nothing
+    standing between a person and the box takes anything from them.** The form
+    asked for four things and collected `chair_picked` on 2 of 108; the gate
+    asks for none and stores one flag on the person's own device that their own
+    wipe clears. Check 150 holds that property in full; what is held here is the
+    class — that the list of things standing there is exactly one thing long and
+    somebody had to name it.
   */
   const chat = strip(fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8"));
 
@@ -13500,6 +13525,27 @@ check("109 The front door collects nothing, and the room opens on the box", () =
     "an unrendered component is dead code and the next person will wire it back");
   ok(!/hasOnboarded|showOnboarding|<Onboarding/.test(chat),
     "and nothing in the chat gates on having onboarded");
+
+  /*
+    Read off the page rather than off a list of names, because a list of names
+    is what let the wall through. Every component the chat route renders must
+    be one somebody decided belongs there — a second wrapper added next month
+    fails the build rather than arriving silently, which is the only property
+    that would have caught this one.
+  */
+  const chatPage = strip(fs.readFileSync(path.join(ROOT, "src/app/chat/page.tsx"), "utf8"));
+  const BEFORE_THE_BOX = {
+    VentChat: "the room itself",
+    AgeGate: "states who this is for, takes nothing, and carries the crisis lines on its refusal — check 150",
+  };
+  const rendered = [...new Set([...chatPage.matchAll(/<([A-Z][A-Za-z0-9]*)/g)].map((m) => m[1]))];
+  ok(rendered.length >= 2, `${rendered.length} components on the chat route examined`,
+    "a sweep that walks nothing reports an empty list and calls it a pass");
+  for (const c of rendered) {
+    ok(c in BEFORE_THE_BOX, `${c} is named as something that may stand before the box`,
+      "anything else between a person and the composer is the front door coming back");
+  }
+  ok(rendered.includes("VentChat"), "and the room is still the thing being wrapped");
 
   /*
     The composer is what a new person meets. Asserted on the input the room is
@@ -18494,6 +18540,245 @@ check("149 The return leg reaches the prompt, not only the Memory page", () => {
   ok(/held: Array\.from\(\{ length: HELD_IN_PROMPT/.test(heaviest),
     "and it counts against the prompt budget, sized from the constant",
     "a block that renders on a real vent and not in that measurement is outside the budget");
+});
+
+// ── 150. the one thing that stands before the box ──────────────────────────
+check("150 The age gate states, never collects — and never closes on a number", () => {
+  /*
+    WHAT THIS IS, AND WHY IT NEEDED A CHECK OF ITS OWN THE MOMENT IT SHIPPED
+
+    A full-screen wall went in front of `/chat` and `/circles`, and the suite
+    reported **157/157**. Check 109 — whose stated rule is *nothing stands
+    between a person and the box* — passed, because it reads `vent-chat.tsx`
+    and greps for `hasOnboarded|showOnboarding|<Onboarding`. The gate is one
+    file up, in `page.tsx`, under a different name.
+
+    A check anchored to names rather than to the rule, walking past the exact
+    object it exists to stop. That is this repository's most-repeated
+    instrument failure, arriving on its own subject.
+
+    So the rule is restated where it can hold: something *does* stand before
+    the box now, and what makes it a different object from the front door that
+    was deleted at `chair_picked` 2/108 is that **it takes nothing**. That
+    property is asserted here, exhaustively, because it is the only thing
+    standing between this and the form.
+  */
+  const gate = strip(fs.readFileSync(path.join(ROOT, "src/components/age-gate.tsx"), "utf8"));
+  const ageSrc = strip(fs.readFileSync(path.join(ROOT, "src/lib/age.ts"), "utf8"));
+
+  /*
+    IT COLLECTS NOTHING
+
+    No route, no column, no anon id, no request. The deleted form's whole
+    defect was that it asked for four things and got two per cent; this asks
+    for none and stores a single flag on the person's own device, which their
+    own wipe button clears. A gate that learns something is a form.
+  */
+  for (const [pattern, why] of [
+    [/\bfetch\s*\(/, "a gate that talks to a server is collecting"],
+    [/["'`]\/api\//, "no route belongs on this screen"],
+    [/\banonId\b/, "nothing here may be keyed to a person"],
+    [/getStore|supabase/i, "there is no row for this and there must not be"],
+  ]) {
+    ok(!pattern.test(gate), `the gate does not ${String(pattern)}`, why);
+  }
+
+  /*
+    IT NEVER CLOSES ON A NUMBER — THE HALF THAT PROTECTS SOMEBODY
+
+    Whoever taps "under 18" is, by construction, disproportionately a teenager
+    at 2am who has already decided to type something they have not said out
+    loud. This repository's oldest rule is that a refusal has to be true *and*
+    has to open onto something: the worst bug it ever shipped was "Your turn
+    comes" to people whose turn could never come.
+
+    Read off the refusal branch specifically, not off the file. Both branches
+    are in one component, and a check that found `tel:` anywhere in it would be
+    satisfied by a confirm screen carrying the numbers while the wall carried
+    none — the wrong-window bug, in the assertion that matters most here.
+  */
+  /*
+    Both ends braced, because the first version anchored the *start* on the
+    bare name and `indexOf` found it in the import list — so the slice ran from
+    the imports through the whole component, and `import { CRISIS_LINES,
+    CRISIS_TEL, EMERGENCY_TEL }` satisfied the assertion on its own. The
+    mutation taking the crisis link off the refusal walked straight through the
+    one assertion here that protects somebody.
+
+    The wrong window, in the check written about the wrong window. Anchor on
+    the JSX, and anchor both ends.
+  */
+  const from = gate.indexOf("{AGE_TURNED_AWAY_HEADLINE}");
+  const to = gate.indexOf("{AGE_HEADLINE}");
+  ok(from > 0 && to > from, "the refusal branch is where this check thinks it is",
+    "a slice that found nothing satisfies every assertion below by not looking");
+  const refusal = gate.slice(from, to);
+  ok(refusal.length > 400, `${refusal.length} characters of the refusal read`,
+    "a window that found nothing passes loudest");
+
+  ok(/CRISIS_TEL/.test(refusal), "the crisis line is on the screen that turns somebody away",
+    "a wall with no phone number on it hands a teenager nothing and closes");
+  ok(/EMERGENCY_TEL/.test(refusal), "and the emergency line beside it");
+  ok(/href=\{`tel:/.test(refusal), "and both are dialable rather than printed",
+    "a number somebody has to copy out at 2am is a number somebody does not call");
+  ok(/AGE_TURNED_AWAY_ALSO/.test(refusal), "and something to do that is not a phone call",
+    "whoever will not dial a stranger is exactly who this screen is talking to");
+  ok(/href="\/"/.test(refusal), "the refusal is not a dead end",
+    "the room never offers a door that opens onto nothing");
+
+  /*
+    THE NUMBER LIVES IN ONE PLACE
+
+    Check 81's rule — no sentence a person reads may live in two files — and
+    check 86's, that a hand-typed integer beside the thing it counts is a copy
+    that goes stale. The age is both. `MIN_AGE` is the only edit if a
+    jurisdiction, an app store or counsel names a different one.
+  */
+  is((ageSrc.match(/export const MIN_AGE = \d+/g) ?? []).length, 1,
+    "the age is declared exactly once");
+  for (const f of ["src/components/age-gate.tsx", "src/app/terms/page.tsx", "src/app/privacy/page.tsx"]) {
+    const src = strip(fs.readFileSync(path.join(ROOT, f), "utf8"));
+    ok(!/\b18\b/.test(src), `${f} reads the age rather than typing it`,
+      "a number typed beside the thing it describes is the POSITIONING.md bug");
+  }
+  /*
+    The component is not asked to import `MIN_AGE`, and the first version of
+    this check was — it went red, correctly, against the better design. The
+    strings are built from the constant in `age.ts` and the screen renders
+    them, so the gate does not know the number at all. An assertion requiring
+    it to would have been an assertion defending a worse shape.
+  */
+  ok(/from "@\/lib\/age"/.test(gate), "the gate reads its sentences from the one module",
+    "a screen that spells its own copy is check 81's bug with a button on it");
+  ok(/\{MIN_AGE\}/.test(strip(fs.readFileSync(path.join(ROOT, "src/app/terms/page.tsx"), "utf8"))),
+    "and the page that states the rule in prose interpolates it");
+
+  /*
+    WHICH PAGES, DERIVED — AND THE UNGATED ONES NAMED WITH THEIR REASONS
+
+    "Derive the list, or the list is the bug." A hand-kept set of gated routes
+    is how `/api/notes` shipped into zero of twenty-seven checks. Every page
+    under `src/app` must land in exactly one bucket, so a page added next month
+    fails the build until somebody decides which it is — and a stale exemption
+    fails too.
+
+    The ungated half is the one that protects somebody. Erasure behind an age
+    wall would mean confirming your age to the thing you are deleting your
+    words from, and a disclosure behind a gate is not a disclosure.
+  */
+  const GATED = new Set([
+    "src/app/chat/page.tsx",
+    "src/app/circles/page.tsx",
+    "src/app/circles/[id]/page.tsx",
+  ]);
+  const UNGATED = {
+    "src/app/page.tsx": "a wall in front of the page that explains the wall",
+    "src/app/privacy/page.tsx": "a disclosure behind a gate is not a disclosure",
+    "src/app/terms/page.tsx": "and this is where the age rule is actually written down",
+    "src/app/memory/page.tsx": "deleting what the room holds about you cannot require confirming your age to it",
+    "src/app/history/page.tsx": "the wipe lives here; erasure is never behind a wall",
+  };
+
+  const pages = [];
+  const walkPages = (dir) => {
+    for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${e.name}`;
+      if (e.isDirectory()) walkPages(rel);
+      else if (e.name === "page.tsx") pages.push(rel);
+    }
+  };
+  walkPages("src/app");
+  ok(pages.length >= 8, `${pages.length} pages examined`,
+    "a sweep that walks nothing reports two empty lists and calls it a pass");
+
+  for (const p of pages) {
+    const src = strip(fs.readFileSync(path.join(ROOT, p), "utf8"));
+    const wrapped = /<AgeGate>/.test(src);
+    if (GATED.has(p)) {
+      ok(wrapped, `${p} is behind the gate`);
+    } else {
+      ok(p in UNGATED, `${p} is named as ungated with its reason`,
+        "a page in neither bucket is a decision nobody took");
+      ok(!wrapped, `${p} is open — ${UNGATED[p]}`);
+    }
+  }
+  for (const p of [...GATED, ...Object.keys(UNGATED)]) {
+    ok(pages.includes(p), `${p} still exists`,
+      "a stale exemption reads as a decision and is an absence");
+  }
+
+  /*
+    AND IT IS A MIRROR, WHICH THE MODULE SAYS OUT LOUD
+
+    "Governance is enforced on the server ... The UI mirrors the rules for
+    kindness, never for safety." The server cannot learn anybody's age — there
+    is no account here — so this is a disclosure with nothing behind it, and a
+    module that does not say so invites the next person to read a cleared gate
+    as a verified adult.
+  */
+  ok(/cannot be enforced on the server/.test(fs.readFileSync(path.join(ROOT, "src/lib/age.ts"), "utf8")),
+    "the module states that nothing enforces this",
+    "a gate documented as a control is a lie the next commit will believe");
+
+  /*
+    THE FLAG, EXERCISED RATHER THAN GREPPED
+
+    A component is not importable here; this is, which is the whole reason the
+    read, the cache, the write and the forget live in `age.ts` instead of in
+    the gate. Ordered so the returning-person path is read before anything
+    touches the cache — the module looks once on purpose, so a test that
+    confirms first can never observe it.
+  */
+  const store = new Map([[AGE_KEY, "1"]]);
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+  };
+
+  is(ageServerSnapshot(), null, "the server renders nothing rather than the gate",
+    "false there flashes the wall at every returning person on every navigation");
+  is(ageSnapshot(), true, "somebody who already confirmed is not asked again");
+
+  let woke = 0;
+  const stop = subscribeAge(() => { woke++; });
+  forgetAge();
+  is(ageSnapshot(), false, "the wipe clears it, so one tap really is everything");
+  ok(!store.has(AGE_KEY), "and the key is gone from storage, not only from memory",
+    "a cache the wipe cannot reach is how `setCarve` reported a write that never landed");
+  is(woke, 1, "and the screen is told");
+
+  confirmAge();
+  is(ageSnapshot(), true, "a tap opens the room");
+  is(store.get(AGE_KEY), "1", "and is remembered");
+  is(woke, 2, "and the screen is told about that too");
+  stop();
+  forgetAge();
+  is(woke, 2, "an unsubscribed screen is not woken", "a listener nothing removes is a leak");
+
+  /*
+    AND A BROWSER THAT REFUSES STORAGE MUST NOT TAKE THE ROOM DOWN.
+
+    Private mode, blocked site data, a thumbnail capture. Run in a subprocess
+    because the module looks exactly once and this one has to look at a
+    throwing store — check 130's trick, for check 130's reason.
+  */
+  const probe = path.join(os.tmpdir(), `mw-age-${process.pid}.mjs`);
+  fs.writeFileSync(probe, [
+    `import { app } from ${JSON.stringify(path.join(ROOT, "scripts/app-imports.mjs"))};`,
+    `const boom = () => { throw new Error("SecurityError"); };`,
+    `globalThis.localStorage = { getItem: boom, setItem: boom, removeItem: boom };`,
+    `const a = await app("src/lib/age.ts");`,
+    `console.log(JSON.stringify({ read: a.ageSnapshot() }));`,
+    `a.confirmAge(); a.forgetAge();`,
+    `console.log("survived");`,
+  ].join("\n"));
+  const out = execFileSync(process.execPath, [probe], { cwd: ROOT, encoding: "utf8" });
+  fs.rmSync(probe, { force: true });
+  is(JSON.parse(out.split("\n")[0]).read, false,
+    "a blocked read asks again rather than throwing",
+    "asking twice is a smaller failure than a white screen, and the screen it falls back to carries the numbers");
+  ok(/survived/.test(out), "and neither writer throws either");
 });
 
 

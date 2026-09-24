@@ -3326,10 +3326,12 @@ repair. The Keeper needs `members.length > 1`, so sixteen rooms never started.
 Steering cannot manufacture a second person; this is a liquidity problem and it
 is the one thing in this product that more engineering cannot reach.
 
-And there is **no age gate** anywhere in `src/app`, on a mental-health-adjacent
+And there was **no age gate** anywhere in `src/app`, on a mental-health-adjacent
 product with `/privacy` and `/terms` pages that do exist. Named rather than
-built: an age wall is a product and legal decision, and this file's own test
-says those are read by a person.
+built for two rounds, because an age wall is a product and legal decision and
+this file's own test says those are read by a person. It is built now, on an
+explicit instruction to handle it; what that decision actually turned on is
+below.
 
 **The number itself had never been checked.** This file spends more words on
 the crisis path than on any other single surface — check 17 makes the digits
@@ -3346,8 +3348,8 @@ correct, and it was correct by somebody's care rather than by anything here.
 Two things came out of the check that are worth writing down:
 
 **The service publishes a second line, `0809 210 6493`, and the product shows
-one.** A busy tone at 2am is the likeliest failure this path has, and there is
-no fallback behind it. That is a real gap and **it was not fixed here**, for a
+one.** A busy tone at 2am is the likeliest failure this path has. That is a
+real gap and **it was not fixed here**, for a
 reason this file already records about iOS haptics: `findahelpline.com` and
 Wikipedia are both blocked by this environment's egress proxy, so the only
 evidence for the sibling number is a search-engine summary. Changing the digits
@@ -3355,6 +3357,26 @@ somebody dials in the worst hour of their life, on a paraphrase, is the exact
 shape of every unfingerprinted claim in this document. **Confirm it against
 SURPIN directly, then add it** — the constant is already the one place, so it
 is a two-line change once the fact is real.
+
+**The sentence that used to follow "likeliest failure" said "and there is no
+fallback behind it", and that was false.** Read off the four call sites rather
+than remembered: `disclaimer.tsx:61-76`, `circle-room.tsx:474-478`,
+`circles-list.tsx:533-538` and `terms/page.tsx:24-25` each render SURPIN **and**
+`CRISIS_LINES.emergency` side by side, both as `tel:` links. There has been a
+second number on every crisis surface this product has. What is missing is a
+second *counselling* line, which is a narrower and truer claim than the one this
+file made — and the reason it matters is that the false version overstates the
+urgency of a change nobody can currently verify, which is how somebody talks
+themselves into typing digits.
+
+**Retried with a search tool and still refused.** `WebSearch` reaches this
+environment where `curl` does not, and it returns `0809 210 6493` — but what it
+returns is a *summary written over pages it read for me*. `WebFetch` on
+`surpinng.com` and `lifeline-international.com` both answer `EGRESS_BLOCKED`,
+the same as `nigeriasuicideprevention.com`. A summary of a source is a
+paraphrase of a source, which is the exact thing rule 8 bans, and the fact that
+a different tool produced it does not make it a fingerprint. **A primary page or
+nothing.** The environment's network policy is where this unblocks.
 
 **And `112` is Nigeria's national emergency number**, with `767` for Lagos,
 while `CRISIS_LINES.emergency` is `199`. 199 is the long-standing line and is
@@ -3367,6 +3389,91 @@ number is displayed is not a check that the number works.** Everything here
 verifies the plumbing. The fact at the end of the pipe is external, it goes
 stale without announcing it, and it is the one number in this product where
 being wrong is not a bug report.
+
+**A full-screen wall went in front of `/chat` and the suite said 157/157.**
+The age gate is the first thing a new person meets, it replaces the room
+entirely until it is answered, and not one of a hundred and fifty-seven checks
+noticed it arrive — **check 109 among them**, whose stated rule is *nothing
+stands between a person and the box*. It reads `vent-chat.tsx` and greps for
+`hasOnboarded|showOnboarding|<Onboarding`. The wall is one file up, in
+`page.tsx`, under a different name.
+
+*Anchor on the rule, not the line* — found by the exact object the line was
+written about. The rule that survives is narrower and stronger, and it is the
+only thing separating this from the front door deleted at `chair_picked` 2/108:
+**nothing standing between a person and the box takes anything from them.** The
+form asked four questions and collected two per cent; this asks none, stores one
+flag on the person's own device, and their own wipe button clears it. Check 109
+now reads the *page* and requires every component rendered before the composer
+to be named with its reason, so a second wrapper next month fails the build
+instead of arriving in silence — which is the only property that would have
+caught this one.
+
+**It is a mirror with nothing behind it, and `age.ts` says so in its own first
+paragraph.** *"Governance is enforced on the server ... The UI mirrors the rules
+for kindness, never for safety"* — and the server cannot learn anybody's age,
+because there is no account here and never has been. So this is a liability
+posture and a disclosure, it stops nobody who does not want to be stopped, and
+no code downstream may read a cleared gate as a verified adult. A gate
+documented as a control is a lie the next commit will believe, so the check
+asserts the sentence is still in the module.
+
+`MIN_AGE` is 18 because it is the strictest ordinary answer, which means counsel
+can only ever loosen it — a gate that has to be *tightened* later has already
+shipped to the people it should not have. Nobody here read a statute.
+
+**What it must never cost is the crisis path, and that is the half a check can
+actually protect.** Somebody tapping *"I am under 18"* is, by construction,
+disproportionately a teenager at 2am who has already decided to type something
+they have not said out loud. A wall with no phone number on it hands them
+nothing and closes — the door onto a 501, on the one screen where that costs
+most. So the refusal carries both lines as the loudest element on it, plus one
+thing to do that is not a phone call, plus a way back. And `/memory`,
+`/history`, `/privacy` and `/terms` are never behind it: deleting what this
+product holds about you cannot require confirming your age to the thing you are
+deleting it from, and a disclosure behind a gate is not a disclosure. The page
+list is derived off the filesystem with the open ones named and reasoned, so a
+page added next month is in neither bucket and fails.
+
+**The mutation that escaped was the one assertion here that protects
+somebody.** `indexOf("AGE_TURNED_AWAY_HEADLINE")` found the name in the **import
+list**, not in the JSX — so the slice meant to be the refusal branch ran from
+the imports through the whole component, and `import { CRISIS_LINES, CRISIS_TEL,
+EMERGENCY_TEL }` satisfied *"the crisis line is on the screen that turns
+somebody away"* on its own. Taking the crisis link off the refusal walked
+straight through. **The wrong window, inside the check written about the wrong
+window** — the HEAD-request lesson for the fifth time, and the third time in
+this file that anchoring one end was not anchoring. Both ends braced; ten of ten
+mutations fail it now.
+
+**The flag is an external store rather than a `useEffect`, and the reason is not
+the lint warning.** The first version read storage in an effect and cached the
+answer *in the component*, while the wipe removed the key somewhere else — two
+writers, one invisible to the other, so navigating from the wipe into the room
+inside one session would have stayed cleared off a memory the wipe could not
+reach. That is `setCarve` and `circle_members` wearing a browser. The read, the
+cache, the write and the forget all live in `age.ts`, there is no second path to
+the key, and **that is also the only reason any of it is testable**: a component
+is not importable by the suite, so check 150 runs the real confirm and the real
+forget against a stubbed `localStorage`, and a subprocess runs one that throws.
+
+`ageServerSnapshot()` returns `null`, not `false`, and that is load-bearing:
+`false` renders the wall into the HTML, so every returning person is shown the
+screen this product least wants to show twice, for one frame, on every
+navigation. `null` renders nothing until the client has looked. The cost is
+paid and measured rather than assumed — `/chat` now serves 11,977 bytes with
+**zero** `<textarea>` in it, and the gate paints 174ms after `domcontentloaded`
+locally. A person cannot type into an un-hydrated composer, so the blank frame
+is bounded by hydration either way; what would not be bounded is an alarming
+legal wall flashing at somebody mid-crisis.
+
+**Verified in an actual browser at 390px, because five of the last findings
+here were not findable any other way.** Fresh `/chat` shows the gate with no
+composer; confirm gives a composer and writes the flag; reload goes straight to
+the room with no flash; *"under 18"* gives the refusal carrying
+`tel:08062106493` and `tel:199` as live links and no reachable composer;
+`/circles` is gated; `/memory`, `/history`, `/privacy`, `/terms` and `/` are
+not. Ten mutations fail checks 109 and 150 between them.
 
 **The capability question lives at `/api/push`, outside the `[id]` prefix, and
 that is not filing.** Every handler under `api/circles/[id]` operates on a

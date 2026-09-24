@@ -16,6 +16,22 @@ export default function PrivacyPage() {
         the body. That&apos;s all.
       </p>
 
+      {/*
+        The age flag named where the rest is named.
+
+        This page's own rule, two sections down: a new thing kept about
+        somebody belongs on the page that lists what is kept about somebody, on
+        the same day it starts being kept. `mw-age-ok` never leaves the device
+        and there is no column for it — which makes it *smaller* than the rest
+        of this list and no less owed a sentence, because "that's all" is a
+        claim and a claim with an exception is false.
+      */}
+      <p>
+        One more thing lives on your device and never reaches us: a flag saying
+        you confirmed your age. It is not sent anywhere, there is no row for it,
+        and the delete button below clears it with everything else.
+      </p>
+
       <h2>What we never ask for</h2>
       <p>
         No name, no email, no phone number, no password. There is no account.

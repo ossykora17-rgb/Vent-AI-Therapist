@@ -1,4 +1,5 @@
 import { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL } from "@/lib/vent/intent";
+import { MIN_AGE } from "@/lib/age";
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
 
@@ -16,6 +17,15 @@ export default function TermsPage() {
         is for emotional support only. It does not diagnose, it does not treat,
         and it does not give medical advice. Nothing here replaces care from a
         qualified professional.
+      </p>
+
+      <h2>Who it is for</h2>
+      <p>
+        VENT is built for people {MIN_AGE} and over. There is no account here
+        and no identity check, so this is something we state and you confirm —
+        it is not something the service can verify, and we do not pretend
+        otherwise. If you are under {MIN_AGE}, please talk to an adult you
+        trust, and use the lines below if you need somebody tonight.
       </p>
 
       <h2>If you are in danger</h2>

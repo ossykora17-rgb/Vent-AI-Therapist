@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AgeGate } from "@/components/age-gate";
 import { CirclesList } from "@/components/circles-list";
 
 export const metadata: Metadata = {
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 };
 
 export default function CirclesPage() {
-  return <CirclesList />;
+  return (
+    <AgeGate>
+      <CirclesList />
+    </AgeGate>
+  );
 }

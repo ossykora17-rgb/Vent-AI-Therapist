@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { anonId, clearQueue } from "@/lib/anon";
+import { forgetAge } from "@/lib/age";
 import { useToast } from "@/components/ui/toast";
 import { RoomHeader } from "@/components/room-header";
 import { cn } from "@/lib/utils";
@@ -308,6 +309,13 @@ export function HistoryList() {
       // back is a new person by construction — the id is gone — so they are
       // owed the sentence again rather than a room acting familiar.
       localStorage.removeItem("mw-alliance");
+      // And the age acknowledgement, for the same reason and for one more:
+      // "one tap deletes everything, for good" is the strongest promise on the
+      // front page, and `circle_members` is what it costs to leave one key
+      // behind. Whoever comes back is asked again, which is correct — the room
+      // has no way to know they are the same person, and that is the whole
+      // point of the id it just destroyed.
+      forgetAge();
       /*
         The offline queue, which is the only local store holding their words.
 
