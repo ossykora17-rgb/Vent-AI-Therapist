@@ -37,6 +37,8 @@ const { guardianVerdict, THRESHOLD } = await app("src/lib/external/guardian.ts")
 // The campfire's own lines, imported once so no check keeps a copy of them.
 const { MYCELIUM: MYCELIUM_RULE } = await app("src/lib/circles/rules.ts");
 const { noModelKeyReply } = await app("src/lib/vent/fallback.ts");
+// Which build is this, and is there a newer one — check 153.
+const UPDATE = await app("src/lib/update.ts");
 // The age flag: the read, the cache, the write and the forget, all in one
 // importable module so check 150 exercises them instead of grepping for them.
 const { MIN_AGE, AGE_KEY, ageSnapshot, ageServerSnapshot, confirmAge, forgetAge, subscribeAge } =
@@ -19198,6 +19200,87 @@ check("152 The room hands nobody anything to do — not a task, a step, or an ex
     "and the retry is told what to do instead");
   ok(/they asked what to do/i.test(inspectReply({ ...q, message: `${q.message} — what should i do` }, bad).correction),
     "and somebody who asked is told the asking is the material, not that they did not ask");
+});
+
+// ── 153. a window left open still ends up on the build that ships ─────────
+check("153 A window left open learns a new build exists, and never loses a sitting to it", () => {
+  /*
+    WHAT THIS CLOSES
+
+    The founder opened the installed app and saw "BEFORE YOU GO" — a card
+    deleted days earlier, whose only trace left in `main` is the postmortem
+    comments about its deletion. The shipped code could not render it; the
+    window could, because it was still running JavaScript loaded before the
+    deploy and nothing on the page ever asked whether the server had moved on.
+    Every fix since was invisible to the one person looking, and would have
+    been to every tester who installed it.
+
+    Two faults made it permanent. The service worker's cache was the constant
+    "mw-v1" across every deploy, so its own cleanup never deleted anything. And
+    the page registered the same `/sw.js` on every build, so an old page could
+    not learn of a new one by re-asking. Next's skew handling reloads only on a
+    client-side navigation, and somebody sitting in `/chat` never navigates.
+  */
+  const { AWAY_MS, BUILD_HEADER, isStale, safeToReload } = UPDATE;
+
+  // ── is there a newer build ───────────────────────────────────────────────
+  ok(isStale("c714a14", "d00dfee"), "a different build is a newer build");
+  ok(!isStale("c714a14", "c714a14"), "the same build is not");
+  for (const [live, why] of [[null, "offline"], [undefined, "a stripped header"], ["", "an empty one"]]) {
+    ok(!isStale("c714a14", live), `no answer is not a new build — ${why}`,
+      "the failure in that direction is a reload nobody needed");
+  }
+  ok(!isStale("local", "c714a14") && !isStale("c714a14", "local"),
+    "and a development build never updates itself");
+
+  // ── may it act — the half that protects somebody ─────────────────────────
+  /*
+    The thread on screen lives only in memory: the chat opens on a blank room
+    and fetches the carve, never the transcript. So a reload is the loss of the
+    conversation somebody is in the middle of, and it may happen only when
+    nothing is lost: the sitting is over, and nothing is typed.
+  */
+  ok(!safeToReload({ awayMs: AWAY_MS - 1, drafted: false }),
+    "not while the sitting might still be going", "a reload is the loss of the thread on screen");
+  ok(!safeToReload({ awayMs: AWAY_MS * 10, drafted: true }),
+    "never over a sentence somebody has started", "a stale screen costs less than a vanished sentence");
+  ok(safeToReload({ awayMs: AWAY_MS, drafted: false }), "and otherwise, yes");
+  ok(AWAY_MS >= 15 * 60_000, `away means a sitting is over (${AWAY_MS / 60_000} minutes)`,
+    "somebody who switched away to answer a message ten minutes ago is still in the conversation");
+
+  // ── one identity, read by both ends ──────────────────────────────────────
+  const config = fs.readFileSync(path.join(ROOT, "next.config.mjs"), "utf8");
+  ok(/const build = \(process\.env\.VERCEL_GIT_COMMIT_SHA \?\? "local"\)\.slice\(0, 7\);/.test(config),
+    "the build is the commit, the way /api/health reports it");
+  const health = fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8");
+  ok(/VERCEL_GIT_COMMIT_SHA\?\.slice\(0, 7\) \?\? "local"/.test(health),
+    "and /api/health still derives `commit` the same way",
+    "the endpoint an operator reads and the header a window reads must not disagree");
+  ok(/env: \{ NEXT_PUBLIC_BUILD: build \}/.test(config), "the bundle is stamped with it");
+  ok(new RegExp(`\\{ key: "${BUILD_HEADER}", value: build \\}`).test(config),
+    "every response carries it, under the one header name the page reads");
+  ok(/source: "\/:path\*"/.test(config), "on every path, including the one the page asks");
+
+  // ── the page asks, on coming back ────────────────────────────────────────
+  const reg = strip(fs.readFileSync(path.join(ROOT, "src/components/sw-register.tsx"), "utf8"));
+  ok(/from "@\/lib\/update"/.test(reg) && /isStale\(/.test(reg) && /safeToReload\(/.test(reg),
+    "the registrar calls the two decisions graded above rather than its own copy",
+    "a predicate re-implemented at a call site is a predicate no check is grading");
+  ok(/addEventListener\("blur"/.test(reg) && /addEventListener\("focus"/.test(reg),
+    "away is focus, not only visibility",
+    "a desktop app window behind other windows is still 'visible' — the founder's window");
+  ok(/addEventListener\("visibilitychange"/.test(reg), "and visibility too, for a phone");
+  ok(/method: "HEAD", cache: "no-store"/.test(reg), "it asks cheaply and past every cache");
+  ok(/querySelectorAll\("textarea"\)/.test(reg), "and reads the box before it acts");
+
+  // ── and the worker stops keeping the old build ───────────────────────────
+  ok(/register\(`\/sw\.js\?v=\$\{encodeURIComponent\(BUILD\)\}`\)/.test(reg),
+    "one worker per build", "the same URL on every build means an old page can never learn of a new one");
+  const sw = fs.readFileSync(path.join(ROOT, "public/sw.js"), "utf8");
+  ok(/const CACHE = "mw-" \+ \(new URL\(self\.location\.href\)\.searchParams\.get\("v"\)/.test(sw),
+    "its cache is named for the build it serves", "\"mw-v1\" never changed, so cleanup never deleted anything");
+  ok(/filter\(\(k\) => k !== CACHE\)/.test(sw) && /caches\.delete\(k\)/.test(sw),
+    "and activation deletes every other build's cache");
 });
 
 for (const r of results) {

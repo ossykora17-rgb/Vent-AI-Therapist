@@ -6,7 +6,17 @@
  * an offline note. API calls are never cached: a therapy reply from yesterday
  * served as today's would be worse than an error.
  */
-const CACHE = "mw-v1";
+/*
+  One cache per build, named from the `v` the page registered this worker with.
+
+  It was a constant — "mw-v1", unchanged across every deploy this product has
+  had — so the activate handler below, which deletes every cache but the
+  current one, never deleted anything. Every build's chunks accumulated, and
+  the page precached at install stayed the page this worker had first seen.
+  Registered as `/sw.js?v=<build>`, a new build is a new worker, and its
+  activation clears the build before it.
+*/
+const CACHE = "mw-" + (new URL(self.location.href).searchParams.get("v") || "v1");
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = ["/", "/chat", OFFLINE_URL];
 
