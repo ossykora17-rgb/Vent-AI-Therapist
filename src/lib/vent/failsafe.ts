@@ -151,7 +151,14 @@ export const REJECT = new Set([
   Measured before it was tiered, which `fused` was not: three of 108 production
   replies, one of them on a Pidgin turn.
 */
-export const RETRY_ONLY = new Set(["language", "jargon", "presumed"]);
+/*
+  `about_me` joins them on the spec's own words — one question, "not about
+  you" — and on production's count rather than a guess: nine of 118 replies,
+  eight of them driven by probes since rewritten. What is left is the model
+  reinventing it, which is rare and worth one more call. Not worth the hold,
+  for `presumed`'s reason: the reply is still made of their words.
+*/
+export const RETRY_ONLY = new Set(["language", "jargon", "presumed", "about_me"]);
 
 /**
  * Computed here, deliberately not acted on. Named rather than merely absent,
@@ -166,7 +173,7 @@ export const RETRY_ONLY = new Set(["language", "jargon", "presumed"]);
  * grader into the rejection set on a sample of zero is how a weight gets set
  * to 90.
  */
-export const NOTED = new Set(["coverage", "length", "fused"]);
+export const NOTED = new Set(["coverage", "length", "fused", "closing"]);
 
 /**
  * Cannot fire on this path, whatever the reply says.
@@ -333,6 +340,9 @@ function correctionFor(graders: string[], wroteIn: GoldenCase["language"], asked
     lines.push(asked
       ? "- They asked what to do. Do not answer with a task, a step or an exercise: say what the asking is doing for them, then one question."
       : "- Nothing for them to do — no task, step, exercise or plan. Show them the loop they are in and what it costs, then one question.");
+  }
+  if (seen.has("about_me")) {
+    lines.push("- Your question was about you — what you should do, or what they want from you. Ask about them: the thing they have not said yet.");
   }
   if (seen.has("recites")) {
     lines.push("- Do not narrate the record. Their sentence, said back, is listening; a count is a database talking.");

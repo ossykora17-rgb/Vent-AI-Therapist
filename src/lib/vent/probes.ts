@@ -118,7 +118,7 @@ const WANT = /\b(want|wish|hope|dream|if only|supposed to|meant to)\b/i;
  */
 const MI: Probe[] = [
   { id: "mi_importance", school: "mi", weight: 84,
-    ask: "Zero to ten — how much does changing this actually matter to you? And why not lower?",
+    ask: "Zero to ten, how much does changing this actually matter to you — and why not lower?",
     opens: "their own case for change, in their own mouth",
     fits: on(CHANGE) },
   { id: "mi_confidence", school: "mi", weight: 80,
@@ -134,7 +134,7 @@ const MI: Probe[] = [
     opens: "ability, without handing them any",
     fits: on(STUCK) },
   { id: "mi_reasons", school: "mi", weight: 74,
-    ask: "What are the two best reasons to change it? Yours, not the obvious ones.",
+    ask: "What are the two best reasons to change it — yours, not the obvious ones?",
     opens: "reasons they will still believe tomorrow",
     fits: on(CHANGE) },
   { id: "mi_need", school: "mi", weight: 76,
@@ -158,12 +158,12 @@ const MI: Probe[] = [
     opens: "consequence, without a warning attached",
     fits: on(STUCK) },
   { id: "mi_exception", school: "mi", weight: 88,
-    ask: "When was the last time it didn't happen? What was different that day?",
+    ask: "When was the last time it didn't happen, and what was different that day?",
     opens: "the exception, which is data they already own",
     fits: on(/\b(always|never|every time|constantly|all the time|every day)\b/i) },
-  { id: "mi_permission", school: "mi", weight: 90,
-    ask: "Do you want me to just hear this, or do you want me to push?",
-    opens: "consent, asked once, before anything is offered",
+  { id: "mi_answer_you_have", school: "mi", weight: 90,
+    ask: "What's the answer you already have, and don't like?",
+    opens: "the answer they walked in holding — evoked from them, never handed over",
     fits: on(/\b(what should i|what do i do|advice|tell me|help me|i don'?t know what)\b/i) },
   { id: "mi_elaborate", school: "mi", weight: 66,
     ask: "What's the part you went quickest past?",
@@ -182,7 +182,7 @@ const MI: Probe[] = [
     opens: "whether they are carrying it alone or only feel that way",
     fits: on(OTHERS) },
   { id: "mi_willing", school: "mi", weight: 78,
-    ask: "What are you actually willing to do? Not should. Willing.",
+    ask: "What are you actually willing to do — not should, willing?",
     opens: "commitment language, which is the only kind that predicts anything",
     fits: on(/\b(should|need to|have to|ought|must)\b/i) },
 ];
@@ -202,9 +202,9 @@ const MI: Probe[] = [
  * six and an affectation at turn one.
  */
 const YALOM: Probe[] = [
-  { id: "yalom_here_now", school: "yalom", weight: 80,
-    ask: "What's it like, typing this to a machine at this hour?",
-    opens: "the room itself as material — the only thing here nobody is reporting second-hand",
+  { id: "yalom_who_instead", school: "yalom", weight: 80,
+    ask: "If a person read this instead of a machine, who would you want it to be?",
+    opens: "the rehearsal pointed at the person it is standing in for — the room is never the destination",
     fits: on(/\b(machine|ai|robot|talking to|typing|weird|strange|even here|why am i)\b/i) },
   { id: "yalom_not_saying", school: "yalom", weight: 86,
     ask: "There's a part of this you've walked around twice. What is it?",
@@ -215,7 +215,7 @@ const YALOM: Probe[] = [
     opens: "freedom, which is the given people most want to give back",
     fits: on(/\b(had to|no choice|forced|stuck with|nothing i could)\b/i) },
   { id: "yalom_responsibility", school: "yalom", weight: 82,
-    ask: "What's your part in it? Not the blame — the part.",
+    ask: "What's your part in it — not the blame, the part?",
     opens: "responsibility assumption, split cleanly from guilt",
     fits: on(OTHERS) },
   { id: "yalom_death", school: "yalom", weight: 88,
@@ -231,7 +231,7 @@ const YALOM: Probe[] = [
     opens: "the meaning it was carrying before it broke",
     fits: on(/\b(pointless|what'?s the point|why bother|meaningless|waste)\b/i) },
   { id: "yalom_wish", school: "yalom", weight: 80,
-    ask: "What do you actually want here? Not the reasonable version.",
+    ask: "What do you actually want here — not the reasonable version?",
     opens: "the wish under the plan — Yalom's wish-block",
     fits: on(WANT) },
   { id: "yalom_wanting_aloud", school: "yalom", weight: 76,
@@ -242,9 +242,9 @@ const YALOM: Probe[] = [
     ask: "Who has learned something from you without you meaning to teach it?",
     opens: "the ripple — the one consolation in this school that is not a lie",
     fits: on(BIG) },
-  { id: "yalom_would_you_tell_me", school: "yalom", weight: 70,
-    ask: "If I just said the wrong thing, would you tell me?",
-    opens: "rupture made speakable before it happens",
+  { id: "yalom_everybody_wrong", school: "yalom", weight: 70,
+    ask: "What's the part of this everybody gets wrong about you?",
+    opens: "the misreading they are braced for, named before it happens — about them, not the room",
     fits: on(/\b(no|not really|that'?s not it|you don'?t|wrong|whatever)\b/i) },
   { id: "yalom_legacy", school: "yalom", weight: 64,
     ask: "What would they say you were like?",
@@ -254,9 +254,9 @@ const YALOM: Probe[] = [
     ask: "What will you regret not having said?",
     opens: "anticipated regret, which moves people when consequence does not",
     fits: on(BIG) },
-  { id: "yalom_what_from_me", school: "yalom", weight: 88,
-    ask: "What do you want from me right now — honestly?",
-    opens: "the ask, made explicit instead of guessed at",
+  { id: "yalom_who_its_for", school: "yalom", weight: 88,
+    ask: "Who is this sentence actually for?",
+    opens: "the addressee the courage is aimed past — asked of them, never of the room",
     fits: on(/\b(i don'?t know why i'?m|why am i telling|what do you|can you)\b/i) },
   { id: "yalom_only_here", school: "yalom", weight: 72,
     ask: "Does this happen with other people, or only here?",
@@ -266,8 +266,8 @@ const YALOM: Probe[] = [
     ask: "When did you first learn to do that?",
     opens: "the origin of a defence, asked as history rather than diagnosis",
     fits: on(/\b(always been|since i was|growing up|as a child|my whole life)\b/i) },
-  { id: "yalom_instead_of", school: "yalom", weight: 68,
-    ask: "If we weren't talking about this, what would we be talking about?",
+  { id: "yalom_in_front_of", school: "yalom", weight: 68,
+    ask: "What is this one standing in front of?",
     opens: "the thing the presenting problem is standing in front of",
     fits: always },
 ];
@@ -280,19 +280,22 @@ const YALOM: Probe[] = [
  * room that never asks whether it has understood is a room that has decided it
  * has, and the person on the other side learns very quickly not to correct it.
  *
- * `rogers_check` and `rogers_own_words` are the two that matter most and read
- * as the smallest. Handing back a word and asking whether it fits is the
+ * `rogers_next_to_it` and `rogers_own_words` are the two that matter most and
+ * read as the smallest. The first was `rogers_check` — "Am I getting it, or am
+ * I off?" — until the founder's VENT spec ruled that the closing question is
+ * about them and never about the room. The correction it invites survived the
+ * move; only the subject changed. Handing back a word and asking whether it fits is the
  * entire mechanism of unconditional positive regard as an *operation* rather
  * than an attitude — and it is the one thing in this file that cannot be
  * faked, because a wrong guess gets corrected out loud.
  */
 const ROGERS: Probe[] = [
-  { id: "rogers_check", school: "rogers", weight: 84,
-    ask: "Am I getting it, or am I off?",
-    opens: "permission to correct us, offered rather than assumed",
+  { id: "rogers_next_to_it", school: "rogers", weight: 84,
+    ask: "Is that it, or is it the thing right next to it?",
+    opens: "their correction invited — the thing or its neighbour — without making the room the subject",
     fits: always },
   { id: "rogers_own_words", school: "rogers", weight: 86,
-    ask: "What word would you use for it? Mine isn't right.",
+    ask: "What word would you use for it, if mine is wrong?",
     opens: "their vocabulary, which outranks ours in every case",
     fits: always },
   { id: "rogers_means_what", school: "rogers", weight: 76,
@@ -303,9 +306,9 @@ const ROGERS: Probe[] = [
     ask: "What's happening in you as you write it?",
     opens: "present experience, not the account of it",
     fits: always },
-  { id: "rogers_not_think", school: "rogers", weight: 82,
-    ask: "What do you not want me to think about you?",
-    opens: "the shame under the telling, asked directly and once",
+  { id: "rogers_if_they_knew", school: "rogers", weight: 82,
+    ask: "What would people think of you if they knew?",
+    opens: "the shame under the telling, pointed at the people it hides from",
     fits: on(SELF_BLAME) },
   { id: "rogers_true_version", school: "rogers", weight: 84,
     ask: "Is that the true version, or the tidy one?",

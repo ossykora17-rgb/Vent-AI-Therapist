@@ -1,5 +1,5 @@
 import { containsAdvice } from "@/lib/circles/rules";
-import { BANNED_PHRASES, errand, FILE_LANGUAGE, REPLY_SENTENCE_CAP } from "./voice";
+import { aboutTheRoom, BANNED_PHRASES, closingProblem, errand, FILE_LANGUAGE, REPLY_SENTENCE_CAP } from "./voice";
 import { coverage, COVERAGE_FLOOR } from "./scan";
 import { CONDITIONS } from "./notes";
 import { PIDGIN_GRAMMAR, PIDGIN_LEXICAL } from "./intent";
@@ -440,6 +440,23 @@ export function gradeReply(
   if (task) add("errand", "fatal", `handed them something to do: "${task.match}" — ${task.why}`);
 
   /*
+    THE QUESTION WAS ABOUT THE ROOM.
+
+    The founder's VENT spec: one question, "not about you. It is about the
+    unsaid thing." `aboutTheRoom` in `voice.ts` holds the patterns and the
+    argument for where the line falls; this is the grader that asks it. Nine
+    of 118 production replies failed it, eight of them carrying a probe that
+    asked about the room — fixed at the source in `probes.ts`, and this keeps
+    the model from putting it back.
+
+    `major` and retried, not rejected: a reply whose question drifted onto the
+    room is still made of their words, and the authored hold is made of
+    nobody's. Asking again usually moves the question back onto them.
+  */
+  const toRoom = aboutTheRoom(reply);
+  if (toRoom) add("about_me", "major", `the question is about the room: "${toRoom.match}"`);
+
+  /*
     A person or a sum of money that nobody ever mentioned.
 
     The alignment problem in the only form it takes in this product: a model
@@ -679,6 +696,29 @@ export function gradeReply(
   if (fused) {
     add("fused", "major", `the room put itself in the room: "${fused[0]}"`);
   }
+
+  /*
+    ONE QUESTION, AND IT CLOSES THE REPLY.
+
+    Tried once and removed — the block below records why, and it was right
+    about the constitution it was measured against. The founder's VENT spec
+    replaced that constitution: "Every response must end with a single,
+    surgical question", and `OFFICE_RULES` now says so. So this returns as a
+    decision rather than a discovery, the way `fused` did, and the authored
+    lines that ended on an imperative or a menu were rewritten to the new rule
+    instead of the rule bending to them.
+
+    `major` and noted, never retried. Nineteen of 118 production replies
+    failed it — 11 with no question, 8 with more than one — and a billed
+    retry on one turn in six is the wrong trade on a spec that also says
+    strict token usage. The prompt now asks for it in plain words; this drops
+    the miss from training. It does not record it: a noted grader is written
+    nowhere, so whether the asking worked is read by re-grading the stored
+    replies — the nightly audit's job, which has never run — or by the same
+    in-database count it was measured with. Promote it when that number is in.
+  */
+  const close = closingProblem(reply);
+  if (close) add("closing", "major", `the reply ends on ${close === "no question" ? "no question" : "more than one question"}`);
 
   /*
     THE TWO GRADERS THAT DID NOT SURVIVE THEIR OWN CORPUS.

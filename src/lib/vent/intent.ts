@@ -516,8 +516,29 @@ export function classify(message: string): Classification {
   return { intent: "vent", realWorldTag, language, body };
 }
 
+/*
+  The founder's VENT spec defines this turn exactly: "If the user says they want
+  to die or harm themselves, you break character for one line: tell the truth —
+  you are not a person and cannot hold this alone — and tell them to tell a real
+  person right now."
+
+  So it opens on what the room is rather than on a feeling it cannot have: it
+  used to open "I'm really concerned about you", which is a stake claimed by
+  something the same spec says has none. And "cannot hold this alone" is
+  written as the *weight* being more than a screen can hold, never as the room
+  being burdened — somebody at this turn is often already carrying the belief
+  that they are too much for the people around them, and a sentence that
+  confirms it from a machine is the one thing this line must not do.
+
+  "You are not alone" stays although the same spec lists it among the phrases
+  VENT never says. That list governs the voice, and this is the one line where
+  the spec breaks character on purpose. What it says here is not a comfort, it
+  is a fact the numbers under it make true: the lines are answered by people.
+  The path is also unchanged — local, free, never a model, rendered with both
+  numbers on every surface that shows it.
+*/
 export const CRISIS_RESPONSE =
-  "I'm really concerned about you. You deserve support right now, from a person, not a screen. You are not alone.";
+  "I'm not a person, and this is more than a screen can hold. Tell a real person, right now. You are not alone.";
 
 /**
  * The same three things, in the language half this list is written for.
@@ -534,8 +555,9 @@ export const CRISIS_RESPONSE =
  * path never calls a model, so no grader was ever going to see this one.
  *
  * Three moves, in the same order as the English, because each is doing a job:
- * name the concern, say plainly that what they need is a person rather than
- * this screen, and end on the one sentence that is true and is not a promise.
+ * say plainly what the room is — not a person, and this is more than a screen
+ * can carry — tell them to tell a real person now, and end on the one sentence
+ * that is true and is not a promise.
  *
  * NEEDS A PIDGIN SPEAKER'S EYES. This is the highest-stakes sentence in the
  * product and it was written by somebody who does not speak the language. The
@@ -543,7 +565,7 @@ export const CRISIS_RESPONSE =
  * not something any check here can answer.
  */
 export const CRISIS_RESPONSE_PIDGIN =
-  "I dey really worry for you. Wetin you need right now na person, no be screen. You no dey alone.";
+  "I no be person, and dis one pass wetin screen fit carry. Tell real person, right now. You no dey alone.";
 
 /**
  * The crisis reply, in the register they wrote in.
