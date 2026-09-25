@@ -712,10 +712,10 @@ export function gradeReply(
     failed it — 11 with no question, 8 with more than one — and a billed
     retry on one turn in six is the wrong trade on a spec that also says
     strict token usage. The prompt now asks for it in plain words; this drops
-    the miss from training. It does not record it: a noted grader is written
-    nowhere, so whether the asking worked is read by re-grading the stored
-    replies — the nightly audit's job, which has never run — or by the same
-    in-database count it was measured with. Promote it when that number is in.
+    the miss from training. The live path does not record it — a noted
+    grader is written nowhere there — so whether the asking worked is read
+    from the nightly audit, which re-grades the stored replies and names every
+    grader that fired. Promote it when that number is in.
   */
   const close = closingProblem(reply);
   if (close) add("closing", "major", `the reply ends on ${close === "no question" ? "no question" : "more than one question"}`);

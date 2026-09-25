@@ -19401,6 +19401,21 @@ check("154 One question, about them — the VENT spec, held where a person meets
   is(holds.filter((t) => sentenceCount(t.hold) > REPLY_SENTENCE_CAP).map((t) => t.id).join(", "), "",
     "and none of them runs past it");
 
+  /*
+    And the corpus, which is the instrument every grader here is judged by: a
+    reply written by hand to the constitution that breaks the constitution is
+    how a correct grader gets deleted for "flagging the corpus". That is what
+    happened to "ask one question" the first time. Thirty-four authored replies
+    were rewritten to this shape, and this keeps the instrument in tune with
+    the thing it measures.
+  */
+  const corpus = fs.readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+    .trim().split("\n").map((l) => JSON.parse(l).full_integration);
+  ok(corpus.length >= 70, `${corpus.length} authored replies read`, "a sweep over nothing passes loudest");
+  is(corpus.map((t, i) => (closingProblem(t) || aboutTheRoom(t) || sentenceCount(t) > REPLY_SENTENCE_CAP ? `#${i}` : null))
+    .filter(Boolean).join(", "), "",
+    "every authored reply ends on one question about them, inside the cap");
+
   // ── the grader that reads what the model wrote ────────────────────────────
   const kase = { message: "my mother rang three times and i said yes three times", intent: "vent", language: "en" };
   const graded = (reply) => gradeReply(kase, reply, { tokensSpent: true, said: kase.message });
