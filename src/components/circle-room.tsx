@@ -4,11 +4,10 @@ import { CRISIS_LINES, CRISIS_TEL, EMERGENCY_TEL } from "@/lib/vent/intent";
 import * as React from "react";
 import Link from "next/link";
 import { anonId } from "@/lib/anon";
-import { CHAIRS, tensionDrop, tensionForChair, tensionNow, CHAIR_QUESTION } from "@/lib/vent/chairs";
-import { CircleVoice } from "@/components/circle-voice";
-import { CircleSeats } from "@/components/circle-seats";
+import { tensionDrop, tensionNow } from "@/lib/vent/chairs";
+import { CircleVoice, type Status as VoiceStatus, type VoiceHandle } from "@/components/circle-voice";
+import { BackIcon, LockIcon, PhoneIcon, SendIcon } from "@/components/icons";
 import { ALONE_LINE, ALONE_DOOR } from "@/lib/circles/rules";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { useComposerHeight } from "@/lib/ui/use-composer-height";
@@ -53,12 +52,44 @@ interface RoomState {
 
 const WORDS = ["Guilt", "Proof", "Anger", "Hope", "Silence", "Tiredness"];
 
+/*
+  Three lines at the door, not four and a form.
+
+  The door was a card with four rules, a chair question, a consent box and a
+  gold button: five things to do before a person could read a word anybody had
+  said. The founder's word for the room was "distracting", and his brief was a
+  WhatsApp group — which you join with one tap, under the group's name.
+
+  The rules survive, merged to three, and the tap on "Take a seat" is the
+  agreement: it sits directly under them and the sentence beside it says so.
+  The server still refuses a join without `consent: true`, so the promise is
+  held where curl cannot walk around it. The chair question is gone from the
+  door; it was an arrival reading a person had to give before they could come
+  in, and the closing already asks where they landed.
+*/
 const AGREEMENT = [
-  "No advice. No fixing. No cross-talk.",
-  "Speak to the circle, not at a person. I-statements only.",
+  "No advice. No fixing. No cross-talk — speak to the circle.",
   "What's said here stays here. Nothing is recorded; everything is deleted within 24 hours.",
   "You can leave at any moment, without explaining.",
 ];
+
+/** "Nobody To Tell" → "NT". The group's picture is its name. */
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w.charAt(0).toUpperCase())
+    .join("");
+}
+
+/** The time a message arrived, as a phone writes it under a bubble. */
+function clock(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
 
 export function CircleRoom({ id }: { id: string }) {
   const { toast } = useToast();
@@ -75,18 +106,11 @@ export function CircleRoom({ id }: { id: string }) {
     component. So a Pidgin speaker in crisis in a circle got English, with
     every server-side assertion green.
 
-    That is the second seam of the crisis bug CLAUDE.md records for the private
-    path, alive one surface over, after the repair: the client imported the
-    constant and rendered that instead of what the server sent. Third
-    mechanism — the fix reached the copy in front of it and not the one beside
-    it.
-
     Null when the server sent no sentence: the block still opens, because the
     numbers are the part somebody can act on, and an absent line is better than
     one this file invented in the wrong language.
   */
   const [crisis, setCrisis] = React.useState<{ reply: string | null } | null>(null);
-  const [consented, setConsented] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [notFound, setNotFound] = React.useState(false);
   /** The room answered something that is not a room — a store that is absent
@@ -102,13 +126,13 @@ export function CircleRoom({ id }: { id: string }) {
    */
   const [notify, setNotify] =
     React.useState<"off" | "idle" | "asking" | "on" | "denied">("off");
-  const [chair, setChair] = React.useState<string>("sunk");
-  const [reflecting, setReflecting] = React.useState(false);
   const [mood, setMood] = React.useState<number | null>(null);
   const [carry, setCarry] = React.useState<string | null>(null);
   const [dropped, setDropped] = React.useState<string | null>(null);
-  /* Which seats are speaking, from the voice room, for the ring to draw. */
+  /* Which seats are speaking in voice, said under the room's name. */
   const [speakingSeats, setSpeakingSeats] = React.useState<number[]>([]);
+  const [voiceStatus, setVoiceStatus] = React.useState<VoiceStatus>("idle");
+  const voiceRef = React.useRef<VoiceHandle>(null);
   const endRef = React.useRef<HTMLDivElement>(null);
   const footerRef = React.useRef<HTMLElement>(null);
   // The room had the bug the chat had already fixed. See the hook.
@@ -138,10 +162,8 @@ export function CircleRoom({ id }: { id: string }) {
       r.json()` and `setState(d)` — so a 503 from a store that is absent or
       refusing became a room object whose every field was `undefined`, and the
       screen drew the whole agreement over it with a gold "Take a seat" on the
-      bottom. That is the door onto a refusal again, in the two shapes where
-      the door cannot open at all, reached by anybody holding a circle link
-      while the database is down. `seats`, `maxSeats` and `joined` were all
-      absent, so the fullness flag read false and the offer rendered.
+      bottom. That is the door onto a refusal again, reached by anybody holding
+      a circle link while the database is down.
 
       The last good room is kept rather than overwritten, because this runs
       every four seconds and one blip must not empty a live circle somebody is
@@ -190,18 +212,16 @@ export function CircleRoom({ id }: { id: string }) {
     return () => { live = false; };
   }, []);
 
-
   async function join() {
     setBusy(true);
     try {
+      // No arrival reading: the chair question left the door with the form it
+      // was part of. A seat with no reading is honest about having none — the
+      // closing's drop line only renders when there was an arrival to drop from.
       const r = await fetch(`/api/circles/${id}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          anonId: me,
-          consent: true,
-          pressure: tensionForChair(chair),
-        }),
+        body: JSON.stringify({ anonId: me, consent: true }),
       });
       const d = await r.json();
       if (r.status === 409 && d.error === "crisis") {
@@ -220,36 +240,19 @@ export function CircleRoom({ id }: { id: string }) {
    * reading, the drop, and the two words — no transcript, nothing anybody
    * said.
    *
-   * Record the close, and say which of the two promises actually held.
-   *
-   * This swallowed everything — no `res.ok` check, a bare catch, and a
-   * comment reasoning that "the seal already happened on their screen". It
-   * had not. The caller then fired "Sealed. Nothing here is kept." without
-   * awaiting this at all, so a 500 produced a success toast.
-   *
-   * Two separate promises live in that one sentence, and only one of them
-   * depends on this request:
+   * Record the close, and say which of the promises actually held.
    *
    *   "Sealed"               your close was recorded. Needs this to succeed.
    *   "Nothing here is kept" the transcript is deleted on close by
    *                          sweepIfOver, server-side, whichever request
    *                          notices the transition first. True either way.
+   *   "held"                 the word you carry reached `vent_users.held` and
+   *                          is on your Memory page. Depends on this request
+   *                          AND on a second write that is allowed to fail
+   *                          without failing the close.
    *
-   * So a failure here loses the mood and the carry/drop, and confidentiality
-   * still holds. Saying both at once made a real guarantee share a fate with
-   * one that had just failed.
-   *
-   * A THIRD PROMISE ARRIVED, AND IT IS THE ONE THAT CAN BE FALSE BOTH WAYS
-   *
-   *   "held"  the word you carry reached `vent_users.held` and is on your
-   *           Memory page. Depends on this request AND on a second write
-   *           that is allowed to fail without failing the close.
-   *
-   * Which is why "Nothing here is kept" can no longer be said unconditionally.
-   * It was true for as long as a circle kept nothing; the moment one word
-   * leaves the room it is a sentence that would be false at exactly the
-   * moment somebody most needs it to be true. Each branch below says only
-   * what actually happened.
+   * So "Nothing here is kept" is said only when nothing was, and each branch
+   * below says only what actually happened.
    */
   async function seal(drop: string): Promise<{ sealed: boolean; held: boolean }> {
     if (mood === null) return { sealed: false, held: false };
@@ -261,15 +264,12 @@ export function CircleRoom({ id }: { id: string }) {
       });
       if (!r.ok) return { sealed: false, held: false };
       /*
-        Read off the body, never off the status.
-
-        This returned `r.ok` and nothing else, which was correct while the seal
-        made exactly two promises. A third arrived with the held route, and a
-        200 says only that the close landed — `addHeld` reports by returning,
-        and the route passes that answer through rather than assuming it. This
-        product has already shipped a thank-you for a rating it dropped by
-        reading the status and never the body; the same function must not do it
-        for a word somebody chose.
+        Read off the body, never off the status. A 200 says only that the close
+        landed — `addHeld` reports by returning, and the route passes that
+        answer through rather than assuming it. This product has already
+        shipped a thank-you for a rating it dropped by reading the status and
+        never the body; the same function must not do it for a word somebody
+        chose.
       */
       const d: unknown = await r.json().catch(() => null);
       const held = typeof d === "object" && d !== null && (d as { held?: unknown }).held === true;
@@ -288,8 +288,7 @@ export function CircleRoom({ id }: { id: string }) {
     the first is their decision and the second is not theirs to fix.
 
     `subscribed` is read off the body, not off `res.ok`. "You'll be told" is a
-    promise that a phone will ring, and this product has shipped a thank-you
-    for a rating it dropped by reading the status and never the body.
+    promise that a phone will ring.
   */
   async function askToBeWoken() {
     const key = pushKey.current;
@@ -334,11 +333,17 @@ export function CircleRoom({ id }: { id: string }) {
     setBusy(true);
     setRuleError(null);
     try {
-      const kind = reflecting ? "witness" : "share";
+      /*
+        Always a share. The Share/Reflect switch above the box was a mode to
+        configure before you could speak — the second row of chrome in a
+        composer a group chat keeps to one. A one-line reflection is still
+        what anybody may choose to write; it no longer needs a setting first,
+        and the server's rules read the words, not the switch.
+      */
       const r = await fetch(`/api/circles/${id}/messages`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ anonId: me, content, kind }),
+        body: JSON.stringify({ anonId: me, content, kind: "share" }),
       });
       const d = await r.json();
       if (r.status === 409 && d.error === "crisis") {
@@ -353,7 +358,6 @@ export function CircleRoom({ id }: { id: string }) {
       }
       if (!r.ok) { toast("Couldn't send that.", "error"); return; }
       setDraft("");
-      setReflecting(false);
       await load();
     } finally {
       setBusy(false);
@@ -381,11 +385,8 @@ export function CircleRoom({ id }: { id: string }) {
     deletion, which is the one claim this product must never make loosely.
 
     Only when there has never been a room to show: a blip on the four-second
-    poll keeps the last good one, upstairs in `load`.
-
-    The private session is the door that is actually open. It answers with no
-    store at all — the live checks prove it in both of the shapes that land
-    here — only without keeping anything.
+    poll keeps the last good one, upstairs in `load`. The private session is
+    the door that is actually open — it answers with no store at all.
   */
   if (unreachable && !state) {
     return (
@@ -405,65 +406,121 @@ export function CircleRoom({ id }: { id: string }) {
   /* Read once, so the agreement and the refusal cannot both render and cannot
      both disappear. See the comment beside the two branches. */
   const roomIsFull = Boolean(state && state.seats >= state.maxSeats);
+  const name = state ? roomName(state.circle.tag, state.circle.created_at) : "";
+  // Seats speaking in voice, never counting yourself: you know when you talk.
+  const mine = state?.mySeat != null ? state.mySeat + 1 : null;
+  const speaking = speakingSeats.filter((n) => n !== mine);
 
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/95 backdrop-blur-glass">
         {/*
-          The room's name first, and one quiet line under it.
+          A group chat's header: back, the group's face, its name, one line
+          under it, and the call.
 
-          This was four things stacked in ninety pixels: a phase word, six
-          seat dots, a count, a clock, the name, a bordered KEEPER pill and a
-          theme toggle. Seven pieces of chrome above a room where somebody is
-          about to say the hardest thing they have said this month — and none
-          of them is the thing they came for.
+          This was a name and a telemetry line, then a KEEPER word and a theme
+          toggle — chrome about the system rather than the room. The theme
+          lives in the lobby's header now; the role reads in the thread, where
+          the Keeper speaks. What is left is what a person uses: the way out,
+          who this is, whether anybody is here or typing, and voice.
 
-          Screenshotted at 4:22am by the person who built it, and the word he
-          used was "jam packed". He was right, and the diagnosis worth keeping
-          is the second one: it looked machine-made. Not ugly — *anxious*.
-          Every fact the system knew, laid out because it knew it.
-
-          A person designing this puts the name where a name goes and says the
-          rest in one sentence. The dots are gone: six borders to say a number
-          that is already written in words two characters to the right. The
-          KEEPER pill loses its border and becomes what it is, a word about
-          who you are here.
-
-          Nothing is hidden. Phase, count, clock and role are all still on
-          screen — they are just one line instead of a dashboard.
+          The one line under the name says the thing that is changing right
+          now. Somebody speaking in voice outranks somebody typing, which
+          outranks the room's clock — the same order a phone uses.
         */}
-        <div className="mx-auto flex h-16 max-w-[640px] items-center justify-between gap-3 px-4">
-          <div className="min-w-0">
+        <div className="mx-auto flex h-16 max-w-[640px] items-center gap-2 px-2">
+          <Link
+            href="/circles"
+            aria-label="Back to circles"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink hover:bg-line/5"
+          >
+            <BackIcon />
+          </Link>
+          {/* The group's face. Decorative — the name beside it is the name. */}
+          <div aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gold/20 font-display text-body font-bold text-gold-deep">
+            {initials(name)}
+          </div>
+          <div className="min-w-0 flex-1">
             <h1 className="truncate font-display text-heading font-bold leading-tight tracking-[-0.02em]">
-              {state ? roomName(state.circle.tag, state.circle.created_at) : "…"}
+              {state ? name : "…"}
             </h1>
-            <p className="label-mono mt-0.5 truncate leading-none">
-              {state?.phaseLabel ?? "Circle"} · {state?.present ?? 0} here · {mins}m
+            <p
+              aria-live="polite"
+              className={cn(
+                "truncate text-fine leading-snug",
+                speaking.length || (state?.typingOthers ?? 0) > 0 ? "font-semibold text-ink" : "text-ash",
+              )}
+            >
+              {voiceStatus === "live" && speaking.length
+                ? `Seat ${speaking.join(", ")} speaking…`
+                : state && state.typingOthers > 0
+                  ? state.typingOthers === 1
+                    ? "someone is typing…"
+                    : `${state.typingOthers} people are typing…`
+                  : `${state?.phaseLabel ?? "Circle"} · ${state?.present ?? 0} here · ${mins}m left`}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-3">
-            {state?.role && <span className="label-mono text-ash">{state.role}</span>}
-            <ThemeToggle />
-          </div>
+          {state?.joined && state.voice && (
+            <button
+              type="button"
+              onClick={() => voiceRef.current?.toggle()}
+              aria-label={voiceStatus === "live" ? "Leave voice" : "Join voice"}
+              aria-pressed={voiceStatus === "live"}
+              disabled={voiceStatus === "joining"}
+              className={cn(
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors duration-300",
+                // Ink flips with the theme and gold does not, so the two
+                // never share a state: on-gold over gold, ink over paper.
+                voiceStatus === "live"
+                  ? "bg-gold text-on-gold"
+                  : "text-ink hover:bg-line/5",
+                voiceStatus === "joining" && "opacity-60",
+              )}
+            >
+              <PhoneIcon />
+            </button>
+          )}
         </div>
       </header>
+
+      {/* Voice sits under the name while you are in it — a call you are on,
+          never scrolled away with the thread. */}
+      {state?.joined && (
+        <CircleVoice
+          ref={voiceRef}
+          circleId={id}
+          anonId={me}
+          enabled={Boolean(state.voice)}
+          keeper={state.role === "keeper"}
+          onSpeaking={setSpeakingSeats}
+          onStatus={setVoiceStatus}
+        />
+      )}
 
       {/*
         Bottom room for the composer, which is `sticky bottom-0`.
 
-        The chat learned this and the room did not: without it the tail of the
-        page sits underneath the footer, and the circle drawing pushed the
-        "nobody has spoken yet" line straight behind it — the sentence naming
-        who is in the room, hidden by the box you talk into.
-
         Measured, not guessed: `--composer-h` is published by the same hook
-        this file already calls, so it stays correct when the mode switch, a
-        rule refusal or the crisis gate changes the footer's height.
+        this file already calls, so it stays correct when a rule refusal or
+        the crisis gate changes the footer's height.
       */}
       <main
         id="main"
-        className="mx-auto w-full max-w-[640px] flex-1 px-4 pt-5 pb-[calc(var(--composer-h,180px)+24px)]"
+        className="mx-auto w-full max-w-[640px] flex-1 px-3 pt-4 pb-[calc(var(--composer-h,120px)+16px)]"
       >
+        {/*
+          What a group chat puts first — the terms of the room, once, small,
+          at the top of the thread. Ours is the twist: a seat instead of a name,
+          a voice that is pitched down, and a transcript with an end.
+        */}
+        <p className="mx-auto mb-4 max-w-[36ch] rounded-card bg-gold/10 px-3 py-2 text-center text-fine text-ash">
+          <span className="mr-1 inline-block align-[-1px]">
+            <LockIcon />
+          </span>
+          A seat, not a name. Voices are pitched down. Everything said here is
+          deleted within 24 hours.
+        </p>
+
         {crisis && (
           <div className="glass mb-4 border-gold/60 p-4">
             <p className="label-mono mb-2">This isn&apos;t the room for that</p>
@@ -485,36 +542,19 @@ export function CircleRoom({ id }: { id: string }) {
         )}
 
         {/*
-          A door onto a 409.
+          A door onto a 409, and the flag that keeps it shut.
 
-          This block rendered for anybody not in the room, whatever its seat
-          count — the whole agreement, the chair question, the consent box and
-          a full-width gold "Take a seat" — on a circle with six people in it.
-          Ticking all of it answers 409 and toasts "That circle is full."
+          The agreement once rendered for anybody not in the room, whatever its
+          seat count, on a circle with six people in it — answered 409 and "That
+          circle is full." Every fact needed arrived in the payload the button
+          was drawn from. The room never offers a door that opens onto a
+          refusal; the lobby is the door that is open, so this points at it.
 
-          Every fact needed to know that arrived in the same payload the button
-          was drawn from: `seats` and `maxSeats`. This repository already
-          records the identical bug one screen out, in the lobby, where a gold
-          "Open a circle" sat above a plate explaining four hundred pixels
-          lower that circles could not open. The room never offers a door that
-          opens onto a refusal.
-
-          The lobby is the door that is open, and it is more open than it was:
-          the route steers somebody asking for this pressure into a room with
-          space, or opens them one. So this names what is shut and points at
-          that, rather than apologising.
-        */}
-        {/*
-          One flag and its negation, never `>=` and `<` of the same pair.
-
+          One flag and its negation, never `>=` and `<` of the same pair:
           `6 >= undefined` and `6 < undefined` are **both false**, so a payload
-          that lost `maxSeats` — a version skew, a route edited in a hurry —
-          would make both branches vanish and leave somebody not in the room
-          looking at nothing at all, with no way in and no sentence saying why.
-          A flag falls back to offering the seat instead, and a 409 they can
-          read beats a blank space.
-
-          Written the wrong way first, in the check-the-other-shape file.
+          that lost `maxSeats` would make both branches vanish and leave
+          somebody looking at nothing at all. A flag falls back to offering the
+          seat instead, and a 409 they can read beats a blank space.
         */}
         {state && !state.joined && roomIsFull && (
           <div className="glass p-5">
@@ -533,9 +573,15 @@ export function CircleRoom({ id }: { id: string }) {
         )}
 
         {state && !state.joined && !roomIsFull && (
-          <div className="glass p-5">
-            <p className="label-mono mb-3">Before you sit</p>
-            <ul className="space-y-2 text-body leading-[1.6]">
+          <div className="glass mx-auto max-w-[440px] p-6 text-center">
+            <div aria-hidden="true" className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gold/20 font-display text-heading font-bold text-gold-deep">
+              {initials(name)}
+            </div>
+            <p className="mt-3 font-display text-heading font-bold">{name}</p>
+            <p className="mt-1 text-fine text-ash">
+              {state.seats} of {state.maxSeats} seats taken · {mins} min left
+            </p>
+            <ul className="mt-5 space-y-2 text-left text-body leading-[1.6]">
               {AGREEMENT.map((line) => (
                 <li key={line} className="flex gap-2">
                   <span aria-hidden="true" className="text-gold">·</span>
@@ -543,69 +589,20 @@ export function CircleRoom({ id }: { id: string }) {
                 </li>
               ))}
             </ul>
-            <p className="label-mono mb-2 mt-5">{CHAIR_QUESTION}</p>
-            <div className="flex flex-wrap gap-2">
-              {CHAIRS.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setChair(c.id)}
-                  aria-pressed={chair === c.id}
-                  className="chip"
-                >
-                  {c.label}
-                </button>
-              ))}
-            </div>
-
-            <label className="mt-4 flex min-h-[44px] items-center gap-3 text-body">
-              <input
-                type="checkbox"
-                checked={consented}
-                onChange={(e) => setConsented(e.target.checked)}
-                className="h-5 w-5 accent-gold"
-              />
-              I agree to hold this the way it&apos;s written.
-            </label>
             <button
               type="button"
               onClick={() => void join()}
-              disabled={!consented || busy}
-              className="mt-4 min-h-[48px] w-full rounded-card bg-gold text-body font-semibold text-on-gold disabled:opacity-40"
+              disabled={busy}
+              className="mt-5 min-h-[48px] w-full rounded-card bg-gold text-body font-semibold text-on-gold disabled:opacity-40"
             >
               {busy ? "Taking a seat…" : "Take a seat"}
             </button>
+            <p className="mt-2 text-fine text-ash">Taking a seat means you agree to hold it this way.</p>
           </div>
         )}
 
         {state?.joined && (
           <>
-            {/*
-              The Keeper has not spoken yet, and this panel used to print its
-              intention anyway — a line attributed to somebody who is still
-              waiting for a second person. The server-side guard was right and
-              the screen was quietly overriding it. Say what is actually true
-              at each moment instead.
-            */}
-            {/*
-              No plate while nobody is here.
-
-              Waiting alone in a room, this was a bordered card saying you
-              were alone, sitting directly on top of a second bordered card
-              explaining the voice feature — two framed panels and a floating
-              feedback pill, stacked, in a room with one person in it.
-
-              The plate is what a *voice* speaks from here. Nobody has spoken.
-              Framing the fact that the room is empty makes the emptiness into
-              an object, and it is not an object, it is a condition. Left on
-              the spine with air around it, it reads as waiting; on a plate it
-              read as a notice about waiting, which is a machine telling you
-              about a state it is in.
-
-              The plate comes back the moment there is a voice — the Keeper's
-              intention and the breathing instruction are both somebody
-              speaking, and both keep it.
-            */}
             {state.seats < 2 ? (
               /*
                 The sentence, and the door.
@@ -614,17 +611,13 @@ export function CircleRoom({ id }: { id: string }) {
                 promise, in a product whose worst shipped bug was a refusal
                 that promised a turn to people whose turn could never come.
                 Fourteen of the first sixteen circles had one person in them.
-                It was not true fourteen times.
 
                 ALONE_LINE says the fact without the promise. The link is the
-                other half: the room never offers a door onto a 501, and read
-                the other way that means when this door is shut you point at
-                the one that is open — /chat needs nobody else and works now.
+                other half: when this door is shut you point at the one that is
+                open — /chat needs nobody else and works now.
               */
-              <div className="flex flex-col items-center gap-3">
-                <p className="max-w-[38ch] text-center text-body leading-[1.7] text-ash">
-                  {ALONE_LINE}
-                </p>
+              <div className="mx-auto flex max-w-[40ch] flex-col items-center gap-2 rounded-card bg-card/80 px-4 py-4 text-center">
+                <p className="text-body leading-[1.7] text-ash">{ALONE_LINE}</p>
                 <Link
                   href="/chat"
                   className="focusable min-h-[44px] text-body text-ink underline underline-offset-4"
@@ -632,18 +625,10 @@ export function CircleRoom({ id }: { id: string }) {
                   {ALONE_DOOR}
                 </Link>
                 {/*
-                  Only here, and only when the build can actually do it.
-
-                  This is the exact moment the offer is true: one person, in a
-                  room, deciding whether to keep a tab open for forty-five
-                  minutes. Fourteen of the first sixteen circles ended here.
-
-                  `notify === "off"` means no VAPID keys in this deployment and
-                  nothing renders — the room never offers a door that opens
-                  onto a 501, which is the rule `voice/route.ts` learned by
-                  handing somebody three environment variable names. It is also
-                  absent once the room has two people, because the notification
-                  it offers has already happened.
+                  Only here, and only when the build can actually do it: one
+                  person, in a room, deciding whether to keep a tab open for
+                  forty-five minutes. `notify === "off"` means no VAPID keys in
+                  this deployment and nothing renders.
                 */}
                 {notify !== "off" && (
                   <button
@@ -663,124 +648,101 @@ export function CircleRoom({ id }: { id: string }) {
                 )}
               </div>
             ) : (
-              <p className="glass p-4 text-body leading-[1.6]">
-                <span className="label-mono">
-                  {state.phase === "breathe" ? "Breathing" : "Keeper"}
-                </span>
-                <br />
-                {state.phase === "breathe"
-                  ? "Three minutes before anybody speaks. In through the nose, longer on the way out."
-                  : state.intention}
+              state.phase === "breathe" && (
+                <p className="mx-auto max-w-[36ch] rounded-card bg-card/80 px-4 py-2 text-center text-fine text-ash">
+                  Breathing — three minutes before anybody speaks. In through the
+                  nose, longer on the way out.
+                </p>
+              )
+            )}
+
+            {/*
+              Said once, by whichever line is true: alone, the sentence above
+              owns the emptiness; with people here and quiet, this does —
+              silence with somebody in it is the whole feeling of a circle.
+            */}
+            {messages.length === 0 && (state.present ?? 1) > 1 && (
+              <p className="mx-auto mt-3 max-w-[34ch] text-center text-body leading-[1.7] text-ash">
+                Nobody has spoken yet. {state.present} people are here,
+                waiting with you.
               </p>
             )}
 
-            {/* When the Closing is up, everything said recedes. Not hidden —
-                still there, just no longer what the room is about. */}
-            {/* More air than before. The shapes now carry the difference
-                between voices, and they need room around them to do it —
-                twelve pixels between an inscription and a share reads as a
-                list, which is what this was. */}
             {/*
-              The room's transcript on the same spine as everything else.
+              Bubbles, the way every phone already reads a group.
 
-              The chat hangs off it, the chronicle hangs off it, the lobby
-              hangs off it — and this, the one place where six people are
-              actually talking, was a plain stack. Here the thread means the
-              forty-five minutes: one sitting, lit where the room spoke, and
-              it recedes with the rest of the transcript at the close.
+              Theirs on the left under the seat that said it, yours on the
+              right in gold, the time in the corner. The seat is written once
+              per run of messages, as a group chat writes a name. The Keeper
+              and the Guardian are not people and are not bubbles: they speak
+              from the middle, in the room's own face — `.reply`, so the Keeper
+              and VENT are audibly the same thing in two rooms.
+
+              When the Closing is up, everything said recedes. Not hidden —
+              still there, just no longer what the room is about.
             */}
-            <ol className={cn("thread mt-5 space-y-6 [&>li]:pl-5", state.phase === "close" && "receding")}>
-              {/*
-                Four kinds of speech, four shapes.
+            <ol className={cn("mt-4 flex flex-col gap-1", state.phase === "close" && "receding")}>
+              {messages.map((m, i) => {
+                const prev = messages[i - 1];
+                const opensRun =
+                  !prev ||
+                  prev.kind === "keeper_prompt" ||
+                  prev.kind === "guardian" ||
+                  prev.mine !== m.mine ||
+                  prev.seat !== m.seat;
 
-                Every line in here was the same plate, separated by border
-                tints at thirty and sixty percent. In a room of six anonymous
-                strangers the single most important thing to know at a glance
-                is which of these is mine — and mine looked exactly like a
-                stranger's. The guardian had no treatment at all.
-
-                  Keeper    the room itself, not a person. No plate, centred,
-                            display face, letterspaced. An inscription.
-                  You       right, off the spine, no plate — the same shape
-                            your words take in /chat, so "you" reads the same
-                            everywhere in the product.
-                  Someone   the plate, left, seat number.
-                  Witness   an echo, not a statement. Quieter than a share,
-                            indented behind a gold mark.
-                  Guardian  unmistakable, never alarming.
-
-                The label line still names the speaker in every case, so none
-                of this is load-bearing for a screen reader.
-              */}
-              {messages.map((m) => {
-                if (m.kind === "keeper_prompt") {
+                if (m.kind === "keeper_prompt" || m.kind === "guardian") {
                   return (
-                    <li key={m.id} className="py-4 text-center">
-                      <p className="label-mono mb-3 tracking-[0.22em]">
-                        Keeper · pattern
-                      </p>
-                      {/* `.reply`, so the Keeper and VENT are audibly the same
-                          thing in two rooms. Left unplated and centred: the
-                          room speaking without walls around it, which is the
-                          one place that reads as more present, not less. */}
-                      <p className="reply mx-auto">{m.content}</p>
-                    </li>
-                  );
-                }
-
-                if (m.kind === "guardian") {
-                  return (
-                    <li key={m.id}>
-                      <div className="presence arrive p-5 sm:p-6">
-                        <p className="nameplate mb-3">Guardian</p>
-                        <p className="reply">{m.content}</p>
+                    <li key={m.id} className="my-3 flex justify-center">
+                      <div className="max-w-[92%] rounded-card bg-card/80 px-4 py-3 text-center">
+                        <p className="label-mono mb-1.5">
+                          {m.kind === "guardian" ? "Guardian" : "Keeper"}
+                        </p>
+                        <p className="reply mx-auto">{m.content}</p>
                       </div>
                     </li>
                   );
                 }
 
-                if (m.kind === "witness") {
-                  return (
-                    <li key={m.id} className="border-l-2 border-gold/30 pl-4">
-                      <p className="label-mono mb-1">
-                        {m.mine ? "You" : `Seat ${m.seat}`} · heard
+                return (
+                  <li
+                    key={m.id}
+                    className={cn("flex", m.mine ? "justify-end" : "justify-start", opensRun && "mt-2")}
+                  >
+                    <div
+                      className={cn(
+                        "max-w-[85%] rounded-card px-3.5 py-2 sm:max-w-[75%]",
+                        m.mine
+                          ? "bg-gold/20 text-right"
+                          : "border border-line/10 bg-card",
+                        opensRun && (m.mine ? "rounded-tr-md" : "rounded-tl-md"),
+                      )}
+                    >
+                      {!m.mine && opensRun && (
+                        <p className="text-fine font-semibold text-ink">
+                          Seat {m.seat}
+                          {m.role === "keeper" ? " · Keeper" : ""}
+                        </p>
+                      )}
+                      {/* A person is set as a person — `.said`, never the
+                          room's face — whoever's words these are. */}
+                      <p className="said text-left text-ink">{m.content}</p>
+                      <p className="mt-0.5 text-right text-label text-ash">
+                        {m.kind === "witness" ? "heard · " : ""}
+                        {clock(m.created_at)}
                       </p>
-                      <p className="said text-body">{m.content}</p>
-                    </li>
-                  );
-                }
-
-                // A share — theirs on the plate, yours in the margin.
-                return m.mine ? (
-                  <li key={m.id} className="flex justify-end">
-                    <div className="max-w-[85%] border-r-2 border-gold/40 pr-4 text-right sm:max-w-[75%]">
-                      <p className="label-mono mb-1">You · {m.role}</p>
-                      <p className="said">{m.content}</p>
-                    </div>
-                  </li>
-                ) : (
-                  <li key={m.id}>
-                    <div className="glass border-l-2 border-l-gold/70 p-4">
-                      <p className="label-mono mb-1">
-                        Seat {m.seat} · {m.role}
-                      </p>
-                      <p className="text-body leading-[1.6]">{m.content}</p>
                     </div>
                   </li>
                 );
               })}
             </ol>
+
             {state.phase === "close" && (
               <div className="glass closing mt-6 border-gold/50 p-6 sm:p-8">
                 {/*
-                  The one screen that earns display type.
-
-                  This is the moment the circle exists for, and it was
-                  announced in `label-mono` — the same 12px uppercase as
-                  "Tension" and "Presence". A system label for the thing the
-                  whole hour was building toward. `CLAUDE.md` already made this
-                  arrive slower than everything else and dimmed the room behind
-                  it; the words themselves were still furniture.
+                  The one screen that earns display type — the moment the
+                  circle exists for. It arrives slower than everything else and
+                  dims the room behind it.
                 */}
                 <p className="label-mono mb-2">Closing</p>
                 <h2 className="mb-5 font-display text-heading leading-[1.2] tracking-[-0.01em]">
@@ -790,8 +752,7 @@ export function CircleRoom({ id }: { id: string }) {
                 {mood === null ? (
                   <>
                     <p className="text-body leading-[1.6]">
-                      You just heard your own word said back to you. Rate where
-                      you are now, 1–10.
+                      Rate where you are now, 1–10.
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
@@ -818,10 +779,9 @@ export function CircleRoom({ id }: { id: string }) {
                           </span>{" "}
                           since you sat down.
                         </p>
-                        {/* scaleX, not width — same reason as the breathing
-                            circle. Animating width is layout on every frame,
-                            and this bar runs for a full second on the screen
-                            somebody is watching most closely. */}
+                        {/* scaleX, not width — animating width is layout on
+                            every frame, on the screen somebody is watching
+                            most closely. */}
                         <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-line/10">
                           <div
                             className="h-full w-full origin-left rounded-full bg-gold transition-transform duration-1000 ease-out"
@@ -881,133 +841,22 @@ export function CircleRoom({ id }: { id: string }) {
                     </div>
 
                     {dropped && (
-                      <>
-                        {/* The sentence somebody leaves with. It was set at
-                            the same size as a form label. */}
-                        <p className="reply mt-6">
-                          You carry {carry ?? "what you came with"}. You drop{" "}
-                          {dropped}. The words in this room go with it.
-                        </p>
-                      </>
+                      <p className="reply mt-6">
+                        You carry {carry ?? "what you came with"}. You drop{" "}
+                        {dropped}. The words in this room go with it.
+                      </p>
                     )}
                   </>
                 )}
               </div>
             )}
 
-            {/* Voice sits above the transcript, below the intention: it is a
-                way of being in this room, not a feature bolted to the side. */}
-            <CircleVoice
-              circleId={id}
-              anonId={me}
-              enabled={Boolean(state.voice)}
-              keeper={state.role === "keeper"}
-              onSpeaking={setSpeakingSeats}
-            />
-
-            {/*
-              A room before anybody speaks, sat where a person is looking.
-
-              Measured at 360px in a real two-person circle: this line sat
-              directly under the breathing card and then roughly eight hundred
-              pixels of nothing ran down to the composer. The silence a circle
-              opens with is the point — but a line pinned to the top of a void
-              reads as a page that stopped loading, not as a room holding its
-              breath.
-
-              Same treatment the chat empty state got, for the same reason and
-              with nothing added to fill it: the air falls on both sides of the
-              sentence instead of all of it underneath.
-            */}
-            {/*
-              Said once, by whichever line is true.
-
-              Alone in a room, this printed "Nobody has spoken yet. Someone
-              goes first." directly under "You are the first one here" — two
-              sentences about the same emptiness, forty percent of the
-              viewport apart, with nothing between them. The same duplicate
-              readout the chat composer had when "some" appeared twice, and
-              found the same way: by looking at it.
-
-              The line above owns the case where nobody else has arrived,
-              because "somebody has to go first" is not true yet — there is
-              nobody to go first in front of. This owns the case where people
-              are here and quiet, which is the one worth naming, because
-              silence with somebody in it is the whole feeling of a circle.
-            */}
-            {/*
-              The room, before it is a conversation.
-
-              Gated first on being alone, which was exactly backwards: three
-              people sitting in silence is when a drawing of the room says the
-              most, and that was the case where it disappeared and left the
-              void back where it started.
-
-              It belongs to the silence, not to the solitude. Whoever is in
-              the room, until somebody speaks, this is what the screen is
-              about — five hundred pixels that were doing no work in a product
-              named after the shape it was not drawing.
-
-              Everything in it came from the server: `seatsPresent` is the
-              presence window, `mySeat` is the member list. A room that draws
-              a person who is not there is "your turn comes" in a nicer shape.
-
-              It goes the moment the room starts talking. A diagram competing
-              with what somebody just said is decoration, and this is only
-              worth its space while the space was empty anyway.
-            */}
-            {messages.length === 0 && (
-              /*
-                The sentence above the drawing, not below it.
-
-                Below, it was the part that fell under the sticky composer —
-                two cards, a circle and a line of text is more than a 740px
-                phone holds, and whatever is last is what the footer covers.
-                The line naming who is in the room, hidden by the box you talk
-                into.
-
-                Padding did not fix it and should not have: the content is
-                genuinely taller than the viewport and the page scrolls. What
-                was wrong was the order. Words cannot be missed; a drawing can
-                be scrolled to. So the sentence is the thing that is always
-                visible and the room is the thing you find under it.
-              */
-              <div className="flex flex-col items-center gap-6 py-6">
-                {(state.present ?? 1) > 1 && (
-                  <p className="max-w-[34ch] text-center text-body leading-[1.7] text-ash">
-                    Nobody has spoken yet. {state.present} people are here,
-                    waiting with you.
-                  </p>
-                )}
-                <CircleSeats
-                  seatsPresent={state.seatsPresent}
-                  maxSeats={state.maxSeats}
-                  mySeat={state.mySeat}
-                  speaking={speakingSeats}
-                />
-              </div>
-            )}
-
-            {/* The whole point of #5: silence with somebody in it reads
-                differently from silence on its own. */}
-            {state.typingOthers > 0 && (
-              <p aria-live="polite" className="mt-4 flex items-center gap-2 text-body text-ash">
-                <span aria-hidden="true" className="flex gap-1">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ash [animation-delay:0ms]" />
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ash [animation-delay:200ms]" />
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ash [animation-delay:400ms]" />
-                </span>
-                {state.typingOthers === 1
-                  ? "Someone is writing."
-                  : `${state.typingOthers} people are writing.`}
-              </p>
-            )}
             {/* scroll-margin, or `block: "end"` parks this exactly where the
                 sticky footer pins itself and the last thing anybody said
                 renders underneath the composer. Same fix as the chat. */}
             <div
               ref={endRef}
-              className="scroll-mb-[calc(var(--composer-h,180px)+16px)]"
+              className="scroll-mb-[calc(var(--composer-h,120px)+16px)]"
             />
           </>
         )}
@@ -1015,52 +864,21 @@ export function CircleRoom({ id }: { id: string }) {
 
       {state?.joined && (
         <footer ref={footerRef} className="sticky bottom-0 border-t border-line/10 bg-paper/95 backdrop-blur-glass">
-          <div className="mx-auto max-w-[640px] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
+          <div className="mx-auto max-w-[640px] px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2.5">
             {ruleError && (
               <p role="alert" className="mb-2 rounded-card border border-gold/50 p-3 text-fine leading-relaxed">
                 {ruleError}
               </p>
             )}
             {/*
-              Two words, not two slabs.
-
-              These were full-width filled pills side by side, taking a whole
-              44px row above the box — a segmented control, which is a shape
-              from settings screens. Under them sat the input, and under that
-              a line of rules: three stacked rows of chrome before anybody
-              could say anything.
-
-              The same fix the chat composer got. What you are doing is one
-              word, what you could do instead is the other, and the one you
-              are not doing recedes rather than competing. It is a sentence
-              about the room — "you are sharing / you are reflecting" — rather
-              than a pair of buttons asking you to configure a mode.
-
-              Both stay full 44px targets. Recession here is weight and
-              colour, never hit area: this is a phone at 4am.
+              One row: the box and the send. A group chat's composer has no
+              mode switch above it and no rule under it — the rules are at the
+              door and enforced on the server, where a refusal is written to
+              teach at the moment it actually fires (`ruleError`, above).
             */}
-            <div className="mb-1.5 flex items-center gap-4">
-              {([false, true] as const).map((mode) => (
-                <button
-                  key={String(mode)}
-                  type="button"
-                  onClick={() => setReflecting(mode)}
-                  aria-pressed={reflecting === mode}
-                  className={cn(
-                    "label-mono flex min-h-[44px] items-center underline-offset-[6px] transition-colors duration-300",
-                    reflecting === mode
-                      ? "text-ink underline decoration-gold"
-                      : "text-ash hover:text-ink",
-                  )}
-                >
-                  {mode ? "Reflect" : "Share"}
-                </button>
-              ))}
-            </div>
-
             <div className="flex items-end gap-2">
               <label htmlFor="circle-input" className="sr-only">
-                {reflecting ? "Reflect one line" : "Your share"}
+                Message the circle
               </label>
               <textarea
                 id="circle-input"
@@ -1070,54 +888,20 @@ export function CircleRoom({ id }: { id: string }) {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
                 }}
-                placeholder={
-                  reflecting ? "One line — what you heard." : "Say the heaviest part."
-                }
-                maxLength={reflecting ? 140 : 900}
-                className="max-h-32 min-h-[48px] flex-1 resize-none rounded-card border border-line/15 bg-card/60 px-4 py-3 leading-[1.6] placeholder:text-ash"
+                placeholder="Say the heaviest part."
+                maxLength={900}
+                className="max-h-32 min-h-[48px] flex-1 resize-none rounded-card border border-line/15 bg-card px-4 py-3 leading-[1.5] placeholder:text-ash"
               />
               <button
                 type="button"
                 onClick={() => void send()}
                 disabled={!draft.trim() || busy}
-                /*
-                  The name has to be the word on the button.
-
-                  This said `aria-label="Send"` over a button that reads
-                  "Say". Screen readers announce "Send"; voice control users
-                  saying "click Say" hit nothing, because the accessible name
-                  never contains the visible label — WCAG 2.5.3, and a real
-                  dead end for somebody driving a phone by voice, which is not
-                  a rare way to use an app you are crying into.
-
-                  Kept as a label rather than deleted because the visible text
-                  becomes "…" while a share is in flight, and "…" is not a
-                  name. This way the name is stable and it is the right word.
-                */
-                aria-label="Say"
-                className="flex h-12 min-w-[64px] items-center justify-center rounded-card bg-gold px-4 text-body font-semibold text-on-gold disabled:opacity-40"
+                aria-label="Send"
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gold text-on-gold disabled:opacity-40"
               >
-                {busy ? "…" : "Say"}
+                <SendIcon />
               </button>
             </div>
-            {/*
-              The rule, once, at the size of a rule.
-
-              "No advice, no you-statements. Speak to the circle." sat under
-              the box at the same weight as everything else, on every render,
-              to somebody who had not broken it yet. A room that opens by
-              listing what you must not do is a room you behave in rather than
-              speak in — and the rule is enforced on the server anyway, with a
-              refusal written to teach when it actually fires.
-
-              So it is quieter and shorter. `ruleError` above is where this
-              subject belongs when it is real; this is only the reminder.
-            */}
-            <p className="mt-2 text-label leading-snug text-ash/80">
-              {reflecting
-                ? "One line — what you heard, not what you'd do."
-                : "No advice. Speak to the circle."}
-            </p>
           </div>
         </footer>
       )}

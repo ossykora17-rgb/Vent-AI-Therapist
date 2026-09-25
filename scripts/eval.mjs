@@ -2436,7 +2436,13 @@ check("21 What the room carries across sessions is earned, and personality has o
     .filter((f) => f.endsWith(".tsx"))
     .map((f) => [f, fs.readFileSync(f, "utf8")])
     .filter(([, src]) => /CHAIRS\b|CHAIR_QUESTION|OBJECTS\b/.test(strip(src)));
-  ok(surfaces.length >= 2,
+  /*
+    One, not two, since the circle room stopped asking the chair question at
+    its door — a one-tap group join has no form in front of it. The lobby still
+    asks it when a circle is opened, so the sweep still has a subject; a floor
+    of one is the floor this rule actually needs, which is "not zero".
+  */
+  ok(surfaces.length >= 1,
     `${surfaces.length} screens render the chair vocabulary`,
     "a sweep that walks nothing passes loudest — if this is 0 the assertions below say nothing");
   for (const [f, src] of surfaces) {
@@ -4306,7 +4312,9 @@ check("36 The room and the person do not sound the same", () => {
     something while it is only the room.
   */
   const room = fs.readFileSync(path.join(ROOT, "src/components/circle-room.tsx"), "utf8");
-  const share = room.match(/Seat \{m\.seat\} · \{m\.role\}[\s\S]{0,260}?<p className="([^"]*)"/);
+  // Anchored on the seat label a group chat writes over somebody else's run of
+  // messages; the next paragraph after it is their words.
+  const share = strip(room).match(/Seat \{m\.seat\}[\s\S]{0,260}?<p className="([^"]*)"/);
   ok(share, "the other-seat share is findable");
   ok(!/font-display|reply/.test(share[1]),
     "another person in the circle is set as a person, not as the room",
@@ -8567,8 +8575,17 @@ check("68 A room does not tell you the same thing twice", () => {
   ok(!/No camera, ever/.test(offer),
     "the voice offer does not stack a second reassurance nobody asked for",
     "three promises to somebody who has not asked a question reads as nerves");
-  is((offer.match(/pitched down/g) ?? []).length, 2,
-    "the one claim worth making is made once per state, and no more");
+  /*
+    Once per state, and the states now live in two files. Before voice, the
+    claim is the room's own opening notice — the offer is a phone icon in the
+    header, which has no sentence of its own. In voice, it is the call bar,
+    above the button that opens the microphone. Two states, one claim each.
+  */
+  is((offer.match(/pitched down/g) ?? []).length, 1,
+    "the voice bar makes the claim once, while you are in voice");
+  is((code.match(/pitched down/g) ?? []).length, 1,
+    "and the room makes it once, before you are",
+    "the claim a person needs before they speak cannot live only behind the tap it informs");
 
   /*
     The header carries the room's name first. Seven pieces of chrome above a
