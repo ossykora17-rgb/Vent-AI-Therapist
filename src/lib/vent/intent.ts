@@ -190,7 +190,6 @@ const META = [
   /\byou (keep|dey|just keep) (saying|repeating)\b/,
   /\byou said the same\b/,
   /\bsame (tactic|script|line) (again|twice)\b/,
-  /\bare you (even )?(real|listening|a bot)\b/,
   /\b(this|that) is generic\b/,
   /\bstop (saying|repeating) (that|the same)\b/,
 ];
@@ -247,6 +246,36 @@ const AIMED_AT_MACHINE = [
  * Exported for the same reason `nothingCanMove` is: the router and the eval
  * must not each keep a copy, or the suite passes while the product regresses.
  */
+/**
+ * They asked what this is — and that is not a complaint about repeating.
+ *
+ * `/are you (even )?(real|listening|a bot)/` sat in `META`, and `META` had one
+ * answer: *"You're right — I repeated myself, and that's on me."* So "are you
+ * even real?" — the question the founder's VENT spec is built around, *can
+ * something see me, can something stay* — was answered with an apology for a
+ * repetition nobody mentioned. And because `META` matches anywhere in a
+ * message, a vent that happened to contain the phrase lost everything else it
+ * said.
+ *
+ * Split three ways now. A bare question about what the room is gets the honest
+ * answer, locally and for free. A longer message carrying the same words is a
+ * vent, and the model answers it under a constitution that now says when to
+ * say what it is. And "are you even listening" is not a question about the
+ * room's nature at all: it is a rupture, which the prompt already knows how to
+ * meet — *say what happened between you plainly, take your half, and stay* —
+ * and a canned line could not, because it cannot see what was missed.
+ */
+const ASKED_WHAT_I_AM = [
+  /\bare you (?:even |actually |really )?(?:real|a bot|a robot|a person|human|an ai|a machine)\b/,
+  /\byou be (?:real|robot|bot|human|machine|ai)\b/,
+];
+
+/** The bare question only — the greeting's rule, for the greeting's reason. */
+export function askedWhatIAm(message: string): boolean {
+  const m = message.toLowerCase().trim();
+  return m.split(/\s+/).length <= 6 && ASKED_WHAT_I_AM.some((re) => re.test(m));
+}
+
 export function aimedAtTheMachine(message: string): boolean {
   const m = message.toLowerCase();
   return AIMED_AT_MACHINE.some((re) => re.test(m));
@@ -506,6 +535,7 @@ export function classify(message: string): Classification {
   */
   if (aimedAtTheMachine(m)) return { intent: "meta", realWorldTag, language, body };
   if (any(META, m)) return { intent: "meta", realWorldTag, language, body };
+  if (askedWhatIAm(m)) return { intent: "meta", realWorldTag, language, body };
 
   // A greeting only counts when it is the whole message — "hi, my oga is
   // making me feel small" is a vent wearing a greeting.
