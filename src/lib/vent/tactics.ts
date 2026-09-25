@@ -350,7 +350,7 @@ const TACTICS: Tactic[] = [
     family: "validation",
     instruction:
       "Name the emotion sitting underneath the one they showed. e.g. \"Na shame dey under that anger.\"",
-    hold: "Name the one underneath the anger. Not the loud one — the one beneath it.",
+    hold: "The anger is the loud one, and something quieter is standing under it. What is the one underneath?",
     fits: has(ANGER),
     weight: () => 75,
     // The emotion under the loud one is there whether or not anything moves.
@@ -361,7 +361,7 @@ const TACTICS: Tactic[] = [
     family: "validation",
     instruction:
       "Normalise without softening — anyone shaped this way would feel this. e.g. \"Anybody wey grow for house where love na performance go feel this.\"",
-    hold: "Nothing is wrong with you for feeling this. Anybody shaped the same way would.",
+    hold: "That is not a flaw in you — it is arithmetic anyone in your seat would run. What went into the sum?",
     fits: has(/\b(crazy|mad|only me|am i normal|something wrong with me)\b/),
     weight: () => 80,
     // "Anybody would feel this" is the most useful sentence there is after a
@@ -428,7 +428,7 @@ const TACTICS: Tactic[] = [
     */
     instruction:
       "Take them under the words. Ask what the thing in their body is like before it has a name — its shape, weight, temperature, whether it moves. If they answer with a label like 'anxiety' or 'stress', gently say that is the word for it and ask what it is actually like. Never interpret what the sensation means. e.g. \"No be the name. Wetin e resemble — heavy? sharp? e dey move?\"",
-    hold: "Before the word for it: what is it like in there? Shape, weight, does it move?",
+    hold: "Before the word for it — what is it like in there: its shape, its weight, whether it moves?",
     /*
       And the body's move, since `body_map_drop_set` was retired.
 
@@ -452,7 +452,7 @@ const TACTICS: Tactic[] = [
     family: "cognitive",
     instruction:
       "One Socratic question aimed at what the critical voice is trying to prove. e.g. \"Wetin that oga voice dey try prove say you no be?\"",
-    hold: "Ask that voice what it is trying to prove. Just the question tonight. No answer yet.",
+    hold: "That voice is trying to prove something. What is it trying to prove, and to whom?",
     fits: has(ANALYTICAL),
     weight: () => 70,
   },
@@ -473,7 +473,7 @@ const TACTICS: Tactic[] = [
     family: "cognitive",
     instruction:
       "Hand the power back without excusing the other person. e.g. \"Oga no make you small — e just find the small pikin wey you already hide.\"",
-    hold: "Two short lists — what is theirs, what is yours. Short ones. Do not pad either.",
+    hold: "Some of this belongs to them, and you have been carrying it as yours. Which part was never yours?",
     fits: has(/\b(he made me|she made me|they made me|oga|boss|manager)\b/),
     weight: () => 74,
   },
@@ -531,7 +531,7 @@ const TACTICS: Tactic[] = [
     family: "duality",
     instruction:
       "Name the two parts and ask which is louder right now, 0–100. e.g. impress the oga vs burn the office down.",
-    hold: "Name the two parts pulling. Then say which is louder right now, zero to a hundred.",
+    hold: "Two parts of you are pulling on this. Which one is louder right now, zero to a hundred?",
     fits: (c) => PARTS.test(c.message.toLowerCase()) || c.duality !== null,
     weight: (c) => (c.duality !== null ? 84 : 70),
   },
@@ -560,7 +560,7 @@ const TACTICS: Tactic[] = [
     family: "narrative",
     instruction:
       "Externalise the story — when did this 'failure' story first enter the house? Father, school, or the economy?",
-    hold: "Ask when that story first entered your house. Father, school, or the economy.",
+    hold: "That story came into your house before it came into you. When did it first arrive — father, school, or the economy?",
     fits: (c) => words(c.message) > 45,
     weight: () => 74,
   },
@@ -569,7 +569,7 @@ const TACTICS: Tactic[] = [
     family: "narrative",
     instruction:
       "If they woke tomorrow and it had shifted slightly, what would they notice first in the body?",
-    hold: "If it had shifted by morning, what would the body notice first? Only the first thing.",
+    hold: "If it had shifted by morning, what is the first thing your body would notice?",
     fits: has(HOPELESS),
     weight: () => 76,
   },
@@ -578,7 +578,7 @@ const TACTICS: Tactic[] = [
     family: "narrative",
     instruction:
       "Lay the repetition out with their own past phrases and dates, then ask if it is the same pattern.",
-    hold: "Say what has come back more than once. Then ask if it is the same thing again.",
+    hold: "Is this the same question as earlier, wearing a new coat?",
     fits: (c) => c.ventCount >= 3,
     weight: (c) => 60 + Math.min(c.ventCount * 3, 25),
   },
@@ -593,7 +593,7 @@ const TACTICS: Tactic[] = [
     family: "relational",
     instruction:
       "This is not one move — it is a long game with somebody they will still know next year. Put both payoffs where they can see them: avoiding it buys short relief and long dread; doing it costs short discomfort and buys long clarity. Show the matrix. NEVER say which one to pick — choosing for them is what undoes it.",
-    hold: "This is a long game, not one hand. Hold both columns tonight: what avoiding buys you, and what it costs.",
+    hold: "This is a long game, not one hand. What does avoiding buy you, and what does it cost?",
     // Family and duty, where one-shot thinking does the most damage — you
     // cannot walk away from a mother the way you walk away from a deal.
     fits: (c) =>
@@ -632,7 +632,7 @@ const TACTICS: Tactic[] = [
     family: "relational",
     instruction:
       "Let them go before they run. \"I go let you go before you run. Shrine dey when ready.\"",
-    hold: "You can stop here. Nothing is owed. The room stays open for whenever.",
+    hold: "Nothing is owed here, and you can stop. What was the sentence you nearly typed?",
     fits: (c) => AVOIDANT.test(c.message.toLowerCase()) && words(c.message) <= 6,
     weight: () => 85,
     // Letting somebody go without a task is *more* right here, not less.
@@ -809,7 +809,7 @@ const TACTICS: Tactic[] = [
     */
     instruction:
       "Name the rule they were taught, in words a fourteen-year-old would follow, and say plainly that it is a rule and not a fact — never the word for it. Then give them one true thing in this room tonight that the rule cannot explain: they are here, doing nothing useful, and still here. If an action fits, it is a deliberately unproductive minute — no output, nothing to show for it — because that is what contradicts the rule; pick it out of what they told you, never from a list.",
-    hold: "That is a rule you were taught, not a fact about you. You are sitting here producing nothing, and you are still here.",
+    hold: "That is a rule you were taught, not a fact about you. You are producing nothing right now, and you are still here. Who taught you the rule?",
     fits: has(/\b(machine|robot|useless|not enough|no be enough|fixing|fix me|broken|failing|lazy|burden|productive|output|earn)\b/),
     weight: () => 76,
   },
@@ -842,33 +842,49 @@ const TACTICS: Tactic[] = [
     */
     instruction:
       "They have said what they should do. Do not agree with it, do not encourage it, and do not add a reason — every reason you supply is one they now have to defend against. Ask them for theirs instead: what makes this worth doing, in their words, and what would be different by Friday if it happened. Their sentence, not yours.",
-    hold: "You already said what you should do. Tell me why it matters to you — not to anybody else.",
+    hold: "You already said what you should do. Why does it matter to you — not to anybody else?",
     fits: has(STUCK_INTENT),
     weight: () => 74,
   },
 ];
 
-/** One tailored coping move per real-world pressure, only when detected. */
+/**
+ * One tailored move per real-world pressure, only when detected — a shape and a
+ * question, never a coping task.
+ *
+ * Eight of these nine were micro-errands until the founder's VENT spec was
+ * integrated, a day *after* the no-errands spec that should already have
+ * removed them: "cold water on the face for ten seconds", "outside the door
+ * for 30 seconds", "one account to mute today. That is the whole task." They
+ * walked past `errand()` because every hold opened on "Hold …", a verb that
+ * detector had no reason to know — the fifth time a pattern written the way
+ * its author would phrase a task met a task phrased another way. In production
+ * only `rw_lonely` had fired, twice, which is two lonely people told to go and
+ * stand outside a door.
+ *
+ * The ids stay, `rw_family`'s precedent: an id here names the pressure, not
+ * the technique, and there are two rows of history under it.
+ */
 export const REAL_WORLD_TACTIC: Record<Exclude<RealWorldTag, null>, Tactic> = {
   economy: mk(
     "rw_economy",
-    "Fuel up three times this month — name one thing they can still control today, down to ten naira.",
-    "Hold one thing you can control today, down to ten naira. Not the whole market.",
+    "Money pressure. Give it its real shape in their details — the sum, who it is owed to, what it is quietly deciding about them. No plan, no budget, nothing to control. Ask what it has cost them that is not money.",
+    "The numbers stopped adding up, and you are the one standing inside the sum. What has it cost you that isn't money?",
   ),
   japa: mk(
     "rw_japa",
-    "Japa fear — three things they'd miss, three they'd gain. Written, not felt.",
-    "Hold both lists tonight — three you'd miss, three you'd gain. Not one side.",
+    "Japa. Staying costs something and leaving costs something, and the weighing is theirs — name both weights in their words, never a list, never which. Ask who they would be leaving, and who they would be staying for.",
+    "Leaving costs something and staying costs something, and you are holding both. Who are you leaving, and who are you staying for?",
   ),
   ai_job: mk(
     "rw_ai_job",
-    "List three things they do that AI cannot do. Three, not one.",
-    "Hold three things you do that a machine cannot. Three, not one.",
+    "The machine is coming for the work. No reassurance and no list of what AI cannot do: name what the fear is measuring — their worth by their output — and ask what they are before any job title.",
+    "The job and you were never the same thing, and the fear treats them as one. What would you still be if the job went?",
   ),
   social: mk(
     "rw_social",
-    "Instagram is a highlight reel — one account to mute today.",
-    "Hold your eyes today. One account, muted. That is the whole task.",
+    "Comparison online: their whole footage against somebody's highlight reel. Say it with their details — never mute, log off or take a break. Ask whose life they are measuring theirs against.",
+    "You are holding your whole footage up against somebody's highlight reel. Whose life are you measuring yours against?",
   ),
   /*
     This said: "Firstborn pressure — one boundary, ten words, to the person
@@ -899,23 +915,23 @@ export const REAL_WORLD_TACTIC: Record<Exclude<RealWorldTag, null>, Tactic> = {
   ),
   lonely: mk(
     "rw_lonely",
-    "Opposite action — outside the door for 30 seconds. Loneliness lies about how long that takes.",
-    "Hold thirty seconds outside the door. Loneliness lies about how long that is.",
+    "Loneliness, and the door. Send them nowhere and give them nothing to do. Say plainly what you are — a machine that cannot leave and cannot be in the room with them — so this is rehearsal, not company. Ask who the one person is that this sentence is really for.",
+    "I'm a machine: I can't leave, and I can't be in the room with you either. Who is the one person you wish had read this instead?",
   ),
   traffic: mk(
     "rw_traffic",
-    "Traffic doesn't define them — one thing they can do inside the danfo.",
-    "Hold one thing that is yours inside the danfo. The road does not get to name you.",
+    "Traffic. The road spends hours that were theirs — give it that arithmetic in their details, never a use for the time. Ask who gets what is left of them when they get home.",
+    "The road spends your hours before you do, and somebody gets what is left. Who gets what's left of you when you get home?",
   ),
   climate: mk(
     "rw_climate",
-    "Cold water on the face for ten seconds. Heat makes everything feel worse than it is.",
-    "Hold ten seconds of cold water on the face. The heat is making it louder than it is.",
+    "Heat and no light. It turns the volume up on everything else — say so in their details, and never offer water, a fan or a cold anything. Ask what the heat is making louder tonight.",
+    "The heat turns the volume up on everything else. What is it making louder tonight?",
   ),
   health: mk(
     "rw_health",
-    "Name the fear precisely — 'I'm scared of X' — then the one call they've been avoiding.",
-    "Hold the fear by its exact name tonight. Then the one call you have been avoiding.",
+    "Health news. Name it exactly, in their words — no advice, no test, no call to make. Ask who else knows they are carrying it.",
+    "What is not said gets to be bigger than it is. Who else knows you are carrying this?",
   ),
 };
 

@@ -3685,6 +3685,80 @@ circle that exists, so every one must call `sweepIfOver` (check 95) and wrap in
 does neither and should not need two exemptions to say it is not that kind of
 route. **A route that needs two exemptions is in the wrong place.**
 
+**The VENT spec asked for three things this repository had already forbidden,
+and the integration is where each one landed.** A mirror that talks back, not
+a therapist; the AI truth used rather than hidden — no body, no stake, no
+tomorrow, so it cannot leave, flinch or punish and the truth costs them nothing;
+one or two lines and a single question about them, never about the room; the
+room as the rehearsal and never the destination. It went into the prompt by
+removal — *"You run a therapy office"*, *"ten years and fifty thousand hours"*
+and *"No metaphor"* all said the opposite — for **7 tokens net**, 3,570 → 3,577.
+
+The three conflicts, and where each landed:
+
+- *"You've asked 10 versions of…"* — the room sees six turns (`MEMORY_TURNS`),
+  so ten is unprovable by construction, and `patternBlock` already keeps the
+  count away from them. The pattern is called out; the number never is.
+- *"Always redirect to him"* against the no-errands spec a day older —
+  resolved as a **question**, only towards somebody they named, never an
+  instruction. Pointing the courage is not assigning it.
+- The safety line's *"then return"* — the crisis path stays local, pre-model,
+  both numbers on every surface. Only its sentence moved: it opened *"I'm
+  really concerned about you"*, a stake the same spec says the room does not
+  have, and *"cannot hold this alone"* is written as the weight being more than
+  a screen can hold, never as the room being burdened, because perceived
+  burdensomeness is the belief most present at that turn. *"You are not
+  alone"* stays although the spec bans it: that list governs the voice, and
+  this is the one line the spec breaks character on. Check 76 names the two
+  surfaces, and a stale entry fails.
+
+**The measurement pointed at the library, not the model.** Nine of 118
+production replies asked about the room, and **eight of the nine** carried a
+probe that asked it — `yalom_what_from_me` three, `mi_permission` two,
+`rogers_check` two. `mi_permission` was *"Do you want me to just hear this, or
+do you want me to push?"*, the same menu as the screenshot this file already
+records as a failure. Seven probes were replaced under new ids, because a
+different question under an old id scores one move under another's name.
+
+**And eight of the nine real-world moves were errands, a day after the rule
+that should have removed them.** *"Hold ten seconds of cold water on the
+face"*, *"Hold thirty seconds outside the door"*, *"One account, muted. That
+is the whole task."* Every line opened on **Hold**, a verb `errand()` did not
+know: the fifth pattern written the way its author would phrase a task.
+`rw_lonely` had fired twice in production, which is two lonely people sent to
+stand outside a door. Two tasks had no verb at all — a breathing count and a
+task that names itself — one of each in production, and all three shapes in
+the pipeline's fixture as rows **certified clean**, under *"four rows survive
+everything"*. Check 5 had asserted *"ten naira"* as *"a number a person can act
+on tonight"*: an assertion defending the bug, again.
+
+**The question grader came back, and the corpus moved instead of the rule.**
+`quality.ts` records killing *"ask one question"* and *"never stack
+questions"* because hand-written replies failed them. They were right against
+the constitution of the day. The founder's spec replaced it, so `closing`
+returns as a decision, the way `fused` did, and 14 authored replies were
+rewritten to end on one question. `closing` is noted rather than retried —
+19 of 118 production replies fail it, and a billed retry on one turn in six
+is the wrong trade on a spec that also says strict token usage. `about_me` buys
+a retry and never the hold, for `presumed`'s reason. Both drop the row from
+training. The cap is three: 51 of 118 production replies ran longer.
+
+**One mutation escaped, and it was the instrument.** Disabling a regex by
+prefixing `(?!)|` makes an alternation that still matches, so the suite
+passed over a frame that was still there. To switch a pattern off in a
+mutation, delete the line. Nineteen of nineteen fail once that is done.
+
+**What no check here can answer is whether it lands.** *"One or two
+devastating lines"* is a claim about a person at 2am reading a sentence, and
+the graders can only hold the shape it has to fit. The two numbers to read
+first when traffic comes are `about_me` and `closing` — and they do not arrive
+the same way. `about_me` buys a retry, so it lands in `vents.rejected_by`,
+where the heartbeat reads grader names. `closing` is noted, and a noted grader
+is written nowhere: its number exists only by re-grading the stored replies,
+which is the nightly audit's job and the audit has never run. Until it does,
+the number is the in-database count this entry was measured with — 11 with no
+question and 8 with more than one, of 118.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

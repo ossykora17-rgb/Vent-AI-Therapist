@@ -44,7 +44,7 @@ const UPDATE = await app("src/lib/update.ts");
 const { MIN_AGE, AGE_KEY, ageSnapshot, ageServerSnapshot, confirmAge, forgetAge, subscribeAge } =
   await app("src/lib/age.ts");
 const { BANNED_PHRASES, FILE_LANGUAGE, bannedPhrase, REPLY_SENTENCE_CAP, NO_MEMORY_LINE, OFFICE_RULES, PRODUCT_LINE,
-        GENERIC_TASKS, genericTask, askedForSkill, errand } =
+        GENERIC_TASKS, genericTask, askedForSkill, errand, closingProblem, aboutTheRoom, sentenceCount } =
   await app("src/lib/vent/voice.ts");
 const { openThread, threadBlock } = await app("src/lib/vent/prompt.ts");
 const { aimedAtTheMachine, PIDGIN_GRAMMAR, PIDGIN_LEXICAL, REAL_WORLD_TAGS, themePattern } = await app("src/lib/vent/intent.ts");
@@ -394,9 +394,34 @@ check("5  Every real-world pressure carries its own tool, and a room phrasing", 
       `${tag} routes to ${t.id}`);
   }
 
-  // Concrete beats zen. "Ten naira" is a number a person can act on tonight.
-  ok(/ten naira/i.test(REAL_WORLD_TACTIC.economy.instruction), "economy names ten naira");
-  ok(/ten naira/i.test(REAL_WORLD_TACTIC.economy.hold), "the room hears the same number");
+  /*
+    "Concrete beats zen" was asserted here as "ten naira" — "a number a person
+    can act on tonight". That was the assertion defending the bug: a number to
+    act on tonight is a task, and eight of these nine tools were tasks the
+    no-errands spec should already have removed, walking past `errand()` on a
+    verb it did not know ("Hold ten seconds of cold water on the face").
+
+    What survives is the half that was right. Concrete still beats zen — the
+    economy move still names the sum and who it is owed to — and the room's
+    line for every pressure hands them nothing, closes on one question, and
+    asks about them rather than about itself. Swept over the table, not named
+    per tag, so a tenth pressure is held to it the day it is added.
+  */
+  ok(/\bsum\b/.test(REAL_WORLD_TACTIC.economy.instruction), "economy is still concrete: the sum, in their details");
+  const rw = Object.entries(REAL_WORLD_TACTIC);
+  ok(rw.length >= 9, "the sweep reads the whole real-world table", `${rw.length}`);
+  for (const [tag, t] of rw) {
+    is(errand(t.hold), null, `${tag}: the room's line hands them nothing to do`);
+    is(closingProblem(t.hold), null, `${tag}: and closes on one question`);
+    is(aboutTheRoom(t.hold), null, `${tag}: about them, not about the room`);
+    /*
+      And what the model is told, because the grader only sees what it wrote:
+      an instruction that asks for a task is the prompt requesting the fail
+      state, which is the shape check 86 found in HOW YOU SPEAK. Every one of
+      these ends by asking them something; none of the eight errands did.
+    */
+    ok(/\bask\b/i.test(t.instruction), `${tag}: the move the model is given ends on asking them`);
+  }
 
   // Every tactic carries one, because a deployment with no model key answers
   // a vent with it. A tactic added without a hold is a vent answered with a
@@ -9269,6 +9294,22 @@ check("76 The office has one voice, and nothing we wrote breaks it", () => {
     `say` — but the generated string still lands in a template literal here.
   */
   const DEFINES = ["voice.ts", "quality.ts", "prompt.ts"];
+  /*
+    One phrase, two surfaces, and a reason — never a file waved through.
+
+    "You're not alone" is on the founder's list of what VENT never says, and
+    the same spec breaks character on purpose for the crisis turn. So the
+    crisis line and the crisis gate's nameplate keep it, each named here by
+    exactly what it is, and nothing else in either file inherits the pass.
+    A stale entry fails below: an exemption nobody uses is a hole with a
+    reason written beside it.
+  */
+  const NOT_ALONE = BANNED_PHRASES.find((b) => b.say === "you're not alone");
+  const CRISIS_VOICE = {
+    "intent.ts": (text) => text === CRISIS_RESPONSE || text === CRISIS_RESPONSE_PIDGIN,
+    "vent-chat.tsx": (text, hit) => hit.match === "You are not alone",
+  };
+  const exempted = new Set();
   let scanned = 0;
   const broken = [];
   for (const f of files) {
@@ -9286,11 +9327,19 @@ check("76 The office has one voice, and nothing we wrote breaks it", () => {
     for (const text of prose) {
       scanned++;
       const hit = bannedPhrase(text) ?? (/\bwe\b/.test(text) ? null : null);
-      if (hit) broken.push(`${path.basename(f)}: "${hit.match}" — ${hit.why}`);
+      const base = path.basename(f);
+      if (hit && NOT_ALONE && hit.why === NOT_ALONE.why && CRISIS_VOICE[base]?.(text, hit)) {
+        exempted.add(base);
+        continue;
+      }
+      if (hit) broken.push(`${base}: "${hit.match}" — ${hit.why}`);
     }
   }
   ok(scanned > 300, `there is authored copy to check (${scanned} strings)`,
     "if this finds almost nothing the assertion below is vacuous");
+  is([...exempted].sort().join(", "), Object.keys(CRISIS_VOICE).sort().join(", "),
+    "each crisis-line exemption is still in use",
+    "an exemption nobody uses is a hole with a reason written beside it");
   is(broken.length, 0,
     `nothing we wrote says one of them${broken.length ? ` — ${broken.join(" | ")}` : ""}`,
     "a slogan in the box at the moment somebody starts typing is the room advertising itself");
@@ -12592,7 +12641,7 @@ check("102 The turn's verdict is computed, never asked for", () => {
       classification: c,
       depth: depthFor({ classification: c, message: msg, pressure: null }),
       tacticId: "exact_mirror",
-      probeId: "rogers_check",
+      probeId: "rogers_next_to_it",
       history: [],
     });
 
@@ -12632,7 +12681,7 @@ check("102 The turn's verdict is computed, never asked for", () => {
   */
   const a = at(vent, "work is heavy and i am tired of it");
   is(a.skill, "exact_mirror", "the move is reported");
-  is(a.probe, "rogers_check", "so is the question");
+  is(a.probe, "rogers_next_to_it", "so is the question");
   is(a.handoff, false, "and a first-time person is not handed off");
   ok(typeof a.because === "string" && a.because.length > 0,
     `the reason is the router's own word (${a.because})`,
@@ -19114,6 +19163,17 @@ check("152 The room hands nobody anything to do — not a task, a step, or an ex
       written to stop it.
     */
     ["A little self-care might help.", "a generic task with no imperative in it — only the table sees it"],
+    /*
+      Three more, found a day late by the VENT spec's integration. Every
+      real-world tactic's line opened "Hold …", a verb this list did not have,
+      and two tasks carry no verb at all: a breathing count, and a task that
+      names itself. All were in the product; the last two were also in the
+      pipeline's fixture as rows it certified clean.
+    */
+    ["Hold ten seconds of cold water on the face.", "the real-world line that opened on a verb the list did not know"],
+    ["Hold both lists tonight — three you'd miss, three you'd gain.", "a list exercise, held rather than written"],
+    ["Four in, six out, drop the shoulder — do it now.", "a breathing count with no verb in front of it"],
+    ["One account, muted today. That's the whole task.", "a task that names itself"],
   ];
   for (const [text, why] of CATCHES) {
     ok(errand(text), `caught: "${text.slice(0, 44)}…"`, why);
@@ -19137,6 +19197,9 @@ check("152 The room hands nobody anything to do — not a task, a step, or an ex
     ["You just go numb when he calls.", "`just go` is English"],
     ["What happens in your chest when you read that back?", "the room's move"],
     ["If your closest friend said that about themselves, what would you tell them?", "an imagined reply, answered here"],
+    ["Hold on — what did he say when you told him?", "`hold on` is not an instruction"],
+    ["Two years in, six months out of work, and the sum stopped adding up.", "a count that is not a breath"],
+    ["You are holding both, and both are yours.", "holding, reflected back"],
   ];
   for (const [text, why] of LEAVES) {
     is(errand(text), null, `left alone: "${text.slice(0, 44)}…"`, why);
@@ -19281,6 +19344,94 @@ check("153 A window left open learns a new build exists, and never loses a sitti
     "its cache is named for the build it serves", "\"mw-v1\" never changed, so cleanup never deleted anything");
   ok(/filter\(\(k\) => k !== CACHE\)/.test(sw) && /caches\.delete\(k\)/.test(sw),
     "and activation deletes every other build's cache");
+});
+
+check("154 One question, about them — the VENT spec, held where a person meets it", () => {
+  /*
+    The founder's VENT spec, integrated rather than pasted: a mirror that talks
+    back, one or two lines, and "a single, surgical question that is not about
+    you. It is about the unsaid thing." Production before it, counted in the
+    database and never read: of 118 replies, 11 ended on no question, 8 asked
+    two or more, and 9 asked about the room — eight of those nine carrying a
+    probe that had asked it.
+
+    So the rule is held at the three places it can break: the library the
+    question comes from, the authored lines a person reads when the model is
+    refused, and the grader that reads what the model wrote.
+  */
+
+  // ── the two detectors, in both directions ─────────────────────────────────
+  const ROOM = [
+    ["Do you want me to just hear this, or do you want me to push?", "the probe that was the founder's screenshot"],
+    ["Do you want me to just witness this with you, or push?", "the screenshot itself"],
+    ["What do you want from me right now — honestly?", "a retired probe"],
+    ["Am I getting it, or am I off?", "a retired probe"],
+    ["What do you not want me to think about you?", "a retired probe"],
+    ["Would it help if I just listened?", "the room offering itself"],
+    ["Should I push on this, or leave it?", "the room asking what to do next"],
+  ];
+  for (const [text, why] of ROOM) ok(aboutTheRoom(text), `about the room: "${text.slice(0, 40)}…"`, why);
+  const THEM = [
+    ["What's the part of this you've never said to anybody — not him, not me until now?", "the spec's own closer names me and asks about them"],
+    ["Does this happen with other people, or only here?", "the room as a mirror of their pattern"],
+    ["What would he say if you told him what you told me?", "the room as the rehearsal"],
+    ["You want me to fix it.", "a reflection, not a question"],
+  ];
+  for (const [text, why] of THEM) is(aboutTheRoom(text), null, `about them: "${text.slice(0, 40)}…"`, why);
+
+  is(closingProblem("Then tell me what happened last night."), "no question", "an imperative that digs still is not a question");
+  is(closingProblem("Where? Since when?"), "more than one question", "two questions are a menu");
+  is(closingProblem("Who would notice first if you stopped — not who should, who would?"), null, "one question, sharpened inside itself");
+  is(closingProblem("Is that the word — the one they used?”"), null, "a closing quote after the mark is still the mark");
+
+  // ── the library the question comes from ───────────────────────────────────
+  ok(PROBES.length >= 50, `${PROBES.length} probes read`, "a sweep over nothing passes loudest");
+  is(PROBES.filter((p) => aboutTheRoom(p.ask)).map((p) => p.id).join(", "), "",
+    "no probe asks about the room", "the reply writes what the probe asks — eight of nine came from here");
+  is(PROBES.filter((p) => closingProblem(p.ask)).map((p) => p.id).join(", "), "",
+    "every probe is one question, ending on its mark");
+
+  // ── the lines a person reads when the model is refused ────────────────────
+  const holds = ALL_TACTICS.filter((t) => t.hold);
+  ok(holds.length >= 30, `${holds.length} holds read`, "the failsafe exempts authored lines, so this is the door");
+  is(holds.filter((t) => closingProblem(t.hold) || aboutTheRoom(t.hold)).map((t) => t.id).join(", "), "",
+    "every hold ends on one question about them");
+  ok(REPLY_SENTENCE_CAP <= 3, "the ceiling is two lines and the question",
+    "\"One or two devastating lines, not paragraphs\" — the spec, not a snapshot of it");
+  is(holds.filter((t) => sentenceCount(t.hold) > REPLY_SENTENCE_CAP).map((t) => t.id).join(", "), "",
+    "and none of them runs past it");
+
+  // ── the grader that reads what the model wrote ────────────────────────────
+  const kase = { message: "my mother rang three times and i said yes three times", intent: "vent", language: "en" };
+  const graded = (reply) => gradeReply(kase, reply, { tokensSpent: true, said: kase.message });
+  const room = graded("Three yeses before noon. Do you want me to just hear this, or push?").find((f) => f.grader === "about_me");
+  is(room?.severity, "major", "a question about the room is graded", "and it is major — it never reaches training");
+  const flat = graded("Three yeses before noon, and none of them were yours.").find((f) => f.grader === "closing");
+  is(flat?.severity, "major", "a reply with no question is graded");
+  is(graded("Three yeses before noon. Whose yes were they?").filter((f) => f.grader === "closing" || f.grader === "about_me").length, 0,
+    "and one question about them is not");
+  ok(RETRY_ONLY.has("about_me") && !REJECT.has("about_me"), "about_me buys a retry and never the hold",
+    "the reply is still made of their words; the hold is made of nobody's");
+  ok(NOTED.has("closing") && !REJECT.has("closing") && !RETRY_ONLY.has("closing"), "closing is noted, never billed",
+    "one turn in six failed it — a retry there is the wrong trade on a spec that also says strict token usage");
+
+  // ── the constitution the model reads ──────────────────────────────────────
+  const said = STABLE_PREFIX.replace(/\s+/g, " ");
+  for (const rule of [/mirror that talks back/, /Not a therapist/, /rehearsal, never the destination/,
+    /never with a count/, /about them, never you/, /cannot leave, flinch or punish/]) {
+    ok(rule.test(said), `the prompt carries ${rule}`);
+  }
+  for (const gone of [/therapy office/i, /No metaphor/, /fifty thousand hours/]) {
+    ok(!gone.test(said), `and no longer says ${gone}`, "the spec says the opposite, and a prompt holding both says neither");
+  }
+
+  // ── the one line that breaks character ────────────────────────────────────
+  for (const [lang, opener] of [["en", /^I'm not a person\b/], ["pidgin", /^I no be person\b/]]) {
+    const line = crisisReply(lang);
+    ok(opener.test(line), `${lang}: the crisis line opens on what the room is`);
+    ok(/real person/i.test(line) && /right now/i.test(line), `${lang}: and tells them to tell a real person, right now`);
+    ok(!/concerned|worry/i.test(line), `${lang}: and claims no stake it does not have`);
+  }
 });
 
 for (const r of results) {

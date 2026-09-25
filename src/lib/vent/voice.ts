@@ -159,6 +159,26 @@ export const BANNED_PHRASES: readonly BannedPhrase[] = [
     why: "a ruling nobody asked for — the same shape as 'you are worthy'" },
   { say: "that sounds incredibly hard", re: /\bsounds? (?:so |really |incredibly |unbelievably |beyond )(?:hard|difficult|tough|painful|exhausting|awful)\b|\bno wonder (?:you|that)\b/i,
     why: "'that must be hard' with an intensifier, which the older pattern could not see" },
+
+  /*
+    THE LAST TWO OF THE FOUNDER'S SEVEN
+
+    The VENT spec lists seven phrases it never says: "hold space", "sit with
+    that", "you're not alone", "I'm here for you", "it's valid", "let's
+    unpack", "how does that make you feel". Five were already here. These are
+    the other two, both at zero in 118 production replies — so they are here
+    to keep it that way, not to fix a count.
+
+    "You're not alone" has one deliberate exception, and it is not in the
+    voice: the crisis line breaks character on purpose, by the same spec, and
+    says it with two phone numbers underneath that make it true. Check 76
+    names that exemption by the constants it lives in, rather than letting a
+    file slip past the sweep.
+  */
+  { say: "you're not alone", re: /\byou(?:'re| are) not alone\b|\byou no dey alone\b/i,
+    why: "a comfort that fits anybody, from a room that is not a person" },
+  { say: "let's unpack", re: /\b(?:let'?s|let us|we can|we could|can we|i'?d like to) unpack\b|\bunpack (?:that|this|it)\b/i,
+    why: "workshop language, and it announces a procedure instead of asking a question" },
 ];
 
 /**
@@ -373,7 +393,18 @@ export function genericTask(text: string): { match: string; why: string } | null
  * the wrong place to be, not what it says to somebody inside a conversation.
  */
 const ERRAND_VERBS =
-  "write|jot|text|call|message|ring|send|go|take|drink|eat|sleep|breathe|walk|try|start|stop|make|set|schedule|list|spend|watch|put|leave|plan|book|reach out|drop|unclench|relax|rest|place|press|count|close|notice|imagine|picture|remind yourself|ask yourself|let yourself|allow yourself|give yourself|practi[cs]e|find|pick|choose|repeat|tell|talk";
+  "write|jot|text|call|message|ring|send|go|take|drink|eat|sleep|breathe|walk|try|start|stop|make|set|schedule|list|spend|watch|put|leave|plan|book|reach out|drop|unclench|relax|rest|place|press|count|close|notice|imagine|picture|remind yourself|ask yourself|let yourself|allow yourself|give yourself|practi[cs]e|find|pick|choose|repeat|tell|talk|hold";
+/*
+  `hold` joined a day late, and it is the fifth time a pattern written the way
+  its author would phrase a task met one phrased another way. Every real-world
+  tactic's authored line opened "Hold …" — "Hold ten seconds of cold water on
+  the face", "Hold thirty seconds outside the door", "Hold your eyes today. One
+  account, muted. That is the whole task." — and all eight walked past this
+  list the day it was written to stop exactly them. Measured before it went in:
+  zero clause-initial "hold" in 118 production replies, so the model never
+  wrote it; only we did. `on` is already excluded below, so "Hold on" is not an
+  instruction and "Hold still" is — which is right, it is a body instruction.
+*/
 const CLAUSE = String.raw`(?:^|[.!?:;]\s+|—\s*|\n\s*)(?:and |then |now |just |first,? |so )?`;
 const ERRAND_FRAMES: ReadonlyArray<readonly [string, RegExp]> = [
   /*
@@ -397,6 +428,17 @@ const ERRAND_FRAMES: ReadonlyArray<readonly [string, RegExp]> = [
   */
   ["somebody to contact", new RegExp(`${CLAUSE}(?:(?:reach out to|talk to|text|call|message|ring) (?:someone|somebody|a friend|a person|anybody|anyone)|say (?:it|that|this) to (?:her|him|them|your \\w+))\\b`, "i")],
   ["a Pidgin instruction", new RegExp(`\\babeg (?:go|try|drink|rest|call|text|sleep|waka|write)\\b|${CLAUSE}make you (?:go|try|call|text|drink|rest|sleep|write|waka)\\b`, "i")],
+  /*
+    Two tasks with no verb in front of them, which is why the frames above
+    could not see either. "Four in, six out, drop the shoulder — do it now" is
+    a breathing exercise whose instruction is a pair of numbers, and "One
+    account, muted today. That's the whole task." names itself. One of each in
+    118 production replies, and both in the pipeline's own fixture as rows it
+    certified clean — the training set's reference for "survives everything"
+    was a breathing instruction.
+  */
+  ["a breathing count", /\b(?:\d|one|two|three|four|five|six|seven|eight)(?: seconds?)? in\b[^.?!]{0,24}\b(?:\d|one|two|three|four|five|six|seven|eight)(?: seconds?)? out\b/i],
+  ["a task, by name", /\bthe whole task\b|\bthat'?s (?:the|your) (?:task|homework|assignment)\b/i],
 ];
 
 /** The first thing this text hands them to do, or null. */
@@ -463,23 +505,26 @@ export function askedForSkill(message: string): boolean {
 }
 
 /**
- * One to four sentences.
+ * One to three sentences: one or two lines, then the question.
  *
  * The prompt said "three to four" and the grader complained at six, which is
  * a two-sentence gap where nobody was in charge. A tired therapist at 11am
  * does not produce four sentences; they produce one, and then a question.
  *
- * Raised from 3 to 4 by decision, not by drift. The argument above is still
- * the argument — one sentence and a question is usually right, and this is a
- * ceiling rather than a target. What moved is the ceiling: a fourth sentence
- * is now allowed rather than noted, which costs up to a third more output
- * tokens on the replies that use it and nothing on the replies that do not.
+ * Raised from 3 to 4 by decision, not by drift — and lowered back to 3 by the
+ * next decision, which is the founder's VENT spec: *"One or two devastating
+ * lines, not paragraphs"*, and every response ends on *"a single, surgical
+ * question"*. Two lines and the question is three sentences, so three is the
+ * ceiling that spec actually describes. Production before it: of 118 replies,
+ * 17 ran two sentences or fewer, 50 ran three, 44 ran four and 7 ran five or
+ * more — so 51 were already past the length the founder asked for, and a
+ * shorter reply is also the one change here that spends fewer tokens.
  *
  * Every reader imports this constant — the prompt, the failsafe's retry
  * instruction and the `length` grader — so the number lives here and only
  * here. It was nearly written into the prompt as a word twice.
  */
-export const REPLY_SENTENCE_CAP = 4;
+export const REPLY_SENTENCE_CAP = 3;
 
 /** Terminal punctuation, ignoring the ellipsis somebody trails off with. */
 export function sentenceCount(text: string): number {
@@ -487,6 +532,74 @@ export function sentenceCount(text: string): number {
     .replace(/\.{2,}/g, " ")
     .split(/[.!?]+(?:\s|$)/)
     .filter((s) => s.trim().length > 0).length;
+}
+
+/**
+ * How the reply ends — on one question, or not.
+ *
+ * The founder's VENT spec: *"Every response must end with a single, surgical
+ * question."* This rule was tried here once and removed, and the removal is
+ * recorded in `quality.ts` with its numbers: a question-mark count flagged
+ * hand-written replies that ended on an imperative that digs ("Then tell me
+ * what happened last night.") or on a narrowing follow-up. That was the right
+ * call against the constitution those replies were written to. It is not the
+ * constitution any more — `OFFICE_RULES` now says the reply ends on the
+ * question and that there is only one — so the rule comes back as a decision,
+ * the same way `fused` did, and the authored lines moved rather than the rule.
+ *
+ * Production before it: of 118 replies, 11 did not end on a question and 8
+ * asked two or more.
+ */
+export function closingProblem(text: string): "no question" | "more than one question" | null {
+  const t = text.trim().replace(/["'”’)\]\s]+$/, "");
+  const marks = (t.match(/\?/g) ?? []).length;
+  if (!t.endsWith("?")) return "no question";
+  if (marks > 1) return "more than one question";
+  return null;
+}
+
+/*
+  A question whose subject is the room.
+
+  *"A single, surgical question that is not about you. It is about the unsaid
+  thing."* The spec's clause, and production says where the other kind came
+  from before anybody guessed: nine of 118 replies asked about the room — what
+  the person wanted from it, whether it was getting it right, whether it should
+  push — and **eight of the nine** carried a probe that had asked exactly that.
+  `mi_permission` was the menu the founder had already objected to in a
+  screenshot ("Do you want me to just witness this with you, or push?"); it was
+  still in the library. So the source was fixed first, in `probes.ts`, and this
+  is the check that the source stays fixed and the model does not reinvent it.
+
+  Only questions are read, and only the room as the *subject of the asking* —
+  what it should do, what is wanted from it, whether it is right. The room as
+  an addressee is not the offence: the spec's own example closer is "What's
+  the part of this you've never said to anybody — not him, not me until now?",
+  which names "me" and asks about them, and it must pass. So must "Does this
+  happen with other people, or only here?", which uses the room as a mirror of
+  a pattern that is theirs.
+*/
+const ROOM_AS_SUBJECT: readonly RegExp[] = [
+  /\byou (?:want|need|like) me to\b/i,
+  /\b(?:want|need|expect)\w* from me\b/i,
+  /\b(?:should|shall|can|could|may) i (?:just |gently |keep )?(?:push|help|stay|listen|ask|go on|continue|stop|hold)\b/i,
+  /\bwould it help (?:if i|to hear)\b/i,
+  /\bam i (?:getting|off|right|close|wrong|missing|making sense)\b/i,
+  /\b(?:me|i) to (?:just )?(?:think|hear|push|stay|listen)\b/i,
+  /\bhear this,? or\b/i,
+  /\bthink of me\b/i,
+  /\byou want make i\b/i,
+];
+
+export function aboutTheRoom(text: string): { match: string } | null {
+  const questions = text.split(/(?<=[.!?])\s+/).filter((s) => /\?["'”’)\]]*\s*$/.test(s));
+  for (const q of questions) {
+    for (const re of ROOM_AS_SUBJECT) {
+      const m = q.match(re);
+      if (m) return { match: m[0] };
+    }
+  }
+  return null;
 }
 
 /**
@@ -565,17 +678,16 @@ export const PRODUCT_LINE =
   request. Belt and braces, except the belt was priming the fall.
 */
 export const OFFICE_RULES = `THE OFFICE
-You run a therapy office. Not a motivational page, not a coach, not a friend
-who cheers. A tired but good therapist at 11am: calm, blunt, "you" and "I".
+Calm, blunt, "you" and "I".
 
 EVERY REPLY
 Answer what they actually said. Then ask one thing you do not know the answer
 to. That is the whole shape and it is deliberately not a template: sometimes
-the right reply is one sentence, sometimes it is only the question, sometimes
-it is their own word said back with nothing after it.
+it is one line and the question, sometimes only the question — but it ends
+on that question, and there is only one.
 
-${REPLY_SENTENCE_CAP} short sentences, maximum, and one is often right. No metaphor, no
-lecture, no preamble, and never the same opening two turns running.
+${REPLY_SENTENCE_CAP} short sentences, maximum. No decoration, no lecture, no preamble,
+and never the same opening two turns running.
 
 Four parts reflecting what they actually said to one part asking, and zero
 parts advice or tasks — nothing to do after this, even when they ask; then
