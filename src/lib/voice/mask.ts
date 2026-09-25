@@ -267,26 +267,87 @@ export type MaskFailure =
   | "no_shift"
   | "no_track";
 
+function audioContextClass(): typeof AudioContext | undefined {
+  return typeof window === "undefined"
+    ? undefined
+    : window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+}
+
+/**
+ * An AudioContext made inside the tap that asked for voice, and asked to start
+ * there.
+ *
+ * Call it as the first statement of a click handler, before anything is
+ * awaited. A phone lets audio start only during the gesture itself, and the
+ * join then spends seconds on a fetch, an SDK download and a microphone prompt
+ * — a context created after all of that is born suspended on Safari and stays
+ * that way. Created here, it is allowed to start, and `whenRunning` collects
+ * the answer once the rest of the join has caught up.
+ */
+export function audioContextInGesture(): AudioContext | null {
+  const Ctx = audioContextClass();
+  if (!Ctx) return null;
+  try {
+    const ctx = new Ctx();
+    void ctx.resume().catch(() => {});
+    return ctx;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True once the context is running; false if it is not running after `ms`.
+ *
+ * The wait is the fix. The Web Audio spec sets a new context's state to
+ * `suspended` and flips it to `running` in a queued task, so reading the
+ * state straight after `resume()` sees `suspended` on every engine that
+ * follows the spec — Safari, and every browser on an iPhone — even when the
+ * start is allowed. Only Chrome flips it synchronously, which is why the
+ * refusal that read it that way looked correct from a laptop.
+ *
+ * Bounded because a resume that is not allowed never settles: the spec parks
+ * the promise until some later gesture that may never come.
+ */
+export async function whenRunning(ctx: BaseAudioContext, ms = 2000): Promise<boolean> {
+  if (ctx.state === "running") return true;
+  if (ctx.state === "closed") return false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    (ctx as AudioContext).resume().catch(() => {}),
+    new Promise<void>((done) => {
+      timer = setTimeout(done, ms);
+    }),
+  ]);
+  clearTimeout(timer);
+  return (ctx.state as string) === "running";
+}
+
 export function maskMicrophone(
   input: MediaStream,
   depth: MaskDepth | number = "deeper",
   onFail?: (why: MaskFailure) => void,
+  /**
+   * The context to build on — made by `audioContextInGesture` inside the tap
+   * and already awaited with `whenRunning`. The mask owns it from here and
+   * closes it on `stop()` or on refusal. Without one it makes its own, which
+   * only a desktop browser will start this late.
+   */
+  context?: AudioContext | null,
 ): Mask | null {
   const fail = (why: MaskFailure) => {
     onFail?.(why);
     return null;
   };
-  const Ctx: typeof AudioContext | undefined =
-    typeof window === "undefined"
-      ? undefined
-      : window.AudioContext ??
-        (window as unknown as { webkitAudioContext?: typeof AudioContext })
-          .webkitAudioContext;
-  if (!Ctx) return fail("no_audio_context");
+  const Ctx = audioContextClass();
 
   let ctx: AudioContext;
   try {
-    ctx = new Ctx();
+    if (context) ctx = context;
+    else if (Ctx) ctx = new Ctx();
+    else return fail("no_audio_context");
   } catch {
     return fail("context_rejected");
   }
@@ -313,13 +374,18 @@ export function maskMicrophone(
     `resume()` is a promise and this function is synchronous by design (its
     caller publishes the track immediately). So it is asked to resume and then
     checked: still suspended means no mask, which means no microphone, which
-    the person is told. A context that resumes a moment later is fine — the
-    track is already wired and starts carrying audio when the graph runs.
+    the person is told.
+
+    That re-read used to be the whole start, under a comment saying `resume()`
+    "flips the state synchronously wherever the policy allows it at all". It
+    does on Chrome and nowhere else: the spec flips it in a queued task, so on
+    an iPhone this refused every context — including the ones that would have
+    been running a millisecond later — and voice never once opened on one.
+    Callers now make the context inside the tap and await `whenRunning` before
+    they get here, so this is the last guard rather than the only attempt.
   */
   if (ctx.state === "suspended") {
     void ctx.resume().catch(() => {});
-    // Re-read: `resume()` resolves asynchronously but flips the state
-    // synchronously wherever the policy allows it at all.
     if (ctx.state === "suspended") {
       void ctx.close();
       return fail("context_suspended");

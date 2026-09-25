@@ -14,6 +14,7 @@ import {
   isSupabaseUrlValid,
 } from "@/lib/env";
 import { cached, inventory } from "@/lib/external/cache";
+import { probeVoice } from "@/lib/voice/probe";
 import { classifyModelError } from "@/lib/vent/model";
 import { allProviders, configuredProviders, probeChain, skipped } from "@/lib/vent/providers";
 
@@ -430,6 +431,13 @@ export async function GET() {
     push: isPushConfigured,
   };
 
+  // Whether the voice server takes our keys — asked, not assumed. Cached a
+  // minute for the same reason as the model probe, and never part of
+  // `status`: a room with no voice is still a room people can be heard in.
+  const voice =
+    (await cached("voice-probe", 60_000, "livekit", async () => ({ status: await probeVoice() })))
+      ?.value?.status ?? "unreachable";
+
   return NextResponse.json(
     {
       /*
@@ -497,6 +505,7 @@ export async function GET() {
         see on the page they already read.
       */
       backups: env.backupToken ? "configured" : "off",
+      voice,
       /*
         Which database this actually is.
 

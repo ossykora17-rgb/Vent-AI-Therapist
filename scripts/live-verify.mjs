@@ -61,6 +61,16 @@ async function main() {
   const hasDb = health.persisting === true;
   const hasAi = health.services?.anthropic === true;
 
+  // 19 — health asks the voice server rather than reading three variables.
+  // CI runs this shape twice: no keys (must read "off", with nothing asked) and
+  // keys pointed at the discard port (must read an answer, never "off").
+  {
+    const keyed = health.services?.livekit === true;
+    const known = ["ok", "refused", "unreachable", "off"].includes(health.voice);
+    const ok = known && (keyed ? health.voice !== "off" : health.voice === "off");
+    record(19, "Health asks the voice server", ok, `livekit=${keyed} voice=${health.voice}`);
+  }
+
   // 1 — the date bug, and it must be free.
   {
     const d = await vent("whats today's date?").then((r) => r.json());

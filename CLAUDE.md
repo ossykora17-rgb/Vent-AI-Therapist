@@ -3855,6 +3855,70 @@ spec opens on *"You are not a therapist"*, and the room hands nobody a
 breathing exercise or a journal. It says what the product is now, and the
 crisis number still comes from `CRISIS_LINES`.
 
+**Voice had never once worked on an iPhone, and 163 checks were green over it.**
+The founder tested circle voice twice and reported that it does not work.
+Nothing here could say why: `[voice] join failed` is a console line in a
+browser, and production had logged no voice errors in seven days — which only
+said the server half was fine.
+
+The cause was one sentence in `mask.ts`, which was confidently wrong. The mask
+refuses to publish a graph that is not running, correctly, and decided whether
+it was running by reading `state` straight after `resume()`, under a comment
+saying the state *"flips synchronously wherever the policy allows it at all"*.
+The Web Audio spec says the opposite: the constructor sets *"[[control thread
+state]] to suspended"*, and `running` arrives in *"a media element task"*
+queued once processing starts (`WebAudio/web-audio-api`, `index.bs`, the
+AudioContext constructor and "sending a control message to start
+processing"). Only Chrome flips it synchronously. So on Safari, and on every
+browser on an iPhone, the mask refused every context — including the ones that
+would have been running a millisecond later — and the context was made after a
+fetch, an SDK download and a microphone prompt anyway, long after the tap that
+could have started it.
+
+Then the screen compounded it in three ways. It told the person *"Tap Join once
+more"* while their only button read *Leave voice*. It kept saying *"Your voice
+is pitched down"* over a room that was hearing nothing. And its hold bar read
+*"Speaking — let go to stop"* while nothing was published. Meanwhile the room's
+own sound was silent too: LiveKit's source says *"iOS blocks audio element
+playback if user is not publishing audio themselves and no other audio source
+is playing"*, and nothing here ever called `startAudio()`.
+
+Reproduced before it was fixed, against a real SFU, because a static check
+cannot see a phone. `livekit-server` built from source through the Go module
+proxy (GitHub releases are blocked from this environment). Two Chromium
+browsers joined one circle, and an init script held them to the iPhone's two
+rules: audio starts only inside a tap, and there is no `<audio>` playback
+unless the page is capturing. The old build logged `mask unavailable:
+context_suspended` on both seats, and the listener received **0 bytes** while
+the speaker's screen read *Speaking*. The fixed build was heard: about 30 KB of
+audio with non-zero energy, measured off the listener's own
+`RTCPeerConnection` stats. Without the iPhone rules, the old build worked as
+well — **the laptop shape was the only one anybody had ever tested.**
+
+The context is now made as the first line of the tap (`audioContextInGesture`).
+`whenRunning` then waits for it to say so, and the wait is bounded, because a
+resume that is not allowed never settles. The mask takes the context it is
+handed. The refusal stays, as the last guard rather than the only attempt. The
+held-back microphone gets a button that exists (*Turn on my microphone*), and
+held-back sound gets one too (*Tap to hear the room*). And the hold bar is a
+tap toggle, because it looked exactly like a voice-note recorder: people held
+it, spoke, let go and waited for a message that was never going to exist. The
+privacy the hold bought is kept by the arrival — shut until you choose.
+
+The server half gets a probe that asks rather than reads. `/api/health` now
+reports `voice`, from a `ListRooms` signed with the same key and secret as
+every join token. It is signed by hand rather than through the SDK, so the
+dependency-free gate can run it offline against a loopback server. And it is
+never part of `status`: a room with no voice is still a room people can be
+heard in. Check 156 holds all of it, and 14 mutations fail it. Live check 19
+holds the field in both of CI's shapes.
+
+**What this cannot prove, stated rather than implied.** The iPhone rules are an
+emulation built from the spec and LiveKit's own comment, and are not an iPhone.
+The production SFU is unreachable from here, so whether it accepts our keys is
+`/api/health`'s `voice` field, read after deploy. Whether it works on a phone
+in Lagos is read by a person holding one.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
