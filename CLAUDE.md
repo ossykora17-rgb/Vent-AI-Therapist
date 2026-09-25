@@ -908,6 +908,12 @@ honest skip this file already argued for, and it has been true every night
 since. The machinery is correct and has been fed nothing; both secrets are the
 whole difference.
 
+**Both secrets have since been set, and this paragraph is history.** The loop
+has run nightly since run 29 — *"The loop's first real run reached
+production"*, further down, is where it starts. The paragraph stays because it
+is true of the nights it describes; this line is here because a sentence this
+confident, this high up, was quoted as current a month later.
+
 **That sentence said "for the whole userbase", and the cache one file over
 says otherwise in its own header:** *"In production the disk is ephemeral, so
 it degrades to an in-process Map — still useful (one lambda serves many
@@ -3737,7 +3743,11 @@ on tonight"*: an assertion defending the bug, again.
 questions"* because hand-written replies failed them. They were right against
 the constitution of the day. The founder's spec replaced it, so `closing`
 returns as a decision, the way `fused` did, and 14 authored replies were
-rewritten to end on one question. `closing` is noted rather than retried —
+rewritten to end on one question. The other 20 that ran past three sentences
+were cut to the cap the next morning, with every row graded before and after —
+twenty `length` findings cleared, no grader newly fired, no reply changed
+language — and check 154 reads the corpus now, so the instrument stays in tune
+with the rule it is used to judge. `closing` is noted rather than retried —
 19 of 118 production replies fail it, and a billed retry on one turn in six
 is the wrong trade on a spec that also says strict token usage. `about_me` buys
 a retry and never the hold, for `presumed`'s reason. Both drop the row from
@@ -3753,11 +3763,32 @@ devastating lines"* is a claim about a person at 2am reading a sentence, and
 the graders can only hold the shape it has to fit. The two numbers to read
 first when traffic comes are `about_me` and `closing` — and they do not arrive
 the same way. `about_me` buys a retry, so it lands in `vents.rejected_by`,
-where the heartbeat reads grader names. `closing` is noted, and a noted grader
-is written nowhere: its number exists only by re-grading the stored replies,
-which is the nightly audit's job and the audit has never run. Until it does,
-the number is the in-database count this entry was measured with — 11 with no
-question and 8 with more than one, of 118.
+where the heartbeat reads grader names. `closing` is noted, so the live path
+writes it nowhere; the number arrives from the nightly audit, which re-grades
+the stored replies with whatever graders are current and names every one that
+fired — the first eight in the Actions log, the full list in the `audit`
+artifact, kept seven days.
+
+**`vent_notes` left zero, and it cannot be credited to the landing trigger.**
+The heartbeat reads `peopleWithCarve: 2, notes: 1`. The note was written on
+2026-09-24 at 05:54 UTC, four vents into a sitting whose two anchors both came
+before it — so the mood path could have fired the Carver as well as the
+landing, and this file's attribution rule, *a carve on a sitting with no anchor
+can only have come from the landing*, does not reach this one. And the sample
+is small enough to name: every vent since 19 September — nineteen of them —
+came from one person on one day. The Carver produces notes in production now;
+which door opened this one is still unmeasured, and the next unanchored sitting
+is the one that answers it.
+
+**This paragraph first said the audit had never run, and that was false.** It
+repeated *"the loop this feeds has never once run"* from the credit section
+without reading the entries below it, which record run 29 reading production
+and the leak it found. Run 37 went out on the commit that shipped these
+graders: 50 of 127 stored turns read, 36 broke a rule, and one of them was
+`about_me` — a reply written before the change, which is the baseline and not
+a regression. A sentence copied from higher up this file is a claim about the
+moment it was written, and this file is long enough for that moment to be
+gone.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
