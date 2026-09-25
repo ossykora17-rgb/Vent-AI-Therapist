@@ -9575,6 +9575,32 @@ check("78 What comes back from outside is a move, never a finding", () => {
       "it is handed a move to make, never a fact to repeat");
   }
 
+  /*
+    And a move, never an errand. The request asked for "a THING TO DO … it will
+    be acted on", which is how an evidence-based technique arrives as homework;
+    the no-errands spec removed five prompt sentences like that and this was the
+    sixth. Moves are written to the listener in the third person, so the reply
+    detector alone cannot see "have them list", and both shapes are refused.
+  */
+  for (const task of [
+    "Have them list three things they can still control this week.",
+    "Encourage them to write the number down tonight and look at it in the morning.",
+    "Ask them to practise a breathing exercise when the account screen opens.",
+    "Assign a short homework: note each time the worry arrives.",
+    "Suggest they take a walk before checking the account.",
+  ]) {
+    is(parseTechnique(JSON.stringify({ move: task, source: "https://apa.org/x" }), "economy"),
+      null, `refused as a task: "${task.slice(0, 38)}…"`, "the room hands nobody anything to do");
+  }
+  for (const move of [
+    "Ask them what the number is doing to them when they are not looking at it.",
+    "Help them notice where the fear sits in the body as they say the amount.",
+  ]) {
+    ok(parseTechnique(JSON.stringify({ move, source: "https://apa.org/x" }), "economy"),
+      `kept as a move inside the conversation: "${move.slice(0, 38)}…"`,
+      "a guard that refuses questions would empty the block and look like caution");
+  }
+
   // Fenced JSON is what a model actually returns half the time.
   ok(parseTechnique("```json\n" + good + "\n```", "economy") !== null,
     "a fenced answer is still read");
@@ -19439,6 +19465,37 @@ check("154 One question, about them — the VENT spec, held where a person meets
   for (const gone of [/therapy office/i, /No metaphor/, /fifty thousand hours/]) {
     ok(!gone.test(said), `and no longer says ${gone}`, "the spec says the opposite, and a prompt holding both says neither");
   }
+
+  // ── what a search result says before anybody arrives ──────────────────────
+  /*
+    The root layout's default title ended "— Calm AI Therapy Grounded in
+    Reality" and its description opened "Autonomous AI therapy": the first
+    sentence a stranger reads, in a search result or a shared link, saying the
+    one thing this spec opens by denying. Swept over every page's metadata, off
+    the filesystem, with "not therapy" and "not a therapist" left alone.
+  */
+  const metaFiles = [];
+  const walkApp = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walkApp(full);
+      else if (/^(page|layout)\.tsx$/.test(e.name) && /export const metadata/.test(fs.readFileSync(full, "utf8"))) metaFiles.push(full);
+    }
+  };
+  walkApp(path.join(ROOT, "src/app"));
+  ok(metaFiles.length >= 5, `${metaFiles.length} files carry metadata`, "a sweep over nothing passes loudest");
+  const claims = [];
+  for (const f of metaFiles) {
+    const src = strip(fs.readFileSync(f, "utf8"));
+    const at = src.indexOf("export const metadata");
+    const block = src.slice(at, src.indexOf("\n};", at));
+    for (const m of block.matchAll(/\btherap(?:y|ist)\w*/gi)) {
+      if (!/\bnot (?:a |licensed )?$/i.test(block.slice(Math.max(0, m.index - 20), m.index))) {
+        claims.push(`${path.relative(ROOT, f)}: "${m[0]}"`);
+      }
+    }
+  }
+  is(claims.join(", "), "", "no page tells a search result this is therapy");
 
   // ── the one line that breaks character ────────────────────────────────────
   for (const [lang, opener] of [["en", /^I'm not a person\b/], ["pidgin", /^I no be person\b/]]) {

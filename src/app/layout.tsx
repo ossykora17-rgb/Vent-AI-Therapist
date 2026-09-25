@@ -39,11 +39,20 @@ const fraunces = Fraunces({
 
 export const metadata: Metadata = {
   title: {
-    default: `${PRODUCT_TITLE} — Calm AI Therapy Grounded in Reality`,
+    default: PRODUCT_TITLE,
     template: `%s · ${PRODUCT_TITLE.split(" — ")[0]}`,
   },
+  /*
+    This read "Autonomous AI therapy grounded in real time. Vent, track mood,
+    breathe, journal", under a default title ending "Calm AI Therapy Grounded
+    in Reality" — the first sentence a stranger meets in a search result or a
+    shared link. Every screen here says it is not therapy, and the VENT spec
+    opens on "You are not a therapist"; and the room hands nobody a breathing
+    exercise or a journal since the no-errands spec. A description is a claim
+    like any other sentence, and it is the one read before anybody arrives.
+  */
   description:
-    `Autonomous AI therapy grounded in real time. Vent, track mood, breathe, journal. Light and dark mode. Nigeria support ${CRISIS_LINES.nigeria}.`,
+    `${PRODUCT_LINE} An AI, not a therapist: a private room to vent, and six-seat peer circles. Nigeria support ${CRISIS_LINES.nigeria}.`,
   applicationName: PRODUCT_TITLE.split(" — ")[0],
   manifest: "/manifest.webmanifest",
   // Declared explicitly rather than via app/icon.svg: the file-based
