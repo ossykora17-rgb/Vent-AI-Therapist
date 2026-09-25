@@ -6,7 +6,7 @@ import { notesBlock, type Note } from "./notes";
 import { probeBlock, type Probe } from "./probes";
 import type { Pattern } from "./pattern";
 import { scan, scanBlock } from "./scan";
-import { aimedAtTheMachine, type Classification } from "./intent";
+import { aimedAtTheMachine, askedWhatIAm, type Classification } from "./intent";
 import { isFailureReply } from "./model";
 import type { Tactic, TacticContext } from "./tactics";
 import { OCCUPATION_PRESSURE } from "@/lib/flavour/profile";
@@ -931,7 +931,28 @@ export function localReply(
         ? "I no go do that one. Nothing dey behind here wey pass wetin you carry come. Wetin dey happen?"
         : "Not doing that. There's nothing behind here more interesting than what you walked in with. What's actually going on?";
     }
-    return "You're right — I repeated myself, and that's on me. Fixing it now. Say the thing again and I'll come at it differently.";
+    /*
+      The third kind: they asked what this is. The founder's VENT spec answers
+      it — an AI, no body, no stake, no tomorrow, so it cannot leave or flinch
+      and the truth costs nothing here — and asks for it in human terms, never
+      as a disclaimer. So it is said once, plainly, and the reply turns straight
+      back to them: *why* somebody needs to check is the part worth hearing.
+    */
+    if (askedWhatIAm(message)) {
+      return language === "pidgin"
+        ? "I be AI — no body, no stake, no tomorrow, and nothing wey you talk here go make me waka or shake. So true talk no go cost you anything here. Wetin make you wan check?"
+        : "I'm an AI — no body, no stake, no tomorrow, and nothing you say here will make me leave or flinch. So the truth costs you nothing here. What made you need to check?";
+    }
+    /*
+      The complaint it was written for. It used to end "Fixing it now. Say the
+      thing again and I'll come at it differently." — a promise about the next
+      reply, and an instruction where the spec asks for one question about
+      them. And it had no Pidgin, so somebody who complained in Pidgin was
+      apologised to in English.
+    */
+    return language === "pidgin"
+      ? "True talk — I don repeat myself, na my own fault. Wetin you talk wey still never land?"
+      : "You're right — I said the same thing twice, and that's mine. What's the part that still hasn't been heard?";
   }
   return null;
 }

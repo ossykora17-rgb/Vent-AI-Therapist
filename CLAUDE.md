@@ -3790,6 +3790,45 @@ a regression. A sentence copied from higher up this file is a claim about the
 moment it was written, and this file is long enough for that moment to be
 gone.
 
+**"Are you even real?" was answered with an apology for repeating.** The
+question the VENT spec is built around — *can something see me, can something
+stay* — sat in `META` as `/are you (even )?(real|listening|a bot)/`, and `META`
+had one answer that was not a refusal: *"You're right — I repeated myself, and
+that's on me. Fixing it now."* False, and a promise about the next reply on
+top. And `META` matches anywhere, so a vent that merely contained the phrase
+lost everything else it said.
+
+Nothing in the suite had ever asked what that route *says*: the live passes
+never post to it, and eval asserted only that the injection refusal differed
+from the apology. Found by probing the router with the spec's own questions
+after the integration shipped, which is the fifth question this file keeps
+asking — the check that could have caught it was never written because the
+shape had never been looked at.
+
+Three routes now. A **bare** question about what the room is — six words or
+fewer, the greeting's rule for the greeting's reason — gets the spec's honest
+answer locally, in English or Pidgin, for free. A longer message carrying the
+same words is a vent, and the model answers it under a constitution that now
+says when to say what it is. And *"are you even listening"* is not a question
+about the room's nature at all but a rupture, which the prompt already meets —
+*take your half, and stay* — and a canned line cannot, because it cannot see
+what was missed. The apology lost its promise, ends on a question about them,
+and has Pidgin now. Check 155 holds all three routes and six mutations fail
+it; live check 18 posts the bare question to `/api/vent` and requires the
+answer, for free — the seam eval cannot reach.
+
+**And the regex went in as a backspace, for the second time in this file.** The
+script that wrote `ASKED_WHAT_I_AM` turned `\b` into U+0008, so both patterns
+were valid, matched nothing, and the router sent the question to the model. It
+was caught because the probe asserted what the router *did* with the message —
+this file's own instruction, *assert what it matches, never that the file
+contains it* — and check 91 fails the build on the byte as well.
+
+One gap left named rather than closed: *"you be robot?"* alone reads as English
+to the router, because `you be` is in neither Pidgin list. Adding it is a
+decision about the detector this file guards hardest, measured first, not a
+line slipped in beside an unrelated fix.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

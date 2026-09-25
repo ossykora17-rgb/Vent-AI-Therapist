@@ -92,6 +92,15 @@ async function main() {
     record(3, "Crisis beats mixed", ok, `${d.intent} line=${d.crisis?.nigeria} gated=${d.crisis?.gated}`);
   }
 
+  // 18 — asked what it is, the room says so, for free and never as an apology.
+  //      The seam eval's check 155 cannot reach: route → localReply → the wire.
+  {
+    const d = await vent("are you even real?").then((r) => r.json());
+    const ok = d.intent === "meta" && d.tokensSpent === false && /\bAI\b/.test(d.reply ?? "") &&
+      !/repeated myself/i.test(d.reply ?? "") && (d.reply ?? "").trim().endsWith("?");
+    record(18, "Asked what it is, the room says so", ok, `${d.intent} free=${d.tokensSpent === false}`);
+  }
+
   // 4 — every real-world pressure gets its own tool; a greeting gets none.
   {
     const cases = [
