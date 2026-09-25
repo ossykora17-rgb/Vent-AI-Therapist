@@ -2,6 +2,11 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { cached } from "@/lib/external/cache";
 import { MODEL } from "./providers";
+import { errand } from "./voice";
+
+/** A task handed to the person through the listener: "have them list…". */
+const THIRD_PERSON_TASK =
+  /\b(?:have|get|encourage|invite|suggest|help|assign|ask) (?:them|the (?:person|client|patient))(?: to)? (?:write|list|keep|track|practi[cs]e|try|schedule|plan|breathe|walk|journal|log|record|set|call|text|rehearse)\b|\bhomework\b|\bbetween sessions\b/i;
 
 /**
  * The outside world, for the office.
@@ -106,13 +111,15 @@ const ASK = `You are briefing a therapist before a session. Search for current,
 evidence-based techniques for the presenting pressure below.
 
 Return ONE technique, as JSON and nothing else:
-{"move": "<one imperative sentence a therapist could act on in the next
-minute>", "source": "<the URL you took it from>"}
+{"move": "<one sentence the listener could use in the next minute, as a
+question or a reflection>", "source": "<the URL you took it from>"}
 
 Rules:
-- The move is a THING TO DO in a conversation, not a finding to report. Never
-  a statistic, a study result, a percentage or a claim about what research
-  shows. It will be acted on, never quoted.
+- The move happens inside the conversation: something to ask or to reflect.
+  Never a task, exercise, homework, list or step for the person to do after
+  it — the room hands nobody anything to do.
+- Never a finding to report: no statistic, study result, percentage or claim
+  about what research shows. It will be used, never quoted.
 - If nothing usable came back from the search, return {"move": null}. Do not
   answer from memory. An absent technique is the correct answer and costs
   nothing; an invented one reaches somebody at 2am.
@@ -230,6 +237,21 @@ export function parseTechnique(text: string, tag: string): Technique | null {
   if (/\b(study|studies|research|trial|meta-analysis|\d+\s?%|participants)\b/i.test(move)) {
     return null;
   }
+
+  /*
+    A move, never an errand. This prompt used to ask for "a THING TO DO … it
+    will be acted on", which is how an evidence-based technique arrives as
+    homework: have them list, have them write, have them practise. The
+    no-errands spec removed five sentences like that from the prompt and this
+    was the sixth, one block over. The request is reframed above; this is the
+    guard, for the same reason as the finding check — a model under pressure to
+    be useful hands back the thing it was trained to hand back.
+
+    Moves are written to the listener, in the third person, so `errand()`
+    alone cannot see "have them list three things" — it reads replies. Both
+    shapes are refused: the reply-shaped task and the one aimed through "them".
+  */
+  if (errand(move) || THIRD_PERSON_TASK.test(move)) return null;
 
   return { move: move.trim(), source: source.trim(), tag };
 }

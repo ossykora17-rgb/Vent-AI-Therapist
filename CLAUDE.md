@@ -3829,6 +3829,32 @@ to the router, because `you be` is in neither Pidgin list. Adding it is a
 decision about the detector this file guards hardest, measured first, not a
 line slipped in beside an unrelated fix.
 
+**The sixth prompt sentence asking for homework was in the web lookup, and
+the first sentence a stranger reads called this therapy.** Both found by
+looking at what a surface *says* after the rules around it had changed.
+
+`research.ts` asked its model for *"one imperative sentence a therapist could
+act on"* and ruled that *"the move is a THING TO DO … It will be acted on"* —
+which is how an evidence-based technique arrives as homework: have them list,
+have them write, have them practise. The no-errands spec removed five
+sentences like that from the prompt; this was the sixth, one block over, and it
+is live in production because the key is set. The request now asks for
+something to ask or reflect inside the conversation, and `parseTechnique`
+refuses a task the way it already refused a finding — the prompt is a request
+and the parser is the guard. Moves are written to the listener in the third
+person, so `errand()` alone cannot see *"have them list three things"*; a
+second pattern reads that shape, and the rows that must still pass — *"Ask
+them what the number is doing to them"* — are asserted beside the ones that
+must not, because a guard that empties the block looks exactly like caution.
+
+And `layout.tsx` carried the product's default title as *"— Calm AI Therapy
+Grounded in Reality"* and its description as *"Autonomous AI therapy grounded
+in real time. Vent, track mood, breathe, journal."* — the text of every search
+result and shared link. Every screen here says it is not therapy, the VENT
+spec opens on *"You are not a therapist"*, and the room hands nobody a
+breathing exercise or a journal. It says what the product is now, and the
+crisis number still comes from `CRISIS_LINES`.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
