@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import type { Participant, RemoteTrack, Room } from "livekit-client";
+import type { Participant, RemoteTrack, Room, Track } from "livekit-client";
+import { audioContextInGesture, maskMicrophone, personaFor, whenRunning } from "@/lib/voice/mask";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,6 +24,24 @@ import { cn } from "@/lib/utils";
 
 type Status = "idle" | "joining" | "live" | "error";
 
+/**
+ * What the room can hear from you, as three states rather than two booleans.
+ *
+ * `unavailable` is its own state because it was the invisible one: the mask
+ * refused, nothing was published, and the screen still drew a live room with
+ * a bar reading "Hold to speak". Holding it changed the label to "Speaking"
+ * and sent nothing. A control that reports speech while the room hears
+ * silence is the worst thing a voice room can do, so the missing microphone
+ * now has a name, a sentence and a button that fixes it.
+ */
+type Mic = "off" | "on" | "unavailable";
+
+interface Grant {
+  url: string;
+  token: string;
+  identity: string;
+}
+
 interface Props {
   circleId: string;
   anonId: string;
@@ -43,14 +62,58 @@ interface Props {
   onSpeaking?: (seats: number[]) => void;
 }
 
+/**
+ * Five ways to be refused a microphone, and each has its own sentence.
+ *
+ * `getUserMedia` rejects with a *name*, and the names are the whole diagnosis:
+ *
+ *   NotAllowedError    the person said no — or a Permissions-Policy did
+ *   NotFoundError      there is no microphone on this device
+ *   NotReadableError   something else has it: a call, another tab
+ *   SecurityError      not a secure context, so http rather than https
+ *   AbortError         the hardware gave up
+ *
+ * `vercel.json` once sent `Permissions-Policy: microphone=()`, and `()` means
+ * *no origin may use this*, including the site that set it — every press of
+ * Join got `NotAllowedError` with no prompt at all, and the message blamed the
+ * browser for obeying a header we wrote. Check 69 holds the header.
+ *
+ * A refused microphone no longer ends the voice session. You were already in
+ * the room when the browser was asked, and hearing it does not need a
+ * microphone — so the room stays open to listen and says what happened.
+ */
+function micRefusal(name: string): string {
+  return name === "NotAllowedError"
+    ? "The microphone was blocked. Check the permission for this site in your browser settings — you can still hear the room, and type."
+    : name === "NotFoundError"
+      ? "No microphone on this device. You can still hear the room, and type."
+      : name === "NotReadableError"
+        ? "Something else is using the microphone — a call, or another tab. You can still hear the room, and type."
+        : name === "SecurityError"
+          ? "Voice needs a secure connection. You can still hear the room, and type."
+          : "The microphone didn't open. You can still hear the room, and type.";
+}
+
 export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: Props) {
   const [status, setStatus] = React.useState<Status>("idle");
   const [error, setError] = React.useState<string | null>(null);
-  // Shut on arrival. See the push-to-talk comment below for why.
-  const [talking, setTalking] = React.useState(false);
-  const [latched, setLatched] = React.useState(false);
-  // Distinct from the two above: this is the Keeper closing your microphone,
-  // which is not yours to undo. Push-to-talk is a choice; this is governance.
+  // Shut on arrival. See `openMic` for why.
+  const [mic, setMic] = React.useState<Mic>("off");
+  /*
+    Whether this browser is letting the room's sound out.
+
+    iPhones refuse to play a page's audio unless the play began in a tap, or
+    the page is itself publishing a microphone. LiveKit says so in its own
+    source: "iOS blocks audio element playback if user is not publishing audio
+    themselves and no other audio source is playing". The room is heard
+    through `<audio>` elements attached seconds after the tap that joined, so
+    on an iPhone whose microphone had not opened — every one of them, until
+    the mask fix — the room was silent in both directions. `room.startAudio()`
+    is the unlock, and it only works from a tap, so it gets a button.
+  */
+  const [canHear, setCanHear] = React.useState(true);
+  // Distinct from `mic`: this is the Keeper closing your microphone, which is
+  // not yours to undo. Talking is a choice; this is governance.
   const [muted, setMuted] = React.useState(false);
   const [seat, setSeat] = React.useState<string | null>(null);
   const [voices, setVoices] = React.useState<string[]>([]);
@@ -59,33 +122,38 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
   const [working, setWorking] = React.useState<string | null>(null);
 
   const roomRef = React.useRef<Room | null>(null);
+  const grantRef = React.useRef<Grant | null>(null);
+  // `Track.Source.Microphone`, kept from the one dynamic import so a second
+  // attempt at the microphone does not need the SDK imported anywhere else.
+  const sourceRef = React.useRef<Track.Source | null>(null);
   const sinkRef = React.useRef<HTMLDivElement>(null);
+  /*
+    How many mute/unmute events are ours and not the Keeper's.
+
+    `RoomEvent.TrackMuted` fires for *every* mute on the track, including the
+    ones this component performs itself — and it performs two kinds. The
+    microphone is muted the instant it is published, deliberately, so the room
+    does not hear the first thing you say before you have decided to say it.
+    And the talk button mutes and unmutes on every tap.
+
+    Both arrived at the handler below as "somebody muted your track", which
+    reported them as governance: *The Keeper closed your microphone.* To a
+    person sitting alone in a room they opened themselves, as the Keeper.
+    Worse than the wrong sentence — it also set `muted`, which disables the
+    talk button, so joining voice silenced you permanently and told you the
+    Keeper had done it. The one control in here that has to work could never
+    be pressed.
+
+    A counter rather than a boolean because taps can arrive faster than React
+    commits state, and two of ours in flight must not let a real one through
+    in between.
+  */
+  const ownMutesRef = React.useRef(0);
   // The raw microphone and the audio graph masking it. Both have to be torn
   // down by hand: disconnecting the room stops the published track, and leaves
   // the real microphone open and the AudioContext running. A live mic light
   // after you left the room is the single most alarming thing this app could
   // do to somebody who came here to be unheard.
-  /*
-    How many mute/unmute events are ours and not the Keeper's.
-
-    `RoomEvent.TrackMuted` fires for *every* mute on the track, including the
-    ones this component performs itself — and it performs two. The microphone
-    is muted the instant it is published, deliberately, so the room does not
-    hear the first thing you say before you have decided to say it. And
-    push-to-talk mutes and unmutes on every press.
-
-    Both arrived at the handler below as "somebody muted your track", which
-    reported them as governance: *The Keeper closed your microphone.* To a
-    person sitting alone in a room they opened themselves, as the Keeper.
-    Worse than the wrong sentence — it also set `muted`, which disables Open
-    mic, so joining voice silenced you permanently and told you the Keeper had
-    done it. The one control in here that has to work could never be pressed.
-
-    A counter rather than a boolean because push-to-talk can fire faster than
-    React commits state, and two of ours in flight must not let a real one
-    through in between.
-  */
-  const ownMutesRef = React.useRef(0);
   const micRef = React.useRef<MediaStream | null>(null);
   const maskRef = React.useRef<{ stop: () => void } | null>(null);
 
@@ -101,6 +169,8 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
     roomRef.current = null;
     releaseAudio();
     setStatus("idle");
+    setMic("off");
+    setCanHear(true);
     setVoices([]);
     setSpeaking([]);
     onSpeaking?.([]);
@@ -118,9 +188,126 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
     [releaseAudio],
   );
 
+  /**
+   * Ask the browser to let the room's sound out. Only ever from a tap.
+   */
+  const hear = React.useCallback(() => {
+    const room = roomRef.current;
+    if (!room || room.canPlaybackAudio) return;
+    void room
+      .startAudio()
+      .then(() => setCanHear(room.canPlaybackAudio))
+      .catch(() =>
+        setNotice("The sound is still held back. Check the phone isn't on silent, then tap again."),
+      );
+  }, []);
+
+  /**
+   * Get the microphone, mask it, publish it closed.
+   *
+   * `ctx` must have been made by `audioContextInGesture` as the first line of
+   * the tap that led here — `join`, or the "Turn on my microphone" button when
+   * a first attempt was held back. That single line is the iPhone fix: a
+   * context made after the awaits below is born suspended on Safari and stays
+   * that way, and the mask rightly refuses to publish a graph that is not
+   * running. Made in the tap, it is allowed to start, and `whenRunning` waits
+   * for it to say so instead of reading the state too early.
+   */
+  async function openMic(ctx: AudioContext | null) {
+    const room = roomRef.current;
+    const grant = grantRef.current;
+    if (!room || !grant) {
+      void ctx?.close();
+      return;
+    }
+
+    let mic: MediaStream;
+    try {
+      // Microphone only — there is no camera call in this file, deliberately.
+      mic = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+    } catch (e) {
+      void ctx?.close();
+      const name = e instanceof DOMException ? e.name : "";
+      console.warn("[voice] microphone refused:", name || "unknown");
+      setMic("unavailable");
+      setNotice(micRefusal(name));
+      return;
+    }
+    micRef.current = mic;
+
+    // Asking for the microphone can pause a running context on an iPhone while
+    // the audio session changes over, so the wait comes after the prompt.
+    if (ctx) await whenRunning(ctx);
+
+    /*
+      Never the raw microphone. Everything else about a circle is anonymous by
+      construction; a voice is a biometric, and the person this is built for
+      is usually talking about somebody who would recognise it. The mask shifts
+      it before anything is published — see lib/voice/mask.ts for what that
+      does and does not promise.
+
+      The order matters: get the stream, mask it, publish the masked track.
+      `setMicrophoneEnabled(true)` would publish the real one, so it is not
+      used here and must not come back.
+
+      The persona comes from the seat, not from a constant. One shift for
+      everybody was one key for everybody: the shifter is a uniform scaling,
+      and one recovered ratio would have unmasked every speaker in every circle
+      ever held. `grant.identity` is `seat-N`, assigned server-side from join
+      order, so this is stable for the session and carries nothing onward.
+
+      Reported to the console with a name, and to the person in words that are
+      true of their case. Never the raw reason on screen: somebody who came
+      here to say a hard thing does not need `context_suspended`.
+    */
+    let why: string | null = null;
+    const masked = maskMicrophone(mic, personaFor(grant.identity), (reason) => {
+      why = reason;
+      console.warn("[voice] mask unavailable:", reason);
+    }, ctx);
+    if (!masked) {
+      // Fail to silence, never to an unmasked person who believed they were
+      // masked. They stay in the room, can hear it, and can still write.
+      mic.getTracks().forEach((t) => t.stop());
+      micRef.current = null;
+      setMic("unavailable");
+      setNotice(
+        why === "context_suspended"
+          // True of their case, and now it points at a button that exists.
+          // This used to read "Tap Join once more" to somebody whose screen
+          // said "Leave voice" — and a second Join ran into the same wall.
+          ? "Your phone held the microphone back. Tap “Turn on my microphone” — you can already hear the room."
+          : "This browser can't disguise your voice, so the microphone stayed shut. You can still hear the room, and type.",
+      );
+    } else {
+      maskRef.current = masked;
+      const publication = await room.localParticipant.publishTrack(masked.track, {
+        source: sourceRef.current ?? undefined,
+      });
+      // Closed on arrival. A published track is live by default, so without
+      // this the room hears the first thing you say before you have decided
+      // to say it — which for somebody who just walked into a room of
+      // strangers is the worst possible first second.
+      ownMutesRef.current += 1;
+      await publication.mute();
+      setMic("off");
+      setNotice(null);
+    }
+  }
+
   async function join() {
+    // Before anything is awaited: the tap is the only moment a phone lets
+    // audio start. See `openMic`.
+    const ctx = audioContextInGesture();
     setStatus("joining");
     setError(null);
+    setNotice(null);
 
     try {
       const r = await fetch(`/api/circles/${circleId}/voice`, {
@@ -131,6 +318,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
       const grant = await r.json();
 
       if (!r.ok) {
+        void ctx?.close();
         setError(
           r.status === 501
             // "Voice isn't configured on this instance" is a sentence about
@@ -145,14 +333,16 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
 
       // Here, and only here. The 13 MB stays off the wire until somebody
       // actually asks to speak.
-      const { Room: LiveKitRoom, RoomEvent, Track } = await import("livekit-client");
+      const { Room: LiveKitRoom, RoomEvent, Track: LiveKitTrack } = await import("livekit-client");
 
       const room = new LiveKitRoom({ adaptiveStream: false, dynacast: false });
       roomRef.current = room;
+      grantRef.current = grant;
+      sourceRef.current = LiveKitTrack.Source.Microphone;
 
       room
         .on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
-          if (track.kind !== Track.Kind.Audio) return;
+          if (track.kind !== LiveKitTrack.Kind.Audio) return;
           const el = track.attach();
           el.setAttribute("data-voice", "1");
           sinkRef.current?.appendChild(el);
@@ -160,6 +350,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
         .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
           track.detach().forEach((el) => el.remove());
         })
+        .on(RoomEvent.AudioPlaybackStatusChanged, () => setCanHear(room.canPlaybackAudio))
         .on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
           const ids = speakers.map((p) => p.identity);
           setSpeaking(ids);
@@ -178,13 +369,14 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
           // Told, never silently silenced. If the Keeper closed your
           // microphone you find out from the room, not from being ignored.
           if (participant.identity !== grant.identity) return;
-          // Ours, and expected. Push-to-talk and the mute-on-arrival both
+          // Ours, and expected. The talk button and the mute-on-arrival both
           // land here; neither is somebody else acting on you.
           if (ownMutesRef.current > 0) {
             ownMutesRef.current -= 1;
             return;
           }
           setMuted(true);
+          setMic("off");
           setNotice("The Keeper closed your microphone. The room is still here in text.");
         })
         .on(RoomEvent.TrackUnmuted, (_pub, participant: Participant) => {
@@ -203,171 +395,51 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
           // has to close on that path too.
           releaseAudio();
           setStatus("idle");
+          setMic("off");
           setVoices([]);
           setSpeaking([]);
         });
 
       await room.connect(grant.url, grant.token);
 
-      // Microphone only — there is no camera call in this file, deliberately.
-      //
-      // And never the raw microphone. Everything else about a circle is
-      // anonymous by construction; a voice is a biometric, and the person this
-      // is built for is usually talking about somebody who would recognise it.
-      // `maskMicrophone` shifts it four semitones before anything is
-      // published. See lib/voice/mask.ts for what that does and does not
-      // promise.
-      //
-      // The order matters: get the stream, mask it, publish the masked track.
-      // `setMicrophoneEnabled(true)` would publish the real one, so it is not
-      // used here and must not come back.
-      const mic = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      micRef.current = mic;
-
-      const { maskMicrophone, personaFor } = await import("@/lib/voice/mask");
-      /*
-        Four causes, one message, and the person who hit it could not tell us
-        which — "my browser doesn't support voice activation" was the report,
-        and the only honest response was that we did not know either. Three of
-        the four are fixable and one is not, so a single sentence covering all
-        four is the "Network dipped on my side" bug in a new room.
-
-        Reported to the console with a name, and to the person in words that
-        are true of their case. Never the raw reason on screen: somebody who
-        came here to say a hard thing does not need `context_suspended`.
-      */
-      let why: string | null = null;
-      /*
-        The persona comes from the seat, not from a constant.
-
-        Every speaker used to be shifted by the same four semitones, which the
-        mask's own docstring argues against two ways: six identically-shifted
-        voices are no easier to tell apart than six unshifted ones, and — the
-        part that matters — a single global ratio is a single global key. This
-        shifter is a uniform scaling, and the file says plainly that anything
-        linear is invertible by whoever knows the ratio. One constant meant one
-        recovered ratio unmasked every speaker in every circle ever held. Per
-        seat, it recovers one seat.
-
-        `grant.identity` is `seat-N`, assigned server-side from join order, so
-        this is stable for the session and carries nothing to the next room.
-      */
-      const masked = maskMicrophone(mic, personaFor(grant.identity), (reason) => {
-        why = reason;
-        console.warn("[voice] mask unavailable:", reason);
-      });
-      if (!masked) {
-        // Fail to silence, never to an unmasked person who believed they were
-        // masked. They stay in the room and can still read and write.
-        mic.getTracks().forEach((t) => t.stop());
-        micRef.current = null;
-        setNotice(
-          why === "context_suspended"
-            ? "Your browser held the audio back until you tap. Tap Join once more and the microphone opens — the room is here in text either way."
-            : "This browser can't disguise your voice, so the microphone stayed shut. The room is still here in text.",
-        );
-      } else {
-        maskRef.current = masked;
-        const publication = await room.localParticipant.publishTrack(masked.track, {
-          source: Track.Source.Microphone,
-        });
-        // Closed on arrival. A published track is live by default, so without
-        // this the room hears the first thing you say before you have decided
-        // to say it — which for somebody who just walked into a room of
-        // strangers is the worst possible first second.
-        ownMutesRef.current += 1;
-        await publication.mute();
-        setTalking(false);
-        setLatched(false);
-      }
-
+      // Hearing does not wait on speaking. Desktop browsers allow this off the
+      // tap that joined; an iPhone may not, and then the button asks for a
+      // tap of its own.
+      await room.startAudio().catch(() => {});
+      setCanHear(room.canPlaybackAudio);
       setSeat(grant.identity);
       setVoices(identities(room));
       setStatus("live");
+
+      await openMic(ctx);
     } catch (e) {
       /*
-        Five ways to be refused a microphone, and this said one sentence for
-        all of them — the second time in this file, and the first fix did not
-        cover it because it was one `await` earlier.
+        Everything that is not a microphone, which is most of this block.
 
-        `getUserMedia` rejects with a *name*, and the names are the whole
-        diagnosis:
+        The `try` covers `import("livekit-client")`, `room.connect(grant.url,
+        grant.token)` and the publish. None of those throw a `DOMException`,
+        and their messages name things that are ours and not the person's: a
+        LiveKit connection failure names the URL it could not reach — our
+        LiveKit project host — and a failed dynamic import names a
+        `_next/static/chunks` path. This component once printed that raw
+        `Error.message` to whoever pressed Join, the exact bug the voice route
+        already had recorded against it for three environment variable names.
 
-          NotAllowedError    the person said no — or a Permissions-Policy did
-          NotFoundError      there is no microphone on this device
-          NotReadableError   something else has it: a call, another tab
-          SecurityError      not a secure context, so http rather than https
-          AbortError         the hardware gave up
-
-        The one that mattered here is the one no wording could have surfaced.
-        `vercel.json` sent `Permissions-Policy: microphone=()`, and `()` means
-        *no origin may use this*, including the site that set it. So every
-        person who ever pressed Join got `NotAllowedError` with no permission
-        prompt at all — the browser had already been told, by us, that this
-        site does not use microphones. Voice had never worked in production,
-        not once, and the message blamed the browser for obeying a header we
-        wrote.
-
-        The header was added to be careful. It disabled the feature it was
-        protecting, silently, for the entire life of the deployment.
-
-        So the name is logged, and the person is told the thing that is true
-        of their case — which for four of the five is something they can act
-        on, and for the fifth was never theirs to fix.
-      */
-      /*
-        AND EVERYTHING THAT IS NOT A MICROPHONE, WHICH IS MOST OF THIS BLOCK
-
-        The comment above is about `getUserMedia`, and it is right about
-        `getUserMedia`. But the `try` it belongs to opens four hundred lines
-        earlier: it covers `import("livekit-client")`, `room.connect(grant.url,
-        grant.token)`, and the mask. None of those throw a `DOMException`, so
-        every one of them fell past the five names into the last branch — which
-        printed the raw `Error.message` to whoever pressed Join.
-
-        A LiveKit connection failure names the URL it could not reach. That URL
-        is `grant.url`, our LiveKit project host. A failed dynamic import names
-        a `_next/static/chunks` path. So the branch that exists for
-        "something else went wrong" was handing people our infrastructure —
-        which is the exact bug this file already has recorded against it, where
-        the route replied with three environment variable names and this
-        component printed them verbatim. That fix reached the route's copy of
-        the sentence. This is the component's own.
-
-        It is also backwards on the diagnostic: `if (name)` means a DOMException
-        is logged and a connection failure is not, so the one failure whose
-        message is genuinely ours to read went to the person and not to us. The
-        log is unconditional now, and carries the error's *kind* rather than its
-        text — a name is a name, and a message can quote a host, a path or a
-        token. That is less than was there. `readSse` and the failsafe both
-        record what it costs to have only stdout: on a Hobby plan this line
-        lives an hour. If voice failures ever need a real diagnosis, they need a
-        row, not a longer console call.
+        So the log carries the error's *kind* rather than its text, always, and
+        the person gets one true sentence about what still works. The
+        microphone's own five refusals are answered in `openMic`, where they
+        happen, and no longer end the session.
       */
       const name = e instanceof DOMException ? e.name : "";
       const kind = name || (e instanceof Error ? e.constructor.name : typeof e);
       console.warn("[voice] join failed:", kind);
-      setError(
-        name === "NotAllowedError"
-          ? "The microphone was blocked. Check the permission for this site in your browser settings — the room is still here in text."
-          : name === "NotFoundError"
-            ? "No microphone on this device. The room is still here in text."
-            : name === "NotReadableError"
-              ? "Something else is using the microphone — a call, or another tab. The room is still here in text."
-              : name === "SecurityError"
-                ? "Voice needs a secure connection. The room is still here in text."
-                : "Couldn't reach the voice room. The circle still works in text — say it there.",
-      );
+      setError("Couldn't reach the voice room. The circle still works in text — say it there.");
       setStatus("error");
+      void roomRef.current?.disconnect();
       roomRef.current = null;
       // Whatever failed, the microphone does not stay open because of it.
       releaseAudio();
+      void ctx?.close();
     }
   }
 
@@ -408,277 +480,176 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
    *
    * `audioTrackPublications` rather than a source comparison: this room
    * publishes exactly one audio track and never any video, so the first entry
-   * is it. That also avoids `Track.Source`, which is only in scope inside
-   * `join` — and CLAUDE.md's standing rule is to use the SDK's own enums
-   * rather than hand-written values, so needing neither is the right answer.
-   *
-   * The raw-stream fallback means the control is never a no-op. A microphone
-   * control that silently fails is the one control in here that has to work.
+   * is it.
    */
   const setOpen = React.useCallback(async (open: boolean) => {
     const room = roomRef.current;
     if (!room) return;
     const pub = [...room.localParticipant.audioTrackPublications.values()][0];
-    if (pub) {
-      /*
-        Counted before the call, not after.
+    if (!pub) return;
+    /*
+      Counted before the call, not after.
 
-        Push-to-talk fires this on every press and every release, and each one
-        raises `TrackMuted`/`TrackUnmuted` for our own identity. Uncounted,
-        letting go of the button reported the Keeper closing your microphone —
-        the same wrong sentence as the mute on arrival, once per word you said.
-
-        Incremented ahead of the await because the event can arrive before the
-        promise resolves; a counter bumped afterwards is a counter that is
-        still zero when the handler reads it.
-      */
-      ownMutesRef.current += 1;
-      if (open) await pub.unmute();
-      else await pub.mute();
-    } else {
-      micRef.current?.getAudioTracks().forEach((t) => (t.enabled = open));
-    }
+      Every tap raises `TrackMuted`/`TrackUnmuted` for our own identity.
+      Uncounted, closing your own microphone reported the Keeper closing it.
+      Incremented ahead of the await because the event can arrive before the
+      promise resolves; a counter bumped afterwards is a counter that is still
+      zero when the handler reads it.
+    */
+    ownMutesRef.current += 1;
+    if (open) await pub.unmute();
+    else await pub.mute();
   }, []);
 
   /*
-   * Hold to speak, and a latch for when you cannot hold anything.
-   *
-   * An open microphone in a six-seat room leaks more than a voice. A
-   * generator, the call to prayer, a street, somebody in the next room saying
-   * your actual name — ambient sound places a person as reliably as their
-   * voice does, and the mask does nothing about any of it. Six open mics also
-   * make a circle unlistenable, which is the ordinary reason every voice
-   * product ends up here.
-   *
-   * So the microphone is shut on arrival and opens while you hold the bar.
-   *
-   * The latch is not a convenience. Somebody crying cannot hold a button, and
-   * a product that requires steady hands from people at their worst has
-   * chosen the wrong default for the exact moment it exists for. Tap the lock
-   * and the mic stays open; it is one tap back.
-   */
-  const setTalkingSafely = React.useCallback(
-    (on: boolean) => {
-      setTalking(on);
-      void setOpen(on || latched);
-    },
-    [setOpen, latched],
-  );
+    Tap to talk, tap again to stop. It used to be a bar you had to hold.
 
-  const toggleLatch = React.useCallback(() => {
-    const next = !latched;
-    setLatched(next);
-    void setOpen(next || talking);
-  }, [latched, talking, setOpen]);
+    The hold existed for good reasons — ambient sound places a person as
+    reliably as their voice, and six open microphones make a room unlistenable
+    — and it failed at the one thing a voice control has to do: tell you
+    whether anybody can hear you. It looked exactly like a voice-note recorder,
+    so people held it, spoke, let go and waited for a message that was never
+    going to exist; people who spoke without holding were heard by nobody. A
+    latch sat beside it for "somebody crying cannot hold a button", which made
+    two controls for one microphone.
 
-  // Space is the hold key. Ignored while typing, so it never swallows a space
-  // in the message box — the transcript is right there and people use it.
-  React.useEffect(() => {
-    if (status !== "live") return;
-    const typing = (t: EventTarget | null) =>
-      t instanceof HTMLElement &&
-      (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+    One button now, and it says the state in words: shut on arrival, open
+    only when you tap it, shut again with a second tap. The privacy the hold
+    bought is kept by the arrival — nothing is heard until you choose — and
+    the tap doubles as the gesture an iPhone needs to let the room be heard.
+  */
+  const toggleMic = React.useCallback(() => {
+    hear();
+    const next = mic !== "on";
+    setMic(next ? "on" : "off");
+    void setOpen(next);
+  }, [hear, mic, setOpen]);
 
-    const down = (e: KeyboardEvent) => {
-      if (e.code !== "Space" || e.repeat || typing(e.target)) return;
-      e.preventDefault();
-      setTalkingSafely(true);
-    };
-    const up = (e: KeyboardEvent) => {
-      if (e.code !== "Space" || typing(e.target)) return;
-      setTalkingSafely(false);
-    };
-    // A tab-away with the key still down would otherwise leave it open.
-    const blur = () => setTalkingSafely(false);
-
-    window.addEventListener("keydown", down);
-    window.addEventListener("keyup", up);
-    window.addEventListener("blur", blur);
-    return () => {
-      window.removeEventListener("keydown", down);
-      window.removeEventListener("keyup", up);
-      window.removeEventListener("blur", blur);
-    };
-  }, [status, setTalkingSafely]);
+  /** A second try at the microphone, from its own tap. */
+  function retryMic() {
+    // First, before anything is awaited — the same rule as `join`.
+    const ctx = audioContextInGesture();
+    hear();
+    setNotice(null);
+    void openMic(ctx).catch(() => {
+      releaseAudio();
+      setMic("unavailable");
+      setNotice("The microphone didn't open. You can still hear the room, and type.");
+    });
+  }
 
   if (!enabled) return null;
+
+  const others = Math.max(0, voices.length - 1);
 
   return (
     /*
       A plate once you are in it, a line while you are not.
 
       Every plate in this product is somewhere a voice speaks from — the
-      Keeper's intention, a share, a reply. This one held an offer, and an
-      offer is not a voice. Stacked under the Breathing card it made two
-      full-width framed panels eating five hundred and fifty pixels before
-      the room itself got any, which is the density complaint moved rather
-      than fixed.
-
-      Unjoined it is a sentence and a button on the page's own spine. The
-      moment somebody is actually in the voice room it becomes a plate again,
-      because then it *is* a voice — it carries who is speaking, the mic, and
-      the leave.
+      Keeper's intention, a share, a reply. Unjoined this is an offer, and an
+      offer is a sentence and a button on the page's own spine. The moment
+      somebody is actually in the voice room it becomes a plate, because then
+      it *is* a voice — it carries who can hear you, the microphone, and the
+      way out.
     */
     <div className={cn(status === "live" ? "glass mt-4 p-4" : "mt-4")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         {/*
-          Say that the voice is disguised, before they speak and while they
-          are speaking.
+          One sentence before, one while live — the pitch shift, because it is
+          the surprising claim and the one about them. Live, the label says who
+          else can hear, because a voice room you are alone in looks exactly
+          like a broken one unless something says which it is.
 
-          A safety feature nobody is told about is one nobody trusts, and the
-          decision this sentence changes — whether to say the true thing or the
-          safe one — is made in the two seconds before the join button. Putting
-          it in a settings panel would be the same as not having it.
-
-          The claim is deliberately bounded: "not recognisably yours" rather
-          than "anonymous". A fixed pitch shift raises the cost of recognition;
-          it does not make it impossible, and somebody who already suspects
-          will hear cadence and the story regardless. Overstating it here would
-          be the exact bug this codebase keeps removing, on the one screen
-          where being wrong has a person on the other end of it.
-        */}
-        {/*
-          One sentence before, not three.
-
-          This said "Voice · audio only", then "No camera, ever. Your seat
-          number is all anyone hears", then "Your voice is pitched down before
-          it leaves your phone" — a label and two reassurances, stacked, above
-          a button nobody had pressed yet.
-
-          Three promises to somebody who has not asked a question is not
-          reassurance, it is nerves. It reads the way a product reads when it
-          is worried about being trusted, and the effect on a person who *was*
-          about to trust it is the opposite of the one intended.
-
-          The pitch shift is the claim worth making, because it is the
-          surprising one and it is the one about them. "Audio only" carries
-          the camera, because there is no camera to carry. And the seat-number
-          detail is true, small, and belongs where somebody looking for it
-          would look — the terms page — not in front of a person deciding
-          whether to speak.
-
-          Live, it says who is in the room, which is the only thing that has
-          changed and the only thing worth a second line.
+          The claim is deliberately bounded: "pitched down" rather than
+          "anonymous". A pitch shift raises the cost of recognition; it does not
+          make it impossible, and somebody who already suspects will hear
+          cadence and the story regardless. And it is only made while it is
+          true: with no masked track published, the live line says the
+          microphone is off instead.
         */}
         <div className="min-w-0">
-          <p className="label-mono">Voice · audio only</p>
-          <p className="mt-1 text-body text-ink">
+          <p className="label-mono">
             {status === "live"
-              ? "Your voice is pitched down. Nobody hears which seat you are in."
-              : "Your voice is pitched down before it leaves your phone."}
+              ? others === 0
+                ? "Voice · only you are here"
+                : `Voice · ${others} ${others === 1 ? "other person" : "other people"} here`
+              : "Voice · audio only"}
+          </p>
+          <p className="mt-1 text-body text-ink">
+            {status !== "live"
+              ? "Your voice is pitched down before it leaves your phone."
+              : mic === "unavailable"
+                ? "Your microphone is off. You can still hear the room."
+                : "Your voice is pitched down. Nobody hears which seat you are in."}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {status === "live" && (
-            <button
-              type="button"
-              onClick={toggleLatch}
-              aria-pressed={latched}
-              disabled={muted}
-              title={latched ? "Close the microphone" : "Keep the microphone open"}
-              className={cn(
-                "min-h-[44px] rounded-full border px-4 text-body transition-colors duration-300",
-                latched ? "border-gold bg-gold/15" : "border-line/15",
-                muted && "opacity-40",
-              )}
-            >
-              {latched ? "Open mic · on" : "Open mic"}
-            </button>
+        <button
+          type="button"
+          onClick={status === "live" ? leave : join}
+          disabled={status === "joining"}
+          className={cn(
+            "min-h-[44px] rounded-full border px-4 text-body transition-colors duration-300",
+            status === "live" ? "border-line/25" : "border-line/15",
+            status === "joining" && "opacity-60",
           )}
-          <button
-            type="button"
-            onClick={status === "live" ? leave : join}
-            disabled={status === "joining"}
-            className={cn(
-              "min-h-[44px] rounded-full border px-4 text-body transition-colors duration-300",
-              status === "live" ? "border-line/25" : "border-line/15",
-              status === "joining" && "opacity-60",
-            )}
-          >
-            {status === "joining" ? "Opening…" : status === "live" ? "Leave voice" : "Join voice"}
-          </button>
-        </div>
+        >
+          {status === "joining" ? "Opening…" : status === "live" ? "Leave voice" : "Join voice"}
+        </button>
       </div>
 
-      {/*
-        The bar you hold to speak.
-
-        Full width and 64px tall because it is held with a thumb, often by
-        somebody who is not steady. Every pointer exit closes it — up, cancel,
-        and leave — so a finger sliding off the edge shuts the microphone
-        rather than leaving it open on a person who thinks they stopped.
-
-        `touch-none` stops the browser treating the press as a scroll gesture
-        and stealing the pointerup, which is the standard way this control
-        breaks on Android.
-      */}
-      {status === "live" && !muted && (
-        <div className="mt-4">
-          <button
-            type="button"
-            aria-pressed={talking || latched}
-            /*
-              No accessible-name override here, deliberately.
-
-              This carried a fixed label reading "Hold to speak" over a button
-              that renders three different things — and when the mic is
-              latched open it shows "Microphone open" while still announcing
-              the old one. That is not a naming mismatch, it is an instruction
-              to do something that does nothing: hold a button that is already
-              open, told only to the person who cannot see that it is.
-
-              The visible text is correct in all three states, so it is the
-              name. `aria-pressed` carries the state, which is what it is for.
-              An override could only ever be a fourth string to keep in sync
-              with three.
-            */
-            onPointerDown={() => setTalkingSafely(true)}
-            onPointerUp={() => setTalkingSafely(false)}
-            onPointerCancel={() => setTalkingSafely(false)}
-            onPointerLeave={() => setTalkingSafely(false)}
-            className={cn(
-              "flex h-16 w-full touch-none select-none items-center justify-center rounded-card border text-body font-semibold transition-all duration-200",
-              talking || latched
-                ? "border-gold bg-gold/20 text-ink"
-                : "border-line/20 text-ash",
-            )}
-          >
-            {latched
-              ? "Microphone open"
-              : talking
-                ? "Speaking — let go to stop"
-                : "Hold to speak"}
-          </button>
-          {/*
-            Only when there is something the button itself does not say.
-
-            "Or hold the space bar" sat under a 64px bar reading "Hold to
-            speak" — a second instruction for the same action, in smaller
-            type, to somebody already holding a phone. The latched case is
-            different and stays: the bar then reads "Microphone open", and how
-            to close it again is genuinely not on screen anywhere else.
-          */}
-          {latched && (
-            <p className="label-mono mt-2 text-center">
-              Tap “Open mic” to close it again
-            </p>
-          )}
-        </div>
+      {status === "live" && !canHear && (
+        <button
+          type="button"
+          onClick={hear}
+          className="mt-4 flex min-h-[48px] w-full items-center justify-center rounded-card bg-gold px-4 text-body font-semibold text-on-gold"
+        >
+          Tap to hear the room
+        </button>
       )}
 
       {/*
-        The seat chips are gone; the ring above them is the seat display.
+        The microphone, as one button that says what it is doing.
 
-        This listed `SEAT-1 (YOU)` under a drawing that already shows six
-        chairs with yours in gold, four hundred pixels apart, in a panel that
-        also said "You are seat-1" in prose. The same fact three times — the
-        duplicate readout this product has now shipped five times, and the
-        first one to appear three ways at once.
+        Full width and 64px tall because it is pressed with a thumb, often by
+        somebody who is not steady. `aria-pressed` carries the state for a
+        screen reader; the visible text carries it for everybody else, so
+        there is no accessible-name override to drift out of step with it.
+      */}
+      {status === "live" && mic === "unavailable" && (
+        <button
+          type="button"
+          onClick={retryMic}
+          className="mt-4 flex h-16 w-full items-center justify-center rounded-card border border-gold text-body font-semibold text-ink"
+        >
+          Turn on my microphone
+        </button>
+      )}
+      {status === "live" && mic !== "unavailable" && (
+        <button
+          type="button"
+          onClick={toggleMic}
+          disabled={muted}
+          aria-pressed={mic === "on"}
+          className={cn(
+            "mt-4 flex h-16 w-full select-none items-center justify-center rounded-card border text-body font-semibold transition-all duration-200",
+            mic === "on" ? "border-gold bg-gold/20 text-ink" : "border-line/20 text-ash",
+            muted && "opacity-40",
+          )}
+        >
+          {muted
+            ? "Microphone closed by the Keeper"
+            : mic === "on"
+              ? "Microphone on — tap to mute"
+              : "Tap to talk"}
+        </button>
+      )}
 
-        The ring is the better of the three by a distance: it shows who is
-        here, which chair is yours, and now which of them is talking. A list
-        of chips can only ever repeat it.
+      {/*
+        The seat chips are gone; the ring above them is the seat display. It
+        shows who is here, which chair is yours, and which of them is talking.
+        A list of chips can only ever repeat it.
       */}
 
       {notice && <p className="mt-3 text-body text-ash" aria-live="polite">{notice}</p>}

@@ -60,6 +60,18 @@ function sign(payload: Record<string, unknown>, secret: string): string {
  */
 export const roomNameFor = (circleId: string) => `circle-${circleId}`;
 
+/**
+ * A one-minute token for this server's own calls to the SFU's API, signed with
+ * the same key and secret as every join token — which is the point of asking
+ * with it. Never handed to a browser, and carrying no identity: it is not a
+ * seat, it is the deployment.
+ */
+export function adminToken(video: Record<string, unknown>): string | null {
+  if (!isLivekitConfigured) return null;
+  const now = Math.floor(Date.now() / 1000);
+  return sign({ iss: env.livekitApiKey, nbf: now, exp: now + 60, video }, env.livekitApiSecret);
+}
+
 export function mintVoiceToken(grant: VoiceGrant): VoiceToken | null {
   if (!isLivekitConfigured) return null;
 

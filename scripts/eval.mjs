@@ -19557,6 +19557,240 @@ check("155 Asked what it is, the room says so — and a rupture is not a questio
     "three kinds of meta, three different answers");
 });
 
+/*
+  Voice in a circle had never once worked on an iPhone, and the suite was
+  green over it the whole time — 163 checks, not one of which could see it.
+
+  The mask refused to publish a graph that was not running, which is right,
+  and decided whether it was running by reading `state` straight after
+  `resume()`, under a comment saying the state "flips synchronously wherever
+  the policy allows it at all". The Web Audio spec sets a new context to
+  `suspended` and flips it in a queued task, so on every engine that follows
+  it — Safari, and every browser on an iPhone — that read saw `suspended`
+  every time, including the times the start was allowed. The context was also
+  made after a fetch, an SDK download and a microphone prompt, long after the
+  tap that could have started it. Measured in a two-browser run against a real
+  SFU with Chromium held to the iPhone's two rules: the old build published
+  nothing and the other seat received zero bytes while the screen read
+  "Speaking — let go to stop". The fixed build was heard.
+
+  The screen made it worse in two ways. It said "Tap Join once more" to
+  somebody whose only button read "Leave voice". And the room's own sound
+  plays through `<audio>` elements an iPhone will not start outside a tap
+  unless the page is publishing a microphone — LiveKit's own source says so —
+  so the same person could not hear anybody either.
+
+  Laptops never showed any of it: Chrome flips the state synchronously and
+  keeps a gesture alive for five seconds. The suite tests the shape its author
+  is standing in, and every author here was standing at a laptop.
+*/
+const { whenRunning: voiceWhenRunning } = await app("src/lib/voice/mask.ts");
+const { spawnSync: voiceSpawn } = await import("node:child_process");
+const { createHmac: voiceHmac } = await import("node:crypto");
+
+// A context that behaves the way the spec says: suspended at birth, and
+// running only after a task, if it was ever allowed to start.
+const specContext = (allowed) => {
+  const c = {
+    state: "suspended",
+    resume() {
+      if (!allowed) return new Promise(() => {});
+      return new Promise((done) => setTimeout(() => { c.state = "running"; done(); }, 5));
+    },
+    close() { c.state = "closed"; return Promise.resolve(); },
+  };
+  return c;
+};
+const readTooEarly = (() => { const c = specContext(true); void c.resume(); return c.state; })();
+const startedInTap = await voiceWhenRunning(specContext(true), 500);
+const neverStarted = await (async () => {
+  const t0 = Date.now();
+  // Raced, so an unbounded wait fails this check instead of hanging the suite.
+  const r = await Promise.race([
+    voiceWhenRunning(specContext(false), 60),
+    new Promise((done) => setTimeout(() => done("hung"), 2000)),
+  ]);
+  return { r, ms: Date.now() - t0 };
+})();
+
+// The smallest graph the mask can be built on, so the mask's contract with a
+// context it is handed can be run rather than read.
+const graphNode = () => ({
+  connect: (n) => n, disconnect() {}, gain: { value: 0 }, delayTime: { value: 0 },
+  frequency: { value: 0 }, setPeriodicWave() {}, start() {}, stop() {}, type: "",
+});
+const graphContext = (state) => {
+  const c = {
+    state, currentTime: 0,
+    resume: () => new Promise(() => {}),
+    close() { c.state = "closed"; return Promise.resolve(); },
+    createMediaStreamSource: graphNode, createDelay: graphNode,
+    createOscillator: graphNode, createGain: graphNode,
+    createPeriodicWave: () => ({}),
+    createMediaStreamDestination: () => ({ ...graphNode(), stream: { getAudioTracks: () => [{ id: "masked" }] } }),
+  };
+  return c;
+};
+
+// The probe, against a loopback server playing the SFU — one subprocess per
+// answer, because `env` is read once at import.
+const probeScratch = fs.mkdtempSync(path.join(os.tmpdir(), "mw-voice-probe-"));
+const probeScript = path.join(probeScratch, "probe.mjs");
+fs.writeFileSync(probeScript, `
+  import http from "node:http";
+  import { app } from ${JSON.stringify(path.join(ROOT, "scripts/app-imports.mjs"))};
+  const mode = process.argv[2];
+  let seen = null;
+  const server = http.createServer((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      seen = { path: req.url, method: req.method, auth: req.headers.authorization ?? "" };
+      if (mode === "ok") { res.writeHead(200, { "content-type": "application/json" }); res.end('{"rooms":[]}'); }
+      else { res.writeHead(401, { "content-type": "application/json" }); res.end('{"code":"unauthenticated","msg":"invalid API key: SFU-SAID-THIS"}'); }
+    });
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const port = server.address().port;
+  if (mode === "closed") await new Promise((r) => server.close(r));
+  const on = mode !== "off";
+  process.env.LIVEKIT_URL = on ? "ws://127.0.0.1:" + port : "";
+  process.env.LIVEKIT_API_KEY = on ? "probe-key" : "";
+  process.env.LIVEKIT_API_SECRET = on ? "probe-secret" : "";
+  const { probeVoice } = await app("src/lib/voice/probe.ts");
+  const status = await probeVoice();
+  if (mode !== "closed") server.close();
+  console.log(JSON.stringify({ status, seen }));
+`);
+const probeRuns = Object.fromEntries(["ok", "refused", "closed", "off"].map((mode) => {
+  const run = voiceSpawn(process.execPath, [probeScript, mode], {
+    cwd: ROOT, encoding: "utf8", env: { ...process.env, VENT_DATA_DIR: probeScratch },
+  });
+  let parsed = null;
+  try { parsed = JSON.parse(run.stdout.trim().split("\n").pop()); } catch { /* reported below */ }
+  return [mode, { ...parsed, stderr: run.stderr ?? "", stdout: run.stdout ?? "" }];
+}));
+
+check("156 Voice starts inside the tap, and the room can always be heard", () => {
+  // 1. The reading the bug lived in, and the wait that replaces it.
+  is(readTooEarly, "suspended",
+    "a spec context still reads suspended straight after resume()",
+    "this is the read the mask trusted — true only on Chrome");
+  is(startedInTap, true, "a context allowed to start is seen running once it has");
+  is(neverStarted.r, false, "one that was never allowed is reported as not running");
+  ok(neverStarted.ms < 1000, `and the wait for it is bounded (${neverStarted.ms}ms)`,
+    "a resume that is not allowed never settles; an unbounded wait hangs the join");
+
+  // 2. The mask builds on the context it is handed, and still refuses a silent one.
+  let whyRunning = null;
+  const running = graphContext("running");
+  const built = maskMicrophone({}, -4, (r) => { whyRunning = r; }, running);
+  is(built?.track?.id, "masked", "handed a running context, the mask builds on it",
+    whyRunning ? `refused: ${whyRunning}` : "a mask that makes its own context here is born suspended on a phone");
+  built?.stop();
+  is(running.state, "closed", "and owns it — stopping the mask closes the context it was given");
+  let whyHeld = null;
+  const held = graphContext("suspended");
+  is(maskMicrophone({}, -4, (r) => { whyHeld = r; }, held), null,
+    "a context that is still suspended is refused, not published",
+    "silence reported as speech — check 67's rule, which the fix must not loosen");
+  is(whyHeld, "context_suspended", "with its name");
+  is(held.state, "closed", "and the refused context is closed rather than leaked");
+
+  // 3. The component makes the context in the tap and waits before masking.
+  const voice = strip(fs.readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8"));
+  const joinAt = voice.indexOf("async function join()");
+  ok(joinAt >= 0, "join() is findable");
+  const beforeFirstAwait = voice.slice(joinAt, voice.indexOf("await ", joinAt));
+  ok(/const ctx = audioContextInGesture\(\);/.test(beforeFirstAwait),
+    "join() makes its AudioContext before anything is awaited",
+    "after the fetch, the import and the prompt, a phone has forgotten the tap");
+  const retryAt = voice.indexOf("function retryMic()");
+  ok(retryAt >= 0 && voice.indexOf("audioContextInGesture()", retryAt) < voice.indexOf("openMic(", retryAt),
+    "and so does the second try, from its own tap");
+  const openAt = voice.indexOf("async function openMic(");
+  const openBody = voice.slice(openAt, voice.indexOf("async function join()"));
+  ok(openAt >= 0 && openBody.indexOf("await whenRunning(ctx)") >= 0
+    && openBody.indexOf("await whenRunning(ctx)") < openBody.indexOf("maskMicrophone("),
+    "the microphone waits for the context to say it is running before masking",
+    "reading the state early is the whole bug");
+  ok(/maskMicrophone\(mic, personaFor\(grant\.identity\),[\s\S]{0,200}?\}, ctx\)/.test(openBody),
+    "and hands the mask that context rather than letting it make a late one");
+  ok(!/new\s+(?:window\.)?\w*AudioContext\b|webkitAudioContext/.test(voice),
+    "no other AudioContext is made in the component");
+
+  // 4. Hearing the room does not depend on speaking.
+  ok(/RoomEvent\.AudioPlaybackStatusChanged,\s*\(\)\s*=>\s*setCanHear\(room\.canPlaybackAudio\)/.test(voice),
+    "the room listens for the browser holding its sound back",
+    "an iPhone that is not publishing will not play the room at all");
+  const hearAt = voice.indexOf("const hear = ");
+  ok(hearAt >= 0 && /startAudio\(\)/.test(voice.slice(hearAt, hearAt + 400)),
+    "and asks for it back with startAudio()");
+  ok(/!canHear && \([\s\S]{0,160}?onClick=\{hear\}[\s\S]{0,300}?Tap to hear the room/.test(voice),
+    "from a button of its own, shown only while the sound is held back");
+
+  // 5. Every sentence about the microphone points at something that exists.
+  const walk = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p, out);
+      else if (/\.tsx?$/.test(p)) out.push(p);
+    }
+    return out;
+  };
+  const sources = walk(path.join(ROOT, "src"));
+  ok(sources.length > 50, `the sweep reads src (${sources.length} files)`);
+  is(sources.filter((f) => /Tap Join once more/.test(strip(fs.readFileSync(f, "utf8")))).length, 0,
+    "no screen tells somebody to tap Join while it shows them Leave",
+    "a second Join ran into the same wall anyway");
+  const pointsAt = /Tap “([^”]+)”/.exec(voice)?.[1];
+  ok(pointsAt, "the held-back microphone names the button that fixes it");
+  ok(pointsAt && new RegExp(`>\\s*${pointsAt}\\s*<`).test(voice),
+    `and "${pointsAt}" is a button the component renders`,
+    "a sentence about a door is not a door");
+  ok(/mic === "unavailable"\s*\?\s*"Your microphone is off/.test(voice),
+    "live, the pitch-shift claim is only made while a masked track exists",
+    "'Your voice is pitched down' over a room that hears nothing was the second false sentence");
+  const talkAt = voice.indexOf(`"Tap to talk"`);
+  const talkGuard = voice.slice(voice.lastIndexOf(`{status === "live"`, talkAt), talkAt);
+  ok(talkAt > 0 && /^\{status === "live" && mic !== "unavailable" && \(/.test(talkGuard),
+    "and the talk button is only offered when there is a microphone to open",
+    "a talk button over a microphone that never opened is the control that said Speaking");
+
+  // 6. The probe asks as the deployment, and reports only a status.
+  is(probeRuns.ok.status, "ok", "the SFU accepting our key reads ok");
+  is(probeRuns.refused.status, "refused", "a 401 reads refused",
+    "a rotated key looked exactly like a working deployment");
+  is(probeRuns.closed.status, "unreachable", "nothing listening reads unreachable");
+  is(probeRuns.off.status, "off", "and no keys read off, without a request");
+  is(probeRuns.off.seen ?? null, null, "off means nothing was asked");
+  is(probeRuns.ok.seen?.path, "/twirp/livekit.RoomService/ListRooms", "it asks the room service");
+  const [h, b, sig] = (probeRuns.ok.seen?.auth ?? "").replace(/^Bearer /, "").split(".");
+  let claims = null;
+  try { claims = JSON.parse(Buffer.from(b ?? "", "base64url").toString()); } catch { /* below */ }
+  is(claims?.iss, "probe-key", "signed as the key that mints join tokens");
+  ok(claims?.video?.roomList === true && !claims?.video?.roomJoin && !claims?.sub,
+    "with a list grant and no seat — it is the deployment asking, not a person");
+  ok(claims && claims.exp - claims.nbf <= 60, "and it lives a minute");
+  const expected = h && b
+    ? voiceHmac("sha256", "probe-secret").update(`${h}.${b}`).digest("base64url")
+    : null;
+  is(sig, expected, "the signature is the join tokens' secret, verified");
+  const said = Object.values(probeRuns).map((r) => r.stdout + r.stderr).join("\n");
+  ok(!/SFU-SAID-THIS/.test(said), "the SFU's refusal text is never printed",
+    "LiveKit's 401 quotes the key it refused");
+  const probeSrc = strip(fs.readFileSync(path.join(ROOT, "src/lib/voice/probe.ts"), "utf8"));
+  ok(/AbortSignal\.timeout\(/.test(probeSrc), "the probe has a deadline of its own");
+  const health = strip(fs.readFileSync(path.join(ROOT, "src/app/api/health/route.ts"), "utf8"));
+  ok(/cached\("voice-probe",[\s\S]{0,120}?probeVoice\(\)/.test(health),
+    "health asks it through the cache, a minute at a time");
+  ok(/^\s*voice,$/m.test(health), "and reports it");
+  const verdictAt = health.search(/status:\s*database === "unreachable" \|\|/);
+  const verdict = verdictAt < 0 ? "" : health.slice(verdictAt, health.indexOf("database,", verdictAt));
+  ok(verdict.length > 20 && !/voice/.test(verdict),
+    "a room with no voice is not a degraded deployment",
+    "voice down must never make the endpoint say nobody can be heard");
+});
+
 for (const r of results) {
   const good = r.failed.length === 0;
   if (good) passed++;

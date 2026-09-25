@@ -124,6 +124,18 @@ server. `src/components/circle-voice.tsx` is the only file that imports
 `livekit-client`, and it does so **inside the join handler**; a static import
 would put 508 KB into every room's first load. Keep it that way.
 
+**The AudioContext is made inside the tap, before anything is awaited** —
+`audioContextInGesture()` as the first line of `join` and of the microphone
+retry, then `whenRunning(ctx)` before the mask. A context made after the fetch,
+the SDK import and the prompt is born suspended on an iPhone and stays that
+way, and the spec flips `state` asynchronously, so reading it straight after
+`resume()` sees `suspended` even when the start was allowed. That pair is why
+voice never worked on an iPhone; check 156 holds it. The room's own sound
+needs `room.startAudio()` from a tap on iOS — keep the *Tap to hear the room*
+button. And test voice in two browsers against a real SFU with the iPhone rules
+emulated (`livekit-server --dev` builds from the Go module proxy): a laptop
+alone is the shape that hid this.
+
 Audio only, permanently: the grant is `canPublishSources: ["microphone"]`, so
 a stray `setCameraEnabled` in the client would be refused by the SFU rather
 than quietly shipping video to five strangers.
