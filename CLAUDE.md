@@ -3919,6 +3919,58 @@ The production SFU is unreachable from here, so whether it accepts our keys is
 `/api/health`'s `voice` field, read after deploy. Whether it works on a phone
 in Lagos is read by a person holding one.
 
+**The circle room is a group chat now, because that is what the founder asked
+for in so many words:** *"I need that shit to be a WhatsApp group with our own
+twist … remove any unnecessary features that might distract the user."* Every
+Nigerian who will ever open a circle already knows how to read a group chat, so
+the room borrows that grammar whole and keeps its promises underneath it.
+
+What went: the chair question and the consent checkbox at the door (a form in
+front of a room), the Share/Reflect switch and the rule line around the box (two
+rows of chrome around one input), the Keeper-intention card (it repeated the
+Keeper's own message in the thread), the seat ring, and the role word and theme
+toggle in the header. What came: back, the group's face, its name and one live
+line under it — who is speaking, else who is typing, else the clock — a phone
+icon for voice, bubbles with the seat written once per run, the Keeper and the
+Guardian speaking from the middle in the room's own face, and one row to type
+in.
+
+**What did not move is the point, and it is all server-side or constant.**
+Consent is still refused without `consent: true` — the tap on *Take a seat*
+sits directly under the three rules and says it is the agreement. Crisis still
+opens the card with both numbers from `CRISIS_LINES`. `checkMessage` and the
+Guardian still read every share. A full room still never offers a seat, and the
+four-second poll still never turns a refusal into a room. The seal still says
+only what happened.
+
+**One cost, stated.** No chair question at the door means no arrival reading for
+anybody who takes a seat there, so the closing's *"Down N points"* line — which only renders
+when there is a reading — shows for whoever came in through the lobby's *Open a
+circle* flow, which still asks and carries the reading into the room it opens
+or steers them to (`api/circles/route.ts`, both `pressure_seeded` writes), and
+for nobody who took a seat at the room's own door. That is honest rather than
+invented: a seat with no reading is shown no drop, and nothing guesses one.
+
+The call moved into the header, and that had one trap in it. The phone icon
+lives in the room and the voice lives in `CircleVoice`, and the obvious wiring —
+set state, let an effect call `join` — runs after the tap and hands an iPhone
+an AudioContext made outside the gesture, which is the exact bug the previous
+entry fixed. So the room holds a `ref` and calls `toggle()` from inside its own
+click handler.
+
+Three checks were anchored to lines and moved with the rule intact. Check 21's
+floor went from two chair screens to one because the room stopped asking. Check
+36 found the other seat's share by a label the room no longer writes. Check 68's
+claim about the pitch shift is now once per state across two files: the room's
+opening notice before voice, the call bar in it. Check 35 was the one that was
+right about the code: the first draft wrote seat names and the typing line in
+gold, and put ink beside solid gold on one line. Both were fixed in the
+component. Five mutations fail the re-anchored three.
+
+Verified at 390px in screenshots — door, room, and a live call — and by the
+two-browser voice proof run through the header icon. B heard A in both desktop
+Chromium and under the iPhone rules.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

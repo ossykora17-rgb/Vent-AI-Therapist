@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
  * and that is the thing you cannot fake with a poll.
  */
 
-type Status = "idle" | "joining" | "live" | "error";
+export type Status = "idle" | "joining" | "live" | "error";
 
 /**
  * What the room can hear from you, as three states rather than two booleans.
@@ -60,6 +60,14 @@ interface Props {
    * and a decoration.
    */
   onSpeaking?: (seats: number[]) => void;
+  /** Where the voice room is, for the header icon that opens it. */
+  onStatus?: (status: Status) => void;
+  /** The header's phone icon calls `toggle` from inside its own tap. */
+  ref?: React.Ref<VoiceHandle>;
+}
+
+export interface VoiceHandle {
+  toggle: () => void;
 }
 
 /**
@@ -94,7 +102,7 @@ function micRefusal(name: string): string {
           : "The microphone didn't open. You can still hear the room, and type.";
 }
 
-export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: Props) {
+export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onStatus, ref }: Props) {
   const [status, setStatus] = React.useState<Status>("idle");
   const [error, setError] = React.useState<string | null>(null);
   // Shut on arrival. See `openMic` for why.
@@ -538,122 +546,135 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
     });
   }
 
-  if (!enabled) return null;
+  /*
+    The room's phone icon, answered here.
+
+    The call lives in the header now, where a group chat keeps it, so the tap
+    arrives through this handle — and it has to call `join` *synchronously*,
+    inside that tap. An effect or a state change would run after the event and
+    hand an iPhone an AudioContext made outside the gesture, which is the bug
+    this component was just rebuilt around.
+  */
+  React.useImperativeHandle(ref, () => ({
+    toggle() {
+      if (status === "live") void leave();
+      else if (status !== "joining") void join();
+    },
+  }));
+
+  React.useEffect(() => {
+    onStatus?.(status);
+  }, [status, onStatus]);
+
+  if (!enabled || status === "idle") return null;
 
   const others = Math.max(0, voices.length - 1);
 
   return (
     /*
-      A plate once you are in it, a line while you are not.
+      A bar under the room's name while you are in voice, the way a phone shows
+      a call you are on — sticky, because the microphone is the one control
+      that must never scroll out of reach while it is open.
 
-      Every plate in this product is somewhere a voice speaks from — the
-      Keeper's intention, a share, a reply. Unjoined this is an offer, and an
-      offer is a sentence and a button on the page's own spine. The moment
-      somebody is actually in the voice room it becomes a plate, because then
-      it *is* a voice — it carries who can hear you, the microphone, and the
-      way out.
+      Nothing when you are not in voice. The offer is the phone icon in the
+      header, and the claim a person needs before they speak is made here, in
+      the two seconds before "Tap to talk": the microphone arrives shut, so
+      joining is not speaking, and this sentence is read before anything is.
     */
-    <div className={cn(status === "live" ? "glass mt-4 p-4" : "mt-4")}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {/*
-          One sentence before, one while live — the pitch shift, because it is
-          the surprising claim and the one about them. Live, the label says who
-          else can hear, because a voice room you are alone in looks exactly
-          like a broken one unless something says which it is.
+    <div className="sticky top-16 z-20 border-b border-line/10 bg-paper/95 backdrop-blur-glass">
+      <div className="mx-auto max-w-[640px] px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="label-mono">
+              {/* "In voice", because the header already counts who is in the
+                  room — and a room of two with one in voice is not "only you". */}
+              {status === "live"
+                ? others === 0
+                  ? "In voice · just you"
+                  : `In voice · you and ${others} ${others === 1 ? "other" : "others"}`
+                : status === "joining"
+                  ? "Voice · opening…"
+                  : "Voice"}
+            </p>
+            {status === "live" && (
+              <p className="mt-0.5 text-fine text-ink">
+                {mic === "unavailable"
+                  ? "Your microphone is off. You can still hear the room."
+                  : "Your voice is pitched down. Nobody hears which seat you are in."}
+              </p>
+            )}
+          </div>
 
-          The claim is deliberately bounded: "pitched down" rather than
-          "anonymous". A pitch shift raises the cost of recognition; it does not
-          make it impossible, and somebody who already suspects will hear
-          cadence and the story regardless. And it is only made while it is
-          true: with no masked track published, the live line says the
-          microphone is off instead.
-        */}
-        <div className="min-w-0">
-          <p className="label-mono">
-            {status === "live"
-              ? others === 0
-                ? "Voice · only you are here"
-                : `Voice · ${others} ${others === 1 ? "other person" : "other people"} here`
-              : "Voice · audio only"}
-          </p>
-          <p className="mt-1 text-body text-ink">
-            {status !== "live"
-              ? "Your voice is pitched down before it leaves your phone."
-              : mic === "unavailable"
-                ? "Your microphone is off. You can still hear the room."
-                : "Your voice is pitched down. Nobody hears which seat you are in."}
-          </p>
+          {status === "live" && (
+            <button
+              type="button"
+              onClick={leave}
+              className="min-h-[44px] shrink-0 rounded-full border border-line/25 px-4 text-body"
+            >
+              Leave voice
+            </button>
+          )}
+          {status === "error" && (
+            <button
+              type="button"
+              onClick={join}
+              className="min-h-[44px] shrink-0 rounded-full border border-line/25 px-4 text-body"
+            >
+              Try again
+            </button>
+          )}
         </div>
 
-        <button
-          type="button"
-          onClick={status === "live" ? leave : join}
-          disabled={status === "joining"}
-          className={cn(
-            "min-h-[44px] rounded-full border px-4 text-body transition-colors duration-300",
-            status === "live" ? "border-line/25" : "border-line/15",
-            status === "joining" && "opacity-60",
-          )}
-        >
-          {status === "joining" ? "Opening…" : status === "live" ? "Leave voice" : "Join voice"}
-        </button>
+        {status === "live" && !canHear && (
+          <button
+            type="button"
+            onClick={hear}
+            className="mt-3 flex min-h-[48px] w-full items-center justify-center rounded-card bg-gold px-4 text-body font-semibold text-on-gold"
+          >
+            Tap to hear the room
+          </button>
+        )}
+
+        {/*
+          The microphone, as one button that says what it is doing.
+
+          Full width because it is pressed with a thumb, often by somebody who
+          is not steady. `aria-pressed` carries the state for a screen reader;
+          the visible text carries it for everybody else, so there is no
+          accessible-name override to drift out of step with it.
+        */}
+        {status === "live" && mic === "unavailable" && (
+          <button
+            type="button"
+            onClick={retryMic}
+            className="mt-3 flex h-12 w-full items-center justify-center rounded-card border border-gold text-body font-semibold text-ink"
+          >
+            Turn on my microphone
+          </button>
+        )}
+        {status === "live" && mic !== "unavailable" && (
+          <button
+            type="button"
+            onClick={toggleMic}
+            disabled={muted}
+            aria-pressed={mic === "on"}
+            className={cn(
+              "mt-3 flex h-12 w-full select-none items-center justify-center rounded-card border text-body font-semibold transition-all duration-200",
+              mic === "on" ? "border-gold bg-gold/20 text-ink" : "border-line/20 text-ash",
+              muted && "opacity-40",
+            )}
+          >
+            {muted
+              ? "Microphone closed by the Keeper"
+              : mic === "on"
+                ? "Microphone on — tap to mute"
+                : "Tap to talk"}
+          </button>
+        )}
+
+        {notice && <p className="mt-2 text-fine text-ash" aria-live="polite">{notice}</p>}
+        {error && <p className="mt-2 text-fine text-ash">{error}</p>}
       </div>
-
-      {status === "live" && !canHear && (
-        <button
-          type="button"
-          onClick={hear}
-          className="mt-4 flex min-h-[48px] w-full items-center justify-center rounded-card bg-gold px-4 text-body font-semibold text-on-gold"
-        >
-          Tap to hear the room
-        </button>
-      )}
-
-      {/*
-        The microphone, as one button that says what it is doing.
-
-        Full width and 64px tall because it is pressed with a thumb, often by
-        somebody who is not steady. `aria-pressed` carries the state for a
-        screen reader; the visible text carries it for everybody else, so
-        there is no accessible-name override to drift out of step with it.
-      */}
-      {status === "live" && mic === "unavailable" && (
-        <button
-          type="button"
-          onClick={retryMic}
-          className="mt-4 flex h-16 w-full items-center justify-center rounded-card border border-gold text-body font-semibold text-ink"
-        >
-          Turn on my microphone
-        </button>
-      )}
-      {status === "live" && mic !== "unavailable" && (
-        <button
-          type="button"
-          onClick={toggleMic}
-          disabled={muted}
-          aria-pressed={mic === "on"}
-          className={cn(
-            "mt-4 flex h-16 w-full select-none items-center justify-center rounded-card border text-body font-semibold transition-all duration-200",
-            mic === "on" ? "border-gold bg-gold/20 text-ink" : "border-line/20 text-ash",
-            muted && "opacity-40",
-          )}
-        >
-          {muted
-            ? "Microphone closed by the Keeper"
-            : mic === "on"
-              ? "Microphone on — tap to mute"
-              : "Tap to talk"}
-        </button>
-      )}
-
-      {/*
-        The seat chips are gone; the ring above them is the seat display. It
-        shows who is here, which chair is yours, and which of them is talking.
-        A list of chips can only ever repeat it.
-      */}
-
-      {notice && <p className="mt-3 text-body text-ash" aria-live="polite">{notice}</p>}
-      {error && <p className="mt-3 text-body text-ash">{error}</p>}
 
       {/* Audio elements land here. Hidden, but in the DOM — a detached element
           does not play in Safari. */}
@@ -661,6 +682,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking }: P
     </div>
   );
 }
+
 
 function identities(room: Room): string[] {
   return [
