@@ -172,6 +172,25 @@ Use the SDK's `TrackType` / `TrackSource` enums, never the integers.
 `TrackType.AUDIO` is **0** and `VIDEO` is 1, so a hand-written `=== 1` mutes
 the one thing this room can never publish and leaves the microphone open.
 
+### Voice notes
+
+`src/lib/voice/note.ts`, `src/lib/voice/recorder.ts` and
+`api/circles/[id]/voice-notes`. Five rules, and check 157 holds each:
+
+1. **Record off `mask.output` and nothing else.** Everything upstream of it is
+   the raw voice, and a stored recording of the raw voice is the one thing the
+   mask exists to prevent.
+2. **Store `checkWav(bytes).wav`, never the request.** Every door (room, end,
+   seat, caps) comes before the body, and the body is read with `readNote`, the
+   capped reader.
+3. **A note dies with the room.** `closeCircle` in both stores, and the purge
+   `pg_cron` runs every fifteen minutes. A new table holding somebody's words or
+   voice goes into both, or it outlives the promise on every screen.
+4. **The thread carries a note's length, never its sound.** The sound route is
+   per seat, per room, `private, no-store`, `nosniff`.
+5. **No rule reads a voice.** Never write a sentence that says the room is
+   moderated.
+
 ## Scoring a Keeper
 
 `npm run rlhf` scores each tag on the **drop**, not the mood: somebody leaving

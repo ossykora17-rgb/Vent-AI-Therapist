@@ -152,6 +152,7 @@ export const TABLE_CONTRACT: Readonly<Record<string, string>> = {
     "id,circle_id,anon_id,role,pressure_seeded,last_seen_at,typing_until,joined_at",
   circle_messages: "id,circle_id,anon_id,content,kind,flagged,created_at",
   circle_push: "id,circle_id,anon_id,endpoint,p256dh,auth,created_at",
+  circle_voice_notes: "id,circle_id,anon_id,duration_ms,audio,created_at",
 } as const;
 
 /**
@@ -210,7 +211,12 @@ export const FULL_CONTRACT = { ...TABLE_CONTRACT, ...AUXILIARY_CONTRACT };
  * `pendingTables`, so an operator sees precisely which migration to run — it
  * simply stops claiming the room is shut when it is open.
  */
-export const PENDING_OK: ReadonlySet<string> = new Set(["circle_push"]);
+/*
+ * `circle_voice_notes` qualifies on both halves: without 0022 the messages
+ * route reports `voiceNotes: false` and the room draws no microphone at all,
+ * and text and live voice work exactly as before.
+ */
+export const PENDING_OK: ReadonlySet<string> = new Set(["circle_push", "circle_voice_notes"]);
 
 /**
  * What a Postgres error code means, in the words of the fix.

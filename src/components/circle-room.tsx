@@ -6,7 +6,10 @@ import Link from "next/link";
 import { anonId } from "@/lib/anon";
 import { tensionDrop, tensionNow } from "@/lib/vent/chairs";
 import { CircleVoice, type Status as VoiceStatus, type VoiceHandle } from "@/components/circle-voice";
-import { BackIcon, LockIcon, PhoneIcon, SendIcon } from "@/components/icons";
+import { BackIcon, LockIcon, MicIcon, PauseIcon, PhoneIcon, PlayIcon, SendIcon, TrashIcon } from "@/components/icons";
+import { audioContextInGesture, personaFor } from "@/lib/voice/mask";
+import { startRecording, type Recording } from "@/lib/voice/recorder";
+import { NOTE_MAX_MS, NOTE_MIN_MS, NOTE_TOO_SHORT, noteLength } from "@/lib/voice/note";
 import { ALONE_LINE, ALONE_DOOR } from "@/lib/circles/rules";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -21,6 +24,8 @@ interface Msg {
   content: string;
   kind: string;
   created_at: string;
+  /** Voice notes only: the length the server measured off the recording. */
+  durationMs?: number;
 }
 
 interface RoomState {
@@ -52,6 +57,23 @@ interface RoomState {
 
 const WORDS = ["Guilt", "Proof", "Anger", "Hope", "Silence", "Tiredness"];
 
+/** The room's one player, made on the first tap that plays anything. */
+function makePlayer(onEnded: () => void, onTime: (ms: number) => void): HTMLAudioElement {
+  const player = new Audio();
+  player.onended = onEnded;
+  player.ontimeupdate = () => onTime(player.currentTime * 1000);
+  return player;
+}
+
+/** Point the player at a sound and start it. Called from inside a tap. */
+function playOn(player: HTMLAudioElement, src: string, onFail: () => void) {
+  player.src = src;
+  void player.play().catch(onFail);
+}
+
+/** An empty WAV: what the player starts on inside the tap, before a note arrives. */
+const SILENCE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=";
+
 /*
   Three lines at the door, not four and a form.
 
@@ -69,7 +91,7 @@ const WORDS = ["Guilt", "Proof", "Anger", "Hope", "Silence", "Tiredness"];
 */
 const AGREEMENT = [
   "No advice. No fixing. No cross-talk — speak to the circle.",
-  "What's said here stays here. Nothing is recorded; everything is deleted within 24 hours.",
+  "What's said here stays here. Messages and voice notes are deleted within 24 hours.",
   "You can leave at any moment, without explaining.",
 ];
 
@@ -133,6 +155,27 @@ export function CircleRoom({ id }: { id: string }) {
   const [speakingSeats, setSpeakingSeats] = React.useState<number[]>([]);
   const [voiceStatus, setVoiceStatus] = React.useState<VoiceStatus>("idle");
   const voiceRef = React.useRef<VoiceHandle>(null);
+  /*
+    Voice notes. `notesOn` is the server's answer, not an assumption: false on
+    a deployment without the table, and then the room draws no microphone at
+    all rather than one that fails when tapped.
+  */
+  const [notesOn, setNotesOn] = React.useState(false);
+  /** `live` once the microphone is actually open — never before. */
+  const [recording, setRecording] = React.useState<{ startedAt: number; live: boolean } | null>(null);
+  const [elapsed, setElapsed] = React.useState(0);
+  const [sendingNote, setSendingNote] = React.useState(false);
+  const recRef = React.useRef<Recording | null>(null);
+  /** Which start a result belongs to, so a cancel that beats the microphone
+   *  prompt is not overtaken by the recording it cancelled. */
+  const recToken = React.useRef(0);
+  /** One player for the room, made inside the first tap that plays anything. */
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  /** Notes already downloaded, by id, as object URLs. */
+  const blobs = React.useRef(new Map<string, string>());
+  /** Downloads under way, so the four-second poll never starts a second one. */
+  const inflight = React.useRef(new Map<string, Promise<string | null>>());
+  const [playing, setPlaying] = React.useState<{ id: string; at: number } | null>(null);
   const endRef = React.useRef<HTMLDivElement>(null);
   const footerRef = React.useRef<HTMLElement>(null);
   // The room had the bug the chat had already fixed. See the hook.
@@ -175,7 +218,11 @@ export function CircleRoom({ id }: { id: string }) {
     setState(d);
     if (d.joined) {
       const m = await fetch(`/api/circles/${id}/messages?anonId=${encodeURIComponent(me)}`);
-      if (m.ok) setMessages((await m.json()).messages ?? []);
+      if (m.ok) {
+        const thread = await m.json();
+        setMessages(thread.messages ?? []);
+        setNotesOn(thread.voiceNotes === true);
+      }
     }
   }, [id, me]);
 
@@ -363,6 +410,188 @@ export function CircleRoom({ id }: { id: string }) {
       setBusy(false);
     }
   }
+
+  /** One note's sound, downloaded once and kept as an object URL. */
+  const fetchNote = React.useCallback((noteId: string): Promise<string | null> => {
+    const have = blobs.current.get(noteId);
+    if (have) return Promise.resolve(have);
+    /*
+      A minute of note is two megabytes, which on a Lagos 3G connection takes
+      longer than the poll does to come round. Without this every poll would
+      start the same download again beside the one still arriving.
+    */
+    const going = inflight.current.get(noteId);
+    if (going) return going;
+    const download = (async () => {
+      try {
+        const r = await fetch(`/api/circles/${id}/voice-notes/${noteId}`, {
+          headers: { "x-anon-id": me },
+        });
+        if (!r.ok) return null;
+        const url = URL.createObjectURL(await r.blob());
+        blobs.current.set(noteId, url);
+        return url;
+      } catch {
+        return null;
+      } finally {
+        inflight.current.delete(noteId);
+      }
+    })();
+    inflight.current.set(noteId, download);
+    return download;
+  }, [id, me]);
+
+  /*
+    Download notes as they arrive, one at a time, the way a phone does — so a
+    tap plays at once, and plays from inside the tap, which is the only place
+    an iPhone lets a page start sound.
+  */
+  React.useEffect(() => {
+    let live = true;
+    void (async () => {
+      for (const m of messages) {
+        if (!live) return;
+        if (m.kind === "voice" && !blobs.current.has(m.id)) await fetchNote(m.id);
+      }
+    })();
+    return () => { live = false; };
+  }, [messages, fetchNote]);
+
+  // Leaving the room stops what is playing and what is recording, and lets go
+  // of every note this page downloaded.
+  React.useEffect(() => {
+    const kept = blobs.current;
+    return () => {
+      recRef.current?.cancel();
+      audioRef.current?.pause();
+      for (const url of kept.values()) URL.revokeObjectURL(url);
+      kept.clear();
+    };
+  }, []);
+
+  function togglePlay(noteId: string) {
+    const player =
+      audioRef.current ??
+      (audioRef.current = makePlayer(
+        () => setPlaying(null),
+        (ms) => setPlaying((p) => (p ? { ...p, at: ms } : p)),
+      ));
+    if (playing?.id === noteId && !player.paused) {
+      player.pause();
+      setPlaying(null);
+      return;
+    }
+    setPlaying({ id: noteId, at: 0 });
+    const ready = blobs.current.get(noteId);
+    if (ready) {
+      playOn(player, ready, () => setPlaying(null));
+      return;
+    }
+    /*
+      Not downloaded yet. Start the player on a moment of silence now, inside
+      the tap, so the element is one this page is allowed to play; then hand
+      it the note when it arrives.
+    */
+    playOn(player, SILENCE, () => {});
+    void fetchNote(noteId).then((url) => {
+      if (!url) {
+        setPlaying(null);
+        setRuleError("That voice note didn't load. Try again.");
+        return;
+      }
+      playOn(player, url, () => setPlaying(null));
+    });
+  }
+
+  /*
+    Record a voice note. The AudioContext is made on the first line, inside the
+    tap — the rule the live voice was rebuilt around — and the recording is
+    taken off the mask, so the voice that leaves the phone is the pitched-down
+    one, seat by seat, exactly as it is in a call.
+  */
+  function startNote() {
+    const ctx = audioContextInGesture();
+    if (recording || !state || state.mySeat === null) {
+      void ctx?.close();
+      return;
+    }
+    const token = ++recToken.current;
+    setRuleError(null);
+    setElapsed(0);
+    setRecording({ startedAt: Date.now(), live: false });
+    void startRecording(ctx, personaFor(`seat-${state.mySeat + 1}`)).then((r) => {
+      if (token !== recToken.current) {
+        if ("recording" in r) r.recording.cancel();
+        return;
+      }
+      if ("refused" in r) {
+        setRecording(null);
+        setRuleError(
+          r.refused === "microphone"
+            ? r.name === "NotAllowedError"
+              ? "The microphone is blocked for this site. Allow it in your browser settings, or type it instead."
+              : "The microphone didn't open. Type it instead — it still counts."
+            : "This phone can't disguise your voice, so nothing was recorded. Type it instead.",
+        );
+        return;
+      }
+      recRef.current = r.recording;
+      // The clock starts when the microphone does, not when the prompt did —
+      // and "Recording" is said from here, not from the tap.
+      setRecording({ startedAt: Date.now(), live: true });
+    });
+  }
+
+  function cancelNote() {
+    recToken.current++;
+    recRef.current?.cancel();
+    recRef.current = null;
+    setRecording(null);
+  }
+
+  const sendNote = React.useCallback(async () => {
+    const rec = recRef.current;
+    if (!rec) return;
+    recToken.current++;
+    recRef.current = null;
+    setRecording(null);
+    const out = rec.finish();
+    if (!out || out.durationMs < NOTE_MIN_MS) {
+      setRuleError(NOTE_TOO_SHORT);
+      return;
+    }
+    setSendingNote(true);
+    try {
+      const r = await fetch(`/api/circles/${id}/voice-notes`, {
+        method: "POST",
+        headers: { "content-type": "audio/wav", "x-anon-id": me },
+        body: new Blob([out.wav], { type: "audio/wav" }),
+      });
+      // The body decides, not the status: a note is only in the room once the
+      // server has handed back the row it wrote.
+      const d = await r.json().catch(() => null);
+      if (r.status === 201 && typeof d?.id === "string") {
+        await load();
+        return;
+      }
+      setRuleError(typeof d?.message === "string" ? d.message : "That voice note didn't send. Try again, or type it.");
+    } catch {
+      setRuleError("That voice note didn't send. Try again, or type it.");
+    } finally {
+      setSendingNote(false);
+    }
+  }, [id, me, load]);
+
+  // The clock on a note, and the minute it stops at — sent, not lost.
+  React.useEffect(() => {
+    if (!recording?.live) return;
+    const t = window.setInterval(() => {
+      const ms = Date.now() - recording.startedAt;
+      setElapsed(ms);
+      if (ms >= NOTE_MAX_MS) void sendNote();
+    }, 250);
+    return () => window.clearInterval(t);
+  }, [recording, sendNote]);
 
   if (notFound) {
     return (
@@ -724,9 +953,37 @@ export function CircleRoom({ id }: { id: string }) {
                           {m.role === "keeper" ? " · Keeper" : ""}
                         </p>
                       )}
-                      {/* A person is set as a person — `.said`, never the
-                          room's face — whoever's words these are. */}
-                      <p className="said text-left text-ink">{m.content}</p>
+                      {m.kind !== "voice" ? (
+                        /* A person is set as a person — `.said`, never the
+                           room's face — whoever's words these are. */
+                        <p className="said text-left text-ink">{m.content}</p>
+                      ) : (
+                        /* A note: play, how far along, how long. The same bubble,
+                           because a voice note is a message said out loud. */
+                        <div className="flex items-center gap-2.5 py-1 text-left">
+                          <button
+                            type="button"
+                            onClick={() => togglePlay(m.id)}
+                            aria-label={playing?.id === m.id ? "Pause voice note" : "Play voice note"}
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gold text-on-gold"
+                          >
+                            {playing?.id === m.id ? <PauseIcon /> : <PlayIcon />}
+                          </button>
+                          <div className="h-1.5 w-28 overflow-hidden rounded-full bg-line/15 sm:w-40">
+                            <div
+                              className="h-full rounded-full bg-ink/60"
+                              style={{
+                                width: `${playing?.id === m.id && m.durationMs
+                                  ? Math.min(100, (playing.at / m.durationMs) * 100)
+                                  : 0}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="tabular text-fine text-ash">
+                            {noteLength(playing?.id === m.id ? playing.at : m.durationMs ?? 0)}
+                          </span>
+                        </div>
+                      )}
                       <p className="mt-0.5 text-right text-label text-ash">
                         {m.kind === "witness" ? "heard · " : ""}
                         {clock(m.created_at)}
@@ -876,32 +1133,83 @@ export function CircleRoom({ id }: { id: string }) {
               door and enforced on the server, where a refusal is written to
               teach at the moment it actually fires (`ruleError`, above).
             */}
-            <div className="flex items-end gap-2">
-              <label htmlFor="circle-input" className="sr-only">
-                Message the circle
-              </label>
-              <textarea
-                id="circle-input"
-                rows={1}
-                value={draft}
-                onChange={(e) => { setDraft(e.target.value); setRuleError(null); }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
-                }}
-                placeholder="Say the heaviest part."
-                maxLength={900}
-                className="max-h-32 min-h-[48px] flex-1 resize-none rounded-card border border-line/15 bg-card px-4 py-3 leading-[1.5] placeholder:text-ash"
-              />
-              <button
-                type="button"
-                onClick={() => void send()}
-                disabled={!draft.trim() || busy}
-                aria-label="Send"
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gold text-on-gold disabled:opacity-40"
-              >
-                <SendIcon />
-              </button>
-            </div>
+            {/*
+              The microphone takes the send button's place while the box is
+              empty, as it does on every phone. One tap starts a note and a
+              second tap on send ends it — a tap, not a hold, for the reason the
+              live voice gave up its hold bar: somebody crying cannot hold a
+              button, and a hold looks the same whether or not it is recording.
+            */}
+            {recording ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={cancelNote}
+                  aria-label="Cancel voice note"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-ash hover:bg-line/5"
+                >
+                  <TrashIcon />
+                </button>
+                <p
+                  aria-live="polite"
+                  className="flex min-h-[48px] flex-1 items-center gap-2 rounded-card border border-gold/60 bg-card px-4 text-body"
+                >
+                  <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-gold motion-safe:animate-pulse" />
+                  {recording.live ? `Recording · ${noteLength(elapsed)}` : "Opening the microphone…"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void sendNote()}
+                  disabled={!recording.live}
+                  aria-label="Send voice note"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gold text-on-gold disabled:opacity-40"
+                >
+                  <SendIcon />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-end gap-2">
+                <label htmlFor="circle-input" className="sr-only">
+                  Message the circle
+                </label>
+                <textarea
+                  id="circle-input"
+                  rows={1}
+                  value={draft}
+                  onChange={(e) => { setDraft(e.target.value); setRuleError(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
+                  }}
+                  placeholder="Say the heaviest part."
+                  maxLength={900}
+                  className="max-h-32 min-h-[48px] flex-1 resize-none rounded-card border border-line/15 bg-card px-4 py-3 leading-[1.5] placeholder:text-ash"
+                />
+                {draft.trim() || !notesOn ? (
+                  <button
+                    type="button"
+                    onClick={() => void send()}
+                    disabled={!draft.trim() || busy}
+                    aria-label="Send"
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gold text-on-gold disabled:opacity-40"
+                  >
+                    <SendIcon />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startNote}
+                    disabled={sendingNote}
+                    aria-label="Record a voice note"
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gold text-on-gold disabled:opacity-40"
+                  >
+                    <MicIcon />
+                  </button>
+                )}
+              </div>
+            )}
+            {sendingNote && (
+              <p aria-live="polite" className="mt-1.5 text-fine text-ash">Sending your voice note…</p>
+            )}
           </div>
         </footer>
       )}

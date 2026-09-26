@@ -49,7 +49,9 @@ const LIMIT = 5000;
  * that must never become automatic. If a future table holds something the
  * product promises to destroy, it belongs on this list and not in the dump.
  */
-const NEVER_EXPORT = new Set(["circle_messages", "circle_members", "circle_push"]);
+// `circle_voice_notes` for the transcript's reason, said out loud: a recording
+// the room promises to destroy at close must never outlive it in a backup.
+const NEVER_EXPORT = new Set(["circle_messages", "circle_members", "circle_push", "circle_voice_notes"]);
 
 /**
  * Compare without leaking length or position through timing.

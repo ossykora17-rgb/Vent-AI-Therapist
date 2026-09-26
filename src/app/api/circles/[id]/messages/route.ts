@@ -38,21 +38,52 @@ async function handleGET(request: Request, { params }: Params) {
   }
 
   const messages = await store.listCircleMessages(id);
+  /*
+    Voice notes ride in the same thread, in time order, as a kind of message —
+    the metadata only. The sound is fetched once, by id, from its own route;
+    a minute of audio on a four-second poll would be a megabyte a person, four
+    times a minute, for the whole room.
+
+    `voiceNotes: false` when the table cannot be read — 0022 not applied, or a
+    refusal — so the room draws no microphone rather than one that fails when
+    tapped. The thread itself never depends on it.
+  */
+  let notes: Awaited<ReturnType<typeof store.listVoiceNotes>> = [];
+  let voiceNotes = true;
+  try {
+    notes = await store.listVoiceNotes(id);
+  } catch {
+    voiceNotes = false;
+  }
 
   // Seat number, not identity. Nobody carries a name between circles.
   const seatOf = new Map(members.map((m, i) => [m.anon_id, i + 1]));
+  const roleOf = (who: string) => members.find((x) => x.anon_id === who)?.role ?? "witness";
 
   return NextResponse.json(
     {
-      messages: messages.map((m) => ({
-        id: m.id,
-        seat: seatOf.get(m.anon_id) ?? 0,
-        mine: m.anon_id === anonId,
-        role: members.find((x) => x.anon_id === m.anon_id)?.role ?? "witness",
-        content: m.content,
-        kind: m.kind,
-        created_at: m.created_at,
-      })),
+      messages: [
+        ...messages.map((m) => ({
+          id: m.id,
+          seat: seatOf.get(m.anon_id) ?? 0,
+          mine: m.anon_id === anonId,
+          role: roleOf(m.anon_id),
+          content: m.content,
+          kind: m.kind,
+          created_at: m.created_at,
+        })),
+        ...notes.map((n) => ({
+          id: n.id,
+          seat: seatOf.get(n.anon_id) ?? 0,
+          mine: n.anon_id === anonId,
+          role: roleOf(n.anon_id),
+          content: "",
+          kind: "voice",
+          created_at: n.created_at,
+          durationMs: n.duration_ms,
+        })),
+      ].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)),
+      voiceNotes,
       storage: store.kind,
     },
     { headers: { "cache-control": "no-store" } },

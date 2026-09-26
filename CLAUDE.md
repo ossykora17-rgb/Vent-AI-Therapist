@@ -3971,6 +3971,83 @@ Verified at 390px in screenshots — door, room, and a live call — and by the
 two-browser voice proof run through the header icon. B heard A in both desktop
 Chromium and under the iPhone rules.
 
+**Voice notes, because a Nigerian group chat speaks in them — and they are the
+first thing this product keeps that is a recording of somebody.** In a WhatsApp
+group the voice is a note, said once and waiting in the thread. It also needs
+nobody else in the room at that moment, where the live call needs two, and
+fourteen of the first sixteen circles never had a second person.
+
+A note is recorded off `mask.output` — the node that feeds the track a call
+publishes — so it is the call's pitched-down voice, seat by seat, and never the
+microphone. That is a claim about wiring, and wiring can be observed: check 157
+builds the real recorder on a graph that writes down every connection and
+requires the recorder's only input to be the published track's feeder. The
+mutation that taps the raw microphone fails it, and so does one that writes to
+the recorder's output, which would play somebody's own voice back to them.
+
+**What is kept is what was checked, never what arrived.** `checkWav` reads the
+format and the length off the bytes and returns a file it wrote itself around
+the samples it validated. A WAV can carry a LIST chunk naming the phone that
+made it, and bytes after its end, and none of that is a voice. Proven on the
+wire: a note sent with `iPhone 15 Pro, Lagos` in a tag and a tail after the
+data comes back byte-identical to the untagged note. And every door comes
+before the body — the room, its end, the seat and both caps — then the body is
+read through a cap held on the bytes rather than on `content-length`, which a
+chunked upload never sends. One consequence was measured rather than guessed:
+when the cap stops a flood the server resets that connection, and the client's
+pool finds out on its next request (`ECONNRESET`). That is the cap working, and
+the live check sends its flood last.
+
+**The 24-hour promise was kept by luck, and a recording is what made that
+matter.** `purge_expired_circle_messages()` has existed since 0003 and nothing
+ever called it: no cron, no route, no reference anywhere in `src`. A room's
+words went when a request next touched the room. Read off production before
+this change, counts only: 12 circle messages, none older than 24 hours, 2 ended
+rooms not yet swept, `pg_cron` available and not installed. The room's own
+sentence — *"Messages and voice notes are deleted within 24 hours"* — was true
+that night because somebody had opened the lobby.
+
+0022 makes the backstop delete everything `closeCircle` deletes, for every room
+past its `ends_at`, and schedules it every fifteen minutes with `pg_cron` —
+plus a nightly prune of `cron.job_run_details`, which Supabase's own cron docs
+say is never cleaned up. It never sets `status`: closing stays the app's,
+because the app also ends the room on the SFU, which a database cannot reach,
+and `sweepIfOver` never reads the seats to do it. Check 157 derives the tables
+from `closeCircle` rather than listing them, so a table the close learns to
+delete is a table the backstop must delete too. Run on a local Postgres 16
+against the real migrations: the ended room's message, note, seat and push row
+deleted, the live room's four kept, `status` untouched, a second run deleting
+zero, and neither `anon` nor `authenticated` able to call it.
+
+**Two things this cannot prove, and one thing it does not do.** Recording and
+playback were proven in two Chromium browsers, with and without the iPhone's
+audio rules emulated — B heard A both times, 16 kHz mono at RMS 0.081 and
+0.093 — and not on an iPhone. A note tapped before it has downloaded plays on
+the room's one `<audio>` element after the fetch lands, which an iPhone may
+refuse outside the tap; the button then returns to Play and the second tap
+plays from inside a gesture. That is a fallback, not a proof. And **no rule
+reads a voice**: `checkMessage`, the Guardian and the crisis router see typed
+words only. That was already true of the live call, and notes widen it. Whether
+a room needs a Keeper's delete for a note is a decision for a person, not a
+line slipped into this commit.
+
+Three instrument errors, all of them old ones. A test body that never ended
+turned a reader with its cap deleted into a suite that died out of memory
+before printing a line — red, for no reason anybody could read — so the body is
+finite now and the mutation fails on an assertion. A kill loop found servers
+with `ps | grep "next start -p 3001"`, matched the shell running it, and killed
+the shell mid-mutation with a mutated store still in the tree. It was restored
+from the scratchpad copy, which is the only reason that was a non-event. Find
+servers by process name (`ps -eo pid=,comm=`), never by command line.
+
+And the harness restores every file from the copy it took on its first run, so
+two edits made after that copy — the ones taking an unsourced iOS claim out of
+`note.ts` and `recorder.ts` — were quietly reverted by the full pass, and found
+only by comparing the tree to the backups once it ended. This file already
+says to pin a fix into the backup before re-running, about the same harness.
+The backups are deleted the moment a pass ends now, so the next run takes fresh
+ones.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
