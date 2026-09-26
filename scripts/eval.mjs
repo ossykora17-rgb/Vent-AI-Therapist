@@ -20076,7 +20076,9 @@ check("157 A voice note is the masked voice, kept only as long as the room", () 
   is(new Set([1, 2, 3, 4, 5, 6].map((s) => personaFor(`seat-${s}`))).size, 6,
     "and six seats are six voices, in a note as in a call");
   ok(!/new\s+(?:window\.)?\w*AudioContext\b|webkitAudioContext/.test(room), "the room makes no other AudioContext");
-  ok(/\{draft\.trim\(\) \|\| !notesOn \? \([\s\S]*?aria-label="Send"[\s\S]*?\) : \([\s\S]*?onClick=\{startNote\}[\s\S]*?aria-label="Record a voice note"/.test(room),
+  // Any further condition OR'd in front of the `?` only sends more cases to
+  // Send — the record branch can narrow, never widen past `notesOn`.
+  ok(/\{draft\.trim\(\) \|\| !notesOn(?: \|\| \w+)* \? \([\s\S]*?aria-label="Send"[\s\S]*?\) : \([\s\S]*?onClick=\{startNote\}[\s\S]*?aria-label="Record a voice note"/.test(room),
     "the microphone is only drawn where the server said notes are on",
     "a microphone that fails when tapped is a door onto a 503");
   ok(/recording\.live \? `Recording · \$\{noteLength\(elapsed\)\}` : "Opening the microphone…"/.test(room),
@@ -20514,6 +20516,23 @@ check("159 The Keeper's hold is the SFU's, and a rejoin comes back held", () => 
     "the seat's own lock is the room's record, not a flag of its own");
   ok(/const closed = held\.includes\(v\);/.test(voice),
     "and so are the Keeper's buttons, which now survive the Keeper leaving voice");
+
+  /*
+    The same voice by another road. A hold that covered the call and not the
+    thread sat on one screen as "Microphone closed by the Keeper" above a gold
+    button that records.
+  */
+  const notes = strip(fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/voice-notes/route.ts"), "utf8"));
+  const heldAt = notes.search(/if \(\(await heldInRoom\(id\)\)\?\.includes\(`seat-\$\{seatAt \+ 1\}`\)\) \{/);
+  ok(heldAt > notes.indexOf('"not_a_member"') && heldAt < notes.indexOf("readNote("),
+    "a held seat's voice note is refused by the route, after the seat is known and before the body is read");
+  ok(/const seatAt = members\.findIndex\(\(m\) => m\.anon_id === anonId\);/.test(notes) &&
+      /const index = members\.findIndex\(\(m\) => m\.anon_id === parsed\.data\.anonId\);/.test(route),
+    "with the seat derived the way the voice route derives it, or a hold would land on the wrong seat");
+  const roomSrc = strip(fs.readFileSync(path.join(ROOT, "src/components/circle-room.tsx"), "utf8"));
+  ok(/onHeld\?\.\(muted\);/.test(voice) && /onHeld=\{setHeldHere\}/.test(roomSrc) &&
+      /\{draft\.trim\(\) \|\| !notesOn \|\| heldHere \? \(/.test(roomSrc),
+    "and in the call, the record button gives way while the seat is held");
 
   /*
     And the line under the call no longer promises what the header breaks:

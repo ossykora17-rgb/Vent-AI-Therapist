@@ -156,6 +156,13 @@ export function CircleRoom({ id }: { id: string }) {
   const [dropped, setDropped] = React.useState<string | null>(null);
   /* Which seats are speaking in voice, said under the room's name. */
   const [speakingSeats, setSpeakingSeats] = React.useState<number[]>([]);
+  /*
+    The Keeper is holding this seat in the call. A voice note is the same
+    voice by another road, so the record button gives way to send — the route
+    refuses a held seat's note either way; this only stops somebody recording
+    a minute of it first.
+  */
+  const [heldHere, setHeldHere] = React.useState(false);
   const [voiceStatus, setVoiceStatus] = React.useState<VoiceStatus>("idle");
   const voiceRef = React.useRef<VoiceHandle>(null);
   /*
@@ -770,6 +777,7 @@ export function CircleRoom({ id }: { id: string }) {
           keeper={state.role === "keeper"}
           onSpeaking={setSpeakingSeats}
           onStatus={setVoiceStatus}
+          onHeld={setHeldHere}
         />
       )}
 
@@ -1245,7 +1253,7 @@ export function CircleRoom({ id }: { id: string }) {
                   maxLength={900}
                   className="max-h-32 min-h-[48px] flex-1 resize-none rounded-card border border-line/15 bg-card px-4 py-3 leading-[1.5] placeholder:text-ash"
                 />
-                {draft.trim() || !notesOn ? (
+                {draft.trim() || !notesOn || heldHere ? (
                   <button
                     type="button"
                     onClick={() => void send()}

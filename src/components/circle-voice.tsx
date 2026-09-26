@@ -63,6 +63,8 @@ interface Props {
   onSpeaking?: (seats: number[]) => void;
   /** Where the voice room is, for the header icon that opens it. */
   onStatus?: (status: Status) => void;
+  /** Whether the Keeper is holding this seat, for the composer's record button. */
+  onHeld?: (held: boolean) => void;
   /** The header's phone icon calls `toggle` from inside its own tap. */
   ref?: React.Ref<VoiceHandle>;
 }
@@ -103,7 +105,7 @@ function micRefusal(name: string): string {
           : "The microphone didn't open. You can still hear the room, and type.";
 }
 
-export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onStatus, ref }: Props) {
+export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onStatus, onHeld, ref }: Props) {
   const [status, setStatus] = React.useState<Status>("idle");
   const [error, setError] = React.useState<string | null>(null);
   // Shut on arrival. See `openMic` for why.
@@ -632,6 +634,10 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
   React.useEffect(() => {
     onStatus?.(status);
   }, [status, onStatus]);
+
+  React.useEffect(() => {
+    onHeld?.(muted);
+  }, [muted, onHeld]);
 
   if (!enabled || status === "idle") return null;
 
