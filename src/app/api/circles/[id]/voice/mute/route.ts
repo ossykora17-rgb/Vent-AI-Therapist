@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { RoomServiceClient, TrackSource, TrackType } from "livekit-server-sdk";
+import { RoomServiceClient, TrackSource, TwirpError } from "livekit-server-sdk";
 import { getStore } from "@/lib/store";
 import { env, isLivekitConfigured } from "@/lib/env";
 import { roomNameFor } from "@/lib/voice/livekit";
+import { withHold } from "@/lib/voice/hold";
 import { sweepIfOver } from "@/lib/circles/sweep";
 import { withStore } from "@/lib/http/with-store";
 
@@ -23,6 +24,23 @@ const schema = z.object({
   muted: z.boolean().default(true),
 });
 
+/*
+  Whole, every time. The SFU replaces every field of a permission it is sent
+  (`UpdateFromPermission` in livekit/protocol), so a hold written as
+  `{ canPublish: false }` alone would also turn off `canSubscribe` — deafening
+  the person it was meant to quiet — and a release written as
+  `{ canPublish: true }` alone would drop `canPublishSources`, which the SFU
+  reads as "any source": a camera, in a room that is audio by promise. Both
+  halves match what the join token grants, apart from the one field a hold is.
+*/
+const seatPermission = (canPublish: boolean) => ({
+  canPublish,
+  canSubscribe: true,
+  canPublishData: false,
+  canPublishSources: [TrackSource.MICROPHONE],
+  canUpdateMetadata: false,
+});
+
 /**
  * The Keeper's hand on the room's volume.
  *
@@ -35,9 +53,10 @@ const schema = z.object({
  *   is deliberately not called. Ejecting somebody from a room they came to
  *   for support is not a moderation action, it is an abandonment.
  * - It is reversible by the same person, in the same request shape.
- * - It is **never silent**. The SFU tells the muted client, and the room is
- *   told too. A circle whose whole promise is being heard cannot take a voice
- *   away without saying so — a quiet mute would be the worst lie in here.
+ * - It is **never silent**. The hold is written into the room's metadata,
+ *   which every seat in the call receives, and every call bar says it. A
+ *   circle whose whole promise is being heard cannot take a voice away
+ *   without saying so — a quiet mute would be the worst lie in here.
  */
 async function handlePOST(request: Request, { params }: Params) {
   const { id } = await params;
@@ -98,46 +117,42 @@ async function handlePOST(request: Request, { params }: Params) {
     );
 
     /*
-      Releasing a seat never touches its microphone.
+      A hold is a permission, not a request.
 
-      This used to undo a mute with `mutePublishedTrack(…, false)` — asking the
-      SFU to switch somebody else's microphone back on. LiveKit refuses that
-      unless the server enables remote unmute, so the Keeper saw "can speak
-      again" while the seat's button stayed shut; and where it is enabled it is
-      worse, because it lets one person open another's microphone, in a room
-      whose promise is that yours is shut until you choose. So the hold is a
-      mark on the seat — `held` in its metadata — and releasing it clears the
-      mark and nothing else. The seat's own screen reads the mark, says so, and
-      its microphone stays off until they tap.
+      It was `mutePublishedTrack` — the SFU asking the seat's own browser to
+      mute, which that browser could undo from its console and which a new
+      connection never heard of. Then a mark in the seat's metadata, which
+      lived on the connection: leaving voice and rejoining — one reload —
+      came back free. Now the SFU takes away the seat's right to publish. It
+      removes the track itself and refuses a new one, whatever the browser
+      does, and the room's metadata records the hold so the token route mints
+      a held seat back held (`hold.ts`).
+
+      Releasing gives the right back and touches nothing else: the seat's
+      microphone stays off until they tap. No microphone is ever opened from
+      here — not theirs, not anybody's.
+
+      The permission moves first and the record second, in both directions:
+      the room is told a seat is muted once it is, never before.
     */
-    if (!muted) {
-      await svc.updateParticipant(room, identity, { metadata: JSON.stringify({ held: false }) });
-      return NextResponse.json(
-        { ok: true, seat, muted, identity },
-        { headers: { "cache-control": "no-store" } },
-      );
+    try {
+      await svc.updateParticipant(room, identity, { permission: seatPermission(!muted) });
+    } catch (error) {
+      if (!(error instanceof TwirpError && error.status === 404)) throw error;
+      // Not in voice. Letting go of somebody who left still has to clear the
+      // record, or their next join comes back held; holding somebody who is
+      // not there is a mute nobody would hear being made.
+      if (muted) {
+        return NextResponse.json(
+          { error: "not_in_voice", message: `Seat ${seat} isn't in voice right now.` },
+          { status: 409 },
+        );
+      }
     }
 
-    // A seat can only publish a microphone, so there is exactly one track to
-    // find. Muting by SID rather than blanket-muting keeps this honest if the
-    // grant ever widens: it would mute what it named, not everything.
-    const participant = await svc.getParticipant(room, identity);
-    // The SDK's own enums, never the numbers. `TrackType.AUDIO` is 0 and
-    // `VIDEO` is 1, so a hand-written `=== 1` here would have muted the one
-    // thing this room can never publish and left the microphone running.
-    const audio = participant.tracks.find(
-      (t) => t.type === TrackType.AUDIO || t.source === TrackSource.MICROPHONE,
-    );
-
-    if (!audio) {
-      return NextResponse.json(
-        { error: "no_track", message: `Seat ${seat} is not speaking right now.` },
-        { status: 409 },
-      );
-    }
-
-    await svc.mutePublishedTrack(room, identity, audio.sid, true);
-    await svc.updateParticipant(room, identity, { metadata: JSON.stringify({ held: true }) });
+    const [current] = await svc.listRooms([room]);
+    // No room is no call, and nobody is held in a call that is not happening.
+    if (current) await svc.updateRoomMetadata(room, withHold(current.metadata, identity, muted));
 
     return NextResponse.json(
       { ok: true, seat, muted, identity },
@@ -155,7 +170,7 @@ async function handlePOST(request: Request, { params }: Params) {
       person. That is how three environment variable names reached somebody
       tapping the microphone one route over.
 
-      A LiveKit error is worse than a hostname here. `mutePublishedTrack` is
+      A LiveKit error is worse than a hostname here. `updateParticipant` is
       called with the room name and an identity, and its failures quote them —
       the room name is derived from the circle id and the identity is a seat.
       A circle's whole promise is that the room is sealed; the error path was

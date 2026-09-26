@@ -8724,9 +8724,19 @@ check("70 A mute you performed is not a mute somebody did to you", () => {
     is the half that matters.
   */
   const handler = code.slice(code.indexOf("TrackMuted"), code.indexOf("TrackUnmuted"));
-  ok(handler.indexOf("ownMutesRef") < handler.indexOf("setMuted(true)"),
+  const changes = handler.indexOf("setMic(");
+  ok(changes > 0 && handler.indexOf("ownMutesRef") < changes,
     "the counter is consulted before the microphone is marked closed",
-    "`muted` is what disables Open mic — setting it first is the whole failure");
+    "setting state first is the whole failure: our own mute arrives here too");
+  /*
+    And no track event speaks for the Keeper. The hold arrives on the room's
+    record now — the SFU removes a held seat's track rather than muting it —
+    so the only way a Keeper sentence could land here is the original bug:
+    somebody's own tap, reported as governance.
+  */
+  ok(!/Keeper/.test(handler) && /RoomMetadataChanged[\s\S]*The Keeper closed your microphone/.test(code),
+    "the Keeper's hold is told from the room's record, never from a track event",
+    "a mute event is raised by our own taps as well as anybody else's");
 
   /*
     The ring is the seat display, and now the speech display too.
@@ -20375,25 +20385,154 @@ check("158 Every handler a circle screen declares is reachable from the screen",
     "'They were told' waits for the route's answer, not its status");
   ok(/<CircleVoice[\s\S]{0,400}?keeper=\{state\.role === "keeper"\}/.test(room),
     "and the room tells the voice bar who holds it");
+});
+
+/*
+  The Keeper's hold, against a loopback server playing the SFU — one
+  subprocess per answer, because `env` is read once at import. It asks the
+  room for its record before a token is minted, and a token minted for a held
+  seat carries no right to publish.
+*/
+const holdScratch = fs.mkdtempSync(path.join(os.tmpdir(), "mw-voice-hold-"));
+const holdScript = path.join(holdScratch, "hold.mjs");
+fs.writeFileSync(holdScript, `
+  import http from "node:http";
+  import { app } from ${JSON.stringify(path.join(ROOT, "scripts/app-imports.mjs"))};
+  const mode = process.argv[2];
+  let seen = null;
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => { body += c; });
+    req.on("end", () => {
+      seen = { path: req.url, auth: req.headers.authorization ?? "", body };
+      const room = { name: "circle-abc", metadata: JSON.stringify({ held: ["seat-2"] }) };
+      if (mode === "held") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ rooms: [room] })); }
+      else if (mode === "none") { res.writeHead(200, { "content-type": "application/json" }); res.end('{"rooms":[]}'); }
+      else { res.writeHead(401, { "content-type": "application/json" }); res.end('{"code":"unauthenticated","msg":"invalid API key: SFU-SAID-THIS"}'); }
+    });
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const port = server.address().port;
+  if (mode === "closed") await new Promise((r) => server.close(r));
+  const on = mode !== "off";
+  process.env.LIVEKIT_URL = on ? "ws://127.0.0.1:" + port : "";
+  process.env.LIVEKIT_API_KEY = on ? "hold-key" : "";
+  process.env.LIVEKIT_API_SECRET = on ? "hold-secret" : "";
+  const { heldInRoom, mintVoiceToken } = await app("src/lib/voice/livekit.ts");
+  const held = await heldInRoom("abc");
+  const claims = (t) => t ? JSON.parse(Buffer.from(t.token.split(".")[1], "base64url").toString()) : null;
+  const heldToken = claims(mintVoiceToken({ circleId: "abc", seat: 2, keeper: false, held: true }));
+  const freeToken = claims(mintVoiceToken({ circleId: "abc", seat: 3, keeper: false }));
+  if (mode !== "closed") server.close();
+  console.log(JSON.stringify({ held, seen, heldToken, freeToken }));
+`);
+const holdRuns = Object.fromEntries(["held", "none", "refused", "closed", "off"].map((mode) => {
+  const run = voiceSpawn(process.execPath, [holdScript, mode], {
+    cwd: ROOT, encoding: "utf8", env: { ...process.env, VENT_DATA_DIR: holdScratch },
+  });
+  let parsed = null;
+  try { parsed = JSON.parse(run.stdout.trim().split("\n").pop()); } catch { /* reported below */ }
+  return [mode, { ...parsed, stderr: run.stderr ?? "", stdout: run.stdout ?? "" }];
+}));
+const holdLib = await app("src/lib/voice/hold.ts");
+
+check("159 The Keeper's hold is the SFU's, and a rejoin comes back held", () => {
+  /*
+    The hold lived on the connection. `mutePublishedTrack` asked the muted
+    seat's own browser to mute, which that browser could undo, and the mark
+    that locked its button sat in participant metadata — gone the moment the
+    seat left voice. So one reload was a way out of the Keeper's only control.
+    Now the SFU withdraws the seat's right to publish, the room records the
+    hold, and the token route reads the record before it mints.
+  */
+  const { heldSeats, withHold } = holdLib;
+  is(JSON.stringify(heldSeats('{"held":["seat-2","seat-2","seat-9","x",3,"seat-4"]}')), '["seat-2","seat-4"]',
+    "the record is read as seats, once each, and nothing that is not a seat");
+  is(heldSeats("not json").length + heldSeats(undefined).length + heldSeats('{"held":"seat-2"}').length, 0,
+    "a record that does not parse holds nobody");
+  const twice = withHold(withHold(undefined, "seat-2", true), "seat-2", true);
+  is(twice, '{"held":["seat-2"]}', "holding a seat twice holds it once");
+  const released = JSON.parse(withHold('{"held":["seat-2","seat-5"],"other":1}', "seat-2", false));
+  ok(released.other === 1 && JSON.stringify(released.held) === '["seat-5"]',
+    "letting go of one seat keeps the others, and whatever else the room carries",
+    JSON.stringify(released));
+
+  const { held: h, none: n, refused: r, closed: c, off: o } = holdRuns;
+  is(JSON.stringify(h?.held), '["seat-2"]', "the token route reads the room's record", h?.stderr?.slice(-300));
+  ok(h?.seen?.path === "/twirp/livekit.RoomService/ListRooms" && /^Bearer \S+/.test(h?.seen?.auth ?? ""),
+    "by asking the SFU as the deployment", JSON.stringify(h?.seen));
+  is(JSON.stringify(JSON.parse(h?.seen?.body || "{}").names), '["circle-abc"]',
+    "for this circle's room and no other", h?.seen?.body);
+  is(JSON.stringify(n?.held), "[]", "no room yet is nobody held, not a failure");
+  ok(r?.held === null && c?.held === null && o?.held === null,
+    "an SFU that refuses, is unreachable, or is not configured is reported as unknown",
+    "the route then mints an ordinary token: a network blip must never mute a room");
+  ok(/\[voice\] hold lookup answered 401/.test(r?.stderr ?? "") && /\[voice\] hold lookup failed:/.test(c?.stderr ?? ""),
+    "each is logged, by status or by kind", (r?.stderr ?? "") + (c?.stderr ?? ""));
+  ok(![r, c].some((x) => /SFU-SAID-THIS|127\.0\.0\.1|hold-key/.test(x?.stderr ?? "")),
+    "and the SFU's words, the host and the key stay out of the log");
+
+  is(h?.heldToken?.video?.canPublish, false, "a held seat is minted with no right to publish");
+  is(h?.heldToken?.video?.canSubscribe, true, "and can still hear the room");
+  is(h?.freeToken?.video?.canPublish, true, "a free seat can publish");
+  ok([h?.heldToken, h?.freeToken].every((t) => t && !t.video?.canUpdateOwnMetadata),
+    "and no seat can write its own metadata",
+    "the SFU would otherwise take a seat's word for what it is allowed");
+
+  // The route: a permission, whole, and never a track.
+  const mute = strip(fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/voice/mute/route.ts"), "utf8"));
+  ok(!/mutePublishedTrack/.test(mute),
+    "the Keeper changes a seat's permission, and never asks for a track to be muted",
+    "a muted track is a request the muted browser can undo from its console");
+  ok(/const seatPermission = \(canPublish: boolean\) => \(\{\s*canPublish,\s*canSubscribe: true,\s*canPublishData: false,\s*canPublishSources: \[TrackSource\.MICROPHONE\],\s*canUpdateMetadata: false,\s*\}\);/.test(mute),
+    "the permission is written whole, matching the join token but for the one field a hold is",
+    "the SFU replaces every field it is sent: no canSubscribe deafens, no canPublishSources opens a camera");
+  const permissions = [...mute.matchAll(/permission:\s*([^\n}]+)/g)].map((m) => m[1].trim());
+  ok(permissions.length >= 1 && permissions.every((p) => p.startsWith("seatPermission(")),
+    "and every permission the route sends is that one", permissions.join(" | "));
+  const moved = mute.indexOf("updateParticipant(");
+  const recorded = mute.indexOf("updateRoomMetadata(");
+  ok(moved > 0 && recorded > moved,
+    "the permission moves before the room is told",
+    "the room saying a seat is muted before it is, is a claim made before the evidence");
+  ok(/error\.status === 404\)\) throw error;[\s\S]{0,200}?if \(muted\) \{/.test(mute),
+    "a seat that left can still be let go, so its next join is not held for ever");
+
+  const lk = strip(fs.readFileSync(path.join(ROOT, "src/lib/voice/livekit.ts"), "utf8"));
+  ok(/canPublish: !grant\.held,/.test(lk), "the token's right to publish is the hold, read");
+  const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/voice/route.ts"), "utf8"));
+  ok(/const held = \(await heldInRoom\(id\)\)\?\.includes\(`seat-\$\{index \+ 1\}`\) \?\? false;[\s\S]{0,300}?held,\s*\}\);/.test(route),
+    "and the token route asks the room about this seat before it mints");
+
+  // The screen: one record, read at the door and on every change.
+  const voice = strip(fs.readFileSync(path.join(ROOT, "src/components/circle-voice.tsx"), "utf8"));
+  ok(/const heldNow = heldSeats\(room\.metadata\);[\s\S]{0,300}?if \(heldNow\.includes\(grant\.identity\)\) \{[\s\S]{0,200}?return;\s*\}[\s\S]{0,400}?await openMic\(ctx\)/.test(voice),
+    "a seat that comes back held is told so, and no microphone is asked for");
+  ok(/was\.includes\(me\) && !now\.includes\(me\)\) \{\s*setNotice\("You can speak again\. Your microphone stays off until you tap\."\)/.test(voice),
+    "released, the seat is told the microphone is still off");
+  ok(/const muted = seat !== null && held\.includes\(seat\);/.test(voice),
+    "the seat's own lock is the room's record, not a flag of its own");
+  ok(/const closed = held\.includes\(v\);/.test(voice),
+    "and so are the Keeper's buttons, which now survive the Keeper leaving voice");
 
   /*
-    Releasing a seat never opens its microphone. The route used to undo a mute
-    with mutePublishedTrack(…, false): LiveKit refuses that without remote
-    unmute switched on — so the Keeper read "can speak again" over a button
-    still shut — and where it is on, it lets one person open another's
-    microphone. Found in two browsers against a real SFU, not by reading.
+    And the line under the call no longer promises what the header breaks:
+    "Nobody hears which seat you are in", above "Seat 3 speaking…".
   */
-  const mute = strip(fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/voice/mute/route.ts"), "utf8"));
-  const calls = [...mute.matchAll(/mutePublishedTrack\(([^)]*)\)/g)].map((m) => m[1]);
-  ok(calls.length >= 1 && calls.every((a) => /,\s*true$/.test(a.trim())),
-    "the SFU is only ever asked to mute, never to open a microphone", calls.join(" | "));
-  const releaseAt = mute.search(/if \(!muted\) \{\s*await svc\.updateParticipant\(room, identity, \{ metadata: JSON\.stringify\(\{ held: false \}\) \}\);/);
-  ok(releaseAt > 0 && releaseAt < mute.indexOf("getParticipant("),
-    "a release clears the hold on the seat and touches no track");
-  ok(/updateParticipant\(room, identity, \{ metadata: JSON\.stringify\(\{ held: true \}\) \}\)/.test(mute),
-    "and a mute marks the hold where the seat can read it");
-  ok(/ParticipantMetadataChanged[\s\S]{0,260}?participant\.identity !== grant\.identity\) return;[\s\S]{0,120}?readHeld\(participant\.metadata\) !== false\) return;\s*setMuted\(false\);\s*setNotice\("You can speak again\. Your microphone stays off until you tap\."\)/.test(voice),
-    "the seat lifts its own lock when the Keeper lets go, and says the microphone is still off");
+  const walk = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const q = path.join(dir, e.name);
+      if (e.isDirectory()) walk(q, out);
+      else if (/\.tsx?$/.test(q)) out.push(q);
+    }
+    return out;
+  };
+  const sources = walk(path.join(ROOT, "src"));
+  ok(sources.length > 50, `the sweep reads src (${sources.length} files)`);
+  is(sources.filter((f) => /Nobody hears which seat/.test(strip(fs.readFileSync(f, "utf8")))).length, 0,
+    "no screen says the seat is secret while another screen names it");
+  is(sources.filter((f) => /mutePublishedTrack\([^)]*false\s*\)/.test(strip(fs.readFileSync(f, "utf8")))).length, 0,
+    "and nothing anywhere asks the SFU to open a microphone");
 });
 
 for (const r of results) {
