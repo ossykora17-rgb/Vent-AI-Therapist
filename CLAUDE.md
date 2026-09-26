@@ -4071,10 +4071,46 @@ reads the mark and says *"You can speak again. Your microphone stays off until
 you tap."* Two browsers, a real `livekit-server`: muted, told, released, still
 off, then on by their own tap. Reverting to the remote unmute fails check 158.
 
-Named rather than fixed: the hold lives on the participant, so somebody who
-leaves voice and joins again comes back unheld. The Keeper can mute again in
-one tap. Making it survive a rejoin means remembering held seats somewhere the
-token route can read, which is a new thing kept about somebody.
+**That paragraph named a way out, and the reason for leaving it open was a
+false choice.** The hold lived on the participant, so leaving voice and
+rejoining — one reload — came back free, and a muted browser could unmute its
+own track from the console besides: `mutePublishedTrack` is a request the
+seat's client honours, not a rule the SFU keeps. Deferred because surviving a
+rejoin "means remembering held seats somewhere the token route can read, which
+is a new thing kept about somebody" — a database column or nothing. There was
+a third place: the LiveKit **room's** metadata, which every seat in the call
+receives, which the token route can read, and which dies with the room that
+`closeCircle` deletes. A seat number, for exactly as long as the call.
+
+So a hold is now a **permission**. The route sends `canPublish: false`; the SFU
+removes the track itself and refuses a new one (`SetPermission` and `AddTrack`
+in `livekit-server`, read rather than assumed), and a seat minted while held
+gets a token with no right to publish. Permission first and record second in
+both directions, because the room being told a seat is muted before it is
+would be a claim ahead of its evidence. **The permission is sent whole**:
+`UpdateFromPermission` replaces every field, so `{ canPublish: false }` alone
+would also switch off `canSubscribe` and deafen the person it meant to quiet,
+and a release without `canPublishSources` reads as *any source* — a camera, in
+a room that is audio by promise.
+
+It closed two more things on the way. The route's own comment said *"the room
+is told too"*, and nobody else in the call saw anything; every call bar reads
+the record now and says who was muted. And a held seat could still record
+voice notes, so *"Microphone closed by the Keeper"* sat above a gold button that
+records. The route refuses a held seat's note, and the button gives way in the
+call. The line under the call read *"Nobody hears which seat you are in"* over
+a header naming the seat speaking; it says the seat now.
+
+Three browsers against a real `livekit-server`, with the SFU's own record of
+seat 2 read beside every screen: muted (no permission, no track, still
+hearing), reloaded and rejoined (a held token, still no track), the Keeper
+leaving and rejoining (still sees the hold), a held note refused 403 and a free
+seat's kept 201, released (permission back, zero tracks until their own tap).
+Check 159 holds it: eleven mutations fail it, and a twelfth — a track event
+blaming the Keeper — fails check 70. Two limits, stated: the
+lookup fails open, so a blip at the moment a held seat rejoins lets it back
+until the Keeper taps again; and a hold lasts as long as the call's room, which
+LiveKit deletes once everybody has left voice.
 
 **A voice note is moderated after the fact, because it cannot be moderated
 before.** A typed share passes `checkMessage` and the Guardian before it
