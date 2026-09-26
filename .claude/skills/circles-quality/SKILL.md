@@ -189,7 +189,12 @@ the one thing this room can never publish and leaves the microphone open.
 4. **The thread carries a note's length, never its sound.** The sound route is
    per seat, per room, `private, no-store`, `nosniff`.
 5. **No rule reads a voice.** Never write a sentence that says the room is
-   moderated.
+   moderated. What exists is after the fact: the author takes a note back, the
+   Keeper takes one down, and a takedown is said in the thread.
+
+The Keeper's mute is `mutePublishedTrack(…, true)` plus `held: true` in the
+seat's participant metadata; releasing clears the metadata and never calls
+`mutePublishedTrack(…, false)`. Nobody opens another person's microphone.
 
 ## Scoring a Keeper
 

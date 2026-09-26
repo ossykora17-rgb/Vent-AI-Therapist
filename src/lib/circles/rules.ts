@@ -285,6 +285,19 @@ export const MYCELIUM = {
  */
 export const NO_KEEPER_TOOL: readonly string[] = ["grief"];
 
+/**
+ * What the room reads when the Keeper takes somebody's voice note down.
+ *
+ * A voice cannot be screened the way a typed share is — `checkMessage` and the
+ * Guardian read words, not sound — so a note is moderated after the fact, by
+ * the one seat that holds the room. Never silently: the note disappearing
+ * from the thread with no sentence would read to its author as a glitch and
+ * to everybody else as nothing. It names no seat and quotes nothing.
+ */
+export const NOTE_TAKEN_DOWN = "A voice note was taken down by the Keeper.";
+/** The author the line is written under, so no seat is credited with it. */
+export const KEEPER_TOOK_DOWN = "keeper:took-down";
+
 export function keeperIntention(tag: string | null, counted?: string | null): string {
   const opening = OPENING[tag ?? ""] ?? "Today we hold whatever is heaviest.";
 

@@ -106,16 +106,23 @@ export function CirclesList() {
   }, []);
 
   React.useEffect(() => {
-    void load();
-    // The client's clock, read once here rather than during render, so the
-    // first paint after hydration already has a real countdown.
-    setNow(Date.now());
+    // The first ask and the client's clock, from a callback rather than the
+    // effect's own body: `load` can set state before its first await, and the
+    // countdown must not be read during render. A timeout rather than a frame,
+    // because a frame never comes to a tab opened in the background.
+    const first = window.setTimeout(() => {
+      void load();
+      setNow(Date.now());
+    }, 0);
     // Polling, not sockets — Phase 0 is proving the room is wanted at all.
     const t = window.setInterval(() => {
       void load();
       setNow(Date.now());
     }, 10_000);
-    return () => window.clearInterval(t);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(t);
+    };
   }, [load]);
 
   async function create() {

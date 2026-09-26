@@ -71,6 +71,9 @@ function playOn(player: HTMLAudioElement, src: string, onFail: () => void) {
   void player.play().catch(onFail);
 }
 
+/** Said when a remove did not land — the note is still in the room. */
+const NOTE_NOT_REMOVED = "That voice note is still there. Try again.";
+
 /** An empty WAV: what the player starts on inside the tap, before a note arrives. */
 const SILENCE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=";
 
@@ -176,6 +179,8 @@ export function CircleRoom({ id }: { id: string }) {
   /** Downloads under way, so the four-second poll never starts a second one. */
   const inflight = React.useRef(new Map<string, Promise<string | null>>());
   const [playing, setPlaying] = React.useState<{ id: string; at: number } | null>(null);
+  /** The note whose remove button has been tapped once. A second tap removes it. */
+  const [confirming, setConfirming] = React.useState<string | null>(null);
   const endRef = React.useRef<HTMLDivElement>(null);
   const footerRef = React.useRef<HTMLElement>(null);
   // The room had the bug the chat had already fixed. See the hook.
@@ -501,6 +506,48 @@ export function CircleRoom({ id }: { id: string }) {
       }
       playOn(player, url, () => setPlaying(null));
     });
+  }
+
+  // A first tap on remove is only a question, and it expires.
+  React.useEffect(() => {
+    if (!confirming) return;
+    const t = window.setTimeout(() => setConfirming(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [confirming]);
+
+  /*
+    Take a note out of the room — your own, or anybody's if you hold it. Two
+    taps, because a Keeper's slip removes somebody else's voice. The note
+    leaves this screen only once the server says the row went.
+  */
+  async function removeNote(m: Msg) {
+    if (confirming !== m.id) {
+      setConfirming(m.id);
+      return;
+    }
+    setConfirming(null);
+    try {
+      const r = await fetch(`/api/circles/${id}/voice-notes/${m.id}`, {
+        method: "DELETE",
+        headers: { "x-anon-id": me },
+      });
+      const d = await r.json().catch(() => null);
+      if (d?.deleted === true) {
+        if (playing?.id === m.id) {
+          audioRef.current?.pause();
+          setPlaying(null);
+        }
+        const url = blobs.current.get(m.id);
+        if (url) URL.revokeObjectURL(url);
+        blobs.current.delete(m.id);
+        setMessages((all) => all.filter((x) => x.id !== m.id));
+        void load();
+        return;
+      }
+      setRuleError(typeof d?.message === "string" ? d.message : NOTE_NOT_REMOVED);
+    } catch {
+      setRuleError(NOTE_NOT_REMOVED);
+    }
   }
 
   /*
@@ -982,6 +1029,20 @@ export function CircleRoom({ id }: { id: string }) {
                           <span className="tabular text-fine text-ash">
                             {noteLength(playing?.id === m.id ? playing.at : m.durationMs ?? 0)}
                           </span>
+                          {(m.mine || state.role === "keeper") && (
+                            <button
+                              type="button"
+                              onClick={() => void removeNote(m)}
+                              aria-label={
+                                confirming === m.id
+                                  ? "Remove? Tap again to confirm"
+                                  : m.mine ? "Remove voice note" : "Take down voice note"
+                              }
+                              className="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-full px-2 text-ash hover:bg-line/5"
+                            >
+                              {confirming === m.id ? <span className="text-fine text-ink">Remove?</span> : <TrashIcon />}
+                            </button>
+                          )}
                         </div>
                       )}
                       <p className="mt-0.5 text-right text-label text-ash">

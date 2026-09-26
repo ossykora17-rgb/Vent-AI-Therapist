@@ -128,6 +128,9 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
   const [speaking, setSpeaking] = React.useState<string[]>([]);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [working, setWorking] = React.useState<string | null>(null);
+  /** Seats this Keeper has closed, by identity — the only way to tell their
+   *  mute from somebody muting themselves, which raises the same event. */
+  const [closedByMe, setClosedByMe] = React.useState<string[]>([]);
 
   const roomRef = React.useRef<Room | null>(null);
   const grantRef = React.useRef<Grant | null>(null);
@@ -183,7 +186,8 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
     setSpeaking([]);
     onSpeaking?.([]);
     setSeat(null);
-  }, [releaseAudio]);
+    setClosedByMe([]);
+  }, [releaseAudio, onSpeaking]);
 
   // Leaving the page is leaving the room. Without this the SFU holds a ghost
   // participant and the seat looks occupied by somebody who is gone — and the
@@ -387,6 +391,14 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
           setMic("off");
           setNotice("The Keeper closed your microphone. The room is still here in text.");
         })
+        // The Keeper letting go: the hold is a mark on this seat, and clearing
+        // it hands the microphone back without opening it.
+        .on(RoomEvent.ParticipantMetadataChanged, (_prev: string | undefined, participant: Participant) => {
+          if (participant.identity !== grant.identity) return;
+          if (readHeld(participant.metadata) !== false) return;
+          setMuted(false);
+          setNotice("You can speak again. Your microphone stays off until you tap.");
+        })
         .on(RoomEvent.TrackUnmuted, (_pub, participant: Participant) => {
           if (participant.identity !== grant.identity) return;
           if (ownMutesRef.current > 0) {
@@ -465,12 +477,14 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ anonId, seat, muted: next }),
       });
-      const d = await r.json();
-      setNotice(
-        r.ok
-          ? `${identity} ${next ? "muted" : "unmuted"}. They were told.`
-          : d.message ?? "That didn't go through.",
-      );
+      const d = await r.json().catch(() => null);
+      // The body decides: the route answers `{ ok: true }` once the SFU took it.
+      if (r.ok && d?.ok === true) {
+        setClosedByMe((was) => (next ? [...was.filter((v) => v !== identity), identity] : was.filter((v) => v !== identity)));
+        setNotice(`Seat ${seat} ${next ? "muted" : "can speak again"}. They were told.`);
+      } else {
+        setNotice(typeof d?.message === "string" ? d.message : "That didn't go through.");
+      }
     } catch {
       setNotice("That didn't go through.");
     } finally {
@@ -672,6 +686,38 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
           </button>
         )}
 
+        {/*
+          The Keeper's one control over somebody else's voice, which the room
+          lost when the seat ring went: `muteSeat` sat here with no button for
+          a month. One row, only for the Keeper, only for seats in voice with
+          them — mute, never remove, and the same tap undoes it.
+        */}
+        {status === "live" && keeper && voices.some((v) => v !== seat && /^seat-\d+$/.test(v)) && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {voices
+              .filter((v) => v !== seat && /^seat-\d+$/.test(v))
+              .map((v) => {
+                const closed = closedByMe.includes(v);
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => void muteSeat(v, !closed)}
+                    disabled={working === v}
+                    aria-pressed={closed}
+                    className={cn(
+                      "min-h-[44px] rounded-full border px-4 text-body text-ink disabled:opacity-40",
+                      closed ? "border-gold bg-gold/20" : "border-line/25",
+                      speaking.includes(v) && "ring-2 ring-gold/60",
+                    )}
+                  >
+                    {closed ? "Unmute" : "Mute"} Seat {v.slice(5)}
+                  </button>
+                );
+              })}
+          </div>
+        )}
+
         {notice && <p className="mt-2 text-fine text-ash" aria-live="polite">{notice}</p>}
         {error && <p className="mt-2 text-fine text-ash">{error}</p>}
       </div>
@@ -683,6 +729,16 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
   );
 }
 
+
+/** The Keeper's hold on a seat, as the server wrote it into that seat's metadata. */
+function readHeld(metadata: string | undefined): boolean | null {
+  try {
+    const v = JSON.parse(metadata ?? "") as { held?: unknown } | null;
+    return typeof v?.held === "boolean" ? v.held : null;
+  } catch {
+    return null;
+  }
+}
 
 function identities(room: Room): string[] {
   return [
