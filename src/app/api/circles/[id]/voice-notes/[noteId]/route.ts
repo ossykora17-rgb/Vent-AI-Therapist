@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
 import { sweepIfOver } from "@/lib/circles/sweep";
 import { withStore } from "@/lib/http/with-store";
+import { KEEPER_TOOK_DOWN, NOTE_TAKEN_DOWN } from "@/lib/circles/rules";
 
 export const dynamic = "force-dynamic";
 
@@ -57,3 +58,61 @@ async function handleGET(request: Request, { params }: Params) {
 }
 
 export const GET = withStore(handleGET);
+
+/*
+  Take a note out of the room: your own, or — for the Keeper — anybody's.
+
+  A typed share is screened before it lands; a voice cannot be, so this is the
+  moderation a note gets, after the fact, by the one seat that holds the room.
+  The Keeper's takedown is said in the thread, because a note vanishing with no
+  sentence reads to its author as a glitch. Taking back your own is not
+  announced — it is unsaying something, and it is yours to unsay.
+
+  Same doors in the same order as every handler under `[id]`.
+*/
+async function handleDELETE(request: Request, { params }: Params) {
+  const { id, noteId } = await params;
+  const anonId = request.headers.get("x-anon-id") ?? "";
+  const store = getStore();
+  if (!store) return NextResponse.json({ error: "no_storage" }, { status: 503 });
+
+  const circle = await store.getCircle(id);
+  if (!circle) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (await sweepIfOver(store, circle)) {
+    return NextResponse.json({ error: "closed" }, { status: 410 });
+  }
+
+  const members = await store.listMembers(id);
+  const me = members.find((m) => m.anon_id === anonId);
+  if (!me) return NextResponse.json({ error: "not_a_member" }, { status: 403 });
+
+  if (!UUID.test(noteId)) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  const note = (await store.listVoiceNotes(id)).find((n) => n.id === noteId);
+  if (!note) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  const mine = note.anon_id === anonId;
+  if (!mine && me.role !== "keeper") {
+    return NextResponse.json(
+      { error: "not_yours", message: "Only the Keeper can take down somebody else's voice note." },
+      { status: 403 },
+    );
+  }
+
+  // The answer is read: a note somebody else removed a moment ago is not
+  // reported as removed by this request.
+  if (!(await store.deleteVoiceNote(id, noteId))) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+  if (!mine) {
+    await store.addCircleMessage({
+      circle_id: id,
+      anon_id: KEEPER_TOOK_DOWN,
+      content: NOTE_TAKEN_DOWN,
+      kind: "keeper_prompt",
+      flagged: false,
+    });
+  }
+  return NextResponse.json({ deleted: true }, { headers: { "cache-control": "no-store" } });
+}
+
+export const DELETE = withStore(handleDELETE);

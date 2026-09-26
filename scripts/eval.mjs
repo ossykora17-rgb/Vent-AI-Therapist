@@ -19824,6 +19824,7 @@ check("156 Voice starts inside the tap, and the room can always be heard", () =>
   can reach, and the live half (157b) carries a note across the wire.
 */
 const noteLib = await app("src/lib/voice/note.ts");
+const { NOTE_TAKEN_DOWN, KEEPER_TOOK_DOWN } = await app("src/lib/circles/rules.ts");
 const { startRecording: noteStartRecording } = await app("src/lib/voice/recorder.ts");
 
 /** Speech-shaped sound: a low tone with a slow swell, as float samples. */
@@ -20108,6 +20109,28 @@ check("157 A voice note is the masked voice, kept only as long as the room", () 
   ok([postSrc, getSrc].every((s) => /request\.headers\.get\("x-anon-id"\)/.test(s) && !/searchParams/.test(s)),
     "both routes take the seat from a header, never the URL");
 
+  // 4b. Taking a note down: your own, or anybody's if you hold the room — said
+  // in the thread when it is somebody else's, and only once the row went.
+  const delAt = getSrc.indexOf("async function handleDELETE(");
+  const del = delAt < 0 ? "" : getSrc.slice(delAt);
+  const delOrder = ["getCircle(", "sweepIfOver(", "listMembers(", "listVoiceNotes(", "deleteVoiceNote(id, noteId)"].map((m) => del.indexOf(m));
+  ok(delAt > 0 && delOrder.every((i, k) => i > 0 && (k === 0 || i > delOrder[k - 1])),
+    "removing a note asks the room, its end and the seat first", delOrder.join(" "));
+  ok(/if \(!mine && me\.role !== "keeper"\) \{/.test(del),
+    "somebody else's note comes down only for the Keeper");
+  ok(/if \(!\(await store\.deleteVoiceNote\(id, noteId\)\)\) \{/.test(del),
+    "and the removal is reported only when a row actually went");
+  ok(/if \(!mine\) \{\s*await store\.addCircleMessage\(\{[\s\S]{0,120}?anon_id: KEEPER_TOOK_DOWN,\s*content: NOTE_TAKEN_DOWN,\s*kind: "keeper_prompt"/.test(del),
+    "a takedown is said in the thread, and taking back your own is not");
+  ok(!/seat|anon/i.test(NOTE_TAKEN_DOWN) && KEEPER_TOOK_DOWN.startsWith("keeper:"),
+    "the line names no seat and is credited to no seat");
+  ok(/if \(confirming !== m\.id\) \{\s*setConfirming\(m\.id\);\s*return;\s*\}/.test(room),
+    "the first tap on remove only asks");
+  ok(/if \(d\?\.deleted === true\) \{[\s\S]{0,400}?setMessages\(\(all\) => all\.filter\(\(x\) => x\.id !== m\.id\)\)/.test(room),
+    "and the note leaves the screen only when the server says it went");
+  ok(/\{\(m\.mine \|\| state\.role === "keeper"\) && \(/.test(room),
+    "the remove control is drawn for your own note, or for the Keeper");
+
   // 5. The stores: a listing never carries a voice, and a close takes every one.
   const supa = strip(fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8"));
   const listCols = /async listVoiceNotes[\s\S]*?\.select\("([^"]*)"\)/.exec(supa)?.[1] ?? "";
@@ -20124,6 +20147,10 @@ check("157 A voice note is the masked voice, kept only as long as the room", () 
   ok(/\.eq\("circle_id", circleId\)\s*\.eq\("id", noteId\)/.test(method(supa, "getVoiceNoteAudio"))
     && /x\.circle_id === circleId && x\.id === noteId/.test(method(file, "getVoiceNoteAudio")),
     "a note is looked up inside its room in both stores — an id carried elsewhere finds nothing");
+  ok(/\.delete\(\)\s*\.eq\("circle_id", circleId\)\s*\.eq\("id", noteId\)\s*\.select\("id"\)\);\s*return[^;]*\.length === 1;/.test(method(supa, "deleteVoiceNote"))
+    && /!\(x\.circle_id === circleId && x\.id === noteId\)/.test(method(file, "deleteVoiceNote"))
+    && /gone = db\.circleVoiceNotes\.length < before;/.test(method(file, "deleteVoiceNote")),
+    "and removed inside its room in both stores, reporting only a row that went");
   const fileClose = file.slice(file.indexOf("async closeCircle("), file.indexOf("async addVoiceNote("));
   ok(/db\.circleVoiceNotes = \(db\.circleVoiceNotes \?\? \[\]\)\.filter\(\(x\) => x\.circle_id !== id\)/.test(fileClose),
     "the file store's close takes the notes with the words");
@@ -20256,6 +20283,31 @@ if (BASE) {
     is(shortBody?.message, noteLib.NOTE_TOO_SHORT, "in the sentence the phone would have said itself");
     is((await leave(a, noteFile({ channels: 2, samples: notePcm }))).status, 422,
       "a format this room did not record is refused");
+    // Taking a note back, and taking one down. `a` opened the room, so `a`
+    // holds it; the tagged note is `b`'s.
+    const drop = (who, noteId) => fetch(`${BASE}/api/circles/${id}/voice-notes/${noteId}`, {
+      method: "DELETE", headers: who ? { "x-anon-id": who } : {},
+    });
+    is((await drop(b, sentBody?.id)).status, 403, "a seat cannot take down somebody else's note");
+    is((await drop(x, sentBody?.id)).status, 403, "and a stranger cannot take down any");
+    const takenDown = await drop(a, taggedId);
+    const takenBody = await takenDown.json().catch(() => null);
+    ok(takenDown.status === 200 && takenBody?.deleted === true,
+      "the Keeper can take down somebody else's note", `${takenDown.status} ${JSON.stringify(takenBody)}`);
+    const afterDown = await fetch(`${BASE}/api/circles/${id}/messages?anonId=${b}`).then((r) => r.json());
+    const downLines = () => (afterDown.messages ?? []).filter((m) => m.kind === "keeper_prompt" && m.content === NOTE_TAKEN_DOWN);
+    is((afterDown.messages ?? []).filter((m) => m.kind === "voice").length, 1, "it leaves the thread");
+    is(downLines().length, 1, "and the room is told once, in the Keeper's voice, naming no seat");
+    is((await hear(b, taggedId)).status, 404, "a note taken down cannot be played");
+    const takenBack = await drop(a, sentBody?.id);
+    ok(takenBack.status === 200 && (await takenBack.json().catch(() => null))?.deleted === true,
+      "anybody can take back their own note");
+    const afterBack = await fetch(`${BASE}/api/circles/${id}/messages?anonId=${b}`).then((r) => r.json());
+    is((afterBack.messages ?? []).filter((m) => m.kind === "voice").length, 0, "and it is gone");
+    is((afterBack.messages ?? []).filter((m) => m.kind === "keeper_prompt" && m.content === NOTE_TAKEN_DOWN).length, 1,
+      "without a line — unsaying your own is not announced");
+    is((await drop(a, sentBody?.id)).status, 404, "a note already gone is not reported as removed twice");
+
     // Close means close, for a voice as for a word.
     const ended = await fetch(`${BASE}/api/circles/${id}?anonId=${a}`, { method: "DELETE" });
     ok(ended.ok, "the Keeper ends the room", String(ended.status));
@@ -20287,6 +20339,62 @@ if (BASE) {
     });
   });
 }
+
+// ── 158: a control that lost its button ─────────────────────────────────────
+check("158 Every handler a circle screen declares is reachable from the screen", () => {
+  /*
+    `muteSeat` — the Keeper's one control over somebody else's voice — sat in
+    circle-voice.tsx with no caller for a month after the seat ring went. The
+    route, the role check, the sentence the muted person reads: all working,
+    and no button. Lint printed "'muteSeat' is defined but never used" the whole
+    time, as a warning, which is a finding nobody reads. So the class is held
+    here: a handler a circle screen declares is called from that screen.
+  */
+  const files = ["circle-voice.tsx", "circle-room.tsx", "circles-list.tsx"]
+    .map((f) => [f, strip(fs.readFileSync(path.join(ROOT, "src/components", f), "utf8"))]);
+  let declared = 0;
+  const orphans = [];
+  for (const [f, src] of files) {
+    const names = [...src.matchAll(/\bfunction\s+([a-z]\w*)\s*\(|\bconst\s+([a-z]\w*)\s*=\s*(?:React\.useCallback\(|async\s*\(|\([^)]*\)\s*=>)/g)]
+      .map((m) => m[1] ?? m[2]);
+    for (const n of new Set(names)) {
+      declared++;
+      if (src.split(new RegExp(`\\b${n}\\b`)).length - 1 < 2) orphans.push(`${f}: ${n}`);
+    }
+  }
+  // A floor against a sweep that reads nothing; 28 were measured when written.
+  ok(declared >= 20, `the sweep reads the circle screens' handlers (${declared})`);
+  is(orphans.length, 0, "no circle screen declares a handler that nothing calls", orphans.join(", "));
+
+  const [, voice] = files[0];
+  const [, room] = files[1];
+  ok(/status === "live" && keeper && voices\.some\(\(v\) => v !== seat && /.test(voice),
+    "the mute is offered only to the Keeper, only in voice, and never for their own seat");
+  ok(/onClick=\{\(\) => void muteSeat\(v, !closed\)\}/.test(voice), "and the same tap undoes it");
+  ok(/if \(r\.ok && d\?\.ok === true\) \{/.test(voice),
+    "'They were told' waits for the route's answer, not its status");
+  ok(/<CircleVoice[\s\S]{0,400}?keeper=\{state\.role === "keeper"\}/.test(room),
+    "and the room tells the voice bar who holds it");
+
+  /*
+    Releasing a seat never opens its microphone. The route used to undo a mute
+    with mutePublishedTrack(…, false): LiveKit refuses that without remote
+    unmute switched on — so the Keeper read "can speak again" over a button
+    still shut — and where it is on, it lets one person open another's
+    microphone. Found in two browsers against a real SFU, not by reading.
+  */
+  const mute = strip(fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/voice/mute/route.ts"), "utf8"));
+  const calls = [...mute.matchAll(/mutePublishedTrack\(([^)]*)\)/g)].map((m) => m[1]);
+  ok(calls.length >= 1 && calls.every((a) => /,\s*true$/.test(a.trim())),
+    "the SFU is only ever asked to mute, never to open a microphone", calls.join(" | "));
+  const releaseAt = mute.search(/if \(!muted\) \{\s*await svc\.updateParticipant\(room, identity, \{ metadata: JSON\.stringify\(\{ held: false \}\) \}\);/);
+  ok(releaseAt > 0 && releaseAt < mute.indexOf("getParticipant("),
+    "a release clears the hold on the seat and touches no track");
+  ok(/updateParticipant\(room, identity, \{ metadata: JSON\.stringify\(\{ held: true \}\) \}\)/.test(mute),
+    "and a mute marks the hold where the seat can read it");
+  ok(/ParticipantMetadataChanged[\s\S]{0,260}?participant\.identity !== grant\.identity\) return;[\s\S]{0,120}?readHeld\(participant\.metadata\) !== false\) return;\s*setMuted\(false\);\s*setNotice\("You can speak again\. Your microphone stays off until you tap\."\)/.test(voice),
+    "the seat lifts its own lock when the Keeper lets go, and says the microphone is still off");
+});
 
 for (const r of results) {
   const good = r.failed.length === 0;

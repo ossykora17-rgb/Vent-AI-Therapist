@@ -97,6 +97,27 @@ async function handlePOST(request: Request, { params }: Params) {
       env.livekitApiSecret,
     );
 
+    /*
+      Releasing a seat never touches its microphone.
+
+      This used to undo a mute with `mutePublishedTrack(…, false)` — asking the
+      SFU to switch somebody else's microphone back on. LiveKit refuses that
+      unless the server enables remote unmute, so the Keeper saw "can speak
+      again" while the seat's button stayed shut; and where it is enabled it is
+      worse, because it lets one person open another's microphone, in a room
+      whose promise is that yours is shut until you choose. So the hold is a
+      mark on the seat — `held` in its metadata — and releasing it clears the
+      mark and nothing else. The seat's own screen reads the mark, says so, and
+      its microphone stays off until they tap.
+    */
+    if (!muted) {
+      await svc.updateParticipant(room, identity, { metadata: JSON.stringify({ held: false }) });
+      return NextResponse.json(
+        { ok: true, seat, muted, identity },
+        { headers: { "cache-control": "no-store" } },
+      );
+    }
+
     // A seat can only publish a microphone, so there is exactly one track to
     // find. Muting by SID rather than blanket-muting keeps this honest if the
     // grant ever widens: it would mute what it named, not everything.
@@ -115,7 +136,8 @@ async function handlePOST(request: Request, { params }: Params) {
       );
     }
 
-    await svc.mutePublishedTrack(room, identity, audio.sid, muted);
+    await svc.mutePublishedTrack(room, identity, audio.sid, true);
+    await svc.updateParticipant(room, identity, { metadata: JSON.stringify({ held: true }) });
 
     return NextResponse.json(
       { ok: true, seat, muted, identity },

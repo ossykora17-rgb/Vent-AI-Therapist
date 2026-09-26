@@ -4048,6 +4048,46 @@ says to pin a fix into the backup before re-running, about the same harness.
 The backups are deleted the moment a pass ends now, so the next run takes fresh
 ones.
 
+**The Keeper had no mute for a month, and its undo would not have worked.**
+`muteSeat` — the Keeper's one control over somebody else's voice — lost its
+only caller when the seat ring went in #141, and sat in `circle-voice.tsx` with
+the route, the role check and the muted person's sentence all intact. Lint said
+`'muteSeat' is defined but never used` every run, as a warning. The button is
+back as one row in the voice bar, for the Keeper only, never for their own
+seat, and check 158 now holds the class rather than the instance: every handler
+a circle screen declares must be called from that screen. Deleting the button's
+`onClick` fails it.
+
+Restoring the button is what found the second bug, because it was run against
+a real SFU instead of read. The route undid a mute with
+`mutePublishedTrack(…, false)` — asking LiveKit to switch somebody else's
+microphone back on. LiveKit refuses that unless remote unmute is enabled on the
+server, so the Keeper read *"can speak again"* over a seat whose button stayed
+shut for the rest of the call. Where it is enabled it is worse: one person
+opening another's microphone, in a room that promises yours is shut until you
+choose. So the hold is a mark — `held` in the seat's participant metadata —
+and releasing it clears the mark and touches no track. The seat's own screen
+reads the mark and says *"You can speak again. Your microphone stays off until
+you tap."* Two browsers, a real `livekit-server`: muted, told, released, still
+off, then on by their own tap. Reverting to the remote unmute fails check 158.
+
+Named rather than fixed: the hold lives on the participant, so somebody who
+leaves voice and joins again comes back unheld. The Keeper can mute again in
+one tap. Making it survive a rejoin means remembering held seats somewhere the
+token route can read, which is a new thing kept about somebody.
+
+**A voice note is moderated after the fact, because it cannot be moderated
+before.** A typed share passes `checkMessage` and the Guardian before it
+lands; a note is sound, and nothing here reads sound. So a note can come down:
+its author can take it back, and the Keeper can take down anybody's. Two taps,
+because a Keeper's slip removes somebody else's voice. A takedown is said in
+the thread as a Keeper line that names no seat — a note vanishing silently
+reads to its author as a glitch — and taking back your own is not announced.
+`deleteVoiceNote` reports whether a row went, and the screen drops the note
+only on `deleted: true`: the rows are the evidence, which is the shape
+`savePush` was once wrong about. Seven mutations fail check 157, and live 157b
+does both removals over the wire.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

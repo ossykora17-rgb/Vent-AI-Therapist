@@ -451,6 +451,12 @@ export interface Store {
    *  another room answers nothing. */
   getVoiceNoteAudio(circleId: string, noteId: string): Promise<{ anon_id: string; audio: string } | null>;
   /**
+   * Take one note out of its room. True only when a row was deleted — a note
+   * already gone, or a note from another room, is false, and the caller says
+   * so rather than claiming a removal nobody watched.
+   */
+  deleteVoiceNote(circleId: string, noteId: string): Promise<boolean>;
+  /**
    * Give the seat back. Used to undo a join that lost a race, and by nothing
    * else — leaving a circle is not a feature, it is a thing that happens when
    * the clock runs out.

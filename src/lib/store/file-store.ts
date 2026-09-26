@@ -495,6 +495,18 @@ export class FileStore implements Store {
     return hit ? { anon_id: hit.anon_id, audio: hit.audio } : null;
   }
 
+  async deleteVoiceNote(circleId: string, noteId: string): Promise<boolean> {
+    let gone = false;
+    await this.write((db) => {
+      const before = (db.circleVoiceNotes ?? []).length;
+      db.circleVoiceNotes = (db.circleVoiceNotes ?? []).filter(
+        (x) => !(x.circle_id === circleId && x.id === noteId),
+      );
+      gone = db.circleVoiceNotes.length < before;
+    });
+    return gone;
+  }
+
   async listMembers(circleId: string): Promise<CircleMemberRow[]> {
     return this.read()
       .circleMembers.filter((m) => m.circle_id === circleId)

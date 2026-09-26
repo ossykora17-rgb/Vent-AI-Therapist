@@ -742,6 +742,18 @@ export class SupabaseStore implements Store {
     return (data as unknown as { anon_id: string; audio: string } | null) ?? null;
   }
 
+  async deleteVoiceNote(circleId: string, noteId: string): Promise<boolean> {
+    // The rows are the evidence: a delete Postgres did not complain about is
+    // not a delete that happened, which is the shape savePush was wrong about.
+    const data = ok("deleteVoiceNote", await this.db
+      .from("circle_voice_notes")
+      .delete()
+      .eq("circle_id", circleId)
+      .eq("id", noteId)
+      .select("id"));
+    return ((data ?? []) as unknown as Array<{ id: string }>).length === 1;
+  }
+
   async seatedIn(anonId: string): Promise<string[]> {
     const data = ok("seatedIn", await this.db
       .from("circle_members")
