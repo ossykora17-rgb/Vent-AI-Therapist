@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
 import { sweepIfOver } from "@/lib/circles/sweep";
 import { withStore } from "@/lib/http/with-store";
+import { heldInRoom } from "@/lib/voice/livekit";
 import {
   checkWav, NOTE_MAX_BYTES, NOTE_TOO_SHORT, NOTES_PER_CIRCLE, NOTES_PER_SEAT, readNote, type WavVerdict,
 } from "@/lib/voice/note";
@@ -66,8 +67,25 @@ async function handlePOST(request: Request, { params }: Params) {
   }
 
   const members = await store.listMembers(id);
-  if (!members.some((m) => m.anon_id === anonId)) {
+  const seatAt = members.findIndex((m) => m.anon_id === anonId);
+  if (seatAt < 0) {
     return NextResponse.json({ error: "not_a_member" }, { status: 403 });
+  }
+
+  /*
+    A seat the Keeper is holding has no microphone in the thread either. A
+    voice note is the same voice by another road, and a hold that covered the
+    call and not the notes would sit on one screen as "Microphone closed by
+    the Keeper" above a button that records. Asked of the call's own record
+    (`hold.ts`), with the seat derived the way the voice route derives it;
+    unknown is not held — a network blip must never mute a room — and with no
+    voice server there is no hold and nothing is asked.
+  */
+  if ((await heldInRoom(id))?.includes(`seat-${seatAt + 1}`)) {
+    return NextResponse.json(
+      { error: "held", message: "The Keeper closed your microphone. You can still type." },
+      { status: 403 },
+    );
   }
 
   let said;

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStore } from "@/lib/store";
-import { mintVoiceToken } from "@/lib/voice/livekit";
+import { heldInRoom, mintVoiceToken } from "@/lib/voice/livekit";
 import { isLivekitConfigured } from "@/lib/env";
 import { sweepIfOver } from "@/lib/circles/sweep";
 import { withStore } from "@/lib/http/with-store";
@@ -95,11 +95,16 @@ async function handlePOST(request: Request, { params }: Params) {
    * still usable for the walk out rather than being born expired.
    */
   const msLeft = new Date(circle.ends_at).getTime() - Date.now();
+  // A seat the Keeper is holding comes back held. It used to come back free:
+  // the hold sat on the connection, so leaving voice and rejoining — one
+  // reload — was a way out of it.
+  const held = (await heldInRoom(id))?.includes(`seat-${index + 1}`) ?? false;
   const token = mintVoiceToken({
     circleId: id,
     seat: index + 1,
     keeper: members[index].role === "keeper",
     ttlSeconds: Math.max(60, Math.ceil(msLeft / 1000) + 60),
+    held,
   });
 
   return NextResponse.json(token, { headers: { "cache-control": "no-store" } });

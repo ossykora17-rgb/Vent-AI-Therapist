@@ -3,6 +3,7 @@
 import * as React from "react";
 import type { Participant, RemoteTrack, Room, Track } from "livekit-client";
 import { audioContextInGesture, maskMicrophone, personaFor, whenRunning } from "@/lib/voice/mask";
+import { heldSeats } from "@/lib/voice/hold";
 import { cn } from "@/lib/utils";
 
 /**
@@ -62,6 +63,8 @@ interface Props {
   onSpeaking?: (seats: number[]) => void;
   /** Where the voice room is, for the header icon that opens it. */
   onStatus?: (status: Status) => void;
+  /** Whether the Keeper is holding this seat, for the composer's record button. */
+  onHeld?: (held: boolean) => void;
   /** The header's phone icon calls `toggle` from inside its own tap. */
   ref?: React.Ref<VoiceHandle>;
 }
@@ -102,7 +105,7 @@ function micRefusal(name: string): string {
           : "The microphone didn't open. You can still hear the room, and type.";
 }
 
-export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onStatus, ref }: Props) {
+export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onStatus, onHeld, ref }: Props) {
   const [status, setStatus] = React.useState<Status>("idle");
   const [error, setError] = React.useState<string | null>(null);
   // Shut on arrival. See `openMic` for why.
@@ -120,17 +123,22 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
     is the unlock, and it only works from a tap, so it gets a button.
   */
   const [canHear, setCanHear] = React.useState(true);
-  // Distinct from `mic`: this is the Keeper closing your microphone, which is
-  // not yours to undo. Talking is a choice; this is governance.
-  const [muted, setMuted] = React.useState(false);
   const [seat, setSeat] = React.useState<string | null>(null);
+  /*
+    Seats the Keeper is holding, read off the room — the one record every
+    screen in the call reads, so the Keeper's buttons, the held seat's own
+    screen and everybody else's cannot disagree. Distinct from `mic`: a hold
+    is not yours to undo. Talking is a choice; this is governance. The ref is
+    for the room's event handlers, which are made once at join and would
+    otherwise read the list as it was then.
+  */
+  const [held, setHeld] = React.useState<string[]>([]);
+  const heldRef = React.useRef<string[]>([]);
+  const muted = seat !== null && held.includes(seat);
   const [voices, setVoices] = React.useState<string[]>([]);
   const [speaking, setSpeaking] = React.useState<string[]>([]);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [working, setWorking] = React.useState<string | null>(null);
-  /** Seats this Keeper has closed, by identity — the only way to tell their
-   *  mute from somebody muting themselves, which raises the same event. */
-  const [closedByMe, setClosedByMe] = React.useState<string[]>([]);
 
   const roomRef = React.useRef<Room | null>(null);
   const grantRef = React.useRef<Grant | null>(null);
@@ -139,7 +147,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
   const sourceRef = React.useRef<Track.Source | null>(null);
   const sinkRef = React.useRef<HTMLDivElement>(null);
   /*
-    How many mute/unmute events are ours and not the Keeper's.
+    How many mute/unmute events are ours.
 
     `RoomEvent.TrackMuted` fires for *every* mute on the track, including the
     ones this component performs itself — and it performs two kinds. The
@@ -186,7 +194,8 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
     setSpeaking([]);
     onSpeaking?.([]);
     setSeat(null);
-    setClosedByMe([]);
+    heldRef.current = [];
+    setHeld([]);
   }, [releaseAudio, onSpeaking]);
 
   // Leaving the page is leaving the room. Without this the SFU holds a ghost
@@ -378,8 +387,6 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
         .on(RoomEvent.ParticipantConnected, () => setVoices(identities(room)))
         .on(RoomEvent.ParticipantDisconnected, () => setVoices(identities(room)))
         .on(RoomEvent.TrackMuted, (_pub, participant: Participant) => {
-          // Told, never silently silenced. If the Keeper closed your
-          // microphone you find out from the room, not from being ignored.
           if (participant.identity !== grant.identity) return;
           // Ours, and expected. The talk button and the mute-on-arrival both
           // land here; neither is somebody else acting on you.
@@ -387,17 +394,9 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
             ownMutesRef.current -= 1;
             return;
           }
-          setMuted(true);
+          // Not a tap of ours, and not the Keeper either — a hold arrives on
+          // the room, below. The button follows the track, whatever moved it.
           setMic("off");
-          setNotice("The Keeper closed your microphone. The room is still here in text.");
-        })
-        // The Keeper letting go: the hold is a mark on this seat, and clearing
-        // it hands the microphone back without opening it.
-        .on(RoomEvent.ParticipantMetadataChanged, (_prev: string | undefined, participant: Participant) => {
-          if (participant.identity !== grant.identity) return;
-          if (readHeld(participant.metadata) !== false) return;
-          setMuted(false);
-          setNotice("You can speak again. Your microphone stays off until you tap.");
         })
         .on(RoomEvent.TrackUnmuted, (_pub, participant: Participant) => {
           if (participant.identity !== grant.identity) return;
@@ -405,8 +404,42 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
             ownMutesRef.current -= 1;
             return;
           }
-          setMuted(false);
-          setNotice("Your microphone is open again.");
+          // A live track under a button reading "Tap to talk" is somebody
+          // audible without knowing it. The button says what the track is.
+          setMic("on");
+          setNotice("Your microphone is on.");
+        })
+        /*
+          The Keeper's hold, told to everybody in the call.
+
+          The SFU has already acted by the time this arrives — the route moves
+          the permission first and writes the record second — so a held seat's
+          track is gone and this only has to say so, and let go of the
+          microphone it can no longer use. Released, the microphone stays off
+          until the person taps: the hold is lifted, nothing is opened.
+        */
+        .on(RoomEvent.RoomMetadataChanged, (metadata: string) => {
+          const was = heldRef.current;
+          const now = heldSeats(metadata);
+          heldRef.current = now;
+          setHeld(now);
+          const me = grant.identity;
+          if (now.includes(me) && !was.includes(me)) {
+            releaseAudio();
+            setMic("unavailable");
+            setNotice("The Keeper closed your microphone. You can still hear the room, and type.");
+            return;
+          }
+          if (was.includes(me) && !now.includes(me)) {
+            setNotice("You can speak again. Your microphone stays off until you tap.");
+            return;
+          }
+          // The Keeper was already told by their own tap.
+          if (keeper) return;
+          const gained = now.find((v) => !was.includes(v));
+          const lost = was.find((v) => !now.includes(v));
+          if (gained) setNotice(`The Keeper muted Seat ${gained.slice(5)}.`);
+          else if (lost) setNotice(`Seat ${lost.slice(5)} can speak again.`);
         })
         .on(RoomEvent.Disconnected, () => {
           roomRef.current = null;
@@ -418,6 +451,8 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
           setMic("off");
           setVoices([]);
           setSpeaking([]);
+          heldRef.current = [];
+          setHeld([]);
         });
 
       await room.connect(grant.url, grant.token);
@@ -429,9 +464,27 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
       setCanHear(room.canPlaybackAudio);
       setSeat(grant.identity);
       setVoices(identities(room));
+      const heldNow = heldSeats(room.metadata);
+      heldRef.current = heldNow;
+      setHeld(heldNow);
       setStatus("live");
 
-      await openMic(ctx);
+      // Held when you left, held when you come back: the token carries no
+      // right to publish, so there is no microphone to ask for.
+      if (heldNow.includes(grant.identity)) {
+        void ctx?.close();
+        setMic("unavailable");
+        setNotice("The Keeper has muted this seat. You can still hear the room, and type.");
+        return;
+      }
+
+      // A microphone that will not open is not a call that failed: they can
+      // still hear the room, so it stays joined and says what happened.
+      await openMic(ctx).catch(() => {
+        releaseAudio();
+        setMic("unavailable");
+        setNotice("The microphone didn't open. You can still hear the room, and type.");
+      });
     } catch (e) {
       /*
         Everything that is not a microphone, which is most of this block.
@@ -480,7 +533,9 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
       const d = await r.json().catch(() => null);
       // The body decides: the route answers `{ ok: true }` once the SFU took it.
       if (r.ok && d?.ok === true) {
-        setClosedByMe((was) => (next ? [...was.filter((v) => v !== identity), identity] : was.filter((v) => v !== identity)));
+        const rest = heldRef.current.filter((v) => v !== identity);
+        heldRef.current = next ? [...rest, identity].sort() : rest;
+        setHeld(heldRef.current);
         setNotice(`Seat ${seat} ${next ? "muted" : "can speak again"}. They were told.`);
       } else {
         setNotice(typeof d?.message === "string" ? d.message : "That didn't go through.");
@@ -580,6 +635,10 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
     onStatus?.(status);
   }, [status, onStatus]);
 
+  React.useEffect(() => {
+    onHeld?.(muted);
+  }, [muted, onHeld]);
+
   if (!enabled || status === "idle") return null;
 
   const others = Math.max(0, voices.length - 1);
@@ -612,9 +671,12 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
             </p>
             {status === "live" && (
               <p className="mt-0.5 text-fine text-ink">
+                {/* This said "Nobody hears which seat you are in", over a header
+                    reading "Seat 3 speaking…". The seat is the one thing the
+                    room does know; the pitch is what it does not. */}
                 {mic === "unavailable"
                   ? "Your microphone is off. You can still hear the room."
-                  : "Your voice is pitched down. Nobody hears which seat you are in."}
+                  : `Your voice is pitched down. The room hears you as Seat ${seat?.slice(5) ?? ""}.`}
               </p>
             )}
           </div>
@@ -657,7 +719,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
           the visible text carries it for everybody else, so there is no
           accessible-name override to drift out of step with it.
         */}
-        {status === "live" && mic === "unavailable" && (
+        {status === "live" && mic === "unavailable" && !muted && (
           <button
             type="button"
             onClick={retryMic}
@@ -666,23 +728,31 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
             Turn on my microphone
           </button>
         )}
+        {/*
+          A held seat has no microphone to offer — the SFU took the track and
+          the seat's right to publish — so it gets a sentence, not a control.
+          A hold always leaves `mic` at "unavailable", which is what keeps both
+          buttons below away from it.
+        */}
+        {status === "live" && muted && (
+          <p
+            role="status"
+            className="mt-3 flex h-12 w-full items-center justify-center rounded-card border border-line/20 text-body font-semibold text-ash"
+          >
+            Microphone closed by the Keeper
+          </p>
+        )}
         {status === "live" && mic !== "unavailable" && (
           <button
             type="button"
             onClick={toggleMic}
-            disabled={muted}
             aria-pressed={mic === "on"}
             className={cn(
               "mt-3 flex h-12 w-full select-none items-center justify-center rounded-card border text-body font-semibold transition-all duration-200",
               mic === "on" ? "border-gold bg-gold/20 text-ink" : "border-line/20 text-ash",
-              muted && "opacity-40",
             )}
           >
-            {muted
-              ? "Microphone closed by the Keeper"
-              : mic === "on"
-                ? "Microphone on — tap to mute"
-                : "Tap to talk"}
+            {mic === "on" ? "Microphone on — tap to mute" : "Tap to talk"}
           </button>
         )}
 
@@ -697,7 +767,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
             {voices
               .filter((v) => v !== seat && /^seat-\d+$/.test(v))
               .map((v) => {
-                const closed = closedByMe.includes(v);
+                const closed = held.includes(v);
                 return (
                   <button
                     key={v}
@@ -729,16 +799,6 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
   );
 }
 
-
-/** The Keeper's hold on a seat, as the server wrote it into that seat's metadata. */
-function readHeld(metadata: string | undefined): boolean | null {
-  try {
-    const v = JSON.parse(metadata ?? "") as { held?: unknown } | null;
-    return typeof v?.held === "boolean" ? v.held : null;
-  } catch {
-    return null;
-  }
-}
 
 function identities(room: Room): string[] {
   return [

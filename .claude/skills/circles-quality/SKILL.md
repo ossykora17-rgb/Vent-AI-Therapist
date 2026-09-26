@@ -192,9 +192,17 @@ the one thing this room can never publish and leaves the microphone open.
    moderated. What exists is after the fact: the author takes a note back, the
    Keeper takes one down, and a takedown is said in the thread.
 
-The Keeper's mute is `mutePublishedTrack(…, true)` plus `held: true` in the
-seat's participant metadata; releasing clears the metadata and never calls
-`mutePublishedTrack(…, false)`. Nobody opens another person's microphone.
+The Keeper's mute is a **permission**, not a request: `updateParticipant` with
+`seatPermission(false)` — the SFU removes the seat's track and refuses a new
+one — and the hold is recorded in the LiveKit **room's** metadata
+(`lib/voice/hold.ts`), which the token route reads so a held seat that leaves
+and rejoins comes back with `canPublish: false`. Permission first, record
+second, both ways. The permission is sent whole every time: the SFU replaces
+every field, so a missing `canSubscribe` deafens and a missing
+`canPublishSources` opens a camera. Release gives the right back and opens
+nothing — the seat's microphone stays off until they tap. A held seat's voice
+note is refused too (403 `held`). Unknown is not held: the lookup fails open.
+Proven only against a real `livekit-server`; check 159 holds the shape.
 
 ## Scoring a Keeper
 

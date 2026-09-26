@@ -2,6 +2,8 @@ import "server-only";
 import { createHmac } from "node:crypto";
 import { env, isLivekitConfigured } from "@/lib/env";
 import { CIRCLE_MINUTES } from "@/lib/circles/rules";
+import { errorKind } from "@/lib/errors";
+import { heldSeats } from "@/lib/voice/hold";
 
 /**
  * Phase 1, the half that can be built without a dependency.
@@ -35,6 +37,11 @@ export interface VoiceGrant {
   keeper: boolean;
   /** Seconds. Defaults to the circle's own length plus a short grace. */
   ttlSeconds?: number;
+  /**
+   * The Keeper is holding this seat. It joins able to hear and unable to
+   * publish, so coming back into voice is not a way out of the hold.
+   */
+  held?: boolean;
 }
 
 export interface VoiceToken {
@@ -92,7 +99,7 @@ export function mintVoiceToken(grant: VoiceGrant): VoiceToken | null {
         roomJoin: true,
         // Voice only. Phase 0 was text because six anonymous strangers on
         // camera is a different product, and a harder promise to keep.
-        canPublish: true,
+        canPublish: !grant.held,
         canSubscribe: true,
         canPublishData: false,
         canPublishSources: ["microphone"],
@@ -110,4 +117,41 @@ export function mintVoiceToken(grant: VoiceGrant): VoiceToken | null {
     identity,
     expiresAt: new Date((now + ttl) * 1000).toISOString(),
   };
+}
+
+const HOLD_LOOKUP_MS = 3_000;
+
+/**
+ * The seats the Keeper is holding in this circle's call, read off the room
+ * before a token is minted — see `hold.ts` for why the room keeps them.
+ *
+ * `null` when the SFU could not be asked, and the caller mints an ordinary
+ * token: a network blip must never mute a room of people trying to speak.
+ * The Keeper's button still shows the hold, and one tap puts it back. No room
+ * yet is an empty list, not a failure — nobody can be held in a call that has
+ * not started.
+ */
+export async function heldInRoom(circleId: string): Promise<string[] | null> {
+  const token = adminToken({ roomList: true });
+  if (!token) return null;
+  try {
+    const r = await fetch(
+      new URL("/twirp/livekit.RoomService/ListRooms", env.livekitUrl.replace(/^ws/, "http")),
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ names: [roomNameFor(circleId)] }),
+        signal: AbortSignal.timeout(HOLD_LOOKUP_MS),
+      },
+    );
+    if (!r.ok) {
+      console.warn("[voice] hold lookup answered", r.status);
+      return null;
+    }
+    const d = (await r.json()) as { rooms?: { metadata?: string }[] };
+    return heldSeats(d.rooms?.[0]?.metadata);
+  } catch (error) {
+    console.warn("[voice] hold lookup failed:", errorKind(error));
+    return null;
+  }
 }
