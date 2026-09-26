@@ -528,8 +528,8 @@ export function CirclesList() {
         <p className="text-fine leading-relaxed text-ash">
           Mind Weave Circles is peer support, not licensed therapy, not medical
           advice, and not affiliated with AA. What&apos;s said in a circle stays
-          in the circle — nothing is recorded and every word is deleted within
-          24 hours. In crisis, call{" "}
+          in the circle — every message and voice note is deleted within 24
+          hours, and a live call is never recorded. In crisis, call{" "}
           <a href={`tel:${CRISIS_TEL}`} className="underline underline-offset-2">
             {CRISIS_LINES.nigeria}
           </a>{" "}

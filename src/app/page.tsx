@@ -245,10 +245,11 @@ export default async function LandingPage() {
         {/*
           Terms and Privacy existed and linked only to each other — a closed
           loop with no door into it from anywhere in the product. Every surface
-          states the promise ("nothing is recorded, every word deleted within
-          24 hours") as plain text, and the page that documents it could not be
-          reached by tapping. A promise a person cannot go and read is a
-          slogan.
+          states the promise as plain text — it read "nothing is recorded"
+          until voice notes, and now reads "every message and voice note is
+          deleted within 24 hours, and a live call is never recorded" — and
+          the page that documents it could not be reached by tapping. A
+          promise a person cannot go and read is a slogan.
         */}
         <p className="mt-3 text-fine text-ash">
           <Link href="/privacy" className="underline underline-offset-2">

@@ -6,7 +6,7 @@ import path from "node:path";
 import { isExpired, MAX_SEATS, MESSAGE_KINDS, SHARE_MAX_CHARS } from "@/lib/circles/rules";
 import { TYPING_WINDOW_MS } from "@/lib/circles/presence";
 import type {
-  CircleMemberRow, CircleMessageRow, CirclePushRow, CircleRow,
+  CircleMemberRow, CircleMessageRow, CirclePushRow, CircleRow, CircleVoiceNoteRow,
   NewVent, ProfilePatch, Store, VentRow, HeldNote, BreakingAnswer } from "./types";
 import { BREAKING_CAP, HELD_CAP } from "./types";
 
@@ -65,6 +65,8 @@ interface Db {
   circleMessages: CircleMessageRow[];
   /** Optional so a file written before 0021 still parses — see `read()`. */
   circlePush: CirclePushRow[];
+  /** Optional for the same reason, before 0022. The sound rides beside the row. */
+  circleVoiceNotes?: Array<CircleVoiceNoteRow & { audio: string }>;
 }
 
 const EMPTY: Db = {
@@ -455,7 +457,42 @@ export class FileStore implements Store {
         rather than to the person.
       */
       db.circlePush = (db.circlePush ?? []).filter((x) => x.circle_id !== id);
+      // And every note anybody said out loud here. A note is a transcript line
+      // with a voice, and it goes with the transcript.
+      db.circleVoiceNotes = (db.circleVoiceNotes ?? []).filter((x) => x.circle_id !== id);
     });
+  }
+
+  async addVoiceNote(n: {
+    circleId: string; anonId: string; durationMs: number; audio: string;
+  }): Promise<string | null> {
+    const id = randomUUID();
+    await this.write((db) => {
+      db.circleVoiceNotes = db.circleVoiceNotes ?? [];
+      db.circleVoiceNotes.push({
+        id,
+        circle_id: n.circleId,
+        anon_id: n.anonId,
+        duration_ms: n.durationMs,
+        audio: n.audio,
+        created_at: new Date().toISOString(),
+      });
+    });
+    return id;
+  }
+
+  async listVoiceNotes(circleId: string): Promise<CircleVoiceNoteRow[]> {
+    return (this.read().circleVoiceNotes ?? [])
+      .filter((x) => x.circle_id === circleId)
+      .map(({ audio: _audio, ...row }) => row)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
+  async getVoiceNoteAudio(circleId: string, noteId: string): Promise<{ anon_id: string; audio: string } | null> {
+    const hit = (this.read().circleVoiceNotes ?? []).find(
+      (x) => x.circle_id === circleId && x.id === noteId,
+    );
+    return hit ? { anon_id: hit.anon_id, audio: hit.audio } : null;
   }
 
   async listMembers(circleId: string): Promise<CircleMemberRow[]> {

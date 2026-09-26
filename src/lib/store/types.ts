@@ -90,6 +90,22 @@ export interface CirclePushRow {
   created_at: string;
 }
 
+/**
+ * A voice note, without its sound.
+ *
+ * The listing never carries the audio: the thread is polled every four
+ * seconds by everybody in the room, and a minute of WAV riding on each poll
+ * would be a megabyte a person every four seconds. The sound is fetched once,
+ * by id, by somebody who is in the room — `getVoiceNoteAudio`.
+ */
+export interface CircleVoiceNoteRow {
+  id: string;
+  circle_id: string;
+  anon_id: string;
+  duration_ms: number;
+  created_at: string;
+}
+
 export interface CircleMessageRow {
   id: string;
   circle_id: string;
@@ -415,6 +431,25 @@ export interface Store {
   listPush(circleId: string, exceptAnonId: string): Promise<CirclePushRow[]>;
   /** One endpoint, gone. Called when the push service says it is dead (404/410). */
   dropPush(endpoint: string): Promise<void>;
+  /**
+   * Keep one voice note for as long as the room lasts. `audio` is the masked
+   * WAV as base64, already validated by the route.
+   *
+   * Returns the new row's id, or null when nothing landed — read off the rows
+   * the write returned, never off the absence of an error, which is the shape
+   * `savePush` and `setCarve` were each wrong about once.
+   */
+  addVoiceNote(n: {
+    circleId: string;
+    anonId: string;
+    durationMs: number;
+    audio: string;
+  }): Promise<string | null>;
+  /** Every note in this room, oldest first, without the sound. */
+  listVoiceNotes(circleId: string): Promise<CircleVoiceNoteRow[]>;
+  /** One note's sound, and whose it is — scoped to the circle, so an id from
+   *  another room answers nothing. */
+  getVoiceNoteAudio(circleId: string, noteId: string): Promise<{ anon_id: string; audio: string } | null>;
   /**
    * Give the seat back. Used to undo a join that lost a race, and by nothing
    * else — leaving a circle is not a feature, it is a thing that happens when

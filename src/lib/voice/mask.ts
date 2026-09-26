@@ -233,6 +233,12 @@ function rampWave(ctx: BaseAudioContext): PeriodicWave {
 export interface Mask {
   /** The track to publish in place of the raw microphone. */
   track: MediaStreamTrack;
+  /**
+   * The same masked sound as a node in the graph, for a voice note to record
+   * from. Never the source: a recorder tapped anywhere upstream of this would
+   * keep the raw voice, which is the one thing this file exists to prevent.
+   */
+  output: AudioNode;
   /** Releases the audio graph. Safe to call twice. */
   stop: () => void;
 }
@@ -401,6 +407,10 @@ export function maskMicrophone(
 
   const source = ctx.createMediaStreamSource(input);
   const destination = ctx.createMediaStreamDestination();
+  // Where the two lines meet: unity gain, so it changes nothing about the
+  // sound — it only gives the masked voice a single node a recorder can tap.
+  const output = ctx.createGain();
+  output.connect(destination);
 
   // The two lines, half a cycle apart.
   const lines = [0, 0.5].map((phase) => {
@@ -448,7 +458,7 @@ export function maskMicrophone(
     shapeDepth.gain.value = 0.5;
     shape.connect(shapeDepth).connect(fade.gain);
 
-    source.connect(delay).connect(fade).connect(destination);
+    source.connect(delay).connect(fade).connect(output);
     return { sweep, shape, phase };
   });
 
@@ -500,6 +510,7 @@ export function maskMicrophone(
   let stopped = false;
   return {
     track,
+    output,
     stop() {
       if (stopped) return;
       stopped = true;

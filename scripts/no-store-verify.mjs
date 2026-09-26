@@ -383,6 +383,16 @@ async function main() {
     ["messages", fetch(`${BASE}/api/circles/does-not-exist/messages`)],
     ["voice", post("/api/circles/does-not-exist/voice", { anonId: ANON })],
     ["mute", post("/api/circles/does-not-exist/voice/mute", { anonId: ANON, identity: "seat-1" })],
+    // A voice note to a room that is not there is refused, whatever it holds —
+    // and the sound of one is never served from nowhere.
+    ["note", fetch(`${BASE}/api/circles/does-not-exist/voice-notes`, {
+      method: "POST",
+      headers: { "content-type": "audio/wav", "x-anon-id": ANON },
+      body: new Uint8Array(0),
+    })],
+    ["note-sound", fetch(`${BASE}/api/circles/does-not-exist/voice-notes/00000000-0000-4000-8000-000000000000`, {
+      headers: { "x-anon-id": ANON },
+    })],
   ].map(async ([name, p]) => {
     const res = await p;
     const text = await res.text();

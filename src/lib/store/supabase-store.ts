@@ -8,7 +8,7 @@ import { isExpired, MAX_SEATS, TRANSCRIPT_TTL_MS } from "@/lib/circles/rules";
 import { TYPING_WINDOW_MS } from "@/lib/circles/presence";
 import { StoreUnavailableError } from "./errors";
 import type {
-  CircleMemberRow, CircleMessageRow, CirclePushRow, CircleRow,
+  CircleMemberRow, CircleMessageRow, CirclePushRow, CircleRow, CircleVoiceNoteRow,
   NewVent, ProfilePatch, Store, VentRow, HeldNote, BreakingAnswer } from "./types";
 import { BREAKING_CAP, HELD_CAP } from "./types";
 
@@ -606,6 +606,23 @@ export class SupabaseStore implements Store {
     */
     done("closeCircle:push",
       await this.db.from("circle_push").delete().eq("circle_id", id));
+    /*
+      And every voice note. A note is a transcript line said out loud, and it
+      goes with the transcript — 0022 cascades from `circles`, but a closed
+      circle is not a deleted one, so the cascade never fires and this line is
+      the policy.
+    */
+    /*
+      Tolerant of exactly one thing: the table not existing yet. A deployment
+      that has not run 0022 has no notes to delete, and a close that threw
+      there would leave every circle on it unable to end — the transcript,
+      the seats and the voice room all held open by a feature that is off.
+      Anything else is a failed delete and is reported as one.
+    */
+    const voice = await this.db.from("circle_voice_notes").delete().eq("circle_id", id);
+    if (voice.error && !["42P01", "PGRST205"].includes(voice.error.code ?? "")) {
+      done("closeCircle:voice", voice);
+    }
     done("closeCircle", await this.db.from("circles").update({ status: "closed" }).eq("id", id));
   }
 
@@ -681,6 +698,48 @@ export class SupabaseStore implements Store {
 
   async dropPush(endpoint: string): Promise<void> {
     done("dropPush", await this.db.from("circle_push").delete().eq("endpoint", endpoint));
+  }
+
+  async addVoiceNote(n: {
+    circleId: string; anonId: string; durationMs: number; audio: string;
+  }): Promise<string | null> {
+    const { data, error } = await this.db
+      .from("circle_voice_notes")
+      .insert({
+        circle_id: n.circleId,
+        anon_id: n.anonId,
+        duration_ms: n.durationMs,
+        audio: n.audio,
+      })
+      .select("id");
+    if (error) {
+      // 42P01 is 0022 not applied yet: a deployment without voice notes, which
+      // is a state and not a fault. The route says so in words.
+      console.warn("[store] addVoiceNote", error.code);
+      return null;
+    }
+    // The row is the answer. No row, no note — whatever Postgres did not say.
+    return (data as unknown as Array<{ id: string }> | null)?.[0]?.id ?? null;
+  }
+
+  async listVoiceNotes(circleId: string): Promise<CircleVoiceNoteRow[]> {
+    // Never `audio` here — see CircleVoiceNoteRow. No space after the commas.
+    const data = ok("listVoiceNotes", await this.db
+      .from("circle_voice_notes")
+      .select("id,circle_id,anon_id,duration_ms,created_at")
+      .eq("circle_id", circleId)
+      .order("created_at", { ascending: true }));
+    return (data ?? []) as unknown as CircleVoiceNoteRow[];
+  }
+
+  async getVoiceNoteAudio(circleId: string, noteId: string): Promise<{ anon_id: string; audio: string } | null> {
+    const data = ok("getVoiceNoteAudio", await this.db
+      .from("circle_voice_notes")
+      .select("anon_id,audio")
+      .eq("circle_id", circleId)
+      .eq("id", noteId)
+      .maybeSingle());
+    return (data as unknown as { anon_id: string; audio: string } | null) ?? null;
   }
 
   async seatedIn(anonId: string): Promise<string[]> {

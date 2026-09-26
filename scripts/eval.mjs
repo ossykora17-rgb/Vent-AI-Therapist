@@ -19808,6 +19808,486 @@ check("156 Voice starts inside the tap, and the room can always be heard", () =>
     "voice down must never make the endpoint say nobody can be heard");
 });
 
+// ── 157: voice notes, from the mask to the room and nowhere else ───────────
+/*
+  The founder asked for a WhatsApp group, and in a Nigerian WhatsApp group the
+  voice is a note: said once, waiting in the thread for whoever comes. It is
+  also the first thing this product keeps that is a *recording of somebody* —
+  so everything here is about what is kept, where it came from, and when it
+  dies, run rather than read wherever a run is possible.
+
+  Three halves. The pure half — what a note is — runs the real encoder and the
+  real validator on files a phone, a careless client and a hostile one would
+  send. The recorder half builds the real recorder on a graph that writes down
+  every connection, because "recorded from the mask" is a claim about wiring
+  and wiring can be observed. The static half holds the orderings no run here
+  can reach, and the live half (157b) carries a note across the wire.
+*/
+const noteLib = await app("src/lib/voice/note.ts");
+const { startRecording: noteStartRecording } = await app("src/lib/voice/recorder.ts");
+
+/** Speech-shaped sound: a low tone with a slow swell, as float samples. */
+const noteTone = (seconds, rate) => {
+  const out = new Float32Array(Math.round(seconds * rate));
+  for (let i = 0; i < out.length; i++) {
+    out[i] = 0.4 * Math.sin((2 * Math.PI * 180 * i) / rate) * (0.6 + 0.4 * Math.sin((2 * Math.PI * 1.5 * i) / rate));
+  }
+  return out;
+};
+const noteRms = (pcm) => Math.sqrt(pcm.reduce((s, v) => s + (v / 32768) ** 2, 0) / Math.max(1, pcm.length));
+
+/** A WAV of any shape — the ones a careless or a hostile client would send. */
+const noteFile = ({ rate = 16000, channels = 1, bits = 16, format = 1, samples, fmtSize = 16, extra = [], trailing = null }) => {
+  const u32 = (n) => { const b = Buffer.alloc(4); b.writeUInt32LE(n); return b; };
+  const u16 = (n) => { const b = Buffer.alloc(2); b.writeUInt16LE(n); return b; };
+  const chunk = (id, body) => Buffer.concat([Buffer.from(id, "ascii"), u32(body.length), body, Buffer.alloc(body.length % 2)]);
+  const fmt = Buffer.concat([u16(format), u16(channels), u32(rate), u32((rate * channels * bits) / 8),
+    u16((channels * bits) / 8), u16(bits), Buffer.alloc(Math.max(0, fmtSize - 16))]).subarray(0, fmtSize);
+  const data = Buffer.alloc(samples.length * 2);
+  samples.forEach((s, i) => data.writeInt16LE(s, i * 2));
+  const body = Buffer.concat([Buffer.from("WAVE"), chunk("fmt ", fmt), ...extra.map(([id, b]) => chunk(id, b)), chunk("data", data)]);
+  return new Uint8Array(Buffer.concat([Buffer.from("RIFF"), u32(body.length), body, trailing ?? Buffer.alloc(0)]));
+};
+
+const notePcm = noteLib.downsample([noteTone(2, 48000)], 48000);
+const noteOwn = noteLib.encodeWav(notePcm);
+
+// The capped reader, on a body eight times the cap: it must stop, and let go.
+// Finite on purpose — the first version never ended, and a reader with its cap
+// deleted took the whole suite down out of memory before a line printed: red,
+// but for no reason anybody could read.
+const noteReads = await (async () => {
+  const small = await noteLib.readNote(new ReadableStream({
+    start(c) { c.enqueue(new Uint8Array([1, 2, 3])); c.enqueue(new Uint8Array([4])); c.close(); },
+  }));
+  let pulls = 0;
+  let cancelled = false;
+  const endless = new ReadableStream({
+    pull(c) { pulls++; c.enqueue(new Uint8Array(65536)); if (pulls >= 128) c.close(); },
+    cancel() { cancelled = true; },
+  });
+  const capped = await Promise.race([
+    noteLib.readNote(endless, 1_000_000),
+    new Promise((done) => setTimeout(() => done("hung"), 3000)),
+  ]);
+  const none = await noteLib.readNote(null);
+  return { small, capped, pulls, cancelled, none };
+})();
+
+/*
+  A graph that writes down every connection, so "the recorder hears what the
+  call would publish, and never the microphone" is observed, not argued.
+  One per run, so no run reads another's wiring.
+*/
+const noteGraph = () => {
+  const edges = [];
+  let n = 0;
+  const node = (ctx, kind, extra = {}) => {
+    const me = { kind: `${kind}#${++n}`, context: ctx, gain: { value: 0 }, delayTime: { value: 0 },
+      frequency: { value: 0 }, setPeriodicWave() {}, start() {}, stop() {}, type: "", ...extra };
+    me.connect = (to) => { edges.push([me.kind, to?.kind ?? "param"]); return to; };
+    me.disconnect = (to) => { edges.push([me.kind, `cut:${to?.kind ?? "all"}`]); };
+    return me;
+  };
+  const context = (state, resume = () => new Promise(() => {})) => {
+    const c = { state, currentTime: 0, sampleRate: 48000, tap: null };
+    Object.assign(c, {
+      destination: node(c, "speakers"),
+      resume,
+      close() { c.state = "closed"; return Promise.resolve(); },
+      createMediaStreamSource: () => node(c, "microphone"),
+      createDelay: () => node(c, "delay"),
+      createOscillator: () => node(c, "oscillator"),
+      createGain: () => node(c, "gain"),
+      createPeriodicWave: () => ({}),
+      createMediaStreamDestination: () => node(c, "published", { stream: { getAudioTracks: () => [{ id: "masked" }] } }),
+      createScriptProcessor: () => (c.tap = node(c, "recorder")),
+    });
+    return c;
+  };
+  return { edges, context };
+};
+
+/** Run with a stubbed microphone, and put the real navigator back after. */
+const noteWithMic = async (getUserMedia, fn) => {
+  const had = Object.getOwnPropertyDescriptor(globalThis.navigator, "mediaDevices");
+  Object.defineProperty(globalThis.navigator, "mediaDevices", { value: { getUserMedia }, configurable: true });
+  try {
+    return await fn();
+  } finally {
+    if (had) Object.defineProperty(globalThis.navigator, "mediaDevices", had);
+    else delete globalThis.navigator.mediaDevices;
+  }
+};
+const noteTracks = () => [{ stopped: false, stop() { this.stopped = true; } }];
+
+const noteRecorded = await (async () => {
+  const tracks = noteTracks();
+  const graph = noteGraph();
+  const ctx = graph.context("running");
+  return noteWithMic(async () => ({ getTracks: () => tracks, getAudioTracks: () => tracks }), async () => {
+    const r = await noteStartRecording(ctx, -4);
+    if (!r || !("recording" in r)) return { refused: r };
+    let outputTouched = false;
+    const tone = noteTone(2, 48000);
+    for (let at = 0; at < tone.length; at += 4096) {
+      const frame = tone.slice(at, at + 4096);
+      ctx.tap.onaudioprocess({
+        inputBuffer: { getChannelData: () => frame },
+        // A tripwire: a recorder that writes here plays the voice back.
+        get outputBuffer() { outputTouched = true; return { getChannelData: () => new Float32Array(4096) }; },
+      });
+    }
+    const wiredBeforeFinish = graph.edges.slice();
+    const out = r.recording.finish();
+    return { ctx, tracks, out, outputTouched, wired: wiredBeforeFinish, all: graph.edges, tapAfter: ctx.tap.onaudioprocess };
+  });
+})();
+
+const noteMicRefused = await (async () => {
+  const graph = noteGraph();
+  const ctx = graph.context("running");
+  const r = await noteWithMic(async () => { throw new DOMException("denied", "NotAllowedError"); },
+    () => noteStartRecording(ctx, -4));
+  return { r, state: ctx.state };
+})();
+
+const noteMaskRefused = await (async () => {
+  const tracks = noteTracks();
+  const graph = noteGraph();
+  // Answers its resume and never starts — the phone that would not let the
+  // page make sound.
+  const ctx = graph.context("suspended", () => Promise.resolve());
+  const r = await noteWithMic(async () => ({ getTracks: () => tracks, getAudioTracks: () => tracks }),
+    () => noteStartRecording(ctx, -4));
+  return { r, tracks, state: ctx.state, tapped: ctx.tap !== null };
+})();
+
+check("157 A voice note is the masked voice, kept only as long as the room", () => {
+  const L = noteLib;
+  const same = (a, b) => Buffer.from(a).equals(Buffer.from(b));
+
+  // 1. What a note is: the phone's own file passes whole, and nothing else rides.
+  const own = L.checkWav(noteOwn);
+  ok(own.ok && own.durationMs === 2000, "the phone's own note passes, and the server reads its length off the bytes",
+    JSON.stringify({ ok: own.ok, why: own.why, ms: own.durationMs }));
+  ok(own.ok && same(own.wav, noteOwn), "and is kept byte for byte");
+  ok(noteRms(notePcm) > 0.1 && notePcm.length === 2 * L.NOTE_RATE,
+    "the sound survives the fold to 16 kHz", `rms ${noteRms(notePcm).toFixed(3)}, ${notePcm.length} samples`);
+
+  const tagged = L.checkWav(noteFile({
+    samples: notePcm,
+    extra: [["LIST", Buffer.from("INFOISFT\u0016\u0000\u0000\u0000iPhone 15 Pro · Lagos\u0000\u0000")]],
+    trailing: Buffer.from("SOMETHING-AFTER-THE-END"),
+  }));
+  ok(tagged.ok && same(tagged.wav, noteOwn),
+    "a file carrying a device tag and bytes after its end is kept as the voice alone",
+    "what travelled with the sound is not somebody's voice and is not ours to keep");
+  ok(tagged.ok && !Buffer.from(tagged.wav).includes("iPhone") && !Buffer.from(tagged.wav).includes("AFTER-THE-END"),
+    "neither the tag nor the tail survives into what is stored");
+
+  const refused = [
+    ["half a second", noteFile({ samples: notePcm.subarray(0, L.NOTE_RATE / 2) }), "too_short"],
+    ["stereo", noteFile({ channels: 2, samples: notePcm }), "not_the_note_format"],
+    ["44.1 kHz", noteFile({ rate: 44100, samples: notePcm }), "not_the_note_format"],
+    ["8-bit", noteFile({ bits: 8, samples: notePcm }), "not_the_note_format"],
+    ["float samples", noteFile({ format: 3, samples: notePcm }), "not_the_note_format"],
+    ["a format chunk lying about its size", noteFile({ fmtSize: 0, samples: notePcm }), "not_wav"],
+    ["a web page", new TextEncoder().encode("<html><body>not a voice</body></html>".padEnd(120)), "not_wav"],
+    ["nothing", new Uint8Array(0), "not_wav"],
+    ["a byte over the cap", new Uint8Array(L.NOTE_MAX_BYTES + 1), "too_big"],
+  ];
+  for (const [what, bytes, why] of refused) is(L.checkWav(bytes).why, why, `${what} is refused as ${why}`);
+  const longest = L.checkWav(noteFile({ samples: new Int16Array((L.NOTE_MAX_BYTES - 44) / 2) }));
+  ok(longest.ok && longest.durationMs <= L.NOTE_MAX_MS + 1000,
+    "the largest file the cap allows is a minute and a second — the byte cap is the length cap",
+    JSON.stringify({ ok: longest.ok, ms: longest.durationMs }));
+  is(L.noteLength(61_000), "1:01", "a length reads the way a phone writes it");
+
+  // Every refusal the validator can return has a sentence, and no sentence
+  // waits for a refusal that cannot happen.
+  const noteSrc = strip(fs.readFileSync(path.join(ROOT, "src/lib/voice/note.ts"), "utf8"));
+  const whyUnion = /why:\s*((?:"\w+"\s*\|?\s*)+)\}/.exec(noteSrc)?.[1] ?? "";
+  const whys = [...whyUnion.matchAll(/"(\w+)"/g)].map((m) => m[1]).sort();
+  const postSrc = strip(fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/voice-notes/route.ts"), "utf8"));
+  const refusedBlock = /const REFUSED[^=]*=\s*\{([\s\S]*?)\n\};/.exec(postSrc)?.[1] ?? "";
+  const said = [...refusedBlock.matchAll(/^\s+(\w+):/gm)].map((m) => m[1]).sort();
+  ok(whys.length >= 4, `the refusals are read off the type (${whys.join(", ")})`);
+  is(said.join(","), whys.join(","), "every refusal has a sentence, and every sentence a refusal");
+
+  // The capped reader stops on the bytes, not on the sender's word.
+  ok(same(noteReads.small, [1, 2, 3, 4]), "a body under the cap is read whole");
+  is(noteReads.capped, null, "a body eight times the cap is refused rather than read",
+    noteReads.capped === "hung" ? "it hung" : `read ${noteReads.capped?.length ?? "?"} bytes`);
+  ok(noteReads.pulls <= Math.ceil(1_000_000 / 65536) + 1 && noteReads.cancelled,
+    "and the read stops at the cap and lets the rest go", `${noteReads.pulls} chunks pulled, cancelled=${noteReads.cancelled}`);
+  is(noteReads.none?.length, 0, "no body is an empty note, not a crash");
+
+  // 2. The recorder hears exactly what the call would publish.
+  const rec = noteRecorded;
+  ok(rec.out, "the real recorder records on a graph it is handed",
+    rec.refused ? JSON.stringify(rec.refused) : "finish() returned nothing");
+  const tapKind = rec.ctx?.tap?.kind ?? "none";
+  const into = (rec.wired ?? []).filter(([, to]) => to === tapKind).map(([from]) => from);
+  const published = (rec.wired ?? []).filter(([, to]) => to.startsWith("published#")).map(([from]) => from);
+  is(into.length, 1, "one node feeds the recorder", into.join(", ") || "nothing");
+  ok(into.length === 1 && published.includes(into[0]),
+    "and it is the node that feeds the masked track — a note is the call's voice, not a second one",
+    `recorder hears ${into[0]}, the track is fed by ${published.join(", ")}`);
+  ok(!into.some((k) => k.startsWith("microphone#")),
+    "the microphone never reaches the recorder", "a note of the raw voice is the one thing the mask exists to prevent");
+  ok((rec.wired ?? []).filter(([from]) => from === tapKind).every(([, to]) => to.startsWith("speakers#")),
+    "the recorder's own output goes only to the destination that keeps it running");
+  is(rec.outputTouched, false, "and it never writes to it, so nobody hears themselves back");
+  const kept = rec.out ? L.checkWav(rec.out.wav) : { ok: false };
+  ok(kept.ok && kept.durationMs === 2000 && rec.out?.durationMs === 2000,
+    "two seconds in is a two-second note the server will accept", JSON.stringify({ why: kept.why, ms: kept.durationMs }));
+  ok(kept.ok && noteRms(new Int16Array(kept.wav.buffer.slice(44))) > 0.05, "with the sound in it");
+  ok(rec.ctx?.state === "closed" && rec.tracks?.every((t) => t.stopped) && rec.tapAfter === null,
+    "finishing lets go of everything: the context, the microphone, the tap");
+  ok((rec.all ?? []).some(([from, to]) => from === into[0] && to === `cut:${tapKind}`),
+    "and unplugs the recorder from the voice");
+
+  is(noteMicRefused.r?.refused, "microphone", "a refused microphone is named as the microphone");
+  is(noteMicRefused.r?.name, "NotAllowedError", "with the browser's own reason, for the sentence the room picks");
+  is(noteMicRefused.state, "closed", "and the context made for it is closed, not leaked");
+  is(noteMaskRefused.r?.refused, "mask", "a phone that cannot disguise the voice records nothing",
+    "fail to silence, never to an unmasked recording");
+  ok(noteMaskRefused.tracks.every((t) => t.stopped) && !noteMaskRefused.tapped,
+    "the microphone is let go and no recorder was ever attached");
+
+  // 3. The room: the context is made in the tap, and nothing claims before it happens.
+  const room = strip(fs.readFileSync(path.join(ROOT, "src/components/circle-room.tsx"), "utf8"));
+  ok(/function startNote\(\) \{\s*const ctx = audioContextInGesture\(\);/.test(room),
+    "a note's AudioContext is the first line of the tap", "after the microphone prompt, a phone has forgotten the tap");
+  ok(/startRecording\(ctx, personaFor\(`seat-\$\{state\.mySeat \+ 1\}`\)\)/.test(room),
+    "recorded with the seat's own disguise, keyed the way the call keys it");
+  is(new Set([1, 2, 3, 4, 5, 6].map((s) => personaFor(`seat-${s}`))).size, 6,
+    "and six seats are six voices, in a note as in a call");
+  ok(!/new\s+(?:window\.)?\w*AudioContext\b|webkitAudioContext/.test(room), "the room makes no other AudioContext");
+  ok(/\{draft\.trim\(\) \|\| !notesOn \? \([\s\S]*?aria-label="Send"[\s\S]*?\) : \([\s\S]*?onClick=\{startNote\}[\s\S]*?aria-label="Record a voice note"/.test(room),
+    "the microphone is only drawn where the server said notes are on",
+    "a microphone that fails when tapped is a door onto a 503");
+  ok(/recording\.live \? `Recording · \$\{noteLength\(elapsed\)\}` : "Opening the microphone…"/.test(room),
+    "'Recording' is said once the microphone is open, not when the tap happened");
+  ok(/disabled=\{!recording\.live\}\s*aria-label="Send voice note"/.test(room),
+    "and there is nothing to send until it is");
+  ok(/if \(!recording\?\.live\) return;[\s\S]{0,240}?ms >= NOTE_MAX_MS\) void sendNote\(\)/.test(room),
+    "the minute is counted from the open microphone, and the note is sent at it, not lost");
+  ok(/r\.status === 201 && typeof d\?\.id === "string"/.test(room),
+    "a note is in the room once the server hands back its row, not on a status");
+  const fetchAt = room.indexOf("const fetchNote");
+  const fetchBody = room.slice(fetchAt, room.indexOf("}, [id, me]);", fetchAt));
+  const joins = fetchBody.search(/const going = inflight\.current\.get\(noteId\);\s*if \(going\) return going;/);
+  ok(fetchAt > 0 && joins > 0 && joins < fetchBody.indexOf("fetch(")
+    && /inflight\.current\.set\(noteId, download\)/.test(fetchBody) && /finally \{\s*inflight\.current\.delete\(noteId\);/.test(fetchBody),
+    "a download under way is joined, never started twice by the poll — and let go when it lands");
+  ok(/headers: \{ "x-anon-id": me \}/.test(fetchBody), "the seat travels in a header, not the URL");
+  const playAt = room.indexOf("function togglePlay(");
+  const playBody = room.slice(playAt, room.indexOf("function startNote()"));
+  ok(playAt > 0 && !/async function togglePlay/.test(room)
+    && playBody.indexOf("playOn(player, ready") > 0 && playBody.indexOf("playOn(player, ready") < playBody.indexOf(".then("),
+    "a downloaded note plays from inside the tap", "an iPhone plays sound only from inside the gesture");
+
+  // 4. The routes: every door before a byte of the body, and what is kept is what was checked.
+  const order = ["getCircle(", "sweepIfOver(", "listMembers(", "listVoiceNotes(", "readNote(request.body)", "checkWav(", "addVoiceNote("]
+    .map((m) => [m, postSrc.indexOf(m)]);
+  ok(order.every(([, i], k) => i > 0 && (k === 0 || i > order[k - 1][1])),
+    "posting a note: the room, its end, the seat and the caps come before the body is read",
+    order.map(([m, i]) => `${m}@${i}`).join(" "));
+  ok(!/request\.(?:arrayBuffer|blob|formData|text|json)\(\)/.test(postSrc),
+    "and the body is only ever read through the cap");
+  ok(/audio: Buffer\.from\(verdict\.wav\)/.test(postSrc) && !/Buffer\.from\(bytes\)/.test(postSrc),
+    "what is stored is what the validator wrote, never what arrived");
+  const getSrc = strip(fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/voice-notes/[noteId]/route.ts"), "utf8"));
+  const gets = ["getCircle(", "sweepIfOver(", "listMembers(", "getVoiceNoteAudio(id, noteId)"].map((m) => getSrc.indexOf(m));
+  ok(gets.every((i, k) => i > 0 && (k === 0 || i > gets[k - 1])),
+    "hearing a note: the room, its end and the seat come first, and the note is looked up inside that room");
+  ok(/"cache-control": "private, no-store"/.test(getSrc) && /"x-content-type-options": "nosniff"/.test(getSrc),
+    "a masked voice is still somebody's voice: no cache keeps it, and nothing guesses what it is");
+  ok([postSrc, getSrc].every((s) => /request\.headers\.get\("x-anon-id"\)/.test(s) && !/searchParams/.test(s)),
+    "both routes take the seat from a header, never the URL");
+
+  // 5. The stores: a listing never carries a voice, and a close takes every one.
+  const supa = strip(fs.readFileSync(path.join(ROOT, "src/lib/store/supabase-store.ts"), "utf8"));
+  const listCols = /async listVoiceNotes[\s\S]*?\.select\("([^"]*)"\)/.exec(supa)?.[1] ?? "";
+  ok(listCols.length > 0 && !/audio/.test(listCols), "the listing's columns carry no sound", listCols);
+  const file = strip(fs.readFileSync(path.join(ROOT, "src/lib/store/file-store.ts"), "utf8"));
+  ok(/async listVoiceNotes[\s\S]{0,200}?\.map\(\(\{ audio: _audio, \.\.\.row \}\) => row\)/.test(file),
+    "and neither does the file store's");
+  // The method's own body, not a window of characters: the first version used
+  // 200 and the store's lookup sits 238 in, so it failed on correct code.
+  const method = (src, name) => {
+    const at = src.indexOf(`async ${name}(`);
+    return at < 0 ? "" : src.slice(at, src.indexOf("\n  }\n", at));
+  };
+  ok(/\.eq\("circle_id", circleId\)\s*\.eq\("id", noteId\)/.test(method(supa, "getVoiceNoteAudio"))
+    && /x\.circle_id === circleId && x\.id === noteId/.test(method(file, "getVoiceNoteAudio")),
+    "a note is looked up inside its room in both stores — an id carried elsewhere finds nothing");
+  const fileClose = file.slice(file.indexOf("async closeCircle("), file.indexOf("async addVoiceNote("));
+  ok(/db\.circleVoiceNotes = \(db\.circleVoiceNotes \?\? \[\]\)\.filter\(\(x\) => x\.circle_id !== id\)/.test(fileClose),
+    "the file store's close takes the notes with the words");
+  const thread = strip(fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/messages/route.ts"), "utf8"));
+  const noteRows = /\.\.\.notes\.map\(\(n\) => \(\{([\s\S]*?)\}\)\)/.exec(thread)?.[1] ?? "";
+  ok(noteRows.length > 0 && !/audio/.test(noteRows) && /durationMs: n\.duration_ms/.test(noteRows),
+    "the thread carries a note's length and never its sound");
+
+  // 6. The backstop deletes what the close deletes, and runs on its own clock.
+  const closeBody = supa.slice(supa.indexOf("async closeCircle("), supa.indexOf("async addVoiceNote("));
+  const closes = [...closeBody.matchAll(/\.from\("(\w+)"\)\s*\.delete\(\)/g)].map((m) => m[1]);
+  ok(closes.includes("circle_voice_notes") && closes.length >= 4,
+    `the close deletes the notes with the words (${closes.join(", ")})`);
+  const migrations = fs.readdirSync(path.join(ROOT, "supabase/migrations")).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort();
+  const sql = migrations.map((f) => fs.readFileSync(path.join(ROOT, "supabase/migrations", f), "utf8").replace(/--[^\n]*/g, "")).join("\n");
+  const purgeAt = sql.lastIndexOf("create or replace function public.purge_expired_circle_messages()");
+  const purge = purgeAt < 0 ? "" : sql.slice(purgeAt, sql.indexOf("$$;", purgeAt));
+  const missed = closes.filter((t) => !new RegExp(`delete from public\\.${t}\\b[\\s\\S]*?where circle_id in \\(select id from ended\\)`).test(purge));
+  ok(purge.length > 0 && missed.length === 0,
+    "the backstop deletes, for every ended room, everything the close deletes",
+    missed.length ? `not: ${missed.join(", ")}` : "no purge function found");
+  ok(/with ended as \(\s*select id from public\.circles where ends_at < now\(\)\s*\)/.test(purge),
+    "'ended' is the circle's own clock, not a guess at one");
+  ok(!/update\s+public\.circles/i.test(purge), "and it never closes a room — the voice room on the SFU is the app's to end");
+  ok(sql.indexOf("revoke all on function public.purge_expired_circle_messages() from public, anon, authenticated", purgeAt) > purgeAt,
+    "nobody outside the database may call it");
+  ok(/cron\.schedule\(\s*'purge-ended-circles',\s*'\*\/15 \* \* \* \*',\s*'select public\.purge_expired_circle_messages\(\)'\s*\)/.test(sql),
+    "and it is scheduled — a backstop nothing calls is a comment", "0003 wrote it and nothing called it for months");
+  ok(/cron\.job_run_details where end_time < now\(\) - interval '7 days'/.test(sql),
+    "with its own history pruned, which pg_cron never does by itself");
+
+  // 7. What a person reads says what is kept, and nothing says nothing is.
+  const privacy = strip(fs.readFileSync(path.join(ROOT, "src/app/privacy/page.tsx"), "utf8"));
+  ok(/every voice note/.test(privacy) && /never recorded/.test(privacy),
+    "the privacy page names voice notes, and that a live call is never recorded");
+  ok(/voice notes are deleted within 24 hours/i.test(room), "the room's own terms say the notes die too");
+  const tsx = [];
+  const walkTsx = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walkTsx(p); else if (p.endsWith(".tsx")) tsx.push(p); } };
+  walkTsx(path.join(ROOT, "src"));
+  ok(tsx.length > 30, `the sweep reads every screen (${tsx.length})`);
+  const claims = tsx.filter((f) => /nothing (?:here )?is recorded|nothing is ever recorded/i.test(strip(fs.readFileSync(f, "utf8"))));
+  is(claims.length, 0, "no screen says nothing is recorded, now that a note is",
+    claims.map((f) => path.relative(ROOT, f)).join(", "));
+});
+
+/*
+  The same note on the wire, through a real store with nothing stubbed between
+  the seat that says it and the seat that hears it — the notes feature had
+  every part working and produced nothing for a month, and a static check
+  cannot tell a route that stores the voice from one that stores nothing.
+*/
+if (BASE) {
+  await checkAsync("157b A voice note goes in through a seat and comes out only to the room", async () => {
+    const json = (p, body, method = "POST") => fetch(`${BASE}${p}`, {
+      method, headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    });
+    // Two pressures nobody has a room open for, so each person here opens one —
+    // check 134's lesson about a store earlier runs have already used.
+    const lobby = await fetch(`${BASE}/api/circles`).then((r) => r.json());
+    const busy = new Set((lobby.circles ?? []).map((c) => c.tag));
+    const free = [...REAL_WORLD_TAGS].reverse().filter((t) => t !== "family" && !busy.has(t));
+    ok(free.length >= 2, "two pressures with no room open for them", `open: ${[...busy].join(", ") || "none"}`);
+    if (free.length < 2) return;
+
+    const stamp = Date.now();
+    const a = `eval-${stamp}-note-a`;
+    const b = `eval-${stamp}-note-b`;
+    const x = `eval-${stamp}-note-x`;
+    const opened = await json("/api/circles", { anonId: a, tag: free[0], pressure: 60 }).then((r) => r.json());
+    const id = opened.circle?.id;
+    ok(id, "a room to leave a note in", JSON.stringify(opened).slice(0, 90));
+    if (!id) return;
+    await json(`/api/circles/${id}`, { anonId: b, consent: true, pressure: 50 });
+    const elsewhere = await json("/api/circles", { anonId: x, tag: free[1], pressure: 40 }).then((r) => r.json());
+
+    const url = `${BASE}/api/circles/${id}/voice-notes`;
+    const leave = (who, body, extra = {}) => fetch(url, {
+      method: "POST", headers: { "content-type": "audio/wav", ...(who ? { "x-anon-id": who } : {}) }, body, ...extra,
+    });
+    const hear = (who, noteId, circle = id) => fetch(`${BASE}/api/circles/${circle}/voice-notes/${noteId}`, {
+      headers: who ? { "x-anon-id": who } : {},
+    });
+
+    const sent = await leave(a, noteOwn);
+    const sentBody = await sent.json().catch(() => null);
+    is(sent.status, 201, "a seat leaves a note", JSON.stringify(sentBody));
+    is(sentBody?.durationMs, 2000, "and the server says how long it is, from the bytes");
+    const tagged = noteFile({
+      samples: notePcm,
+      extra: [["LIST", Buffer.from("INFOISFTiPhone 15 Pro, Lagos\u0000\u0000")]],
+      trailing: Buffer.from("SOMETHING-AFTER-THE-END"),
+    });
+    const sentTagged = await leave(b, tagged);
+    const taggedId = (await sentTagged.json().catch(() => null))?.id;
+    is(sentTagged.status, 201, "a note from a file with a device tag and a tail is accepted");
+
+    const raw = await fetch(`${BASE}/api/circles/${id}/messages?anonId=${b}`).then((r) => r.text());
+    const thread = JSON.parse(raw);
+    const voices = (thread.messages ?? []).filter((m) => m.kind === "voice");
+    is(thread.voiceNotes, true, "the thread says notes are on in this room");
+    is(voices.length, 2, "both notes are in the thread");
+    const first = voices.find((v) => v.id === sentBody?.id);
+    ok(first && first.mine === false && first.durationMs === 2000 && first.content === "",
+      "a note arrives as a seat and a length, with no words attached", JSON.stringify(first));
+    ok(!/UklGR/.test(raw) && !/"audio"/.test(raw), "and the thread carries no sound at all",
+      "a minute of audio on a four-second poll is a megabyte a person, four times a minute");
+
+    const heard = await hear(b, sentBody?.id);
+    const bytes = Buffer.from(await heard.arrayBuffer());
+    is(heard.status, 200, "another seat can play it");
+    is(heard.headers.get("content-type"), "audio/wav", "as a WAV every phone plays");
+    is(heard.headers.get("cache-control"), "private, no-store", "that no cache between here and the phone keeps");
+    is(heard.headers.get("x-content-type-options"), "nosniff", "and that nothing guesses at");
+    ok(bytes.equals(Buffer.from(noteOwn)), "what plays is what was said, byte for byte", `${bytes.length} bytes`);
+    const heardTagged = Buffer.from(await (await hear(a, taggedId)).arrayBuffer());
+    ok(heardTagged.equals(Buffer.from(noteOwn)),
+      "and the tagged file comes back as the voice alone — the tag and the tail were never kept");
+
+    is((await hear(x, sentBody?.id)).status, 403, "somebody without a seat here cannot play it");
+    is((await hear(null, sentBody?.id)).status, 403, "nor can a request that names no seat");
+    is((await leave(x, noteOwn)).status, 403, "or leave one");
+    if (elsewhere.circle?.id) {
+      is((await hear(x, sentBody?.id, elsewhere.circle.id)).status, 404,
+        "a note's id carried into another room answers nothing there", "scoped by the room, not only by the id");
+    }
+
+    const short = await leave(a, noteFile({ samples: notePcm.subarray(0, 4000) }));
+    const shortBody = await short.json().catch(() => null);
+    is(short.status, 422, "a quarter of a second is refused");
+    is(shortBody?.message, noteLib.NOTE_TOO_SHORT, "in the sentence the phone would have said itself");
+    is((await leave(a, noteFile({ channels: 2, samples: notePcm }))).status, 422,
+      "a format this room did not record is refused");
+    // Close means close, for a voice as for a word.
+    const ended = await fetch(`${BASE}/api/circles/${id}?anonId=${a}`, { method: "DELETE" });
+    ok(ended.ok, "the Keeper ends the room", String(ended.status));
+    is((await hear(b, sentBody?.id)).status, 410, "and its notes cannot be played once it is over");
+    is((await leave(b, noteOwn)).status, 410, "or left");
+
+    /*
+      Last, because it is the one request here the server answers by hanging
+      up. The upload is refused mid-stream at the cap and the connection it was
+      arriving on is reset — which HTTP allows, and which is the point: the
+      rest is never read. A pooled client learns that on its next request, so
+      that one request is allowed a single retry on exactly that reset.
+    */
+    ok(elsewhere.circle?.id, "a second room, for the one request that ends in a reset",
+      JSON.stringify(elsewhere).slice(0, 90));
+    if (!elsewhere.circle?.id) return;
+    let pushed = 0;
+    const flood = new ReadableStream({
+      pull(c) { pushed += 65536; c.enqueue(new Uint8Array(65536)); if (pushed >= 3_000_000) c.close(); },
+    });
+    const flooded = await fetch(`${BASE}/api/circles/${elsewhere.circle.id}/voice-notes`, {
+      method: "POST", headers: { "content-type": "audio/wav", "x-anon-id": x }, body: flood, duplex: "half",
+    }).catch((e) => ({ status: `threw ${e.cause?.code ?? e.name}` }));
+    is(flooded.status, 413, "a body that declares no length is still stopped at the cap");
+    const closeElsewhere = () => fetch(`${BASE}/api/circles/${elsewhere.circle.id}?anonId=${x}`, { method: "DELETE" });
+    await closeElsewhere().catch((e) => {
+      if (e.cause?.code === "ECONNRESET") return closeElsewhere();
+      throw e;
+    });
+  });
+}
+
 for (const r of results) {
   const good = r.failed.length === 0;
   if (good) passed++;

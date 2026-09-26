@@ -49,12 +49,19 @@ export default function PrivacyPage() {
       */}
       <h2>In a circle</h2>
       <p>
-        Everything anyone types in a circle is deleted when the circle ends —
-        the whole transcript, and the seats with it. One thing survives, and
-        only because you chose it: the word you say you are carrying out. It
-        goes to your own Memory page, where you can read it and delete it.
-        Nobody else&apos;s words follow you out, and neither does a summary of
-        the room.
+        Everything anyone types or records in a circle is deleted when the
+        circle ends — the whole transcript, every voice note, and the seats
+        with it. One thing survives, and only because you chose it: the word
+        you say you are carrying out. It goes to your own Memory page, where
+        you can read it and delete it. Nobody else&apos;s words follow you out,
+        and neither does a summary of the room.
+      </p>
+      <p>
+        A voice note is recorded on your phone from a pitched-down copy of your
+        voice — the raw microphone never leaves the device — and kept on our
+        server only until the circle ends, where only people with a seat in
+        that circle can play it. A live call in a circle is never recorded at
+        all.
       </p>
 
       <h2>Who can read it</h2>

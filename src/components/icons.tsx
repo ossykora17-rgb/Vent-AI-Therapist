@@ -52,3 +52,41 @@ export function LockIcon() {
     </svg>
   );
 }
+
+export function MicIcon() {
+  return (
+    <svg {...base}>
+      <rect x="9" y="2" width="6" height="12" rx="3" />
+      <path d="M5 10a7 7 0 0 0 14 0" />
+      <path d="M12 17v4" />
+    </svg>
+  );
+}
+
+export function PlayIcon() {
+  return (
+    <svg {...base} fill="currentColor" stroke="none">
+      <path d="M8 5.5v13a1 1 0 0 0 1.5.9l10-6.5a1 1 0 0 0 0-1.7l-10-6.5A1 1 0 0 0 8 5.5z" />
+    </svg>
+  );
+}
+
+export function PauseIcon() {
+  return (
+    <svg {...base} fill="currentColor" stroke="none">
+      <rect x="6" y="5" width="4" height="14" rx="1" />
+      <rect x="14" y="5" width="4" height="14" rx="1" />
+    </svg>
+  );
+}
+
+export function TrashIcon() {
+  return (
+    <svg {...base}>
+      <path d="M4 7h16" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
+      <path d="M9 7V4h6v3" />
+    </svg>
+  );
+}
