@@ -10017,8 +10017,13 @@ check("80 Six seats means six, in the store that can race", () => {
 
   // ── the route must read the answer ────────────────────────────────────────
   const handler = slice(join, "const took = await store.addMember(", 900);
-  ok(/if\s*\(!took\)[\s\S]{0,200}409/.test(handler),
+  ok(/if\s*\(!took\)[\s\S]{0,400}409/.test(handler),
     "a seat that did not land is a 409, not a 201 with a role");
+  // False is also "you are already in it" — two of one person's requests
+  // racing — and that one is a seat, not a full room.
+  ok(/if\s*\(!took\)\s*\{[^}]*?after\.find\(\(m\) => m\.anon_id === anonId\)[\s\S]{0,200}rejoined: true[\s\S]{0,200}409/.test(handler),
+    "and a seat that did not land because it was already theirs is their seat, not a full room",
+    "addMember answers false for both; the lobby route reads the members back and this one must too");
   ok(handler.indexOf("listMembers") < handler.indexOf("status: 201"),
     "and the seat count is read after the write");
   ok(!/seats:\s*members\.length\s*\+\s*1/.test(join),

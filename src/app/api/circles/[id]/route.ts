@@ -258,6 +258,16 @@ async function handlePOST(request: Request, { params }: Params) {
   // Counted after the write, never inferred from the read before it.
   const after = await store.listMembers(id);
   if (!took) {
+    /*
+      `addMember` answers false for two things — the room filled, and you are
+      already in it — and only the first is "full". The seat check above cannot
+      see the second when two of one person's requests race (two tabs, two
+      taps), so the loser was told "That circle is full" about a room they were
+      sitting in. The lobby route learned this and reads the members back; this
+      one had the members in hand and never looked.
+    */
+    const seated = after.find((m) => m.anon_id === anonId);
+    if (seated) return NextResponse.json({ role: seated.role, seats: after.length, rejoined: true });
     return NextResponse.json({ error: "full", seats: after.length }, { status: 409 });
   }
 
