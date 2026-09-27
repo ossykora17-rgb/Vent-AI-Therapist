@@ -92,6 +92,10 @@ const SILENCE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9A
   door; it was an arrival reading a person had to give before they could come
   in, and the closing already asks where they landed.
 */
+/** Said when a share or a seat does not go through — refused or never answered. */
+const COULDNT_SEND = "Couldn't send that.";
+const COULDNT_SIT = "Couldn't take a seat.";
+
 const AGREEMENT = [
   "No advice. No fixing. No cross-talk — speak to the circle.",
   "What's said here stays here. Messages and voice notes are deleted within 24 hours.",
@@ -219,6 +223,14 @@ export function CircleRoom({ id }: { id: string }) {
     // here, and there is text in my box. No new endpoint, no debounce timer,
     // no extra request per keystroke.
     const typing = draftRef.current.trim().length > 0 ? "&typing=1" : "";
+    /*
+      A request that throws is a refusal too — the connection dropped, which
+      on a phone in Lagos is the ordinary case. It used to escape as an
+      unhandled rejection, so a circle link opened on a dead connection showed
+      the room's first line and nothing else: not the room, and not the
+      sentence below that exists for exactly this.
+    */
+    try {
     const r = await fetch(`/api/circles/${id}?anonId=${encodeURIComponent(me)}${typing}`);
     if (r.status === 404) { setNotFound(true); return; }
     /*
@@ -247,12 +259,20 @@ export function CircleRoom({ id }: { id: string }) {
         setNotesOn(thread.voiceNotes === true);
       }
     }
+    } catch {
+      setUnreachable(true);
+    }
   }, [id, me]);
 
   React.useEffect(() => {
-    void load();
+    // The first read waits one tick, the lobby's pattern for the same rule:
+    // `load` can now set state from its catch, and an effect must not.
+    const first = window.setTimeout(() => void load(), 0);
     const t = window.setInterval(load, 4000);
-    return () => window.clearInterval(t);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(t);
+    };
   }, [load]);
 
   React.useEffect(() => {
@@ -298,8 +318,12 @@ export function CircleRoom({ id }: { id: string }) {
         setCrisis({ reply: typeof d.reply === "string" && d.reply.trim() ? d.reply : null });
         return;
       }
-      if (!r.ok) { toast(d.error === "full" ? "That circle is full." : "Couldn't take a seat.", "error"); return; }
+      if (!r.ok) { toast(d.error === "full" ? "That circle is full." : COULDNT_SIT, "error"); return; }
       await load();
+    } catch {
+      // The tap reached nothing — a dropped connection throws rather than
+      // answering, and a tap that does nothing reads as a room refusing you.
+      toast(COULDNT_SIT, "error");
     } finally {
       setBusy(false);
     }
@@ -426,9 +450,13 @@ export function CircleRoom({ id }: { id: string }) {
         setRuleError(d.message);
         return;
       }
-      if (!r.ok) { toast("Couldn't send that.", "error"); return; }
+      if (!r.ok) { toast(COULDNT_SEND, "error"); return; }
       setDraft("");
       await load();
+    } catch {
+      // A dropped connection throws rather than answering. Their words stay
+      // in the box, which is only worth anything if they are told it did not go.
+      toast(COULDNT_SEND, "error");
     } finally {
       setBusy(false);
     }

@@ -4155,6 +4155,19 @@ counts, no names, not a word anybody said — and check 15f reads the count's
 source beside the sentence, so the two cannot drift apart again. Found by
 reading the lobby's own words during the same end-of-room audit.
 
+**Every circle screen answered a refusal, and none answered a throw.** A
+request that throws — the connection dropped, which on a phone in Lagos is the
+ordinary case — escaped as an unhandled rejection from three places: a share
+that failed said nothing, a tapped *"Take a seat"* did nothing, and a circle
+link opened on a dead connection showed the room's first line and nothing
+else, never reaching the *"Can't reach this room"* screen written for exactly
+that. The voice note one function over already caught it, in the same file.
+Reproduced by aborting the requests in a browser before anything changed;
+after, the share and the seat say so in the words their refusals use and the
+dead link lands on the unreachable screen. Check 160 walks every request the
+circle screens make and requires a catch around each, with a floor on how many
+it read — the class rather than the three.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
