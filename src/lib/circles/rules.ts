@@ -267,7 +267,7 @@ export const MYCELIUM = {
 } as const;
 
 /**
- * Circle topics that deliberately open without a tool.
+ * Circle topics whose Keeper opens without the private room's line.
  *
  * 0012's argument, moved out of a migration comment and into the code, because
  * a decision only Postgres knows about is one nothing here can hold anybody to.
@@ -282,8 +282,19 @@ export const MYCELIUM = {
  * would read exactly like this one, and the check that guards holds iterates
  * `REAL_WORLD_TACTIC`, so it cannot see a circle topic that is missing from it
  * at all.
+ *
+ * `lonely` has a line, and it is written for somebody else. The private room's
+ * hold is the machine telling one person what it is: *"I'm a machine: I can't
+ * leave, and I can't be in the room with you either. Who is the one person you
+ * wish had read this instead?"* Read out as a circle opens, it is false three
+ * times — the room closes itself in forty-five minutes and says so in the same
+ * breath, the room is the company the line says is missing, and nobody has
+ * written anything yet to have read. It is also the Keeper's name over it, and
+ * a circle has a person called the Keeper. The circle is the answer that line
+ * points at, so the room opens without it. The line stays exactly as it is in
+ * the private room, where every word of it is true.
  */
-export const NO_KEEPER_TOOL: readonly string[] = ["grief"];
+export const NO_KEEPER_TOOL: readonly string[] = ["grief", "lonely"];
 
 /**
  * What the room reads when the Keeper takes somebody's voice note down.
@@ -302,7 +313,7 @@ export function keeperIntention(tag: string | null, counted?: string | null): st
   const opening = OPENING[tag ?? ""] ?? "Today we hold whatever is heaviest.";
 
   const tool =
-    tag && tag in REAL_WORLD_TACTIC
+    tag && tag in REAL_WORLD_TACTIC && !NO_KEEPER_TOOL.includes(tag)
       ? REAL_WORLD_TACTIC[tag as keyof typeof REAL_WORLD_TACTIC].hold
       : null;
 

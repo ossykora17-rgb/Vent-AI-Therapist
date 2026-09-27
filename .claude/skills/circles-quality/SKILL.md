@@ -25,9 +25,14 @@ minutes, peer support — not therapy, not affiliated with AA.
 Both lines are **selected, not generated**. No model call, no tokens.
 
 - **Opening** — `keeperIntention(tag)` is the tag's `OPENING` sentence plus
-  `REAL_WORLD_TACTIC[tag].hold`, the tactic library's own room-facing phrasing.
-  One library, so a private session and a circle cannot drift. Adding a tenth
-  real-world pressure means adding its `hold` in the same commit.
+  `REAL_WORLD_TACTIC[tag].hold`, the tactic library's phrasing. One library, so
+  a private session and a circle cannot drift — and the drift goes both ways: a
+  hold is written for the private room first, so a rewrite there is read out in
+  a circle. `NO_KEEPER_TOOL` names the rooms that open without it, with why:
+  `grief` has no tool, and `lonely`'s hold is the machine telling one person it
+  cannot be company, which is false in a room of people. Adding a tenth
+  real-world pressure means adding its `hold` in the same commit, and reading
+  it aloud as the Keeper before anybody has spoken.
 - **Reflection** — `keeperReflection(shares)` counts `PATTERN_WORDS` across
   what the room actually said and reports any appearing twice or more. It
   cannot name a pattern nobody voiced. With no repeated word it says how many

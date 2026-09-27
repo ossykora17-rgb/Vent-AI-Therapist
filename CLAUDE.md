@@ -4170,6 +4170,27 @@ it read — the class rather than the three.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
+**The lonely circle opened by telling a room of people it could not be
+company.** `keeperIntention` reads the private room's hold for each topic —
+*"one library, so a private session and a circle cannot drift"* — and the VENT
+rewrite turned `rw_lonely`'s into the machine talking to one person: *"I'm a
+machine: I can't leave, and I can't be in the room with you either. Who is the
+one person you wish had read this instead?"* Every lonely circle then opened on
+it, before anybody had written a word, in the same breath as *"Wetin talk for
+here, dey die for here"* — a room that closes itself saying it cannot leave,
+under the Keeper's name, in a circle that has a person called the Keeper.
+
+The drift the shared line was meant to prevent ran the other way: a line is
+written for the private room first, so a rewrite there is read aloud in a
+circle, and check 9 asserted `includes(hold)` for every topic — **an assertion
+defending the bug**. The private line is untouched, because there every word of
+it is true. `lonely` joins `grief` in `NO_KEEPER_TOOL` with its reason written
+beside it, both directions are asserted off what the Keeper actually says
+rather than off the tactic table, and an exempt room with no reason in the
+comment fails, because adding a name to that list is otherwise a tool quietly
+lost. Five mutations fail checks 9 and 32. Found by printing the opening of
+every topic, which nothing had done since the holds were rewritten.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
