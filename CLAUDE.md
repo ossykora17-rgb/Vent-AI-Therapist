@@ -4145,6 +4145,16 @@ word on the sender's own page and nobody else's, and a server-side guard needs
 a column. Five mutations fail check 140, and a browser proof sent two drop taps
 back to back: one `PATCH`, one word on the page, both rows of chips locked.
 
+**And the lobby's reassurance was false about the rows it sat under.** *"Counts
+only. Nothing anybody said is kept, here or anywhere."* — printed beneath "24
+people sat down with something", a number `carrying.ts` builds out of
+**private vents**, which the store keeps until the person deletes them (that is
+the whole reason the delete-everything button exists). Circles keep nothing;
+the room these counts come from does. The line now says what the panel is —
+counts, no names, not a word anybody said — and check 15f reads the count's
+source beside the sentence, so the two cannot drift apart again. Found by
+reading the lobby's own words during the same end-of-room audit.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

@@ -1449,6 +1449,21 @@ check("15f The house counts what it holds, and stays quiet below the floor", () 
   is(carryingWord("ai_job"), "work", "tags are spoken in words, not in schema");
   is(carryingWord("economy"), "money", "money is money");
   is(carryingWord("unknown_tag"), "unknown_tag", "and an unmapped tag falls through intact");
+
+  /*
+    And the line under it may only say what the panel is. It read "Nothing
+    anybody said is kept, here or anywhere" over a count made of private vents
+    — rows the store keeps until the person deletes them. A privacy claim that
+    is false about the rows it is printed over.
+  */
+  const carryingSrc = strip(fs.readFileSync(path.join(ROOT, "src/lib/community/carrying.ts"), "utf8"));
+  const lobbySrc = strip(fs.readFileSync(path.join(ROOT, "src/components/circles-list.tsx"), "utf8"));
+  const panel = lobbySrc.slice(lobbySrc.indexOf("This week, in the house"), lobbySrc.indexOf("{creating && ("));
+  ok(/VentRow/.test(carryingSrc) && panel.length > 200,
+    `the count is made of stored vents, and the panel under it was read (${panel.length} chars)`);
+  ok(!/\bkept\b[^.<]*\banywhere\b/i.test(panel) && /not a word anybody said/.test(panel),
+    "so it says it shows nobody's words, never that nothing is kept anywhere",
+    "the private room keeps what people write until they delete it");
 });
 
 // ── 15g. every clause, not the last noun ──────────────────────────────────
