@@ -4231,6 +4231,18 @@ reproducible on the file store, which updates memory before it yields — **0 of
 statically and three mutations fail it. The unique constraint is declared in
 0003 and was not verified against the live database from here.
 
+**The circle's crisis card opened on a verdict.** *"This isn't the room for
+that"*, in mono capitals, sat above a crisis reply this file argues over word by
+word — the weight is more than a screen can hold, never the room being burdened
+— and read first, by somebody who had just typed the worst sentence of their
+week, as their words not belonging where they said them. The fact they need is
+the one it hid: the room did not see it. The route returns before it stores
+anything and the draft stays in their box, so the thread's silence is not the
+room saying nothing back. It reads *"Not sent to the room"* now, and check 162
+ties the sentence to the route answering before `addCircleMessage` — a claim
+that the room did not see it is only as true as that ordering. The reply, the
+numbers and the way out are untouched.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
