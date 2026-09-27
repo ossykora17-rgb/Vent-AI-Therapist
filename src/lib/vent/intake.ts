@@ -31,6 +31,9 @@ import type { Note } from "./notes";
 /** A gap shorter than this is the same sitting, not a return. */
 export const RETURN_AFTER_HOURS = 12;
 
+/** Inside a sitting, a gap this long is stepping away and coming back. */
+export const PAUSE_MINUTES = 20;
+
 /**
  * How long they were away, said the way a person says it — or null when there
  * is no gap worth naming. Twelve hours: the same night is still the same
@@ -87,6 +90,21 @@ export function openingLine(
       : `You're back after ${away}. Where is it sitting now?`;
   }
 
+  /*
+    Back inside the same day. The presence directive: "after delays, re-enter
+    with calm continuity" — and this branch used to fall through to the
+    stranger's line, asking somebody who had talked two hours ago what made
+    them open VENT today. A restart is the passivity the directive calls
+    failure: it hands them the whole thread again. Under `PAUSE_MINUTES` it
+    is the same conversation and says nothing about leaving.
+  */
+  if (sinceLastHours !== null && sinceLastHours !== undefined && sinceLastHours >= 0) {
+    const stepped = sinceLastHours * 60 >= PAUSE_MINUTES;
+    return pidgin
+      ? `${stepped ? "You don come back. " : ""}Where e dey sit for you now?`
+      : `${stepped ? "You're back. " : ""}Where is it sitting now?`;
+  }
+
   return pidgin
     ? `How far. ${g.block === "night" ? "Late o" : `Good ${g.block}`}. Wetin make you open this one today?`
     : `Hey. ${g.block === "night" ? "Late one." : `Good ${g.block}.`} What made you open VENT today?`;
@@ -97,6 +115,9 @@ export function openingLine(
  *
  * "Quick thing: I remember our conversations so we don't start over. I'm not
  * human but I'm here. Is that cool?"
+ *
+ * (It said "what we talk about" until the presence directive's *"No 'we'"*:
+ * there is one person here, and the room keeps what *they* said.)
  *
  * The first half of that is a **promise the code cannot keep** — and this
  * product's own grader bans `/I'?ll remember/` outright, because the worst bug
@@ -121,8 +142,8 @@ export function allianceLine(persisted: boolean, language: "en" | "pidgin"): str
   const pidgin = language === "pidgin";
   if (persisted) {
     return pidgin
-      ? "Quick one: I dey keep wetin we talk, so we no go start over. I be machine, no be person — but I dey here. You dey okay with am?"
-      : "Quick thing: I keep what we talk about, so we don't start over. I'm not a person — I'm a machine — but I'm here. You good with that?";
+      ? "Quick one: I dey keep wetin you tell me for here, so you no go start over. I be machine, no be person — but I dey here. You dey okay with am?"
+      : "Quick thing: I keep what you tell me here, so you don't start over. I'm not a person — I'm a machine — but I'm here. You good with that?";
   }
   /*
     Nothing is being kept, so nothing is claimed. The sentence still gets said
@@ -130,7 +151,7 @@ export function allianceLine(persisted: boolean, language: "en" | "pidgin"): str
     owed it either way.
   */
   return pidgin
-    ? "Quick one: nothing wey we talk dey saved for now — e go go when you close am. I be machine, no be person, but I dey here."
+    ? "Quick one: nothing wey you talk here dey saved for now — e go go when you close am. I be machine, no be person, but I dey here."
     : "Quick thing: nothing here is being kept beyond this visit yet. I'm not a person — I'm a machine — but I'm here.";
 }
 

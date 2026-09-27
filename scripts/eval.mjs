@@ -9676,13 +9676,21 @@ check("76 The office has one voice, and nothing we wrote breaks it", () => {
   // Whitespace-normalised: the contract is wrapped prose, and a phrase that
   // straddles a line break is still the phrase. A check that fails on where
   // the text happens to wrap is asserting about the editor.
+  /*
+    And then the requirement itself moved. The presence directive: "Prefer
+    statements that open awareness. One precise question is allowed when it
+    serves flow" — and "never leave the user carrying the conversation". So the
+    contract no longer demands a question; it demands momentum, and caps the
+    questions at one. These three asserted the old contract ("ask one thing you
+    do not know the answer to", "deliberately not a template", "Four parts
+    reflecting") and now assert the new one.
+  */
   const contract = OFFICE_RULES.replace(/\s+/g, " ");
-  ok(/ask one thing you do not know the answer to/i.test(contract),
-    "the contract still demands exactly one real question");
-  ok(/deliberately not a template/i.test(contract),
-    "and says the shape is not one",
-    "sometimes the right reply is one sentence, sometimes only the question");
-  for (const rule of ["Four parts reflecting"]) {
+  ok(/keep the thread moving yourself/i.test(contract) && /one precise question when a question serves/i.test(contract),
+    "the contract demands momentum, and a question only when one serves");
+  ok(/never leave them to ask what next/i.test(contract) && /never more than one question/i.test(contract),
+    "and names the two ways to fail it: passivity, and a second question");
+  for (const rule of ["Reflection, never repair"]) {
     ok(OFFICE_RULES.includes(rule), `the contract carries: ${rule.slice(0, 40)}`);
   }
   /*
@@ -10638,7 +10646,7 @@ check("84 The room introduces itself once, and only as true as the write", () =>
     the disclosure survives. A person is owed the second half either way.
   */
   const kept = allianceLine(true, "en");
-  ok(/keep what we talk about/i.test(kept), "with a store, it says it keeps things");
+  ok(/keep what you tell me/i.test(kept), "with a store, it says it keeps things — theirs, not \"ours\"");
   ok(/not a person|machine/i.test(kept), "and says what it is",
     "four US states now require this product to say so out loud");
 
@@ -10998,7 +11006,9 @@ check("86 Nobody is handed a task that would fit anybody", () => {
     contradicts it: the prompt was telling the model the old rule every turn.
   */
   ok(!/unless they asked/.test(speaks), "and no exemption for asking survives in the prompt");
-  ok(/Understanding is the job/.test(speaks) && /even when they ask/.test(speaks),
+  // The no-task sentence has one home now, the office contract; HOW YOU SPEAK
+  // carried a second copy until the presence rewrite paid for its budget with it.
+  ok(/Understanding is the job/.test(speaks) && /even when they ask/.test(STABLE_PREFIX.replace(/\s+/g, " ")),
     "and extraction is what stands in its place",
     "RULE 2: your job is not to fix, your job is to understand");
 
@@ -19711,6 +19721,15 @@ check("154 One question, about them — the VENT spec, held where a person meets
     So the rule is held at the three places it can break: the library the
     question comes from, the authored lines a person reads when the model is
     refused, and the grader that reads what the model wrote.
+
+    AND THEN THE PRESENCE DIRECTIVE MOVED IT. "Prefer statements that open
+    awareness. One precise question is allowed when it serves flow" — so a
+    reply ending on a statement is the preferred shape now, not a finding, and
+    "a single, surgical question" became "one at most". What the obligatory
+    question was standing in for is kept and named instead: never leave them
+    carrying the thread. Four assertions below said the old spec and were
+    rewritten to say the new one, rather than deleted, because a decision that
+    moved is a record and an assertion that vanished is not.
   */
 
   // ── the two detectors, in both directions ─────────────────────────────────
@@ -19732,7 +19751,18 @@ check("154 One question, about them — the VENT spec, held where a person meets
   ];
   for (const [text, why] of THEM) is(aboutTheRoom(text), null, `about them: "${text.slice(0, 40)}…"`, why);
 
-  is(closingProblem("Then tell me what happened last night."), "no question", "an imperative that digs still is not a question");
+  is(closingProblem("Then tell me what happened last night."), null, "an imperative that digs keeps the thread moving");
+  is(closingProblem("Three yeses before noon, and none of them were yours."), null,
+    "a statement that opens is the shape the directive prefers, not a finding");
+  for (const back of ["Three yeses before noon. Take your time.", "That's a lot. Anything else?",
+    "You said yes three times. Let me know if you want to talk more.", "Three yeses. What would you like to talk about?"]) {
+    is(closingProblem(back), "hands it back", `hands the thread back: "${back.slice(-34)}"`,
+      "an ending that could close any conversation leaves this one to them");
+  }
+  for (const mid of ["Take your time with it. The yes you gave her at noon is still sitting there.",
+    "Take your time with it, and the yes you gave her at noon is still sitting there."]) {
+    is(closingProblem(mid), null, `the same words, not as the ending: "${mid.slice(0, 30)}…"`);
+  }
   is(closingProblem("Where? Since when?"), "more than one question", "two questions are a menu");
   is(closingProblem("Who would notice first if you stopped — not who should, who would?"), null, "one question, sharpened inside itself");
   is(closingProblem("Is that the word — the one they used?”"), null, "a closing quote after the mark is still the mark");
@@ -19741,16 +19771,17 @@ check("154 One question, about them — the VENT spec, held where a person meets
   ok(PROBES.length >= 50, `${PROBES.length} probes read`, "a sweep over nothing passes loudest");
   is(PROBES.filter((p) => aboutTheRoom(p.ask)).map((p) => p.id).join(", "), "",
     "no probe asks about the room", "the reply writes what the probe asks — eight of nine came from here");
-  is(PROBES.filter((p) => closingProblem(p.ask)).map((p) => p.id).join(", "), "",
-    "every probe is one question, ending on its mark");
+  is(PROBES.filter((p) => closingProblem(p.ask) || !/\?["”’)\]]*$/.test(p.ask.trim()) || (p.ask.match(/\?/g) ?? []).length !== 1)
+    .map((p) => p.id).join(", "), "",
+    "every probe is one question, ending on its mark — what the room goes after, whether it is asked or said");
 
   // ── the lines a person reads when the model is refused ────────────────────
   const holds = ALL_TACTICS.filter((t) => t.hold);
   ok(holds.length >= 30, `${holds.length} holds read`, "the failsafe exempts authored lines, so this is the door");
   is(holds.filter((t) => closingProblem(t.hold) || aboutTheRoom(t.hold)).map((t) => t.id).join(", "), "",
-    "every hold ends on one question about them");
-  ok(REPLY_SENTENCE_CAP <= 3, "the ceiling is two lines and the question",
-    "\"One or two devastating lines, not paragraphs\" — the spec, not a snapshot of it");
+    "no hold hands the thread back, asks twice, or asks about the room");
+  ok(REPLY_SENTENCE_CAP <= 4, "the ceiling is the directive's four",
+    "\"1–4 clean sentences\" — the spec, not a snapshot of it; it was three under the VENT spec before it");
   is(holds.filter((t) => sentenceCount(t.hold) > REPLY_SENTENCE_CAP).map((t) => t.id).join(", "), "",
     "and none of them runs past it");
 
@@ -19767,21 +19798,23 @@ check("154 One question, about them — the VENT spec, held where a person meets
   ok(corpus.length >= 70, `${corpus.length} authored replies read`, "a sweep over nothing passes loudest");
   is(corpus.map((t, i) => (closingProblem(t) || aboutTheRoom(t) || sentenceCount(t) > REPLY_SENTENCE_CAP ? `#${i}` : null))
     .filter(Boolean).join(", "), "",
-    "every authored reply ends on one question about them, inside the cap");
+    "no authored reply hands the thread back, asks twice or asks about the room, and none runs past the cap");
 
   // ── the grader that reads what the model wrote ────────────────────────────
   const kase = { message: "my mother rang three times and i said yes three times", intent: "vent", language: "en" };
   const graded = (reply) => gradeReply(kase, reply, { tokensSpent: true, said: kase.message });
   const room = graded("Three yeses before noon. Do you want me to just hear this, or push?").find((f) => f.grader === "about_me");
   is(room?.severity, "major", "a question about the room is graded", "and it is major — it never reaches training");
-  const flat = graded("Three yeses before noon, and none of them were yours.").find((f) => f.grader === "closing");
-  is(flat?.severity, "major", "a reply with no question is graded");
+  is(graded("Three yeses before noon, and none of them were yours.").filter((f) => f.grader === "closing").length, 0,
+    "a reply that opens with a statement is not graded");
+  const back = graded("Three yeses before noon. Take your time.").find((f) => f.grader === "closing");
+  is(back?.severity, "major", "a reply that hands the thread back is graded");
   is(graded("Three yeses before noon. Whose yes were they?").filter((f) => f.grader === "closing" || f.grader === "about_me").length, 0,
     "and one question about them is not");
   ok(RETRY_ONLY.has("about_me") && !REJECT.has("about_me"), "about_me buys a retry and never the hold",
     "the reply is still made of their words; the hold is made of nobody's");
-  ok(NOTED.has("closing") && !REJECT.has("closing") && !RETRY_ONLY.has("closing"), "closing is noted, never billed",
-    "one turn in six failed it — a retry there is the wrong trade on a spec that also says strict token usage");
+  ok(RETRY_ONLY.has("closing") && !REJECT.has("closing") && !NOTED.has("closing"), "closing buys a retry and never the hold",
+    "it was noted while one turn in six failed it, mostly for having no question — which is no longer a failure");
 
   // ── the constitution the model reads ──────────────────────────────────────
   const said = STABLE_PREFIX.replace(/\s+/g, " ");
@@ -19830,6 +19863,10 @@ check("154 One question, about them — the VENT spec, held where a person meets
     ok(opener.test(line), `${lang}: the crisis line opens on what the room is`);
     ok(/real person/i.test(line) && /right now/i.test(line), `${lang}: and tells them to tell a real person, right now`);
     ok(!/concerned|worry/i.test(line), `${lang}: and claims no stake it does not have`);
+    // "Clear concern", asked for by two directives running, as seriousness and
+    // priority — the form that needs no stake — and after the opener, not before.
+    ok(/\bserious\b/i.test(line) && /\bsafety\b/i.test(line) && line.search(/\bserious\b/i) > line.search(/person\b/i),
+      `${lang}: and states the concern plainly, after it says what it is`);
   }
 });
 
@@ -21389,14 +21426,19 @@ check("169 Coming back is a fact off their own record, said once", () => {
   ok(/after three days/.test(openingLine(g, "pidgin", null, [], 72)), "in Pidgin as well");
   ok(/Last time it was the rent/.test(openingLine(g, "en", "the rent", [], 72)),
     "and a carve outranks the gap — their thread beats a clock");
-  ok(!/back/i.test(openingLine(g, "en", null, [], 2)), "two hours away is not a return");
+  is(openingLine(g, "en", null, [], 2), "You're back. Where is it sitting now?",
+    "two hours away is not a return across days, and not a stranger either — the thread picks up");
+  is(openingLine(g, "en", null, [], 0.1), "Where is it sitting now?",
+    "a greeting six minutes in says nothing about leaving");
+  ok(/^Hey\./.test(openingLine(g, "en", null, [], null)), "and only somebody with no thread gets the stranger's line");
+  ok(/^You don come back\. Where e dey sit/.test(openingLine(g, "pidgin", null, [], 2)), "in Pidgin as well");
 
   ok(/Back after three days/.test(arcBlock(0, 72)), "the first turn of a return tells the model so");
   ok(!/Back after/.test(arcBlock(0, null)) && !/Back after/.test(arcBlock(3, 72)),
     "and only the first turn: a return is said once, not narrated");
 
   const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
-  ok(/const lastAt = mine\.reduce\(/.test(route) && /greetCarve, greetNotes, sinceLastHours\)/.test(route)
+  ok(/const lastAt = mine\s*\.filter\(\(r\) => r\.intent_type !== "greeting"\)\s*\.reduce\(/.test(route) && /greetCarve, greetNotes, sinceLastHours\)/.test(route)
     && /^\s*sinceLastHours,$/m.test(route),
     "the gap is read off their own rows and reaches both the greeting and the prompt");
 });
@@ -21442,6 +21484,117 @@ check("170 Every reply is scored on the anchors, and every grader counts toward 
     "the nightly audit carries the same anchor names into the record that outlives the hour");
   const audit = strip(fs.readFileSync(path.join(ROOT, "scripts/audit.mjs"), "utf8"));
   ok(/anchors: \{ scored, whole, broken \}/.test(audit), "and writes the counts into the artifact");
+});
+
+// ── 171. the presence directive: the thread kept alive, and nobody held ─────
+const { RESCUES, STICKY } = await app("src/lib/vent/quality.ts");
+const { HAND_BACK } = await app("src/lib/vent/voice.ts");
+const { LANDING_PROBE: LANDING } = await app("src/lib/vent/arc.ts");
+
+check("171 The room keeps the thread alive, and never rescues, holds on, lectures or says we", () => {
+  /*
+    The founder's presence directive, where a person meets it. Its hard law —
+    "No advice. No tasks. No exercises. No frameworks. No 'we'. No rescuing" —
+    and "never create dependency ... never harvest or hold it in a trance",
+    plus the one rule a model breaks by being polite: "you never leave the user
+    carrying the conversation." Every pattern below was run against all 197
+    authored lines (holds, probes, the corpus, the room's own local lines)
+    before it went in, and hit none; this keeps it that way and holds both
+    directions, because a pattern written the way its author would phrase a
+    rescue is the fifth way this repository has paid for a regex.
+  */
+  const c = { id: "p", message: "my mum keeps saying e go better but the rent is due friday", intent: "vent", language: "en", probes: "" };
+  const fired = (reply, said = c.message) =>
+    gradeReply(c, reply, { tokensSpent: true, said }).map((f) => f.grader);
+
+  // ── rescuing ────────────────────────────────────────────────────────────
+  for (const r of ["It's going to be okay.", "You'll get through this.", "This too shall pass.", "Don't be so hard on yourself.",
+    "You're stronger than you think.", "I'm proud of you for saying it.", "It's okay to feel this way.", "No worry, you go make am."]) {
+    ok(fired(`Friday is doing the talking. ${r}`).includes("rescues"), `rescue caught: "${r}"`);
+  }
+  for (const [r, why] of [
+    ["You keep telling yourself it'll be okay, and the telling is getting louder.", "the room seeing the rescue, not doing it"],
+    ["Your mum's e go better has been doing the night shift.", "their own words, handed back"],
+    ["That one no be your fault.", "defended in the advice grader, and not relitigated here"],
+    ["It will pass the landlord's desk by Friday either way.", "a verb, not a promise about how it ends"],
+  ]) ok(!fired(r).includes("rescues"), `not a rescue: "${r.slice(0, 44)}…"`, why);
+
+  // ── holding on: dependency, a lull, a hook ──────────────────────────────
+  for (const r of ["You can always come back and talk to me.", "I'm here whenever you need me.", "You have me.",
+    "With each breath the rent gets smaller.", "Stay a little longer.", "Keep talking to me."]) {
+    ok(fired(`Friday is loud. ${r}`).includes("sticky"), `held on to them: "${r}"`);
+  }
+  for (const r of ["You keep talking about Friday like it is a person.", "You came back to the same sentence.",
+    "You stayed longer at the office than you meant to."]) {
+    ok(!fired(r).includes("sticky"), `not a hook: "${r.slice(0, 44)}…"`);
+  }
+
+  // ── frameworks: the name, and the shape ─────────────────────────────────
+  ok(fired("That is your fight-or-flight doing its job. What is Friday asking of you?").includes("teaches"),
+    "a framework named at them is a lesson");
+  ok(!fired("That is the fight-or-flight you named. What is Friday asking of you?", "my fight-or-flight kicks in every friday").includes("teaches"),
+    "their own framework handed back is not");
+  ok(fired("Two things are happening:\n1. Friday is close.\n2. Your mum is certain.").includes("teaches"),
+    "a reply laid out as a list is a framework, whatever it lists");
+  ok(!fired("Friday is close - and your mum is certain.").includes("teaches"), "a dash inside a sentence is not a list");
+
+  // ── the thread, kept ────────────────────────────────────────────────────
+  ok(!fired("Your mum is certain and you are not. Friday is the one doing the talking.").includes("closing"),
+    "a reply that ends on a statement keeps the thread — the shape the directive prefers");
+  ok(fired("Your mum is certain and you are not. Take your time.").includes("closing"),
+    "an ending that could close any conversation hands it back");
+  ok(fired("Friday is close. What happens Friday? And what happens after?").includes("closing"),
+    "and so does a second question");
+  ok(fired("We can sit with Friday together.").includes("fused"), "\"we\" is still fusion");
+
+  // ── the authored lines: every one passes all of it ──────────────────────
+  const g = { block: "evening" };
+  const local = ["en", "pidgin"].flatMap((lang) => [
+    openingLine(g, lang, null), openingLine(g, lang, "the rent"), openingLine(g, lang, null, [], 72), openingLine(g, lang, null, [], 2),
+    allianceLine(true, lang), allianceLine(false, lang),
+    ...["meta", "greeting"].map((i) => localReply(i, g, lang, "are you real?")).filter(Boolean),
+  ]);
+  const authored = [
+    ...ALL_TACTICS.filter((t) => t.hold).map((t) => t.hold),
+    ...PROBES.map((p) => p.ask),
+    ...fs.readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l).full_integration),
+    ...local,
+  ];
+  ok(authored.length >= 180 && local.length >= 12, `${authored.length} authored lines read, ${local.length} of them the room's own`,
+    "a sweep over nothing passes loudest");
+  const offenders = authored
+    .map((t) => [t, gradeReply(c, t, { tokensSpent: true, said: c.message })
+      .filter((f) => ["rescues", "sticky", "fused", "closing", "teaches"].includes(f.grader)).map((f) => f.grader)])
+    .filter(([, gs]) => gs.length)
+    .map(([t, gs]) => `${gs.join("+")}: ${t.slice(0, 40)}`);
+  is(offenders.join(" | "), "", "no line the room already says rescues, holds on, says we, hands the thread back or lectures",
+    "an authored line that breaks a law is the door the failsafe falls back through");
+  ok(RESCUES.length >= 10 && STICKY.length >= 10 && HAND_BACK.length >= 10, "and the three lists are the lists, not empty ones");
+
+  // ── where each one lands ────────────────────────────────────────────────
+  ok(REJECT.has("rescues") && REJECT.has("sticky"), "rescuing and holding on buy a retry and, failing that, the hold",
+    "each is mostly a promise about a future the room does not have");
+  ok(RETRY_ONLY.has("fused") && RETRY_ONLY.has("closing") && !NOTED.has("fused") && !NOTED.has("closing"),
+    "\"we\" and a dropped thread buy a retry and never the hold — the directive made both law");
+  ok(ANCHORS.no_advice_or_tasks.includes("rescues") && ANCHORS.continuity.includes("sticky"),
+    "rescuing is fixing, and a hook is the flow turned extractive",
+    "the directive's internal gate, asked after the fact");
+
+  // ── the slot the reply ends on ──────────────────────────────────────────
+  ok(/^WHAT TO GO AFTER\n/.test(probeBlock(PROBES[0])) && !/QUESTION/.test(probeBlock(PROBES[0])),
+    "the question slot names the thread and lets it be said",
+    "a block headed THE QUESTION made every reply end on one, whatever the contract said");
+  ok(/^THE QUESTION TO ASK\n/.test(probeBlock(LANDING)), "except the landing reading, which the track under the reply waits on");
+
+  // ── the constitution the model reads ────────────────────────────────────
+  const said = STABLE_PREFIX.replace(/\s+/g, " ");
+  for (const rule of [/never "we"/, /Never leave them to ask what next/, /Their attention is theirs/,
+    /feel without owning/, /Not a therapist, coach, fixer or cheerleader/, /zero advice, tasks, frameworks or rescue/]) {
+    ok(rule.test(said), `the prompt carries ${rule}`);
+  }
+  ok(!/Weight over warmth/.test(said) && /Warm, steady, alive, precise/.test(said),
+    "and its tone is the directive's, not the one it replaced",
+    "\"weight over warmth\" under a directive whose tone opens \"warm\" is a prompt holding both");
 });
 
 for (const r of results) {

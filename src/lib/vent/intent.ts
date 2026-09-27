@@ -634,9 +634,19 @@ export function classify(message: string): Classification {
   is a fact the numbers under it make true: the lines are answered by people.
   The path is also unchanged — local, free, never a model, rendered with both
   numbers on every surface that shows it.
+
+  Then two directives in a row asked for "clear concern" — the full-fix
+  directive's safety gate and the presence directive's hard law, "risk of harm
+  → clear concern + real local resources. Then stop." Both are satisfiable
+  without undoing the objection above, which was to a *stake* ("I'm really
+  concerned about you"), not to concern. So the concern is stated as what it
+  is rather than as what the room feels: what they wrote is serious, and their
+  safety comes before anything else here. No "I", no "worried", nothing the
+  room claims to carry — and it sits after the opener, so the line still
+  breaks character first.
 */
 export const CRISIS_RESPONSE =
-  "I'm not a person, and this is more than a screen can hold. Tell a real person, right now. You are not alone.";
+  "I'm not a person, and this is more than a screen can hold. What you wrote is serious, and your safety comes first. Tell a real person, right now. You are not alone.";
 
 /**
  * The same three things, in the language half this list is written for.
@@ -663,7 +673,7 @@ export const CRISIS_RESPONSE =
  * not something any check here can answer.
  */
 export const CRISIS_RESPONSE_PIDGIN =
-  "I no be person, and dis one pass wetin screen fit carry. Tell real person, right now. You no dey alone.";
+  "I no be person, and dis one pass wetin screen fit carry. Wetin you write serious, and your safety come first. Tell real person, right now. You no dey alone.";
 
 /**
  * The crisis reply, in the register they wrote in.

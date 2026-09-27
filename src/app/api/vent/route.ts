@@ -455,7 +455,10 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
     stored yet, so the newest row is the one before it. Null with no store or no
     history: a gap nobody measured is not named.
   */
-  const lastAt = mine.reduce((t, r) => Math.max(t, Date.parse(r.created_at) || 0), 0);
+  // A greeting is not a thread, so a second "hi" is not somebody coming back.
+  const lastAt = mine
+    .filter((r) => r.intent_type !== "greeting")
+    .reduce((t, r) => Math.max(t, Date.parse(r.created_at) || 0), 0);
   const sinceLastHours = lastAt > 0 ? (Date.now() - lastAt) / 3_600_000 : null;
 
   // ── 3. Free paths. No model call — this is the credit policy in code. ───
@@ -1006,7 +1009,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
       /*
         Said once, at the third exchange, and only as true as the write.
 
-        The first half of this sentence — "I keep what we talk about" — is a
+        The first half of this sentence — "I keep what you tell me here" — is a
         promise the code cannot keep, and the grader bans a model from making
         it for exactly that reason: a model cannot know whether the write
         landed. The server can, and `saved` is what came back from it rather

@@ -72,6 +72,12 @@ export interface Probe {
    * rumination fuel for the wrong person.
    */
   process?: true;
+  /**
+   * Always asked, never turned into a statement — the landing reading, which
+   * the pressure track waits on. Every other probe is the thread to go after,
+   * and the presence directive prefers a line that opens it to a question.
+   */
+  asked?: true;
   /** What it opens. Documentation — never sent to a model. */
   opens: string;
   fits: (m: string) => boolean;
@@ -571,5 +577,14 @@ export function probeBlock(p: Probe | null): string | null {
     deleting a duplicate rather than by raising the ceiling, which is the rule
     that check exists to enforce.
   */
-  return `THE QUESTION TO GO AFTER\n${p.ask}\nYour words, not these. A better question in their message wins.`;
+  /*
+    "Prefer statements that open awareness. One precise question is allowed
+    when it serves flow." A block headed THE QUESTION made every reply end on
+    one, whatever `OFFICE_RULES` said about it — the slot, not the rule, is
+    what the model obeys. So the slot names the thread and lets it be said.
+    The landing reading is the one exception, because the track under the
+    reply is waiting for its answer.
+  */
+  if (p.asked) return `THE QUESTION TO ASK\n${p.ask}\nYour words, not these.`;
+  return `WHAT TO GO AFTER\n${p.ask}\nAsked or said — your words, not these. A better one in their message wins.`;
 }
