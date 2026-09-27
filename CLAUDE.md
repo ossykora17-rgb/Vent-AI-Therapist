@@ -684,14 +684,14 @@ own copy passes while the product regresses.
 | Concern | File |
 | --- | --- |
 | The office: banned phrases, unasked-for tasks, reply contract | `src/lib/vent/voice.ts` |
-| 63 extraction questions — MI, Yalom, Rogers, Wells | `src/lib/vent/probes.ts` |
+| 66 extraction questions — MI, Yalom, Rogers, Wells | `src/lib/vent/probes.ts` |
 | Reject and regenerate, before anybody reads it | `src/lib/vent/failsafe.ts` |
 | One move from outside, per pressure, cached | `src/lib/vent/research.ts` |
 | What the audit proposed and the gate kept | `src/lib/vent/learned.ts` |
 | What a proposed rule did to the corpus, measured | `src/lib/vent/fitness.ts` |
 | Intent routing, crisis, meta-vs-vent, injection | `src/lib/vent/intent.ts` |
 | The turn's verdict, computed not asked for | `src/lib/vent/assess.ts` |
-| 37 tactics, 3-turn block, body asked about, never instructed | `src/lib/vent/tactics.ts` |
+| 38 tactics, 3-turn block, body asked about, never instructed | `src/lib/vent/tactics.ts` |
 | Memory: vents only, six-turn cap | `src/lib/vent/memory.ts` |
 | The office across sessions, and no diagnosis | `src/lib/vent/notes.ts` |
 | What it worked out, shown and deletable | `src/app/api/notes/route.ts` |
@@ -4326,6 +4326,64 @@ fixture selected — `meaning_stance`, 3,577. With the rest of the library,
 reporting headroom. Merging the two metaphor engines paid it back — fixture
 3,577 → 3,547, worst tactic 3,616 → 3,586 — and the worst tactic is the budget
 now. Thirteen mutations fail checks 15h, 104, 163 and friends.
+
+**The second principle named three effects, and the room had one of them.**
+The founder, verbatim: *"The Engine’s highest-leverage effect is increasing
+the user’s real-time metacognitive awareness, cognitive flexibility, and
+visibility of their own predictions while they are inside the experience ...
+Never teach the concepts. Only create the conditions."* Awareness is the entry
+above. Flexibility was already in the library — `double_standard`,
+`exception_finding`, `two_chair`, engine three's *"Never tell them which"* — so
+nothing new was built for it except one clause. What had nothing behind it was
+the forecast: *"they'll laugh at me"* is lived tonight as if it had happened, and
+no reading, move or question in the product could see it.
+
+`forecasting` in `tactics.ts` reads a feared ending held as certain, in both
+registers, and **the exclusions are the work**: a reaction needs an object that
+is them (*"laugh at the joke"* is not), certainty needs something feared (*"I
+know he'll be fine"* is not), despair stays with `exception_finding`, a what-if
+is the loop's, *"he said he'll leave"* is his sentence, and bare *"I will fail"*
+stays with `CATASTROPHE`, which named it first. **Violence and death are never
+forecasts to rate** — *"how sure, out of ten?"* asked of *"he will beat me"* is
+the room grading somebody's danger. It reaches 2 of 72 authored openings.
+`name_the_forecast` hands the ending back as theirs at 85 — under a fused
+verdict, over `iterated_game`'s any-family-word — and joins `FEEDS_THE_LOOP`,
+which is exported now because the eval had been checking its own copy. Three
+questions fill the slot, none process-safe. Routing over the 72: one tactic and
+two questions moved, distinct winners 23 → 24.
+
+**Never teach the concepts is a grader, and it is not `jargon`.** `jargon`
+passes a term unpacked in the same sentence; a lesson unpacked is still a
+lesson. `TEACHES` holds the principle's own concepts and the lecture shapes a
+model reaches for — *"thoughts aren't facts"*, *"your brain is wired to"* —
+and `catastrophising`, `cognitive distortion` and `rumination` moved into it
+from `JARGON`, because each names the thinking process and one word lives in
+one list. `reframe` went in and came out on the first sweep of the prompt,
+which uses it as a plain verb. The sweep is the other half: nothing the model
+reads may name a concept either, and it found `defusion`'s own instruction
+saying *"never use the word 'defusion'"*, the banned-phrase list priming the
+ban again. `teaches` is `RETRY_ONLY` **without a production number**, which
+`presumed` had and this does not; the nightly audit's first run after merge is
+the measurement.
+
+**The ceiling had a second slot nobody measured.** Check 24 built the heaviest
+turn with its fixture's one question, so every longer question was vouched for
+by a shorter one — the per-tactic gap, one slot over. The longest tactic with
+the longest question is **3,596 of 3,600** and is asserted now. Engine two's new
+clause cost nothing net: the third copy of the no-task rule came out of engine
+one and a restated line out of engine three. Nineteen mutations fail checks 24,
+104 and 164; three escaped first, because their negatives never reached the
+exclusion they claimed to test.
+
+**And four graders bought a retry that was told nothing.** `chooseReply` ranks
+the retry first *"because the retry is the one that was told what was wrong"*,
+and `correctionFor` had no line for `verdict` — written in the entry above —
+`jargon`, `presumed`, or the new `teaches`. Those retries read the header and
+the sentence cap, and were ranked first on a promise nobody kept: *"did this
+wait for the thing"*, arriving inside the failsafe. Each has a line now, naming
+the rule and never the words, and check 165 derives the graders from
+`REJECT` and `RETRY_ONLY` rather than listing them, so the next one to join a
+tier fails there until it says something. Three mutations fail it.
 
 # This is NOT the Next.js you know
 

@@ -285,23 +285,23 @@ somebody at their lowest changes the subject to you.
    Insight fades by morning, and a task is homework nobody asked for. So make
    the loop visible instead: what sets it off, what they do next, what that
    buys them and what it costs — "the dad worry comes at night, you check the
-   phone, and the checking keeps it company." Never hand them a step, a task
-   or an exercise, even when they ask. One loop. Never a list.
+   phone, and the checking keeps it company." One loop. Never a list.
 
 2. LET THEM SEE IT WHILE THEY ARE IN IT.
    Clarity and change start when someone can feel it and watch it at the
    same time. Hold up what they are living and how they are holding it. A
-   verdict on themselves goes back in their words as a sentence they are
-   hearing — "the voice that says you're …" — never as a fact, and never
-   argued with: reassurance is denial and they can smell it. Only
-   explaining it? Bring them back inside. Noticing themselves mid-feeling?
-   Name it plainly; that is the thing to keep.
+   verdict on themselves, or an ending they are sure of, goes back in their
+   words as a sentence they are hearing — "the voice that says you're …" —
+   never as a fact, and never argued with: reassurance is denial and they
+   can smell it. Ask how sure it is right now, or what else it could be; the
+   answer is theirs. Only explaining it? Bring them back inside. Noticing
+   themselves mid-feeling? Name it plainly; that is the thing to keep.
 
 3. NOTHING HERE IS ONE MOVE.
    Family is an iterated game, not a single hand. So put the payoffs where
    they can see them: avoid the call — short relief, long dread. Make the
-   call — short discomfort, long clarity. Never tell them which. Showing the
-   matrix is the intervention; choosing for them undoes it.
+   call — short discomfort, long clarity. Never tell them which: choosing
+   for them undoes it.
 
 THE ROOM
 Nothing said here is new to this place, and none of it needs finishing

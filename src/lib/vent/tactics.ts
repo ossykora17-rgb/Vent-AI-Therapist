@@ -333,6 +333,71 @@ export function seesWhileIn(message: string): boolean {
   const m = message.toLowerCase();
   return SEES.some((re) => re.test(m));
 }
+
+/*
+  An ending they are already sure of — the third thing the founder's principle
+  names, after being in it and watching it: seeing what they expect while they
+  expect it. "They'll laugh at me" is lived tonight as if it had happened, and
+  the only thing that makes it visible is hearing it back as theirs.
+
+  EVERY PART EARNED ITS PLACE BY WHAT IT EXCLUDES
+  - A reaction needs an object: "they'll laugh at me", never "they'll laugh at
+    the joke"; "they will fire me", never "fire the manager".
+  - Certainty alone is not enough: "I know he'll be fine" is sure and not
+    feared, so a sure clause needs something feared inside it.
+  - Hopelessness is not this: "it will never get better" is owned by
+    `exception_finding` and `meaning_stance`, and a rating asked of it is a
+    number asked of despair.
+  - Violence and death are never forecasts to rate. "How sure, out of ten?"
+    asked of "he will beat me" is the room grading somebody's danger.
+  - Heard, not expected: "he said he'll leave" is his sentence, not theirs.
+  - "What if" is the loop turning, which `inTheLoop` owns.
+  - Bare "I will fail" stays with `CATASTROPHE`, which named it first.
+*/
+const WHO = String.raw`(?:he|she|they|e|dem|him|everyone|everybody|people|nobody|my\s+(?:dad|daddy|papa|mum|mom|mummy|mama|mother|father|boss|oga|wife|husband|family|parents|people|friends?|brother|sister|landlord|pastor|in-laws|babe|girlfriend|boyfriend|manager|lecturer)|(?:the\s+)?(?:oga|boss|manager|landlord|lecturer|interviewers?))`;
+const WILL = String.raw`(?:\s*'ll|\s+will|\s+(?:is|are|am)\s+going\s+to|'s\s+going\s+to|'re\s+going\s+to|'m\s+going\s+to|\s+gonna|\s+go)`;
+const WONT = String.raw`(?:\s+won'?t|\s+wont|\s+will\s+not|\s+(?:is|are)\s+not\s+going\s+to|\s+no\s+go)`;
+const JUDGED = String.raw`(?:so\s+|just\s+|too\s+|a\s+)?(?:lazy|weak|stupid|useless|failure|mad|crazy|joke|fraud|nothing|wicked|selfish|ungrateful|proud|bad|not\s+\w+)`;
+const REACTION = String.raw`(?:say\s+no|laugh\s+(?:at\s+)?(?:me|us)|mock\s+(?:me|us)|judge\s+(?:me|us)|reject\s+(?:me|us|it|my)|dump\s+me|disown\s+(?:me|us)|abandon\s+(?:me|us)|leave\s+(?:me|us)|cut\s+me\s+off|hate\s+(?:me|us)|blame\s+(?:me|us)|shout|(?:sack|fire)\s+(?:me|us)|disgrace\s+(?:me|us)|look\s+down\s+on\s+(?:me|us)|talk(?!\s+to\b)(?:\s+about\s+me)?|find\s+out(?=\s*(?:$|[,.!?]|\s+about\s+(?:me|it|this)|\s+and\b))|see\s+(?:right\s+)?through\s+me|ignore\s+(?:me|us|my)|be\s+(?:so\s+|very\s+)?(?:angry|disappointed|ashamed|upset|furious|vexed)|vex|(?:think|say|feel)\s+(?:that\s+)?i'?m\s+${JUDGED}|never\s+(?:forgive|speak\s+to|talk\s+to|look\s+at|trust)\s+(?:me|us))`;
+const REFUSAL = String.raw`(?:understand|believe\s+me|listen|forgive|come\s+back|accept|agree|gree|reply|answer|call|pick|help)`;
+const OWN_LOSS = String.raw`(?:lose\s+(?:my\s+job|the\s+job|everything|am|him|her)|get\s+(?:fired|sacked|rejected)|be\s+(?:rejected|alone|found\s+out)|end\s+up\s+(?:alone|like|with\s+nothing)|mess\s+(?:it|this|everything)\s+up|embarrass\s+myself|never\s+(?:get|find|be\s+able|have|make|pass|marry))`;
+const COLLAPSE = String.raw`(?:go\s+wrong|fall\s+apart|end\s+badly|blow\s+up|collapse|scatter|spoil|be\s+a\s+disaster|crash)`;
+const SURE = String.raw`(?:i\s+(?:already\s+|just\s+)?know|i'?m\s+(?:so\s+|very\s+|100%?\s+)?(?:sure|certain)|i\s+am\s+(?:so\s+)?(?:sure|certain)|i\s+(?:know|sabi)\s+say|i\s+(?:dey\s+)?fear\s+say|i'?m\s+(?:so\s+)?(?:scared|afraid|terrified)|i\s+am\s+(?:so\s+)?(?:scared|afraid|terrified))`;
+
+const FORECASTS: readonly RegExp[] = [
+  new RegExp(String.raw`\b${WHO}${WILL}\s+(?:just\s+|definitely\s+|surely\s+|probably\s+|all\s+)?${REACTION}\b`),
+  new RegExp(String.raw`\b${WHO}${WONT}\s+(?:ever\s+)?${REFUSAL}\b`),
+  new RegExp(String.raw`\bnobody${WILL}\s+(?:ever\s+)?${REFUSAL}\b`),
+  new RegExp(String.raw`\bi${WILL}\s+${OWN_LOSS}\b`),
+  new RegExp(String.raw`\b(?:it|this|everything|e|all\s+of\s+it)${WILL}\s+${COLLAPSE}\b`),
+  new RegExp(String.raw`\bi\s+(?:already\s+)?know\s+how\s+(?:this|it|that)\s+(?:ends|goes|will\s+end|is\s+going\s+to\s+end)\b`),
+];
+const SURE_OF_IT = new RegExp(
+  String.raw`\b${SURE}\s+(?:that\s+)?(?:if\s+[^,.!?]{1,40},?\s+)?[^.!?]{0,40}?(?:${WILL}|${WONT})\s+(?:not\s+|never\s+)?\w+`,
+);
+const FEARED = /\b(?:not|never|no|won'?t|wont|fail\w*|lose|losing|wrong|bad|worse|leave|laugh|reject|hate|judge|sack|fire|end|ends|over|collapse|spoil|scatter|disappoint\w*|angry|vex|ashamed|alone|nothing|mess)\b/;
+const NEVER_RATED = /\b(?:die[sd]?|dying|death|dead|funeral|pass(?:es|ed)?\s+away|beat(?:s|ing|en)?|kill(?:s|ed|ing)?|hit(?:s|ting)?|slap(?:s|ped|ping)?|hurt(?:s|ing)?|harm|rape[sd]?|flog(?:s|ged|ging)?|stab(?:s|bed|bing)?|abus(?:e|es|ed|ing)|weapon|gun|knife)\b/;
+const HEARD_FROM_THEM = /\b(?:says?|said|tells?\s+me|told\s+me|threatened|swore|promised)\s+(?:that\s+)?$/;
+const DESPAIR = /\b(?:no\s+go\s+better|won'?t\s+get\s+better|never\s+get\s+better|nothing\s+(?:will|go)\s+change|never\s+change)\b/;
+
+/** In it, and already sure how it ends: a feared future stated as what will happen. */
+export function forecasting(message: string): boolean {
+  const m = message.toLowerCase();
+  if (NEVER_RATED.test(m)) return false;
+  const found = (re: RegExp, needsFear: boolean) => {
+    for (const hit of m.matchAll(new RegExp(re.source, "g"))) {
+      const at = hit.index ?? 0;
+      const clause = m.slice(0, at).split(/[.!?\n]/).pop() ?? "";
+      if (HEARD_FROM_THEM.test(clause) || /\bwhat\s+if\b/.test(clause)) continue;
+      const span = m.slice(at, at + hit[0].length + 30);
+      if (DESPAIR.test(span)) continue;
+      if (needsFear && !FEARED.test(span)) continue;
+      return true;
+    }
+    return false;
+  };
+  return FORECASTS.some((re) => found(re, false)) || found(SURE_OF_IT, true);
+}
 const CATASTROPHE = /\b(always|never|everything|nothing|ruin|disaster|end of|i will fail|i go fail)\b/;
 const SELF_CRITIC = /\b(useless|stupid|failure|worthless|i'?m bad|i no good|weak)\b/;
 const PARTS = /\b(part of me|one side|half of me|i want to but|i wan but)\b/;
@@ -570,6 +635,26 @@ const TACTICS: Tactic[] = [
     fits: (c) => seesWhileIn(c.message),
     weight: () => 89,
     holdsWhenNothingMoves: true,
+  },
+  {
+    id: "name_the_forecast",
+    family: "observing",
+    /*
+      The ending they are already living, seen as theirs. Never argued down —
+      odds are a debate and they will win it — and never promised away. The
+      question does the rest: a number they chose is a number that is not ten,
+      and a second ending they found is one nobody handed them.
+
+      85: below a fused verdict (86), because a sentence about the whole self
+      outweighs one about Tuesday; above `iterated_game` (84), which fits any
+      family word and so loses to the more specific reading; far above
+      `thought_record` (78), which argues with content this one only shows.
+    */
+    instruction:
+      "They are already living an ending that has not happened. Say it back in their words as the ending they are sure of — never as what will happen, never argued down, never promised away. Then ask how sure it is right now, out of ten, or what else could happen: theirs to find, never yours to offer.",
+    hold: "You are already living an ending that has not happened yet. How sure of it are you, right now, out of ten?",
+    fits: (c) => forecasting(c.message),
+    weight: () => 85,
   },
   {
     id: "socratic",
@@ -899,7 +984,7 @@ const TACTICS: Tactic[] = [
       A self-critical word without the verdict keeps the old order, at 80.
     */
     instruction:
-      "Do not argue with the sentence. Put one inch between them and it: they are not the thing they said, they are the one having the thought that they are. Say it back with that gap in it, in their own words, once. Never explain the technique, never use the word 'defusion' or 'thought' as jargon.",
+      "Do not argue with the sentence. Put one inch between them and it: they are not the thing they said, they are the one having the thought that they are. Say it back with that gap in it, in their own words, once. Never explain the technique.",
     hold: "You are not that sentence. You are the one hearing it — so how long has it been saying that to you?",
     fits: (c) => has(SELF_CRITIC)(c) || fusedVerdict(c.message),
     weight: (c) => (fusedVerdict(c.message) ? 86 : 80),
@@ -1141,7 +1226,6 @@ export function selectTactic(ctx: TacticContext): Tactic {
     stays, because it goes to the belly rather than the argument — it was
     always the right instinct, just outranked.
   */
-  const FEEDS_THE_LOOP = new Set(["socratic", "thought_record", "double_standard"]);
   if (caughtWatchingSelf(ctx.message)) {
     pool = pool.filter((t) => !FEEDS_THE_LOOP.has(t.id));
   }
@@ -1163,6 +1247,19 @@ export function selectTactic(ctx: TacticContext): Tactic {
   const anyFresh = pool.find((t) => !blocked.has(t.id));
   return anyFresh ?? eligible[0] ?? TACTICS[0];
 }
+
+/**
+ * Moves that ask somebody to think about the thought — vetoed for anybody
+ * already watching themselves think (see `selectTactic`). Exported so the suite
+ * reads the set the selector uses rather than a copy of it.
+ *
+ * `name_the_forecast` joined it with the forecast reading: "how sure, out of
+ * ten?" is exactly the evaluation a person caught in their own analysis cannot
+ * stop running, and asked of them it is one more lap.
+ */
+export const FEEDS_THE_LOOP: ReadonlySet<string> = new Set([
+  "socratic", "thought_record", "double_standard", "name_the_forecast",
+]);
 
 export const ALL_TACTIC_IDS = [
   ...TACTICS.map((t) => t.id),

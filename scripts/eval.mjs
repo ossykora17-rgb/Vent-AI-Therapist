@@ -65,11 +65,11 @@ const { knownProblems, flatReplies, parseProposals, auditPrompt } =
 const whisper = await app("src/lib/vent/whisper.ts");
 const { echoesThem } = await app("src/lib/vent/echo.ts");
 const { wasAuthored, inTheLoop } = await app("src/lib/vent/tactics.ts");
-const { fusedVerdict, seesWhileIn, verdictAfter } = await app("src/lib/vent/tactics.ts");
+const { fusedVerdict, seesWhileIn, verdictAfter, forecasting, FEEDS_THE_LOOP } = await app("src/lib/vent/tactics.ts");
 const { inspectReply, chooseReply, REJECT, RETRY_ONLY, NOTED, UNREACHABLE } =
   await app("src/lib/vent/failsafe.ts");
 const { assessTurn } = await app("src/lib/vent/assess.ts");
-const { gradeReply, JARGON } = await app("src/lib/vent/quality.ts");
+const { gradeReply, JARGON, TEACHES } = await app("src/lib/vent/quality.ts");
 const arc = await app("src/lib/vent/arc.ts");
 const { openingLine, allianceLine, shouldSayAlliance, ALLIANCE_AT } =
   await app("src/lib/vent/intake.ts");
@@ -1657,7 +1657,8 @@ check("15h The engines run in the prompt and are never taught to anybody", () =>
     "the core mechanism is an engine, in plain words");
   ok(/never as a fact, and never\s+argued with/i.test(prompt),
     "a verdict goes back as a sentence they are hearing, never agreed with and never disputed");
-  ok(/reassurance is denial and they can smell it/i.test(prompt), "and it is fenced off from toxic positivity");
+  // Whitespace-tolerant: the rule is the phrase, not where the line wraps.
+  ok(/reassurance\s+is\s+denial\s+and\s+they\s+can\s+smell\s+it/i.test(prompt), "and it is fenced off from toxic positivity");
 
   ok(/iterated game/i.test(prompt), "family is framed as iterated, not one-shot");
   ok(
@@ -2989,6 +2990,19 @@ check("24 The system prompt has a budget, and every block earns its place", () =
   ok(worstTokens <= BUDGET,
     "and the heaviest turn with the longest tactic still fits",
     `${worstId}: ${worstTokens} tokens vs ${BUDGET}`);
+  /*
+    And the question slot is the same kind of block. The fixture's message
+    selects one probe, so every longer probe was vouched for by a shorter one —
+    the per-tactic gap above, one slot over. The slots are chosen independently,
+    so the longest of each together is the ceiling a real turn can reach.
+  */
+  const longestProbe = PROBES.reduce((x, y) => (probeBlock(y).length > probeBlock(x).length ? y : x));
+  const worstTurn = Math.round(buildSystemPrompt({
+    ...heaviestArgs, tactic: ALL_TACTICS.find((t) => t.id === worstId), probe: longestProbe,
+  }).length / 3.7);
+  ok(PROBES.length > 50 && worstTurn <= BUDGET,
+    "and so does the longest tactic with the longest question",
+    `${worstId} + ${longestProbe.id}: ${worstTurn} tokens vs ${BUDGET}`);
   ok(heaviest.includes("THE OFFICE") && heaviest.includes("EVERY REPLY"),
     "and the contract the ceiling was raised for is in it",
     "otherwise the raise paid for something that is no longer there");
@@ -6278,7 +6292,9 @@ check("47 The one who is already watching is not handed a mirror", () => {
     moves the selection every time, and the bug would simply arrive on turn
     two.
   */
-  const FEEDS_THE_LOOP = ["socratic", "thought_record", "double_standard"];
+  // The selector's own set, imported: a suite that checks its copy passes
+  // while the product regresses, and this one had drifted a member behind.
+  ok(FEEDS_THE_LOOP.size >= 3, "the veto is read off the selector, not a copy", `${FEEDS_THE_LOOP.size}`);
   for (const m of WATCHING) {
     const recent = [];
     for (let turn = 1; turn <= 4; turn++) {
@@ -6286,7 +6302,7 @@ check("47 The one who is already watching is not handed a mirror", () => {
         ...classify(m), message: m, pressure: 70, duality: null, mood: null,
         ventCount: turn, recentTactics: [...recent], body: turn > 2 ? "chest" : null,
       });
-      ok(!FEEDS_THE_LOOP.includes(t.id),
+      ok(!FEEDS_THE_LOOP.has(t.id),
         `turn ${turn} does not answer analysis with analysis (${t.id})`,
         "handing insight to somebody drowning in insight is more water");
       recent.push(t.id);
@@ -20963,6 +20979,155 @@ check("163 Split awareness: a verdict gets a step back, a noticing gets named, a
   ok(said.length >= 10, `the moves' own words were read (${said.length})`);
   ok(!said.some((x) => PHYSICS_OR_MAGIC.test(x)), "and none of them describes change as physics or magic",
     said.filter((x) => PHYSICS_OR_MAGIC.test(x)).join(" | "));
+});
+
+// ── 164. the ending they are already living, and a room that never lectures ──
+//
+// The founder's principle, verbatim: "The Engine’s highest-leverage effect is
+// increasing the user’s real-time metacognitive awareness, cognitive
+// flexibility, and visibility of their own predictions while they are inside
+// the experience ... Never teach the concepts. Only create the conditions."
+//
+// Check 163 holds the first of the three. This holds the other two and the
+// constraint: a feared ending is read and handed back as theirs, the question
+// asks how sure it is or what else it could be, and nothing the room says or
+// reads teaches the concept it is using. Every word list here is the module's
+// own, imported.
+check("164 An ending they are sure of is seen as theirs, and the room never teaches the concept", () => {
+  // ── the reading, in both registers ──
+  const sureYes = ["i know he'll say no", "they'll laugh at me", "my dad will be disappointed",
+    "if i tell my mum she will disown me", "i'm sure she won't come back", "everyone will judge me",
+    "nobody will believe me", "i know how this ends", "i'm going to lose my job", "people will talk",
+    "i know say dem go laugh me", "my oga go sack me", "e no go gree", "i dey fear say i go end up like my papa",
+    "i dey fear say if i rest everything go collapse"];
+  const sureNo = [
+    "i know he will be fine", "they'll be happy for me", "she will understand",      // sure, not feared
+    "they will laugh at the joke", "they will fire the manager",                      // no object that is them
+    // Each of these would be read but for the exclusion it names — a negative the
+    // pattern never reaches proves nothing about the rule that excludes it.
+    "my husband will hate me and beat me", "i know he will never stop hitting me",
+    "my dad will leave us when he dies",                                              // never a number to rate
+    "i know it will never get better", "i know say e no go better",                  // despair
+    "he said he will leave me",                                                       // his sentence
+    "what if i tell him and he'll laugh at me",                                       // the loop turning
+    "i will fail this, everything is ruined, it is always the same",                  // CATASTROPHE's
+    "they laughed at me yesterday", "nobody will miss me", "she won't care if i'm late"];
+  ok(sureYes.every(forecasting), "a feared ending held as certain is read — English and Pidgin",
+    sureYes.filter((m) => !forecasting(m)).join(" | "));
+  ok(!sureNo.some(forecasting),
+    "and not a hope, a stranger's joke, danger, despair, somebody else's sentence, a what-if, or the past",
+    sureNo.filter(forecasting).join(" | "));
+
+  // Counted, in check 123's shape.
+  const openings = fs.readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+    .trim().split("\n").map((l) => JSON.parse(l).input);
+  const reach = openings.filter(forecasting).length;
+  ok(openings.length > 50 && reach >= 1 && reach < openings.length / 6,
+    "the reading reaches real openings and not everybody", `${reach} of ${openings.length}`);
+
+  // ── the move, in the room's order ──
+  const pick = (message, extra = {}) => selectTactic({ ...classify(message), message, pressure: 60,
+    duality: null, mood: null, ventCount: 3, recentTactics: [], ...extra }).id;
+  is(pick("i know he'll say no"), "name_the_forecast", "a feared ending is shown as theirs");
+  is(pick("i dey fear say if i rest everything go collapse"), "name_the_forecast",
+    "and the corpus's own: shown, not argued the way `thought_record` would");
+  is(pick("if i tell my mum she will disown me"), "name_the_forecast",
+    "a family word does not hand it to `iterated_game`: the more specific reading wins");
+  is(pick("i'm useless and they'll laugh at me"), "defusion",
+    "a verdict on the whole self outweighs a sentence about Tuesday");
+  is(pick("i know he'll say no", { ventCount: 0 }), "exact_mirror", "turn one still mirrors");
+  is(pick("i know he'll say no", { body: "chest", pressure: 85 }), "felt_sense",
+    "and a named body still comes first");
+  ok(FEEDS_THE_LOOP.has("name_the_forecast") &&
+    pick("i keep overthinking it and i know he'll say no") !== "name_the_forecast",
+    "somebody caught in their own analysis is not asked to rate one more thought");
+  const move = ALL_TACTICS.find((t) => t.id === "name_the_forecast");
+  ok(move && !move.holdsWhenNothingMoves, "and it never survives a fact that cannot move");
+
+  // ── the question slot ──
+  const asks = PROBES.filter((p) => p.fits("they'll laugh at me") && /ending|sure|only way/.test(p.ask));
+  ok(asks.length >= 3 && asks.every((p) => !p.process),
+    "three questions, none of them process-safe — asked of a loop, 'how sure?' is one more lap",
+    asks.map((p) => p.id).join(" "));
+  const seen = [];
+  for (let turn = 0; turn < 3; turn++) seen.push(selectProbe("they'll laugh at me", [...seen])?.id);
+  ok(new Set(seen).size === 3 && seen.every((id) => asks.some((p) => p.id === id)),
+    "and three turns ask all three, never one twice", seen.join(" → "));
+  ok(selectProbe("i keep overthinking it and i know he'll say no")?.process === true,
+    "inside the loop the question is about the process, never the ending");
+
+  // ── the constitution carries it, and it costs nothing ──
+  const said = "i know he'll say no";
+  const prompt = buildSystemPrompt({ grounding: groundNow(), classification: classify(said), tactic: move,
+    probe: selectProbe(said), message: said, memory: [],
+    ctx: { ...classify(said), message: said, pressure: 60, duality: null, mood: null, ventCount: 3,
+      recentTactics: [] } });
+  ok(/an ending they are sure of/i.test(prompt) && /how sure it is right now, or what else it could\s+be/i.test(prompt)
+    && /answer is theirs/i.test(prompt), "the second engine hands back the ending and asks — it never answers");
+
+  // ── never teach the concepts: not on the page the model reads, not in the reply ──
+  const authored = [
+    ["the assembled prompt", prompt],
+    ...ALL_TACTICS.flatMap((t) => [[`${t.id} instruction`, t.instruction], [`${t.id} hold`, t.hold]]),
+    ...PROBES.map((p) => [`${p.id} ask`, p.ask]),
+  ];
+  const taught = authored.filter(([, text]) => TEACHES.some((re) => re.test(text)));
+  ok(authored.length > 100 && taught.length === 0,
+    "nothing the model reads names the concept it is running — a word in the prompt is a word in the reply",
+    taught.map(([what]) => what).join(" | "));
+  const teaches = (reply, said = "i know he'll say no") => gradeReply(
+    { message: said, language: "en", intent: "vent" }, reply, { said }).some((f) => f.grader === "teaches");
+  for (const lesson of [
+    "That's a prediction, not a fact. How sure are you?",
+    "Your brain is wired to expect the worst. What else could happen?",
+    "You're catastrophising — jumping to the worst outcome before anything has happened.",
+    "Thoughts aren't facts. What would you tell a friend?",
+    "Your mind is just trying to protect you. How sure is it?",
+    "Try to notice your thoughts without judging them.",
+    "That's fortune-telling. Is that the only way it goes?",
+    "This is about metacognition — thinking about your thinking."]) {
+    ok(teaches(lesson), "a lesson about how minds work is caught, unpacked or not", lesson);
+  }
+  for (const condition of [
+    "You already know how that call ends, and it hasn't happened. How sure of it are you, right now?",
+    "He hasn't said no. You've heard it anyway. Is that the only way it can go?",
+    "Nobody can predict him, and you already have. What does being that sure cost you tonight?",
+    "The voice that says they'll laugh has been loud all week. Whose voice is it?"]) {
+    ok(!teaches(condition), "and the question that lets them see it is not", condition);
+  }
+  ok(!teaches("You said you're catastrophising. What are you sure of tonight?", "i know i'm catastrophising again"),
+    "their own word handed back is not a lesson");
+  ok(RETRY_ONLY.has("teaches") && !REJECT.has("teaches"),
+    "a second call, never the authored line — the lesson is one sentence of three, and the other two are theirs");
+  for (const word of ["catastrophising", "cognitive distortion", "rumination"]) {
+    ok(TEACHES.some((re) => re.test(word)) && !JARGON.some((re) => re.test(word)),
+      `"${word}" lives in one list, and it is the one where unpacking is no excuse`);
+  }
+  ok(!authored.some(([, text]) => PHYSICS_OR_MAGIC.test(text)), "and no string the room reads is physics or magic");
+});
+
+// ── 165. a retry that is not told what was wrong is a second roll of the dice ──
+//
+// `chooseReply` ranks the retry first "because the retry is the one that was
+// told what was wrong", and four graders that buy a retry — `verdict`, `jargon`,
+// `presumed`, `teaches` — had no line in its note. Derived from the tiers, not
+// listed, so the next grader to join one fails here until it says something.
+check("165 Every grader that buys a retry tells the retry what was wrong", () => {
+  const src = strip(fs.readFileSync(path.join(ROOT, "src/lib/vent/failsafe.ts"), "utf8"));
+  const told = new Set([...src.matchAll(/seen\.has\("(\w+)"\)/g)].map((m) => m[1]));
+  const retried = [...REJECT, ...RETRY_ONLY];
+  ok(retried.length >= 12 && told.size >= 12, "both sides were read", `${retried.length} retried, ${told.size} told`);
+  const untold = retried.filter((g) => !told.has(g));
+  ok(untold.length === 0, "and every one of them has a line in the note", untold.join(" "));
+
+  // Behaviourally, for the one this was found on: the note names the rule and
+  // carries none of the words it is refusing.
+  const said = "i know they'll laugh at me";
+  const v = inspectReply({ message: said, language: "en", intent: "vent" },
+    "They'll laugh, you think. That's a prediction, not a fact. How sure are you, out of ten?", said);
+  ok(v.reject?.split(" · ").includes("teaches") && /how minds work/.test(v.correction ?? ""),
+    "a lesson buys a retry that is told it was a lesson", v.reject);
+  ok(!TEACHES.some((re) => re.test(v.correction ?? "")), "and the note does not teach the word back");
 });
 
 for (const r of results) {
