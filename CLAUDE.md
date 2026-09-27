@@ -4481,6 +4481,69 @@ it: the Supabase connector could not connect from this session, so how often
 real vents hit the new crisis shapes, the careful fortnight or the anchors is
 unread. The first nightly audit after merge is the first number.
 
+**The presence directive, and the rule it overturned was one this file had
+just reinstated.** *"You never leave the user carrying the conversation ...
+Prefer statements that open awareness. One precise question is allowed when
+it serves flow."* The VENT spec a week earlier said every reply *ends* on a
+question, and `closingProblem` enforced it — so the shape the founder now
+prefers was the one thing the grader flagged. "No question" is gone; what the
+obligatory question was standing in for is kept and named instead: an ending
+that hands the thread back ("Take your time.", "Anything else?", "What would
+you like to talk about?"), read off the last sentence only, plus a second
+question.
+
+**The prompt was never the reason every reply asked.** `OFFICE_RULES` could
+say anything; the block under it was headed `THE QUESTION TO GO AFTER`, and a
+model obeys the slot. It is `WHAT TO GO AFTER` now — asked or said — except the
+landing reading, which stays `THE QUESTION TO ASK` because the pressure track
+under that reply is waiting for its answer. `asked` on the probe decides it,
+not an id compared in a second file.
+
+**Hard law, where a person meets it.** `rescues` (a promise about how it ends,
+a cheer, a permission to feel) and `sticky` (the room offered as the place to
+come back to, a lull, a hook to stay) are `REJECT`, for `promise`'s reason:
+most of each is a sentence about a future the room does not have. `fused` and
+`closing` left `NOTED` for `RETRY_ONLY` — `fused` was waiting for a number, and
+*"No 'we'"* is the decision the number was going to inform; `closing` was noted
+because a retry on one turn in six was the wrong trade, and most of that six
+was "no question". Frameworks joined `teaches` as names `JARGON` did not
+already hold, and as a shape: a reply laid out as a list is a framework,
+whatever it lists. `REPLY_SENTENCE_CAP` is 4, the directive's *"1–4 clean
+sentences"*. Every pattern hit **zero of 197** authored lines before it went in.
+None has a production rate behind it: the database connector could not connect.
+
+**The exclusions are the work again.** `HELD_AS_SENTENCE` excuses a clause that
+reports somebody, and it did not know *"you keep telling yourself it'll be
+okay"* — the room seeing the rescue, not doing it. It learned "telling
+yourself", and `verdict` reads the same list, so *"you keep telling yourself
+you're useless"* stopped being a false finding there too. *"That one no be your
+fault"* is deliberately not a rescue: the advice grader's own comment defends
+it, and a new list is not the place to relitigate that. A second "hi" is not
+somebody coming back, so greetings no longer start the clock `awayFor` reads,
+and a greeting inside the day continues the thread instead of asking what made
+them open VENT today.
+
+**Two sentences a person reads changed with it.** The alliance line said *"I
+keep what we talk about, so we don't start over"*; it keeps what *they* tell it
+now. And the crisis reply states the concern two directives running asked for
+— *"What you wrote is serious, and your safety comes first"* — as seriousness
+and priority, the form that claims no stake, after the opener, so the VENT
+spec's objection to *"I'm really concerned about you"* still holds. The Pidgin
+line (*"Wetin you write serious, and your safety come first"*) needs a native
+speaker's read, which no check here can give.
+
+**Paid by removal: 3,597 of 3,600.** The rewrite added the directive's
+differentiation line, its tone and *"their attention is theirs: hand it back
+sharper"*, and deleted the second copy of the no-task sentence and half the
+deletion explanation. *"Weight over warmth"* went because a directive whose tone
+opens *"warm"* and a prompt that says the opposite is a prompt saying neither.
+Check 15d caught the deletion reason going missing, and it came back compact.
+
+**One instrument error, the familiar kind.** The mutation meant to empty
+`RESCUES` read `= [] && [ … ]`, which is the second array — an empty array is
+truthy — so it changed nothing and reported an escape. Thirty-one of thirty-one
+fail once the mutation empties the list for real.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.

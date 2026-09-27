@@ -113,6 +113,21 @@ export const REJECT = new Set([
     buys is a retry on the one sentence this room must never send.
   */
   "verdict",
+  /*
+    `rescues` and `sticky` arrive on the presence directive's hard law — "no
+    rescuing", and "never create dependency ... never harvest or hold it in a
+    trance" — and they sit here rather than in the retry-only tier for
+    `promise`'s reason, which is most of what they are. "It's going to be okay"
+    and "you can always come back to me" are both sentences about a future the
+    room does not have; the first decides how somebody's night ends and the
+    second makes the room the place they return to. If the second call still
+    says either, the authored line that says less is the better thing to send.
+
+    NOT measured in production before tiering, and said so: the store was not
+    reachable from the session that wrote them. Zero of 197 authored lines
+    fire either, so a retry they buy is a retry on what a model wrote.
+  */
+  "rescues", "sticky",
 ]);
 
 /**
@@ -182,22 +197,31 @@ export const REJECT = new Set([
   nightly audit re-grades stored replies with every current grader, so its
   first run after this merges is the number — read it before anything moves.
 */
-export const RETRY_ONLY = new Set(["language", "jargon", "presumed", "about_me", "teaches"]);
+/*
+  `fused` and `closing` move here from `NOTED`, on the presence directive's
+  internal gate — *"Am I fused or separate? Is the flow alive? Any failure →
+  revise"* — and its hard law, *"No 'we'"*. `NOTED` held them for two reasons
+  that no longer stand. `fused` was waiting for a number, and the founder's law
+  is the decision a number was going to inform. `closing` was noted because a
+  retry on one production turn in six was the wrong trade — and most of that
+  six was "no question", which is no longer a finding: the directive prefers
+  the statement it flagged. What is left is a second question (8 of 118
+  replies, at the last count) and an ending that hands the thread back.
+
+  Retry, never the hold, for `presumed`'s reason: a reply that says "we", or
+  asks twice, is still made of their words.
+*/
+export const RETRY_ONLY = new Set(["language", "jargon", "presumed", "about_me", "teaches", "fused", "closing"]);
 
 /**
  * Computed here, deliberately not acted on. Named rather than merely absent,
  * because a decision and an oversight are different states and an empty space
  * cannot tell you which one it is.
  *
- * `fused` sits here on arrival rather than in `REJECT`, and the reason is the
- * same one `earned_worth` carries: nothing has measured how often a model
- * actually writes "we" into a reply on this product. It is `major`, so the row
- * never reaches training and the heartbeat counts it — and the day there is a
- * number, that number decides whether it earns a billed retry. Tuning a new
- * grader into the rejection set on a sample of zero is how a weight gets set
- * to 90.
+ * `fused` and `closing` sat here until the presence directive made both law;
+ * see `RETRY_ONLY` for why they moved and what was given up.
  */
-export const NOTED = new Set(["coverage", "length", "fused", "closing"]);
+export const NOTED = new Set(["coverage", "length"]);
 
 /**
  * Cannot fire on this path, whatever the reply says.
@@ -409,7 +433,19 @@ function correctionFor(graders: string[], wroteIn: GoldenCase["language"], asked
     lines.push("- You told them what they feel. Say what you noticed in their own words, or ask.");
   }
   if (seen.has("teaches")) {
-    lines.push("- You explained how minds work. No lessons: ask the question that lets them see it for themselves.");
+    lines.push("- You explained how minds work, or laid it out as a framework. No lessons and no lists: say what they are doing, in their words, so they see it themselves.");
+  }
+  if (seen.has("rescues")) {
+    lines.push("- You rescued them: a promise it will be okay, a cheer, or a permission to feel. Stay with what is true tonight, and leave the feeling theirs.");
+  }
+  if (seen.has("sticky")) {
+    lines.push("- You held on to them: offered yourself as the place to come back to, talked them down, or asked them to stay. Hand their attention back.");
+  }
+  if (seen.has("fused")) {
+    lines.push("- You wrote \"we\". There is one person here, and you are not inside it with them. \"You\" and \"I\".");
+  }
+  if (seen.has("closing")) {
+    lines.push("- You handed the thread back, or asked more than once. Keep it moving yourself: a line that opens it, or one precise question.");
   }
   if (seen.has("language")) {
     /*
@@ -440,6 +476,6 @@ function correctionFor(graders: string[], wroteIn: GoldenCase["language"], asked
         : "- They wrote to you in English and you answered in Pidgin. Answer in English. They chose that register; it is not yours to change.",
     );
   }
-  lines.push(`${REPLY_SENTENCE_CAP} sentences, one question, their words.`);
+  lines.push(`${REPLY_SENTENCE_CAP} sentences at most, one question at most, their words.`);
   return lines.join("\n");
 }

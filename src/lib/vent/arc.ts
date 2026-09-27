@@ -202,6 +202,7 @@ export const LANDING_PROBE: Probe = {
   school: "mi",
   ask: "Where does it sit now, against how you walked in?",
   process: true,
+  asked: true,
   opens: "the reading the whole sitting is measured by, asked as the room's own last question",
   fits: () => false,
   weight: 0,

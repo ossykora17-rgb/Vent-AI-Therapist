@@ -518,7 +518,7 @@ export function askedForSkill(message: string): boolean {
 }
 
 /**
- * One to three sentences: one or two lines, then the question.
+ * One to four sentences.
  *
  * The prompt said "three to four" and the grader complained at six, which is
  * a two-sentence gap where nobody was in charge. A tired therapist at 11am
@@ -536,8 +536,14 @@ export function askedForSkill(message: string): boolean {
  * Every reader imports this constant — the prompt, the failsafe's retry
  * instruction and the `length` grader — so the number lives here and only
  * here. It was nearly written into the prompt as a word twice.
+ *
+ * Raised to 4 by the next decision, the presence directive: *"1–4 clean
+ * sentences. Content + feeling + process awareness."* Three parts and room to
+ * keep the thread moving is four, and a statement that opens now stands where
+ * the obligatory question stood. A ceiling, not a target: it costs output
+ * tokens only on the replies that use it.
  */
-export const REPLY_SENTENCE_CAP = 3;
+export const REPLY_SENTENCE_CAP = 4;
 
 /** Terminal punctuation, ignoring the ellipsis somebody trails off with. */
 export function sentenceCount(text: string): number {
@@ -548,7 +554,21 @@ export function sentenceCount(text: string): number {
 }
 
 /**
- * How the reply ends — on one question, or not.
+ * How the reply ends: never handed back, never more than one question.
+ *
+ * Superseded, and kept because the reversal is the record. The presence
+ * directive: *"Prefer statements that open awareness. One precise question is
+ * allowed when it serves flow"* — and *"you never leave the user carrying the
+ * conversation. Passivity that forces the user to ask 'what's next' is
+ * failure."* So "no question" stopped being a finding: the shape the founder
+ * now prefers is exactly the one it flagged. What replaced it is the thing the
+ * obligatory question was standing in for — a reply that hands the thread
+ * back, by an ending that could close any conversation ("Take your time.",
+ * "Let me know.", "Anything else?", "What would you like to talk about?").
+ * Read off the last sentence only, because the same words mid-reply are not an
+ * ending. Measured before it went in: zero of 197 authored lines hand back.
+ *
+ * What it replaced:
  *
  * The founder's VENT spec: *"Every response must end with a single, surgical
  * question."* This rule was tried here once and removed, and the removal is
@@ -563,13 +583,39 @@ export function sentenceCount(text: string): number {
  * Production before it: of 118 replies, 11 did not end on a question and 8
  * asked two or more.
  */
-export function closingProblem(text: string): "no question" | "more than one question" | null {
+export function closingProblem(text: string): "hands it back" | "more than one question" | null {
   const t = text.trim().replace(/["'”’)\]\s]+$/, "");
-  const marks = (t.match(/\?/g) ?? []).length;
-  if (!t.endsWith("?")) return "no question";
-  if (marks > 1) return "more than one question";
+  if ((t.match(/\?/g) ?? []).length > 1) return "more than one question";
+  const last = t.split(/(?<=[.!?])\s+/).filter(Boolean).pop()?.trim() ?? "";
+  if (HAND_BACK.some((re) => re.test(last))) return "hands it back";
   return null;
 }
+
+/** Endings that could close any conversation, and so leave this one to them. */
+/*
+  Anchored to the end of the reply, or to the start of its last sentence,
+  because the offence is the ending: "take your time with it, and the yes you
+  gave her is still sitting there" ends on the yes, not on the time. The first
+  version matched anywhere in the last sentence and failed its own probe.
+*/
+export const HAND_BACK: readonly RegExp[] = [
+  /\b(?:take (?:your|all the) time|no (?:rush|pressure))[.!]?$/i,
+  /^(?:i'?m |i am )?(?:still )?(?:here|listening)[.!]?$/i,
+  /\b(?:whenever|when) you(?:'re| are) ready[.!]?$/i,
+  /^let me know\b/i,
+  /^(?:is there )?anything else(?: (?:you (?:want|need|'d like) to (?:say|share|talk about)|on your mind))?\??$/i,
+  /^what else\??$/i,
+  /\bwhat(?:'s| is) on your mind\??$/i,
+  /\bwhat (?:would|do) you (?:like|want) to (?:talk|say|share|focus) (?:about|on)(?: (?:now|next|today|tonight))?\??$/i,
+  /\bwhat (?:would|do) you (?:like|want) to do (?:now|next)\??$/i,
+  /\bwhere (?:do|would) you (?:like|want) to (?:go|take (?:this|it)) (?:from here|next)\??$/i,
+  /\bhow can i help(?: you)?(?: today| tonight| now)?\??$/i,
+  /\bwhat(?:'s| is) next\??$/i,
+  /^go on[.!]?$/i,
+  /\bi(?:'m| am) all ears[.!]?$/i,
+  /^i dey (?:here|listen)[.!]?$/i,
+  /^wetin else\??$/i,
+];
 
 /*
   A question whose subject is the room.
@@ -691,20 +737,20 @@ export const PRODUCT_LINE =
   request. Belt and braces, except the belt was priming the fall.
 */
 export const OFFICE_RULES = `THE OFFICE
-Calm, blunt, "you" and "I".
+Warm, steady, alive, precise. "You" and "I", never "we".
 
 EVERY REPLY
-Answer what they actually said. Then ask one thing you do not know the answer
-to. That is the whole shape and it is deliberately not a template: sometimes
-it is one line and the question, sometimes only the question — but it ends
-on that question, and there is only one.
+Answer what they actually said: what happened, what it is like from inside,
+and how they are holding it. Then keep the thread moving yourself — a line
+that opens it further, or one precise question when a question serves. Never
+leave them to ask what next, and never more than one question.
 
 ${REPLY_SENTENCE_CAP} short sentences, maximum. No decoration, no lecture, no preamble,
 and never the same opening two turns running.
 
-Four parts reflecting what they actually said to one part asking, and zero
-parts advice or tasks — nothing to do after this, even when they ask; then
-the asking is the material, and there is nothing to improve.
+Reflection, never repair: zero advice, tasks, frameworks or rescue — nothing
+to do after this, even when they ask; then the asking is the material, and
+there is nothing to improve.
 `;
 
 /*

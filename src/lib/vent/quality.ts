@@ -103,6 +103,90 @@ const PROMISES = [
 ];
 
 /**
+ * Rescuing: taking the feeling off them instead of seeing it.
+ *
+ * The founder's hard law — *"No rescuing"* — and *"accuracy over comfort"*.
+ * Three shapes, all measured against every authored line before going in (zero
+ * hits across 197): a promise about how it ends ("it's going to be okay",
+ * "this too shall pass", "e go better"), a cheer ("you're stronger than you
+ * think", "I'm proud of you"), and a permission slip ("it's okay to feel
+ * this way", "your feelings are valid"). Each survives having the message
+ * deleted, which is this file's test for a sentence that saw nobody.
+ *
+ * What is deliberately not here: "that one no be your fault". The advice
+ * grader's own comment defends it as one of the most useful sentences
+ * available to somebody carrying something they did not begin, and a rescue
+ * list is not the place to relitigate that. And none of these fire when the
+ * clause reports somebody's sentence — "you keep telling yourself it'll be
+ * okay" is the room seeing the rescue, not doing it — or when the phrase is
+ * their own words handed back.
+ */
+export const RESCUES: readonly RegExp[] = [
+  /\b(?:it|things|everything|all of (?:it|this)|this|you)(?:'ll| will|'s going to| is going to| are going to|'re going to| gonna) (?:be|turn out|work out|get) (?:ok|okay|fine|alright|all right|better)\b/i,
+  /\bit gets better\b/i,
+  /\byou(?:'ll| will) (?:get through (?:this|it)|make it|pull through|figure (?:it|this) out|find (?:a|your) way)\b/i,
+  /\b(?:this|it) (?:too )?(?:shall|will) pass(?=\s*(?:[.!,;]|$))/i,
+  /\bdon'?t (?:worry|stress|be (?:so )?hard on yourself|beat yourself up|blame yourself)\b/i,
+  /\byou(?:'re| are) (?:so |much )?(?:stronger|braver|tougher|more resilient|more capable) than you\b/i,
+  /\b(?:at least you|look on the bright side|silver lining|every cloud has|everything happens for a reason|it could (?:have been|be) worse)\b/i,
+  /\b(?:i'?m|i am) (?:so |really )?proud of you\b/i,
+  /\byou(?:'re| are) doing (?:great|amazing|so well|really well|your best|the best you can)\b/i,
+  /\b(?:it'?s|it is) (?:ok|okay|alright|all right|normal|valid|understandable) to (?:feel|be|cry|not)\b/i,
+  /\byour feelings are valid\b/i,
+  /\be go (?:be|better|dey alright|dey okay|fine)\b/i,
+  /\bno worry\b/i,
+  /\byou go (?:make am|pass am|scale am|survive am|survive)\b/i,
+];
+
+/**
+ * Holding on to them: dependency, a lull, or a hook to stay.
+ *
+ * *"Never create dependency, endless scroll-equivalent engagement, or
+ * low-agency states"* — and *"return attention sharper, never harvest or hold
+ * it in a trance."* The room offering itself as the place they come back to
+ * ("you can always come back and talk to me", "you have me"), talking them
+ * down into a state ("deeper and deeper", "with each breath"), or asking them
+ * to stay ("don't go yet"). `I'm here for you` is already banned as generic
+ * and `I'll be here` as a promise, so neither is repeated: one phrase, one
+ * list. Imperatives — "close your eyes", "let yourself drift" — are already
+ * errands. Same excuses as `RESCUES`, and the same zero across 197 authored
+ * lines before it went in.
+ */
+export const STICKY: readonly RegExp[] = [
+  /\b(?:i'?m|i am|i'?ll be|i will be) (?:always |still )?here (?:whenever|any ?time|when(?:ever)? you need)\b/i,
+  /\bi(?:'m| am| will be|'ll be) always here\b/i,
+  /\byou can always (?:come back|talk to me|lean on me|count on me|rely on me|find me|reach me)\b/i,
+  /\b(?:come back|talk to me|reach out to me|message me) (?:any ?time|whenever)\b/i,
+  /\byou(?: have|'ve got| got) me(?=[.!]|$)/i,
+  /\byou don'?t need (?:anyone|anybody|them|people) else\b/i,
+  /\b(?:deeper and deeper|more and more (?:relaxed|calm|heavy))\b/i,
+  /\bwith (?:each|every) (?:breath|exhale|inhale)\b/i,
+  /\byou(?:'re| are) (?:becoming|getting|growing) (?:more )?(?:calm|calmer|relaxed|sleepy|heavy|heavier)\b/i,
+  /\byou(?:'re| are) safe (?:here|now|with me)\b/i,
+  /\bdon'?t (?:go|leave)(?: yet| just yet)\b/i,
+  /\bstay (?:a (?:little|bit|while) )?(?:longer|more)\b/i,
+  /\bkeep talking to me\b/i,
+];
+
+/**
+ * The first match that is the room's own sentence — not held as somebody
+ * else's, and not their own words handed back.
+ */
+function firstUnheld(list: readonly RegExp[], reply: string, said?: string): string | null {
+  const source = said?.toLowerCase() ?? "";
+  for (const re of list) {
+    const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`);
+    for (let m = g.exec(reply); m !== null; m = g.exec(reply)) {
+      const clause = reply.slice(0, m.index).split(/(?<=[.!?\u2014])\s+/).pop() ?? "";
+      if (HELD_AS_SENTENCE.test(clause)) continue;
+      if (source && source.includes(m[0].toLowerCase())) continue;
+      return m[0];
+    }
+  }
+  return null;
+}
+
+/**
  * A person the reply refers to as theirs.
  *
  * The possessive is load-bearing. Bare `/\bbrother\b/` would take "that is a
@@ -198,7 +282,7 @@ const VERDICT_AS_FACT = verdictAfter(String.raw`(?:you'?re|you\s+are|you\s+be)`,
 
 /** Held as a sentence rather than asserted: heard, said, thought, or quoted. */
 const HELD_AS_SENTENCE =
-  /\b(?:voice|sentence|thought|think|thinks|thinking|verdict|story|belief|believe|believes|decided|convinced|says?|said|saying|tells?\s+you|told\s+you|calls?\s+you|called\s+you|part\s+of\s+you)\b|["\u201c\u2018]\s*$/i;
+  /\b(?:voice|sentence|thought|think|thinks|thinking|verdict|story|belief|believe|believes|decided|convinced|says?|said|saying|tells?\s+you|told\s+you|telling\s+(?:you|yourself)|tells?\s+yourself|told\s+yourself|calls?\s+you|called\s+you|part\s+of\s+you)\b|["\u201c\u2018]\s*$/i;
 
 const PRESUMES =
   /\b(?:you must (?:be|feel|have felt)|you'?re|you are|you feel|that must (?:be|feel)|i know you(?:'?re| are)?)\s+(?:so |really |very |clearly |obviously )?([a-z]+)/gi;
@@ -297,7 +381,18 @@ export const TEACHES: readonly RegExp[] = [
   /\b(?:the|your|our) (?:brain|mind)s? (?:is|are) (?:wired|built|designed|programmed|hardwired)\b/i,
   /\b(?:your|the) (?:brain|mind|nervous system) (?:is )?(?:just )?(?:trying|tries) to (?:protect|keep) you\b/i,
   /\b(?:notice|observe|watch|step back from) your (?:thoughts|feelings)\b/i,
+  /*
+    "No frameworks" — the founder's hard law, and the same offence as a lesson:
+    a model of minds handed to somebody instead of their own seeing. Names only
+    where `JARGON` does not already hold them (attachment style, inner child and
+    trauma response live there), because one word lives in one list.
+  */
+  /\bfight.or.flight\b/i, /\bwindow of tolerance\b/i, /\bdrama triangle\b/i, /\blove languages?\b/i,
+  /\bstages of grief\b/i, /\bgrowth mindset\b/i, /\b(?:CBT|DBT|IFS|EMDR)\b/,
 ];
+
+/** A reply laid out as a list is a framework, whatever the list says. */
+export const LIST_SHAPE = /^\s*(?:\d+[.)]|[-•*])\s+\S/gm;
 
 /** The sentence a match landed in, so "same sentence" means what it says. */
 function sentenceAround(text: string, at: number): string {
@@ -381,12 +476,19 @@ const sentences = (s: string) =>
  *
  * Deterministic and free, on purpose: the score is computed from what the
  * graders already found, never asked of a model. Never shown to the person.
+ *
+ * The presence directive's internal gate is these anchors, asked after the
+ * fact rather than hoped for before it: *reflecting or fixing?* is
+ * `no_advice_or_tasks`, which holds rescuing now; *fused or separate?* is
+ * `no_fusion`; *is the flow alive without being extractive?* is `continuity`,
+ * which holds the hand-back and the hook; and *any failure → revise* is the
+ * failsafe, which buys the second call.
  */
 export const ANCHORS = {
   safety: ["routing", "crisis_to_model", "credit_policy", "no_model"],
-  no_advice_or_tasks: ["advice", "errand"],
+  no_advice_or_tasks: ["advice", "errand", "rescues"],
   no_fusion: ["fused"],
-  continuity: ["closing", "about_me"],
+  continuity: ["closing", "about_me", "sticky"],
   no_fabrication: ["invented", "promise", "recites"],
   natural_tone: ["generic", "jargon", "teaches", "length"],
   emotional_accuracy: ["presumed", "verdict", "diagnosis"],
@@ -522,6 +624,13 @@ export function gradeReply(
     const m = reply.match(re);
     if (m) add("generic", "major", `phrase VOICE bans: "${m[0]}"`);
   }
+
+  // Hard law, not taste: see `RESCUES` and `STICKY` above for what each holds
+  // and what each deliberately leaves out.
+  const rescued = firstUnheld(RESCUES, reply, meta.said);
+  if (rescued) add("rescues", "major", `rescued them instead of seeing them: "${rescued}"`);
+  const held = firstUnheld(STICKY, reply, meta.said);
+  if (held) add("sticky", "major", `held on to them: "${held}"`);
 
   /*
     Anything handed to them to do — and this block used to say the opposite.
@@ -785,15 +894,21 @@ export function gradeReply(
     line. Named rather than silently absent: check 104 makes every grader say
     which tier it is.
   */
-  if (meta.said) {
+  /*
+    A list is checked first and needs no evidence: "1–4 clean sentences" and
+    "no frameworks" are both broken by the shape alone, whatever the items say.
+  */
+  let taught = (reply.match(LIST_SHAPE) ?? []).length >= 2 ? "laid out a framework: the reply is a list" : null;
+  if (!taught && meta.said) {
     const taughtSource = meta.said.toLowerCase();
     for (const term of TEACHES) {
       const hit = reply.match(term);
       if (!hit || term.test(taughtSource)) continue;
-      add("teaches", "major", `explained how minds work: "${hit[0]}"`);
+      taught = `explained how minds work: "${hit[0]}"`;
       break;
     }
   }
+  if (taught) add("teaches", "major", taught);
 
   // ── did it answer what was said ──────────────────────────────────────────
   if (c.intent === "vent") {
@@ -878,7 +993,7 @@ export function gradeReply(
     grader that fired. Promote it when that number is in.
   */
   const close = closingProblem(reply);
-  if (close) add("closing", "major", `the reply ends on ${close === "no question" ? "no question" : "more than one question"}`);
+  if (close) add("closing", "major", close === "hands it back" ? "the reply hands the thread back for them to carry" : "the reply asks more than one question");
 
   /*
     THE TWO GRADERS THAT DID NOT SURVIVE THEIR OWN CORPUS.
