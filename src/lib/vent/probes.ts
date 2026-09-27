@@ -1,4 +1,4 @@
-import { inTheLoop } from "./tactics";
+import { fusedVerdict, inTheLoop, seesWhileIn } from "./tactics";
 
 /**
  * Fifty questions, and not one of them is in the system prompt.
@@ -354,6 +354,20 @@ const ROGERS: Probe[] = [
     ask: "What's the part of this you've never said to anybody?",
     opens: "the thing the product exists for",
     fits: always },
+  /*
+    Both at once. Somebody feeling it and watching it in the same breath is
+    doing the thing every change here depends on; these ask what the watching
+    shows, which keeps them in it while they look. Gated on `seesWhileIn`, so
+    they sit in the specific tier and never reach somebody who is not noticing.
+  */
+  { id: "rogers_watch_it_happen", school: "rogers", weight: 90,
+    ask: "When you watch it happen like that, what do you see?",
+    opens: "the observing capacity, used on purpose instead of by accident",
+    fits: (m) => seesWhileIn(m) },
+  { id: "rogers_both_at_once", school: "rogers", weight: 86,
+    ask: "What's it like to feel it and watch it at the same time?",
+    opens: "the split itself, made noticeable so it can be found again",
+    fits: (m) => seesWhileIn(m) },
 ];
 
 /**
@@ -414,9 +428,29 @@ const WELLS: Probe[] = [
     ask: "When it arrives, do you look at it or do you go with it?",
     opens: "detached mindfulness — the thought as an event rather than an instruction",
     fits: LOOP },
+  /*
+    A verdict on the whole self, held as a fact. The content questions that fit
+    a self-critical word — what people would think if they knew, what the word
+    means — go into the verdict; these look at it from one step back, which is
+    the split the founder's mechanism asks for. Process questions by the test
+    above: none of them can be answered by deciding whether the verdict is true.
+    Three, so the three-turn block never has to ask one twice.
+  */
+  { id: "wells_whose_voice", school: "wells", process: true, weight: 92,
+    ask: "Whose voice does that sentence about you sound like?",
+    opens: "the verdict located in a person, which makes it a sentence rather than a fact",
+    fits: (m) => fusedVerdict(m) },
+  { id: "wells_seeing_it_written", school: "wells", process: true, weight: 90,
+    ask: "What happens in you when you see it written down like that?",
+    opens: "being in it and seeing it at once — their own sentence, on the screen",
+    fits: (m) => fusedVerdict(m) },
+  { id: "wells_when_it_started", school: "wells", process: true, weight: 88,
+    ask: "When did that sentence start talking tonight?",
+    opens: "the verdict as an event with a start, not a permanent fact",
+    fits: (m) => fusedVerdict(m) },
 ];
 
-/** All fifty-eight, in one place, so nothing keeps a second copy. */
+/** All of them, in one place, so nothing keeps a second copy. */
 export const PROBES: readonly Probe[] = [...MI, ...YALOM, ...ROGERS, ...WELLS];
 
 /**

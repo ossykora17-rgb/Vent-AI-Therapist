@@ -231,6 +231,108 @@ export function caughtWatchingSelf(message: string): boolean {
   if (markers >= 2) return true;
   return markers >= 1 && (ANALYTICAL.test(m) || words(m) > 25);
 }
+
+/*
+  SPLIT AWARENESS — the two readings `caughtWatchingSelf` never made.
+
+  The founder's core mechanism, in the founder's words: "Accurate
+  self-observation (the capacity to be in the experience and see the experience
+  at the same time) is the primary condition for clarity and change." Three
+  stances follow from it, and this file already read one of them:
+
+  - watching without being in it — analysis about themselves, delivered whole.
+    `caughtWatchingSelf`, and the room takes them back under the words.
+  - in it without watching — a verdict on themselves held as a fact.
+    `fusedVerdict`: the room gives them one step back from the sentence.
+  - both at once — feeling it and noticing it in the same breath.
+    `seesWhileIn`: the room names the noticing, because that is the capacity.
+
+  Described as what people do, never as a mechanism of the world. Nothing here
+  is physics and nothing here is magic: the change is in what a person can see
+  about themselves, and the reading is their own words.
+*/
+
+/**
+ * Verdicts about the whole self. One list for the person's first person and the
+ * room's second person — `quality.ts` builds the `verdict` grader from it —
+ * because two detectors disagreeing about one question is this repository's
+ * most-repeated bug. Each word is identity-level; an event ("I failed the exam")
+ * or a state ("I'm tired") is not a verdict, and `stupid` and `a mess` are out
+ * because "I'm so stupid, I left my keys" is a Tuesday.
+ */
+export const VERDICT_WORDS = String.raw`(?:a\s+|an\s+)?(?:failure|useless|worthless|nobody|burden|disappointment|pathetic|hopeless|broken(?![-\w])|fraud|joke|waste(?:\s+of\s+space)?|loser|unlovable|the\s+problem(?![-\w]|\s+solver)|bad\s+person|nothing(?!\s+like))`;
+
+const VERDICT_INTENSIFIER = String.raw`(?:such\s+|so\s+|just\s+|completely\s+|totally\s+|really\s+|a\s+complete\s+|a\s+total\s+|nothing\s+but\s+)?`;
+
+/**
+ * A verdict word after a subject — one construction for both sides of the
+ * conversation, so the router reading "I am useless" and the grader reading
+ * "you're useless" cannot drift apart. The lookahead keeps a domain ("useless
+ * at cooking") or a denial ("a burden to nobody") out of it.
+ */
+export function verdictAfter(subject: string, flags = ""): RegExp {
+  return new RegExp(
+    String.raw`\b${subject}\s+${VERDICT_INTENSIFIER}${VERDICT_WORDS}\b(?!\s+(?:at|with|when|to\s+(?:no\s*one|nobody))\b)`,
+    flags,
+  );
+}
+
+const FUSED = [
+  verdictAfter(String.raw`i(?:'?m|\s+am)`),
+  /\bi(?:'?m|\s+am)\s+not\s+(?:good\s+)?enough\b/,
+  /\bi\s+(?:always|never)\s+(?:fail|ruin\s+everything|get\s+anything\s+right|do\s+anything\s+right)\b/,
+  /\bi\s+(?:can'?t|cannot)\s+do\s+anything\s+right\b/,
+  /\bi\s+(?:be|na)\s+(?:a\s+|one\s+)?(?:failure|useless|nobody|disappointment|burden|mumu|olodo)\b/,
+  /\bi\s+no\s+(?:be|worth)\s+(?:anything|anybody|nothing)\b/,
+  /\bi\s+no\s+good\s+for\s+anything\b/,
+  /\bna\s+me\s+be\s+the\s+problem\b/,
+  /\bi\s+(?:useless|worthless)\b/,
+];
+
+/**
+ * The verdict is somebody else's voice already, or a condition rather than a
+ * claim. "My dad says I'm useless" has the distance this move would offer;
+ * "or I am not enough" is conditional worth, which `earned_worth` answers more
+ * precisely — specificity outranks weight.
+ */
+const REPORTED = /\b(?:says?|said|tells?\s+me|told\s+me|calls?\s+me|called\s+me|thinks?)\s+(?:that\s+)?$/;
+const CONDITIONAL = /\b(?:or|if|unless|until|otherwise|else)\s*$/;
+
+/** In it without watching: a verdict on themselves, stated as a fact. */
+export function fusedVerdict(message: string): boolean {
+  const m = message.toLowerCase();
+  return FUSED.some((re) => {
+    for (const hit of m.matchAll(new RegExp(re.source, "g"))) {
+      const clause = m.slice(0, hit.index).split(/[.!?]/).pop() ?? "";
+      if (!REPORTED.test(clause) && !CONDITIONAL.test(clause)) return true;
+    }
+    return false;
+  });
+}
+
+const SEES = [
+  /\bi\s+(?:can\s+)?(?:notice|feel|see|hear)\s+(?:myself|my\s+(?:chest|throat|stomach|belly|heart|hands?|jaw|body|voice|breath(?:ing)?|head))\b/,
+  /\bi\s+(?:just\s+)?noticed?\s+(?:that\s+)?i\b/,
+  /\bi(?:'?m|\s+am)\s+(?:watching|noticing)\s+(?:myself|it\s+happen)\b/,
+  /\bi\s+(?:catch|caught)\s+myself\b/,
+  /\bas\s+i(?:'?m|\s+am)?\s+(?:type|typing|write|writing|say|saying)\s+(?:this|it|that)\b/,
+  /\b(?:typing|writing|saying)\s+(?:this|it)\s+(?:out\s+)?(?:makes|made)\b/,
+  /\bpart\s+of\s+me\b[^.!?]{0,60}\b(?:another|other)\s+part\b/,
+  /\bas\s+i\s+dey\s+(?:type|write|talk)\b/,
+  /\bi\s+dey\s+(?:see|notice)\s+(?:say\s+i|myself)\b/,
+];
+
+/**
+ * Both at once: noticing themselves while they are in it. Present-tense and
+ * about their own experience — the body, the voice, the act of writing this —
+ * which is what separates it from the analysis `caughtWatchingSelf` reads:
+ * "I know that I always…" explains from outside, "I can feel my chest go tight
+ * as I type this" is inside and seeing.
+ */
+export function seesWhileIn(message: string): boolean {
+  const m = message.toLowerCase();
+  return SEES.some((re) => re.test(m));
+}
 const CATASTROPHE = /\b(always|never|everything|nothing|ruin|disaster|end of|i will fail|i go fail)\b/;
 const SELF_CRITIC = /\b(useless|stupid|failure|worthless|i'?m bad|i no good|weak)\b/;
 const PARTS = /\b(part of me|one side|half of me|i want to but|i wan but)\b/;
@@ -445,6 +547,28 @@ const TACTICS: Tactic[] = [
     fits: (c) => c.body !== null || caughtWatchingSelf(c.message),
     weight: (c) =>
       caughtWatchingSelf(c.message) ? (c.body ? 88 : 76) : c.pressure !== null && c.pressure > 70 ? 88 : 72,
+    holdsWhenNothingMoves: true,
+  },
+  {
+    id: "name_the_noticing",
+    family: "observing",
+    /*
+      Both at once — the capacity itself. Somebody who can feel their chest go
+      tight and watch it happen is doing the one thing every change here
+      depends on, and nobody has ever told them it is a thing. Naming it is how
+      it becomes findable again. No praise: praise makes it a performance.
+
+      89: above `felt_sense`'s 88, because somebody already inside the body and
+      watching it does not need taking under the words; below `exact_mirror`'s
+      turn-one 90, because the mirror is the room's first act of showing them
+      themselves; below `insight_is_not_change`'s confident 93, because
+      noticing wrapped in analysis is the watcher again.
+    */
+    instruction:
+      "They are feeling it and watching it at the same time — the capacity every change here depends on, so let them see they have it. Name what they noticed and that they noticed it, in their words, plainly: no praise, no lesson, no new interpretation. Then ask what the watching shows them that being inside it alone does not. e.g. \"You felt your chest go tight and you watched it happen. Wetin the watching dey show you?\"",
+    hold: "You are feeling it and watching it at the same time. What does the watching show you?",
+    fits: (c) => seesWhileIn(c.message),
+    weight: () => 89,
     holdsWhenNothingMoves: true,
   },
   {
@@ -763,12 +887,22 @@ const TACTICS: Tactic[] = [
       content of the thought; this one changes the relationship to it. "I am
       a failure" fought on its own terms concedes the premise that the
       sentence is a verdict to be litigated. Six words of distance does more.
+
+      And first, when the verdict is fused. It used to come second, after
+      `double_standard`, on any self-critical word. The founder's core
+      mechanism makes the order a decision: seeing it while in it is the
+      primary condition for change, so when somebody states a verdict on the
+      whole self as a fact (`fusedVerdict`), one step back from the sentence
+      comes before asking what they would tell a friend — the reframe argues
+      with the content; this lets them see it. 86 keeps the room's other
+      orders: the turn-one mirror (90) and a named body (88) still come first.
+      A self-critical word without the verdict keeps the old order, at 80.
     */
     instruction:
       "Do not argue with the sentence. Put one inch between them and it: they are not the thing they said, they are the one having the thought that they are. Say it back with that gap in it, in their own words, once. Never explain the technique, never use the word 'defusion' or 'thought' as jargon.",
     hold: "You are not that sentence. You are the one hearing it — so how long has it been saying that to you?",
-    fits: has(SELF_CRITIC),
-    weight: () => 80,
+    fits: (c) => has(SELF_CRITIC)(c) || fusedVerdict(c.message),
+    weight: (c) => (fusedVerdict(c.message) ? 86 : 80),
   },
 
   {
