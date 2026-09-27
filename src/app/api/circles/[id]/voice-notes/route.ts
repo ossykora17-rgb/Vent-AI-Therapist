@@ -6,6 +6,7 @@ import { heldInRoom } from "@/lib/voice/livekit";
 import {
   checkWav, NOTE_MAX_BYTES, NOTE_TOO_SHORT, NOTES_PER_CIRCLE, NOTES_PER_SEAT, readNote, type WavVerdict,
 } from "@/lib/voice/note";
+import { KEEPER_CLOSED_MIC } from "@/lib/voice/hold";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +84,7 @@ async function handlePOST(request: Request, { params }: Params) {
   */
   if ((await heldInRoom(id))?.includes(`seat-${seatAt + 1}`)) {
     return NextResponse.json(
-      { error: "held", message: "The Keeper closed your microphone. You can still type." },
+      { error: "held", message: KEEPER_CLOSED_MIC },
       { status: 403 },
     );
   }

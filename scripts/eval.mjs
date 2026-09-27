@@ -8831,7 +8831,7 @@ check("70 A mute you performed is not a mute somebody did to you", () => {
     so the only way a Keeper sentence could land here is the original bug:
     somebody's own tap, reported as governance.
   */
-  ok(!/Keeper/.test(handler) && /RoomMetadataChanged[\s\S]*The Keeper closed your microphone/.test(code),
+  ok(!/Keeper|KEEPER_CLOSED_MIC/.test(handler) && /RoomMetadataChanged[\s\S]*setNotice\(KEEPER_CLOSED_MIC\)/.test(code),
     "the Keeper's hold is told from the room's record, never from a track event",
     "a mute event is raised by our own taps as well as anybody else's");
 
@@ -19916,6 +19916,17 @@ check("156 Voice starts inside the tap, and the room can always be heard", () =>
   ok(/mic === "unavailable"\s*\?\s*"Your microphone is off/.test(voice),
     "live, the pitch-shift claim is only made while a masked track exists",
     "'Your voice is pitched down' over a room that hears nothing was the second false sentence");
+  // Hearing is a state the component holds, and only that state may claim it.
+  // The line said "You can still hear the room" above a gold "Tap to hear the
+  // room", and ten notices said it without looking — on an iPhone, exactly
+  // when the microphone failed and the sound was held back with it.
+  const heldSays = strip(fs.readFileSync(path.join(ROOT, "src/lib/voice/hold.ts"), "utf8"));
+  ok(/KEEPER_CLOSED_MIC = "/.test(heldSays), "the held seat's sentence is read where it is kept");
+  is(((voice + heldSays).match(/can (?:still|already) hear the room/g) ?? []).length, 1,
+    "the room claims you can hear it in exactly one place",
+    "a notice written at the moment of a failure cannot know whether the sound is held back");
+  ok(/"Your microphone is off\."\s*\+\s*\(canHear \? " You can still hear the room\." : ""\)/.test(voice),
+    "and that place asks canHear first");
   const talkAt = voice.indexOf(`"Tap to talk"`);
   const talkGuard = voice.slice(voice.lastIndexOf(`{status === "live"`, talkAt), talkAt);
   ok(talkAt > 0 && /^\{status === "live" && mic !== "unavailable" && \(/.test(talkGuard),

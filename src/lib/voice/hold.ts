@@ -20,6 +20,14 @@
 
 const SEAT = /^seat-[1-6]$/;
 
+/**
+ * What a held seat is told, on the call bar and by the voice-note route alike.
+ * It says they can type and not that they can hear: on an iPhone a seat that
+ * is not publishing may have its sound held back, and only the call bar's own
+ * playback state may say whether it is.
+ */
+export const KEEPER_CLOSED_MIC = "The Keeper closed your microphone. You can still type.";
+
 function parse(metadata: string | null | undefined): Record<string, unknown> {
   try {
     const v = JSON.parse(metadata ?? "") as unknown;
