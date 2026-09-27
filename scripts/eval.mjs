@@ -8654,11 +8654,35 @@ check("68 A room does not tell you the same thing twice", () => {
     header, which has no sentence of its own. In voice, it is the call bar,
     above the button that opens the microphone. Two states, one claim each.
   */
-  is((offer.match(/pitched down/g) ?? []).length, 1,
+  is((offer.match(/pitch-shifted/g) ?? []).length, 1,
     "the voice bar makes the claim once, while you are in voice");
-  is((code.match(/pitched down/g) ?? []).length, 1,
+  is((code.match(/pitch-shifted/g) ?? []).length, 1,
     "and the room makes it once, before you are",
     "the claim a person needs before they speak cannot live only behind the tap it informs");
+
+  /*
+    And the claim is true of every seat. Four screens said "pitched down",
+    and `SEAT_SEMITONES` is weighted downward rather than all downward — seats
+    4 and 6 go up, on purpose, so six voices are audibly six. A direction may
+    be named only when every seat the server can assign goes that way, read
+    off `personaFor` rather than off a comment, so the day the table changes
+    the rule moves with it.
+  */
+  const ways = new Set([1, 2, 3, 4, 5, 6].map((n) => Math.sign(personaFor(`seat-${n}`))));
+  ok(!ways.has(0), "every seat the server assigns is shifted", [...ways].join(","));
+  const tsx = fs.readdirSync(path.join(ROOT, "src"), { recursive: true })
+    .filter((f) => String(f).endsWith(".tsx"))
+    .map((f) => strip(fs.readFileSync(path.join(ROOT, "src", String(f)), "utf8")));
+  ok(tsx.length > 30, `the sweep read the screens (${tsx.length})`);
+  const says = (re) => tsx.some((t) => re.test(t));
+  ok(!says(/pitched[ -]down/i) || (ways.size === 1 && ways.has(-1)),
+    "no screen says 'pitched down' while any seat is pitched up",
+    `seat directions: ${[1, 2, 3, 4, 5, 6].map((n) => personaFor(`seat-${n}`)).join(" ")}`);
+  ok(!says(/pitched[ -]up/i) || (ways.size === 1 && ways.has(1)),
+    "and none says 'pitched up' while any seat goes down");
+  ok(!says(/not recogni[sz]ably yours/i),
+    "and no screen promises the voice is unrecognisable — the mask is tuned for that and a person decides it, not a sentence",
+    "a friend in the same circle hears your accent and your rhythm at any ratio");
 
   /*
     The header carries the room's name first. Seven pieces of chrome above a
