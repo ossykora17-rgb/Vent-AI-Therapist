@@ -4205,6 +4205,19 @@ outside … That is the day you are having"*, a claim about a window nobody
 measured, to a pressure circle that includes the people who left. It names
 Lagos now. Six mutations fail checks 9 and 40.
 
+**And the room's own first notice promised a quiet nothing kept.** With a
+second person seated, the first three minutes read *"Breathing — three minutes
+before anybody speaks. In through the nose, longer on the way out."* The box
+stayed open and the messages route never reads the phase, so a share landed
+under a sentence saying nobody speaks; the three minutes ran from the circle's
+opening, so the second person was told three and heard the Keeper in thirty
+seconds; and it was a breathing instruction. The notice is gone and the phase
+is labelled `Arriving`. Enforcing the silence instead was not taken: most rooms
+here hold one or two people, and forbidding the first three minutes of the only
+overlap they get is a feature the founder asked to have removed. Check 161 ties
+any claim of quiet on a circle screen to a route that refuses by phase, and
+failed on the old code before it passed on the new.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.

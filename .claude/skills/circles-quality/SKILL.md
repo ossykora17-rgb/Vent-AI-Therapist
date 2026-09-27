@@ -14,9 +14,9 @@ minutes, peer support — not therapy, not affiliated with AA.
 
 | Minute | Phase | What happens |
 | --- | --- | --- |
-| 0–3 | Breathing | Nobody speaks, the Keeper included |
-| 3–8 | Opening | The Keeper reads the intention, once |
-| 8–38 | Sharing | People share; anyone may reflect in one line |
+| 0–3 | Arriving | The Keeper waits. People may talk — nothing refuses a share by phase, so no screen may say otherwise (check 161) |
+| 3–8 | Opening | The Keeper reads the intention, once, at the first read after minute three with two seated |
+| 8–38 | Sharing | People share. The route still accepts a one-line `witness`; no screen has sent one since the room became a group chat |
 | 38–43 | Reflection | The Keeper reads back the counted pattern, once |
 | 43–45 | Closing | Rate 1–10, see the drop, carry one word, drop one |
 
