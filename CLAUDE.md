@@ -4218,6 +4218,19 @@ overlap they get is a feature the founder asked to have removed. Check 161 ties
 any claim of quiet on a circle screen to a route that refuses by phase, and
 failed on the old code before it passed on the new.
 
+**`addMember` answers false for "you are already in it" in the room route
+too.** The lobby route learned it and reads the members back; `POST
+/api/circles/[id]` checked for an existing seat *before* the write, fetched the
+members *after* it, and on `false` refused as full without looking. Two of one
+person's requests racing — two tabs, a retry — both pass the first check, and
+the Supabase store answers the loser false twice over: its own re-read sees the
+winner's row, and `unique (circle_id, anon_id)` refuses the insert. The loser
+read *"That circle is full"* about a room they were sitting in. It is not
+reproducible on the file store, which updates memory before it yields — **0 of
+5** concurrent pairs raced there, measured before the fix — so check 80 holds it
+statically and three mutations fail it. The unique constraint is declared in
+0003 and was not verified against the live database from here.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
