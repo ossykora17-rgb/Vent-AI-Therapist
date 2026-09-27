@@ -3,7 +3,7 @@
 import * as React from "react";
 import type { Participant, RemoteTrack, Room, Track } from "livekit-client";
 import { audioContextInGesture, maskMicrophone, personaFor, whenRunning } from "@/lib/voice/mask";
-import { heldSeats } from "@/lib/voice/hold";
+import { heldSeats, KEEPER_CLOSED_MIC } from "@/lib/voice/hold";
 import { cn } from "@/lib/utils";
 
 /**
@@ -95,14 +95,14 @@ export interface VoiceHandle {
  */
 function micRefusal(name: string): string {
   return name === "NotAllowedError"
-    ? "The microphone was blocked. Check the permission for this site in your browser settings — you can still hear the room, and type."
+    ? "The microphone was blocked. Check the permission for this site in your browser settings — you can still type."
     : name === "NotFoundError"
-      ? "No microphone on this device. You can still hear the room, and type."
+      ? "No microphone on this device. You can still type."
       : name === "NotReadableError"
-        ? "Something else is using the microphone — a call, or another tab. You can still hear the room, and type."
+        ? "Something else is using the microphone — a call, or another tab. You can still type."
         : name === "SecurityError"
-          ? "Voice needs a secure connection. You can still hear the room, and type."
-          : "The microphone didn't open. You can still hear the room, and type.";
+          ? "Voice needs a secure connection. You can still type."
+          : "The microphone didn't open. You can still type.";
 }
 
 export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onStatus, onHeld, ref }: Props) {
@@ -303,8 +303,8 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
           // True of their case, and now it points at a button that exists.
           // This used to read "Tap Join once more" to somebody whose screen
           // said "Leave voice" — and a second Join ran into the same wall.
-          ? "Your phone held the microphone back. Tap “Turn on my microphone” — you can already hear the room."
-          : "This browser can't disguise your voice, so the microphone stayed shut. You can still hear the room, and type.",
+          ? "Your phone held the microphone back. Tap “Turn on my microphone” to speak."
+          : "This browser can't disguise your voice, so the microphone stayed shut. You can still type.",
       );
     } else {
       maskRef.current = masked;
@@ -427,7 +427,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
           if (now.includes(me) && !was.includes(me)) {
             releaseAudio();
             setMic("unavailable");
-            setNotice("The Keeper closed your microphone. You can still hear the room, and type.");
+            setNotice(KEEPER_CLOSED_MIC);
             return;
           }
           if (was.includes(me) && !now.includes(me)) {
@@ -474,7 +474,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
       if (heldNow.includes(grant.identity)) {
         void ctx?.close();
         setMic("unavailable");
-        setNotice("The Keeper has muted this seat. You can still hear the room, and type.");
+        setNotice("The Keeper has muted this seat. You can still type.");
         return;
       }
 
@@ -483,7 +483,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
       await openMic(ctx).catch(() => {
         releaseAudio();
         setMic("unavailable");
-        setNotice("The microphone didn't open. You can still hear the room, and type.");
+        setNotice("The microphone didn't open. You can still type.");
       });
     } catch (e) {
       /*
@@ -611,7 +611,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
     void openMic(ctx).catch(() => {
       releaseAudio();
       setMic("unavailable");
-      setNotice("The microphone didn't open. You can still hear the room, and type.");
+      setNotice("The microphone didn't open. You can still type.");
     });
   }
 
@@ -674,8 +674,13 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
                 {/* This said "Nobody hears which seat you are in", over a header
                     reading "Seat 3 speaking…". The seat is the one thing the
                     room does know; the pitch is what it does not. */}
+                {/* Whether they can hear is `canHear`, not a hope: on an iPhone
+                    a seat that is not publishing has its sound held back, and
+                    the gold "Tap to hear the room" below is there because of it.
+                    This line said "You can still hear the room" above that
+                    button, and so did ten notices that never looked. */}
                 {mic === "unavailable"
-                  ? "Your microphone is off. You can still hear the room."
+                  ? "Your microphone is off." + (canHear ? " You can still hear the room." : "")
                   : `Your voice is pitch-shifted. The room hears you as Seat ${seat?.slice(5) ?? ""}.`}
               </p>
             )}

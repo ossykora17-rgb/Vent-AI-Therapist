@@ -4257,6 +4257,21 @@ for that, the file says only −4 was ever measured, and whether a friend in the
 same circle still hears your accent is read by a person, not promised by a
 sentence. Five mutations fail check 68.
 
+**"You can still hear the room", above the button that exists because you
+cannot.** With the microphone off, the call bar read *"Your microphone is off.
+You can still hear the room."* whatever `canHear` said — and when it is false a
+gold *"Tap to hear the room"* renders directly beneath. On an iPhone a seat that
+is not publishing has its sound held back, so the two arrive together exactly
+when the microphone fails. Ten notices said the same thing without looking,
+written at the moment of a failure, when nothing knows yet whether the sound is
+held — *"Tap 'Turn on my microphone' — you can already hear the room"* among
+them. The line asks `canHear` now and the notices say what is always true, that
+they can type. The held seat's sentence became `KEEPER_CLOSED_MIC` in `hold.ts`
+on the way, because check 81 caught the new wording duplicating the voice-note
+route's 403 word for word. Check 156 counts the claim across both files — the
+first version read only the component and would have passed the constant
+growing the claim back — and five mutations fail 156 and 70.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
