@@ -684,14 +684,14 @@ own copy passes while the product regresses.
 | Concern | File |
 | --- | --- |
 | The office: banned phrases, unasked-for tasks, reply contract | `src/lib/vent/voice.ts` |
-| 58 extraction questions — MI, Yalom, Rogers, Wells | `src/lib/vent/probes.ts` |
+| 63 extraction questions — MI, Yalom, Rogers, Wells | `src/lib/vent/probes.ts` |
 | Reject and regenerate, before anybody reads it | `src/lib/vent/failsafe.ts` |
 | One move from outside, per pressure, cached | `src/lib/vent/research.ts` |
 | What the audit proposed and the gate kept | `src/lib/vent/learned.ts` |
 | What a proposed rule did to the corpus, measured | `src/lib/vent/fitness.ts` |
 | Intent routing, crisis, meta-vs-vent, injection | `src/lib/vent/intent.ts` |
 | The turn's verdict, computed not asked for | `src/lib/vent/assess.ts` |
-| 36 tactics, 3-turn block, body asked about, never instructed | `src/lib/vent/tactics.ts` |
+| 37 tactics, 3-turn block, body asked about, never instructed | `src/lib/vent/tactics.ts` |
 | Memory: vents only, six-turn cap | `src/lib/vent/memory.ts` |
 | The office across sessions, and no diagnosis | `src/lib/vent/notes.ts` |
 | What it worked out, shown and deletable | `src/app/api/notes/route.ts` |
@@ -4271,6 +4271,61 @@ on the way, because check 81 caught the new wording duplicating the voice-note
 route's 403 word for word. Check 156 counts the claim across both files — the
 first version read only the component and would have passed the constant
 growing the claim back — and five mutations fail 156 and 70.
+
+**The core mechanism is split awareness, and the constitution said physics.**
+The founder, verbatim: *"Accurate self-observation (the capacity to be in the
+experience and see the experience at the same time) is the primary condition
+for clarity and change. Help the user strengthen that split awareness. Do not
+invoke physics or magic."* Engine four was physics word for word — *"Both
+futures are live until they move … beliefs arrive knotted … cutting one shakes
+the other"*, superposition and entanglement under a line reading *"Never as
+physics"* — and engine two asserted that *"the version of you that already has
+clarity on this exists"*. Check 15h **required** both by name. They are one
+engine now, the mechanism in plain words — *"Clarity and change start when
+someone can feel it and watch it at the same time"* — and 15h asserts no physics
+or magic in the assembled prompt instead; the argument that lost is kept there.
+The future-self question survives as the `future_self` tactic, which asks and
+claims nothing.
+
+**The room already read one of the three stances, from the other side.**
+`caughtWatchingSelf` is watching without being in it, and `felt_sense` and
+`insight_is_not_change` take that person back under the words. The missing two
+sit beside it in `tactics.ts`: `fusedVerdict` — in it without watching, a
+verdict on the whole self held as a fact — and `seesWhileIn`, both at once.
+Measured before building: 2 of 72 authored openings carry a fused verdict, none
+carries a noticing, so the second one's floor is synthetic. Reported speech
+(*"my dad says I'm useless"*) is excused only when the verb governs the verdict,
+and a conditional (*"or I am not enough"*) is `earned_worth`'s, which is the
+more specific move.
+
+**A parallel system was written and deleted inside the hour.** The first
+`hear_the_verdict` tactic was `defusion` — Hayes, already in the library,
+already putting "one inch between them and it" — and check 25 caught it taking
+defusion's turns. So nothing new answers a verdict: `defusion` became
+stance-aware, first at 86 when the verdict is fused and still 80 behind
+`double_standard` when it is only a self-critical word. The turn-one mirror (90)
+and a named body (88) keep their places, and checks 2 and 4 say so. Only
+`name_the_noticing` is new, at 89, below the mirror and the confident watcher.
+Routing over the 72 openings: exactly 2 moved, distinct winners 22 → 23.
+
+**The question slot and the reply follow the same rule.** Five probes: three
+process-safe `wells_` questions that look at a verdict from one step back —
+three so the three-turn block never repeats one — and two `rogers_` questions
+that ask what the watching shows. And `verdict` is the grader: the room saying
+*"you're useless"* back as a fact is fatal and in `REJECT` for `diagnosis`'s
+reason, built by `verdictAfter` from the same list the router reads, excused
+when hedged, quoted, framed as a voice or a thought, disputed, or limited to a
+domain. No production measurement stands behind the tier — the Supabase
+connector could not connect from this session — and the pattern is narrow for
+that reason.
+
+**And check 24 measured one tactic of thirty-six.** The tactic's instruction is
+a per-turn block and the check built the heaviest prompt with whichever one its
+fixture selected — `meaning_stance`, 3,577. With the rest of the library,
+`faith_frame` came to **3,616**: a real turn over the 3,600 ceiling under a check
+reporting headroom. Merging the two metaphor engines paid it back — fixture
+3,577 → 3,547, worst tactic 3,616 → 3,586 — and the worst tactic is the budget
+now. Thirteen mutations fail checks 15h, 104, 163 and friends.
 
 # This is NOT the Next.js you know
 

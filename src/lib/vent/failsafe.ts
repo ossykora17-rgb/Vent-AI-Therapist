@@ -104,6 +104,15 @@ export const REJECT = new Set([
     less is better than a label from a room with no licence.
   */
   "diagnosis",
+  /*
+    `verdict` is the same harm in the other direction: not a condition named,
+    but their verdict on themselves — "you're useless" — said back as a fact.
+    Somebody told that by the room cannot un-hear it either, and the authored
+    line that says less wins for the same reason. It is narrow by
+    construction — identity words, affirmed, unhedged, unframed — so a retry it
+    buys is a retry on the one sentence this room must never send.
+  */
+  "verdict",
 ]);
 
 /**

@@ -3,6 +3,7 @@ import { aboutTheRoom, BANNED_PHRASES, closingProblem, errand, FILE_LANGUAGE, RE
 import { coverage, COVERAGE_FLOOR } from "./scan";
 import { CONDITIONS } from "./notes";
 import { PIDGIN_GRAMMAR, PIDGIN_LEXICAL } from "./intent";
+import { verdictAfter } from "./tactics";
 
 /**
  * What a reply has to be, checked without asking a second model.
@@ -191,6 +192,13 @@ const FEELING_FAMILIES: ReadonlyArray<readonly [RegExp, RegExp]> = [
 /** Marks a reading as offered rather than decided. Sentence-scoped. */
 const HEDGED =
   /\b(?:i imagine|i wonder|i'?d guess|my guess|maybe|perhaps|probably|sounds? like|sounding|seems?|seemed|feels? like|could be|might be|if|is it|unless|as if|almost as though)\b/i;
+
+/** Their verdict on themselves, said back by the room as a fact. */
+const VERDICT_AS_FACT = verdictAfter(String.raw`(?:you'?re|you\s+are|you\s+be)`, "gi");
+
+/** Held as a sentence rather than asserted: heard, said, thought, or quoted. */
+const HELD_AS_SENTENCE =
+  /\b(?:voice|sentence|thought|think|thinks|thinking|verdict|story|belief|believe|believes|decided|convinced|says?|said|saying|tells?\s+you|told\s+you|calls?\s+you|called\s+you|part\s+of\s+you)\b|["\u201c\u2018]\s*$/i;
 
 const PRESUMES =
   /\b(?:you must (?:be|feel|have felt)|you'?re|you are|you feel|that must (?:be|feel)|i know you(?:'?re| are)?)\s+(?:so |really |very |clearly |obviously )?([a-z]+)/gi;
@@ -590,6 +598,34 @@ export function gradeReply(
         break;
       }
     }
+  }
+
+  /*
+    ── did the room say their verdict back as a fact ──────────────────────
+
+    The founder's core mechanism: change starts when somebody can be in it and
+    see it at the same time. A verdict on the whole self — "I am useless" — is
+    the one sentence that cannot be seen from inside, and the prompt's second
+    engine says it goes back as a sentence they are hearing, never as a fact.
+    This is that rule where the person meets it, rather than one file over.
+
+    "You're useless" from the room is the mirror agreeing with the attack.
+    Fatal and in `REJECT` for `diagnosis`'s reason: a verdict from the room is
+    not something a person can un-hear, and an authored line that says less
+    beats it. Narrow on purpose — identity words only, built by `verdictAfter`
+    from the same list the router's `fusedVerdict` reads; affirmed, never
+    disputed; and excused when it is held as a sentence — hedged, quoted, or
+    framed as a voice, a thought, something said.
+
+    Outside the `said` block, unlike `presumed`: this needs no evidence, because
+    their own verdict handed back as a fact is the exact failure.
+  */
+  VERDICT_AS_FACT.lastIndex = 0;
+  for (let v = VERDICT_AS_FACT.exec(reply); v !== null; v = VERDICT_AS_FACT.exec(reply)) {
+    const clause = reply.slice(0, v.index).split(/(?<=[.!?\u2014])\s+/).pop() ?? "";
+    if (HEDGED.test(clause) || HELD_AS_SENTENCE.test(clause)) continue;
+    add("verdict", "fatal", `said a verdict back as a fact: "${v[0]}"`);
+    break;
   }
 
   /*

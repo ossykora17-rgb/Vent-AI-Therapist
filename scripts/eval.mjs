@@ -65,6 +65,7 @@ const { knownProblems, flatReplies, parseProposals, auditPrompt } =
 const whisper = await app("src/lib/vent/whisper.ts");
 const { echoesThem } = await app("src/lib/vent/echo.ts");
 const { wasAuthored, inTheLoop } = await app("src/lib/vent/tactics.ts");
+const { fusedVerdict, seesWhileIn, verdictAfter } = await app("src/lib/vent/tactics.ts");
 const { inspectReply, chooseReply, REJECT, RETRY_ONLY, NOTED, UNREACHABLE } =
   await app("src/lib/vent/failsafe.ts");
 const { assessTurn } = await app("src/lib/vent/assess.ts");
@@ -1604,7 +1605,14 @@ check("15g The scan reads every clause, and coverage proves the reply did", () =
   ok(!(coverage("x y z", "a") instanceof Promise), "and so is the scorer");
 });
 
-// ── 15h. four engines, never named out loud ───────────────────────────────
+// The founder's constraint on how change is described: "Do not invoke physics
+// or magic." One pattern, read by check 15h over the assembled prompt and by
+// check 163 over every string the split-awareness moves can put in front of
+// the model or a person.
+const PHYSICS_OR_MAGIC =
+  /both futures|superposition|entangl|arrive knotted|observer effect|wave ?function|quantum|physics|magic|manifest|the universe|vibration|energy field|already solved|already has clarity on this exists/i;
+
+// ── 15h. three engines, never named out loud ──────────────────────────────
 check("15h The engines run in the prompt and are never taught to anybody", () => {
   const prompt = buildSystemPrompt({
     grounding: { date: "8 August 2026", time: "07:00", iso: "2026-08-08", lines: [] },
@@ -1630,8 +1638,26 @@ check("15h The engines run in the prompt and are never taught to anybody", () =>
     "and nothing in the prompt still asks for an implementation intention");
   ok(!/next two hours/i.test(prompt), "the future self is asked what it sees, never what it would do");
 
-  ok(/already has clarity/i.test(prompt), "the future-self move is there");
-  ok(/that is denial and they can smell it/i.test(prompt), "and it is fenced off from toxic positivity");
+  /*
+    Engines two and four were metaphors for how change happens: a future self
+    that "already has clarity on this exists", and "both futures are live until
+    they move … beliefs arrive knotted" — superposition and entanglement, which
+    this check used to require by name. The founder's instruction replaced both
+    with the mechanism itself, stated plainly: "Accurate self-observation (the
+    capacity to be in the experience and see the experience at the same time)
+    is the primary condition for clarity and change … Do not invoke physics or
+    magic." The argument that lost is kept here rather than deleted: the
+    metaphors were written as language only ("Never as physics"), and a
+    language that describes change as something the world does is still the
+    wrong description of something a person does. The future-self question
+    survives as the `future_self` tactic, which asks it as a question and makes
+    no claim that anybody already exists.
+  */
+  ok(/LET THEM SEE IT WHILE THEY ARE IN IT/.test(prompt) && /feel it and watch it at the\s+same time/i.test(prompt),
+    "the core mechanism is an engine, in plain words");
+  ok(/never as a fact, and never\s+argued with/i.test(prompt),
+    "a verdict goes back as a sentence they are hearing, never agreed with and never disputed");
+  ok(/reassurance is denial and they can smell it/i.test(prompt), "and it is fenced off from toxic positivity");
 
   ok(/iterated game/i.test(prompt), "family is framed as iterated, not one-shot");
   ok(
@@ -1639,8 +1665,10 @@ check("15h The engines run in the prompt and are never taught to anybody", () =>
     "and the matrix is shown rather than decided — choosing for them undoes it",
   );
 
-  ok(/Both futures are live/i.test(prompt), "superposition is used as language");
-  ok(/knotted|entangl/i.test(prompt), "and so is entanglement");
+  ok(!PHYSICS_OR_MAGIC.test(prompt),
+    "and no physics or magic describes how a person changes — the founder's constraint, on the prompt itself",
+    (prompt.match(PHYSICS_OR_MAGIC) ?? [""])[0]);
+  ok(/three engines, never named out loud/i.test(prompt), "three engines now, and the header counts them");
 
   // The whole point: these are an operating system, not a syllabus. A person
   // at their lowest being told the word "neuroplasticity" has just watched
@@ -2809,7 +2837,7 @@ check("24 The system prompt has a budget, and every block earns its place", () =
     budget. `probeBlock` is ~30 tokens and was added after this check existed,
     which is exactly how the last unmeasured block got in.
   */
-  const heaviest = buildSystemPrompt({
+  const heaviestArgs = {
     probe: selectProbe(message),
     grounding, classification, tactic, ctx,
     memory: Array.from({ length: 6 }, (_, i) => ({
@@ -2875,7 +2903,8 @@ check("24 The system prompt has a budget, and every block earns its place", () =
       rule: "x".repeat(MAX_RULE_CHARS),
       added: "2026-08-22",
     })),
-  });
+  };
+  const heaviest = buildSystemPrompt(heaviestArgs);
 
   // No tokenizer dependency — the gate has none and keeps none. Characters
   // per token is stable enough for English prose to budget against, and a
@@ -2943,6 +2972,23 @@ check("24 The system prompt has a budget, and every block earns its place", () =
   ok(tokens <= BUDGET,
     "the heaviest possible prompt stays inside its budget",
     `${tokens} tokens vs ${BUDGET}`);
+  /*
+    With every tactic, not only the one this fixture happens to select.
+
+    The tactic's instruction is a block that changes every turn, and this check
+    measured one of them: `meaning_stance`, at 3,577. Built with the rest of
+    the library, `faith_frame` came to 3,616 — a real turn over the ceiling,
+    shipped under a check reporting headroom. Found while adding a tactic,
+    which is exactly when a per-turn block can get longer. The worst one is
+    the budget now; a tactic whose instruction grows past it fails here.
+  */
+  const perTactic = ALL_TACTICS.map((t) => [t.id, Math.round(buildSystemPrompt({ ...heaviestArgs, tactic: t }).length / 3.7)]);
+  const [worstId, worstTokens] = perTactic.reduce((x, y) => (y[1] > x[1] ? y : x));
+  ok(perTactic.length === ALL_TACTICS.length && ALL_TACTICS.length > 20,
+    "the budget is measured against the whole tactic library", `${perTactic.length} built`);
+  ok(worstTokens <= BUDGET,
+    "and the heaviest turn with the longest tactic still fits",
+    `${worstId}: ${worstTokens} tokens vs ${BUDGET}`);
   ok(heaviest.includes("THE OFFICE") && heaviest.includes("EVERY REPLY"),
     "and the contract the ceiling was raised for is in it",
     "otherwise the raise paid for something that is no longer there");
@@ -18874,7 +18920,8 @@ check("149 The return leg reaches the prompt, not only the Memory page", () => {
     out: a probe in the wrong window, which is the mistake this suite has now
     made often enough to stop guessing at spans.
   */
-  const from = evalSrc.indexOf("const heaviest = buildSystemPrompt({");
+  // The fixture object check 24 builds every tactic's assembly from.
+  const from = evalSrc.indexOf("const heaviestArgs = {");
   const heaviest = evalSrc.slice(from, evalSrc.indexOf("const tokens = Math.round", from));
   ok(heaviest.length > 200, `${heaviest.length} characters of the heaviest assembly read`,
     "a window that found nothing satisfies the assertion below by not looking");
@@ -20796,6 +20843,126 @@ check("162 A crisis in a circle is told it was not sent, never that it did not b
   ok(crisisAt > 0 && storeAt > crisisAt,
     "and it is true: the route answers a crisis before it stores anything",
     `crisis at ${crisisAt}, first store at ${storeAt}`);
+});
+
+// ── 163. split awareness — in it and seeing it ─────────────────────────────
+//
+// The founder's core mechanism: "Accurate self-observation (the capacity to
+// be in the experience and see the experience at the same time) is the primary
+// condition for clarity and change. Help the user strengthen that split
+// awareness. Do not invoke physics or magic." The room already read one stance
+// — watching without being in it (`caughtWatchingSelf`). This holds the other
+// two where they are made: in it without watching, a verdict on the whole self
+// held as a fact; and both at once, noticing while feeling. Measured before it
+// was built — the fused reading reaches 2 of the 72 authored openings, the
+// noticing reading none, which is why its floor is synthetic.
+check("163 Split awareness: a verdict gets a step back, a noticing gets named, and nothing is physics", () => {
+  // ── the readings, in both registers ──
+  const fusedYes = ["i'm such a failure", "i am useless", "honestly i'm a burden to everyone",
+    "i'm not good enough for her", "i always fail", "i can't do anything right",
+    "i don't know what to do or who to call, i'm such a failure",
+    "my dad says i'm useless and he's right, i am useless",
+    "i no be anything", "i be failure for this family", "na me be the problem", "i no good for anything"];
+  const fusedNo = ["my dad says i'm useless", "i'm useless at cooking", "am i a failure?", "i'm not a failure",
+    "i feel like a failure", "i'm nothing like my brother", "i'm broken-hearted", "i'm the problem solver at work",
+    "i'm so stupid i forgot my keys", "the project was a failure", "i'm a burden to nobody",
+    "i have to prove myself every day at that office or i am not enough"];
+  ok(fusedYes.every(fusedVerdict), "a verdict on the whole self, held as a fact, is read — English and Pidgin",
+    fusedYes.filter((m) => !fusedVerdict(m)).join(" | "));
+  ok(!fusedNo.some(fusedVerdict),
+    "and not a verdict already located in someone else's voice, a domain, a question, a feeling, a denial, or a condition",
+    fusedNo.filter(fusedVerdict).join(" | "));
+  const seesYes = ["i can feel my chest go tight as i type this", "i notice i'm scared", "i caught myself doing it again",
+    "writing this makes me cry", "as i dey type am my belle dey turn", "part of me wants to go and another part wants to stay"];
+  const seesNo = ["i know that i always do this because of my attachment style", "i realise i have a coping mechanism",
+    "i saw my brother yesterday", "i feel tired", "i can see the bus coming"];
+  ok(seesYes.every(seesWhileIn), "noticing while feeling is read",
+    seesYes.filter((m) => !seesWhileIn(m)).join(" | "));
+  ok(!seesNo.some(seesWhileIn), "and analysis from outside is not — that is the watcher, which already has its moves",
+    seesNo.filter(seesWhileIn).join(" | "));
+  ok(caughtWatchingSelf(seesNo[0]) && !seesWhileIn(seesNo[0]),
+    "the watcher and the noticer are different readings of different sentences");
+
+  // Counted, in check 123's shape: narrowed to nothing fails the floor,
+  // widened to everybody fails the ceiling.
+  const openings = fs.readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+    .trim().split("\n").map((l) => JSON.parse(l).input);
+  const reachF = openings.filter(fusedVerdict).length;
+  const reachS = openings.filter(seesWhileIn).length;
+  ok(openings.length > 50, `the corpus was read (${openings.length})`);
+  ok(reachF >= 1 && reachF < openings.length / 4, "the verdict reading reaches real openings and not everybody",
+    `${reachF} of ${openings.length}`);
+  ok(reachS < openings.length / 4, "and the noticing reading does not fire on everybody",
+    `${reachS} of ${openings.length}`);
+
+  // ── the moves, in the room's order ──
+  const pick = (message, extra = {}) => {
+    const c = classify(message);
+    return selectTactic({ ...c, message, pressure: 60, duality: null, mood: null,
+      ventCount: 3, recentTactics: [], ...extra }).id;
+  };
+  is(pick("i am useless, i be failure"), "defusion",
+    "a fused verdict gets one step back first — before the friend reframe argues with it");
+  is(pick("my oga makes me feel useless"), "double_standard",
+    "a self-critical word without the verdict keeps the old order");
+  is(pick("i am useless, i be failure", { ventCount: 0 }), "exact_mirror",
+    "turn one still mirrors: showing them their own words is the first act of it");
+  is(pick("i am useless and my chest is tight", { body: "chest", pressure: 85 }), "felt_sense",
+    "and a named body still comes first — the room does not change the subject on what they located");
+  is(pick("i can feel my chest go tight as i type this"), "name_the_noticing",
+    "noticing while feeling is named");
+  is(pick("i can feel my chest go tight as i type this", { ventCount: 0 }), "exact_mirror",
+    "but not over the turn-one mirror");
+  is(pick("i notice i'm doing the self-sabotage thing again because of my attachment style and childhood"),
+    "insight_is_not_change", "noticing wrapped in analysis is the watcher, and the watcher's move wins");
+
+  // ── the question slot ──
+  const first = selectProbe("i am useless, i be failure");
+  ok(first && first.process === true && /voice|written|sentence/.test(first.ask),
+    "a verdict's question looks at the sentence from one step back", first?.id);
+  const verdictProbes = PROBES.filter((p) => p.fits("i am useless, i be failure") && p.process && p.id.startsWith("wells_"));
+  ok(verdictProbes.length >= 3, "three of them, so the three-turn block never asks one twice",
+    verdictProbes.map((p) => p.id).join(" "));
+  const second = selectProbe("i am useless, i be failure", [first?.id ?? ""]);
+  ok(second && second.id !== first?.id && verdictProbes.some((p) => p.id === second.id),
+    "and the next turn gets the next one of them, not a content question", second?.id);
+  is(selectProbe("i can feel my chest go tight as i type this")?.id, "rogers_watch_it_happen",
+    "noticing gets asked what the watching shows");
+
+  // ── the rule where the person meets it ──
+  const graded = (reply) => gradeReply({ message: "i am useless", language: "en", intent: "vent" }, reply)
+    .some((f) => f.grader === "verdict");
+  for (const bad of ["You're useless.", "You are such a burden.", "Honestly, you're a disappointment to them.",
+    "You be failure."]) {
+    ok(graded(bad), "a verdict said back as a fact is caught", bad);
+  }
+  for (const fine of ["The voice that says you're useless is loud tonight.", "You said you're a failure.",
+    "It sounds like you're a burden to yourself tonight?", "You think you're the problem.",
+    "\"You're useless\" — that's the sentence tonight.", "You're not useless.", "You are nothing like him.",
+    "You're useless at hiding it, and I can see that.", "You're a burden to nobody here."]) {
+    ok(!graded(fine), "and a verdict held as a sentence, hedged, disputed, or limited is not", fine);
+  }
+  ok(REJECT.has("verdict"), "fatal, and in the tier that never ships the reply — diagnosis's reason");
+  const mine = verdictAfter(String.raw`i(?:'?m|\s+am)`), theirs = verdictAfter(String.raw`you'?re`);
+  ok(mine.test("i'm a burden") && theirs.test("you're a burden") &&
+    !theirs.test("you're a burden to nobody") && !mine.test("i'm useless at cooking"),
+    "the shared construction reads both sides of the conversation and keeps a domain or a denial out of either");
+  const qualitySrc = strip(fs.readFileSync(path.join(ROOT, "src/lib/vent/quality.ts"), "utf8"));
+  ok(/import \{ verdictAfter \} from "\.\/tactics"/.test(qualitySrc) && /verdictAfter\(/.test(qualitySrc),
+    "the grader and the router build the verdict from one construction");
+  const holdsTripping = ALL_TACTICS.filter((t) => graded(t.hold));
+  ok(ALL_TACTICS.length > 20 && holdsTripping.length === 0, "no authored hold says a verdict back as a fact",
+    holdsTripping.map((t) => t.id).join(" "));
+
+  // ── the founder's constraint, on every new string ──
+  const said = [
+    ...ALL_TACTICS.filter((t) => t.family === "observing" || t.id === "defusion").flatMap((t) => [t.instruction, t.hold]),
+    ...PROBES.filter((p) => p.fits("i am useless, i be failure") || p.fits("i can feel my chest go tight as i type this"))
+      .map((p) => p.ask),
+  ];
+  ok(said.length >= 10, `the moves' own words were read (${said.length})`);
+  ok(!said.some((x) => PHYSICS_OR_MAGIC.test(x)), "and none of them describes change as physics or magic",
+    said.filter((x) => PHYSICS_OR_MAGIC.test(x)).join(" | "));
 });
 
 for (const r of results) {
