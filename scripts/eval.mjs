@@ -20606,6 +20606,47 @@ check("159 The Keeper's hold is the SFU's, and a rejoin comes back held", () => 
     "and nothing anywhere asks the SFU to open a microphone");
 });
 
+check("160 A dropped connection is answered on the circle screens, never swallowed", () => {
+  /*
+    A request that throws is a refusal too — the connection dropped, which on a
+    phone in Lagos is the ordinary case, not the edge one. Every circle screen
+    answered a refusal and none answered a throw: found by aborting requests in
+    a browser, a share that failed said nothing at all, a tapped "Take a seat"
+    did nothing, and a circle link opened on a dead connection showed the
+    room's first line and nothing else — while the voice note one function
+    over already caught it, in the same file.
+
+    The class, not the three: every request these screens make sits in a try
+    that catches, read off the source with a floor on how many were read.
+  */
+  const screens = ["circle-room.tsx", "circles-list.tsx", "circle-voice.tsx"]
+    .map((f) => [f, strip(fs.readFileSync(path.join(ROOT, "src/components", f), "utf8"))]);
+  const unguarded = [];
+  let scanned = 0;
+  for (const [f, s] of screens) {
+    for (const m of s.matchAll(/await fetch\(/g)) {
+      scanned++;
+      const before = s.slice(0, m.index);
+      let guarded = false;
+      for (let pos = before.lastIndexOf("try {"); pos >= 0; pos = before.lastIndexOf("try {", pos - 1)) {
+        let depth = 0, j = pos + 4;
+        for (; j < s.length; j++) { if (s[j] === "{") depth++; else if (s[j] === "}" && --depth === 0) break; }
+        if (j > m.index) { guarded = /^\s*catch\b/.test(s.slice(j + 1, j + 40)); break; }
+      }
+      if (!guarded) unguarded.push(`${f}:${before.split("\n").length}`);
+    }
+  }
+  ok(scanned >= 10, `every request the circle screens make is read (${scanned})`,
+    "a sweep that walks nothing passes loudest");
+  is(unguarded.length, 0, "and every one sits in a try that catches", unguarded.join(", "));
+
+  const room = screens[0][1];
+  ok(/\} catch \{\s*setUnreachable\(true\);\s*\}\s*\}, \[id, me\]\);/.test(room),
+    "a room read that throws is the unreachable screen, not a room with its first line");
+  is((room.match(/catch \{\s*toast\(COULDNT_(?:SEND|SIT), "error"\);/g) ?? []).length, 2,
+    "and a share or a seat that never arrived says so, in the words its refusal already uses");
+});
+
 for (const r of results) {
   const good = r.failed.length === 0;
   if (good) passed++;
