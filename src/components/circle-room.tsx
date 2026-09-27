@@ -846,7 +846,16 @@ export function CircleRoom({ id }: { id: string }) {
 
         {crisis && (
           <div className="glass mb-4 border-gold/60 p-4">
-            <p className="label-mono mb-2">This isn&apos;t the room for that</p>
+            {/*
+              What happened, not a verdict on what they said. This read "This
+              isn't the room for that" — above a crisis reply written so the
+              room is never the one burdened — to somebody who had just typed
+              the worst sentence of their week. The fact they need is that the
+              room did not see it: the route returns before anything is stored
+              and their words are still in the box, so the silence in the
+              thread is not the room saying nothing back.
+            */}
+            <p className="label-mono mb-2">Not sent to the room</p>
             {crisis.reply && (
               <p className="text-body leading-[1.6]">{crisis.reply}</p>
             )}

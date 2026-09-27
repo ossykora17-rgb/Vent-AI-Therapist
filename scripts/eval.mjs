@@ -20739,6 +20739,30 @@ check("161 The room claims no quiet it does not keep, and hands nobody an exerci
     Object.values(PHASE_LABEL).join(" · "));
 });
 
+// ── 162. a crisis in a circle is told what happened, not that it was wrong ─
+//
+// The circle's crisis card opened "This isn't the room for that", in mono
+// capitals, above a reply written so the room is never the one burdened — to
+// somebody who had just typed the worst sentence of their week. What they need
+// is the fact: nobody in the room saw it. That fact is only true while the
+// route returns before it stores anything, so the sentence is tied to that.
+check("162 A crisis in a circle is told it was not sent, never that it did not belong", () => {
+  const room = fs.readFileSync(path.join(ROOT, "src/components/circle-room.tsx"), "utf8");
+  const at = room.indexOf("{crisis && (");
+  ok(at > 0, "the room has a crisis card");
+  const card = strip(room.slice(at, room.indexOf("</div>\n        )}", at)));
+  ok(card.length > 200 && /CRISIS_TEL/.test(card), "the slice is the card, with the number in it", card.slice(0, 80));
+  ok(/Not sent to the room/.test(card), "it says the room did not see it");
+  ok(!/room for that|wrong (?:room|place)|belong/i.test(card),
+    "and never that what they wrote did not belong there", card.slice(0, 120));
+  const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/messages/route.ts"), "utf8"));
+  const crisisAt = route.indexOf('error: "crisis"');
+  const storeAt = route.indexOf("addCircleMessage(");
+  ok(crisisAt > 0 && storeAt > crisisAt,
+    "and it is true: the route answers a crisis before it stores anything",
+    `crisis at ${crisisAt}, first store at ${storeAt}`);
+});
+
 for (const r of results) {
   const good = r.failed.length === 0;
   if (good) passed++;
