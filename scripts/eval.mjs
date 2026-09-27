@@ -561,6 +561,31 @@ check("9  Circle governance protects people without breaking a promise", () => {
     `${oneVoice} — "you are not the only one" is the promise; overstating the room invents evidence for it`);
 
   /*
+    AND THE SENTENCE ABOVE THE COUNT MADE THE SAME CLAIM, LOUDER
+
+    The pattern branch counted occurrences across the room, so one person
+    saying "chest" twice made the Keeper say "Same room, same word, different
+    lives … you are not the only one carrying it" about one life. The count
+    branch was repaired for this and the branch that says it in words was not.
+    Every assertion above has each word said once by two different people,
+    where occurrences and people agree — the shape its author was standing in.
+  */
+  const oneLife = keeperReflection([
+    share("a", "my chest, my chest is tight"),
+    share("b", "today was long"),
+  ]);
+  ok(!/I heard/.test(oneLife) && /\b2 people spoke/.test(oneLife),
+    "one person saying a word twice is not 'same word, different lives'", oneLife);
+  const twoLives = keeperReflection([
+    share("a", "my chest, my chest"),
+    share("b", "chest again"),
+  ]);
+  ok(/I heard chest 3 times\./.test(twoLives),
+    "two people saying it is, and the number is still every time it was said", twoLives);
+  ok(/people spoke/.test(keeperReflection([share("a", "price, price, price"), share("b", "long day")], "economy")),
+    "and a theme word one person repeats is not the room's word either");
+
+  /*
     AND THE MOVE ITSELF WAS DEAD
 
     `PATTERN_WORDS` is eighteen words of body and affect and contains nothing
@@ -599,11 +624,29 @@ check("9  Circle governance protects people without breaking a promise", () => {
     "and an unknown tag is silence rather than a wrong theme",
     "silence beats a guess, in the one sentence the Keeper reads aloud");
 
-  // Single source of truth: the room opens with the tactic library's phrasing.
+  /*
+    Single source of truth: the room opens with the tactic library's phrasing —
+    unless that phrasing was written for one person and the machine speaking.
+
+    This asserted `includes(hold)` for every tag, and so defended the day the
+    private room rewrote `rw_lonely` into *"I'm a machine … Who is the one
+    person you wish had read this instead?"* and every lonely circle opened on
+    it: a line for one reader, read out to a room of people before anybody had
+    written a word. Both directions now, off `NO_KEEPER_TOOL`, so an exempt
+    line that leaks back in fails, and so does any other that goes missing.
+  */
   for (const tag of Object.keys(REAL_WORLD_TACTIC)) {
-    ok(keeperIntention(tag).includes(REAL_WORLD_TACTIC[tag].hold),
-      `the ${tag} circle opens with the ${tag} tool`);
+    const opens = keeperIntention(tag).includes(REAL_WORLD_TACTIC[tag].hold);
+    if (NO_KEEPER_TOOL.includes(tag)) {
+      ok(!opens, `the ${tag} circle does not open on the private room's line`,
+        "a line for one reader, read out to a room before anybody has written");
+    } else {
+      ok(opens, `the ${tag} circle opens with the ${tag} tool`);
+    }
   }
+  ok(!/I'm a machine|read this/i.test(keeperIntention("lonely", null)),
+    "the lonely circle is not told the room cannot be company",
+    keeperIntention("lonely", null));
 
   // Presence: derived from timestamps, so it can only ever be a little stale.
   const now = Date.UTC(2026, 7, 1, 12, 0, 0);
@@ -3784,14 +3827,25 @@ check("32 Every circle tag exists everywhere a circle tag is read", () => {
     decision as a value rather than as a migration comment, and the set of
     topics with no tool has to equal it in both directions: a topic that
     quietly lost its hold fails, and a name that no longer describes one fails
-    too.
+    too. Read off what the Keeper says rather than off the tactic table,
+    because `lonely` has a hold and opens without it on purpose.
   */
-  const toolless = [...uiTags].filter((t) => !(t in REAL_WORLD_TACTIC)).sort();
+  const toolless = [...uiTags]
+    .filter((t) => !(t in REAL_WORLD_TACTIC) || !keeperIntention(t, null).includes(REAL_WORLD_TACTIC[t].hold))
+    .sort();
   is(toolless.join(","), [...NO_KEEPER_TOOL].sort().join(","),
-    "and it is the only room that opens without one",
+    "and those are the only rooms that open without one",
     `no tool: [${toolless.join(" ")}] · declared: [${[...NO_KEEPER_TOOL].join(" ")}]`);
   is(keeperIntention("grief", null).includes("Today we hold somebody who is gone."), true,
     "the grief room opens by saying it");
+  // An exemption is a decision, so it carries its reason where it is made: a
+  // room added to the list without a sentence saying why is a tool quietly lost.
+  const rulesSrc = fs.readFileSync(path.join(ROOT, "src/lib/circles/rules.ts"), "utf8");
+  const whyNoTool = rulesSrc.slice(0, rulesSrc.indexOf("export const NO_KEEPER_TOOL"));
+  const reasons = whyNoTool.slice(whyNoTool.lastIndexOf("/**"));
+  ok(NO_KEEPER_TOOL.length > 0 && NO_KEEPER_TOOL.every((t) => reasons.includes(`\`${t}\``)),
+    "every room that opens without a tool is named, with why, where the list is kept",
+    NO_KEEPER_TOOL.filter((t) => !reasons.includes(`\`${t}\``)).join(" ") || "(empty list)");
 });
 
 // ── 33. the tense people actually write in ────────────────────────────────
@@ -4596,6 +4650,10 @@ check("40 Weather is measured, and the rest of the news is not invented", () => 
       "the sentence says it is a number and not a feeling", line);
     ok(!/\b(sorry|unfortunately|sadly|hope|spoil|ruin)\b/i.test(line),
       "and never decides how somebody feels about their own weather", line);
+    // The browser is never asked where somebody is, so "outside" is a claim
+    // about a window nobody measured — true in Lagos and nowhere else.
+    ok(/\bLagos\b/.test(line) && !/\boutside\b|\bout there\b/i.test(line),
+      "and says whose weather it is rather than claiming theirs", line);
   }
 
   /*
