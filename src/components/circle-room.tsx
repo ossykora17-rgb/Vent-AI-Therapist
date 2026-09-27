@@ -154,6 +154,17 @@ export function CircleRoom({ id }: { id: string }) {
   const [mood, setMood] = React.useState<number | null>(null);
   const [carry, setCarry] = React.useState<string | null>(null);
   const [dropped, setDropped] = React.useState<string | null>(null);
+  /*
+    One close per seat. Every drop chip used to seal again, and the server
+    puts the carried word on the Memory page each time — so somebody who
+    changed their mind about the word they drop found the word they carry
+    there twice, and could change the carried word after the room had
+    recorded the first. Locked once a seal lands, open again if it fails. A
+    ref as well as state, because two taps arrive before React renders the
+    first one.
+  */
+  const sealRef = React.useRef<"idle" | "sealing" | "sealed">("idle");
+  const [sealState, setSealState] = React.useState<"idle" | "sealing" | "sealed">("idle");
   /* Which seats are speaking in voice, said under the room's name. */
   const [speakingSeats, setSpeakingSeats] = React.useState<number[]>([]);
   /*
@@ -1131,6 +1142,7 @@ export function CircleRoom({ id }: { id: string }) {
                           key={`c-${w}`}
                           type="button"
                           onClick={() => setCarry(w)}
+                          disabled={sealState !== "idle"}
                           aria-pressed={carry === w}
                           className="chip"
                         >
@@ -1146,18 +1158,32 @@ export function CircleRoom({ id }: { id: string }) {
                           key={`d-${w}`}
                           type="button"
                           onClick={() => {
+                            if (sealRef.current !== "idle") return;
+                            sealRef.current = "sealing";
+                            setSealState("sealing");
                             setDropped(w);
-                            void seal(w).then(({ sealed, held }) =>
+                            void seal(w).then(({ sealed, held }) => {
+                              sealRef.current = sealed ? "sealed" : "idle";
+                              setSealState(sealRef.current);
+                              /*
+                                Future tense, because it is. This said "The
+                                words here are gone" — and the seal deletes
+                                nothing: it only opens in the last two
+                                minutes, and the words go when the room ends,
+                                so it was read over a header saying "2m left"
+                                with every word still on the screen above it.
+                              */
                               toast(
                                 !sealed
                                   ? "Your close didn't reach us. The room still ends and the transcript still goes."
                                   : held
-                                    ? `Sealed. The words here are gone. "${carry}" is on your Memory page.`
+                                    ? `Sealed. The words here go when the room ends. "${carry}" is on your Memory page.`
                                     : "Sealed. Nothing here is kept.",
                                 sealed ? "success" : "info",
-                              ),
-                            );
+                              );
+                            });
                           }}
+                          disabled={sealState !== "idle"}
                           aria-pressed={dropped === w}
                           className="chip"
                         >

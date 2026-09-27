@@ -17434,6 +17434,43 @@ check("140 The circle's one word comes home, and the sentence says so", () => {
   ok(!/held:\s*r\.ok/.test(sealBody) && !/return r\.ok;/.test(sealBody),
     "and never from the status",
     "a 200 says the close landed and says nothing about the word");
+
+  /*
+    NOTHING IS GONE YET WHEN THE SEAL IS READ
+
+    The seal opens only in the close phase, before the room ends, and its
+    handler deletes nothing — the words go when the room does. "Sealed. The
+    words here are gone." was read under a header saying "2m left", with
+    every word still on the screen above it. Found in a screenshot.
+  */
+  const routeSrc = strip(fs.readFileSync(
+    path.join(ROOT, "src/app/api/circles/[id]/route.ts"), "utf8"));
+  const patchBody = routeSrc.slice(routeSrc.indexOf("async function handlePATCH("),
+    routeSrc.indexOf("async function handleDELETE("));
+  ok(patchBody.length > 500 && !/closeCircle\(|\.delete\(/.test(patchBody),
+    `the seal deletes nothing (${patchBody.length} chars read)`,
+    "if it ever does, the sentence below may say so — and not before");
+  const sealTap = room.slice(room.indexOf("void seal(w)"), room.indexOf("aria-pressed={dropped === w}"));
+  ok(sealTap.length > 100 && /Memory page/.test(sealTap) &&
+      !/\b(?:are|were|is|has been|have been) (?:gone|deleted)\b/i.test(sealTap),
+    "so what it says afterwards is when the words go, never that they have",
+    "a deletion announced before it happens is a claim ahead of its evidence");
+
+  /*
+    ONE CLOSE PER SEAT
+
+    Every drop chip sealed again, and the server puts the carried word on the
+    Memory page each time: two taps, the same word twice, measured on the wire.
+    The guard is a ref checked and set before the request, because two taps
+    arrive before React renders the first; a failed seal reopens it.
+  */
+  ok(/if \(sealRef\.current !== "idle"\) return;\s*sealRef\.current = "sealing";[\s\S]{0,200}?void seal\(w\)/.test(room),
+    "a seal already under way or landed is never sent again");
+  ok(/sealRef\.current = sealed \? "sealed" : "idle";/.test(room),
+    "and a close that did not reach the server can be tried again");
+  is((room.match(/disabled=\{sealState !== "idle"\}/g) ?? []).length, 2,
+    "both the word carried and the word dropped stop moving once the room has recorded them",
+    "a carried word changed after the seal disagrees with the one on the Memory page");
 });
 
 check("141 The audit's free half does not need the paid half installed", () => {
