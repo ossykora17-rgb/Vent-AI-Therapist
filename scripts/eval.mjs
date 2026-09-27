@@ -29,7 +29,7 @@ const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/vent/chairs.ts");
 const { selectMemory, MEMORY_TURNS } = await app("src/lib/vent/memory.ts");
 const { checkMessage, economyFact, weatherFact, keeperIntention, keeperReflection, roleForSeat,
-        ALONE_LINE, ALONE_DOOR, NO_KEEPER_TOOL, MAX_SEATS } =
+        ALONE_LINE, ALONE_DOOR, NO_KEEPER_TOOL, MAX_SEATS, PHASE_LABEL } =
   await app("src/lib/circles/rules.ts");
 const { PRESENCE_WINDOW_MS, TYPING_WINDOW_MS, isPresent, isTyping, presenceOf, shouldTouch } =
   await app("src/lib/circles/presence.ts");
@@ -20703,6 +20703,35 @@ check("160 A dropped connection is answered on the circle screens, never swallow
     "a room read that throws is the unreachable screen, not a room with its first line");
   is((room.match(/catch \{\s*toast\(COULDNT_(?:SEND|SIT), "error"\);/g) ?? []).length, 2,
     "and a share or a seat that never arrived says so, in the words its refusal already uses");
+});
+
+// ── 161. the room claims no quiet it does not keep ────────────────────────
+//
+// For the first three minutes, with a second person seated, the room read
+// "Breathing — three minutes before anybody speaks. In through the nose,
+// longer on the way out." Nothing kept anybody from speaking: the box stayed
+// open and the messages route never reads the phase, so a share landed under a
+// sentence saying nobody speaks. The three minutes ran from the circle's
+// opening rather than from the seat, so the second person was told three and
+// heard the Keeper in thirty seconds. And it handed the room a breathing
+// instruction. A rule stated on a screen is either enforced where the message
+// is written or it is not a rule, and this one was a sentence.
+check("161 The room claims no quiet it does not keep, and hands nobody an exercise", () => {
+  const screens = ["src/components/circle-room.tsx", "src/components/circles-list.tsx", "src/components/circle-voice.tsx"]
+    .map((f) => strip(fs.readFileSync(path.join(ROOT, f), "utf8")));
+  ok(screens.length === 3 && screens.every((t) => t.length > 2000),
+    "all three circle screens were read", "a sweep over nothing passes loudest");
+  const said = screens.join("\n");
+  const messages = fs.readFileSync(path.join(ROOT, "src/app/api/circles/[id]/messages/route.ts"), "utf8");
+  const claimsQuiet = /before any(?:body|one) speaks|nobody (?:can|may) speak|no one speaks/i.test(said);
+  ok(!claimsQuiet || /phaseFor\(/.test(messages),
+    "a circle screen that says nobody may speak is backed by a route that refuses them",
+    "the box is open and the route never reads the phase, so the sentence is the only thing saying it");
+  ok(!/in through the nose|breathe (?:in|out)|\bbreathing\b/i.test(said),
+    "and no circle screen tells the room how to breathe");
+  ok(Object.keys(PHASE_LABEL).includes("breathe") && !/breath/i.test(Object.values(PHASE_LABEL).join(" ")),
+    "the first three minutes are named for what happens in them — people arriving — not for an exercise",
+    Object.values(PHASE_LABEL).join(" · "));
 });
 
 for (const r of results) {

@@ -346,7 +346,9 @@ export function phaseFor(msRemaining: number): CirclePhase {
 }
 
 export const PHASE_LABEL: Record<CirclePhase, string> = {
-  breathe: "Breathing",
+  // The first three minutes are people arriving before the Keeper opens. It
+  // read "Breathing", beside a notice telling the room how to breathe.
+  breathe: "Arriving",
   intention: "Opening",
   shares: "Sharing",
   reflect: "Reflection",

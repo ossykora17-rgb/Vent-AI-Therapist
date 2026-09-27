@@ -970,14 +970,19 @@ export function CircleRoom({ id }: { id: string }) {
                   </button>
                 )}
               </div>
-            ) : (
-              state.phase === "breathe" && (
-                <p className="mx-auto max-w-[36ch] rounded-card bg-card/80 px-4 py-2 text-center text-fine text-ash">
-                  Breathing — three minutes before anybody speaks. In through the
-                  nose, longer on the way out.
-                </p>
-              )
-            )}
+            ) : null}
+            {/*
+              There was a second notice here for the first three minutes:
+              "Breathing — three minutes before anybody speaks. In through the
+              nose, longer on the way out." False three ways. Nothing kept
+              anybody from speaking — the box stayed open and the messages
+              route never reads the phase — so a share landed under a sentence
+              saying nobody speaks. The three minutes ran from when the circle
+              opened, not from when you sat down, so the second person was told
+              three and heard the Keeper in thirty seconds. And it was a
+              breathing instruction, which the room does not hand anybody. The
+              quiet it described is said by the line below when it is true.
+            */}
 
             {/*
               Said once, by whichever line is true: alone, the sentence above
