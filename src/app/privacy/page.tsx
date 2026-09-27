@@ -57,7 +57,7 @@ export default function PrivacyPage() {
         and neither does a summary of the room.
       </p>
       <p>
-        A voice note is recorded on your phone from a pitched-down copy of your
+        A voice note is recorded on your phone from a pitch-shifted copy of your
         voice — the raw microphone never leaves the device — and kept on our
         server only until the circle ends, where only people with a seat in
         that circle can play it. A live call in a circle is never recorded at

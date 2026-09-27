@@ -599,7 +599,7 @@ export function CircleRoom({ id }: { id: string }) {
   /*
     Record a voice note. The AudioContext is made on the first line, inside the
     tap — the rule the live voice was rebuilt around — and the recording is
-    taken off the mask, so the voice that leaves the phone is the pitched-down
+    taken off the mask, so the voice that leaves the phone is the pitch-shifted
     one, seat by seat, exactly as it is in a call.
   */
   function startNote() {
@@ -834,13 +834,13 @@ export function CircleRoom({ id }: { id: string }) {
         {/*
           What a group chat puts first — the terms of the room, once, small,
           at the top of the thread. Ours is the twist: a seat instead of a name,
-          a voice that is pitched down, and a transcript with an end.
+          a voice that is pitch-shifted, and a transcript with an end.
         */}
         <p className="mx-auto mb-4 max-w-[36ch] rounded-card bg-gold/10 px-3 py-2 text-center text-fine text-ash">
           <span className="mr-1 inline-block align-[-1px]">
             <LockIcon />
           </span>
-          A seat, not a name. Voices are pitched down. Everything said here is
+          A seat, not a name. Voices are pitch-shifted. Everything said here is
           deleted within 24 hours.
         </p>
 

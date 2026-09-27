@@ -676,7 +676,7 @@ export function CircleVoice({ circleId, anonId, enabled, keeper, onSpeaking, onS
                     room does know; the pitch is what it does not. */}
                 {mic === "unavailable"
                   ? "Your microphone is off. You can still hear the room."
-                  : `Your voice is pitched down. The room hears you as Seat ${seat?.slice(5) ?? ""}.`}
+                  : `Your voice is pitch-shifted. The room hears you as Seat ${seat?.slice(5) ?? ""}.`}
               </p>
             )}
           </div>

@@ -270,8 +270,8 @@ export function CirclesList() {
             </p>
             <p className="mt-3 max-w-[46ch] text-body leading-[1.7] text-ash">
               You are a seat number, never a name. If you speak, your voice is
-              pitched down first — not recognisably yours. Nothing said in a
-              circle is kept after it closes.
+              pitch-shifted before anybody hears it. Nothing said in a circle is
+              kept after it closes.
             </p>
             <button
               type="button"

@@ -4243,6 +4243,20 @@ ties the sentence to the route answering before `addCircleMessage` — a claim
 that the room did not see it is only as true as that ordering. The reply, the
 numbers and the way out are untouched.
 
+**"Pitched down" was true of four seats in six, on four screens.** The room's
+terms, the call bar, the lobby and the privacy page all told people their voice
+is *pitched down*, and `SEAT_SEMITONES` is `[-4, -6, -3, 4, -5, 3]` — weighted
+downward on purpose, with seats 4 and 6 going up so six voices are audibly six.
+The mask was right and the sentence about it was not, and check 68 counted the
+false phrase to keep it to once per state: **an assertion defending the bug**,
+by counting it. They say *pitch-shifted* now. The rule is derived rather than
+restated — a direction may be named only when every seat `personaFor` can
+return goes that way — so the day the table changes, the sentence may change
+with it. The lobby also dropped *"not recognisably yours"*: the mask is tuned
+for that, the file says only −4 was ever measured, and whether a friend in the
+same circle still hears your accent is read by a person, not promised by a
+sentence. Five mutations fail check 68.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
