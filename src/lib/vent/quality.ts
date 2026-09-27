@@ -247,14 +247,56 @@ const CONDITION_PATTERNS = CONDITIONS.map((f) => new RegExp(`\\b(?:${f})\\b`, "i
 export const JARGON: readonly RegExp[] = [
   /\binternali[sz]ed?\b/i, /\binternali[sz]ation\b/i, /\binstrumentali[sz]ation\b/i,
   /\bdepersonali[sz]ation\b/i, /\bderealisation\b/i, /\bdysregulat\w+\b/i,
-  /\bmaladaptive\b/i, /\bcognitive distortion\b/i, /\bcore belief\b/i,
+  /\bmaladaptive\b/i, /\bcore belief\b/i,
   /\bschema\b/i, /\battachment style\b/i, /\binner child\b/i,
-  /\bself.actuali[sz]ation\b/i, /\bcatastrophi[sz]ing\b/i, /\brumination\b/i,
+  /\bself.actuali[sz]ation\b/i,
   /\bemotional labou?r\b/i, /\bnervous system response\b/i, /\btrauma response\b/i,
   /\bcoping mechanism\b/i, /\bdefen[cs]e mechanism\b/i, /\bsomati[sz]ation\b/i,
   /\baffect regulation\b/i, /\bself.effica?cy\b/i, /\blocus of control\b/i,
   /\breinforcement loop\b/i, /\bexecutive function\b/i, /\blearned helplessness\b/i,
   /\bcognitive load\b/i,
+];
+
+/**
+ * The room teaching how minds work, instead of letting one work.
+ *
+ * The founder's principle: the highest-leverage thing here is somebody seeing
+ * their own mind while they are inside it — noticing it, holding it loosely,
+ * seeing what it expects — and "never teach the concepts, only create the
+ * conditions". A lesson about predictions is a sentence about everybody; the
+ * question that lets somebody see their own is a sentence about them. So this
+ * is not `JARGON`, and unpacking does not excuse it: "catastrophising — your
+ * mind jumping to the worst" is a clear sentence and still the lesson.
+ *
+ * Scoped to the principle's own concepts — thinking about thinking, holding a
+ * thought loosely, what the mind expects — and to the lecture shapes a model
+ * reaches for when told about them. Three words moved here from `JARGON`
+ * (`catastrophising`, `cognitive distortion`, `rumination`) because each names
+ * the thinking process, and one word lives in one list. `mindfulness` is not
+ * here: `GENERIC_TASKS` already refuses it, as the exercise it always is.
+ * The rest of `JARGON` — core belief, schema, inner child — is about the
+ * content of a life rather than the process, and keeps its unpack rule.
+ *
+ * Every entry is a word or a shape no ordinary sentence needs: "predict" and
+ * "predicted" stay out ("nobody can predict", "you predicted this"), and so do
+ * "aware" and "notice", which are how anybody says anything. `reframe` went in
+ * and came out on the first sweep of the prompt, which uses it as an ordinary
+ * verb ("Do not reframe it as feeling") — given up for being jargon *and*
+ * English, as `JARGON` gave up `conditioning`, `projection` and `displacement`.
+ */
+export const TEACHES: readonly RegExp[] = [
+  /\bmetacogniti\w*/i, /\b(?:cognitive|psychological|mental) flexibility\b/i,
+  /\bpredictive (?:processing|brain|coding|mind)\b/i, /\bpredict(?:ion|ions|ing)\b/i,
+  /\bself.observation\b/i, /\bsplit awareness\b/i,
+  /\bobserv(?:ing|er) self\b/i, /\bdecent(?:er|r)ing\b/i, /\bdefusion\b/i,
+  /\bcognitive distortions?\b/i, /\bcatastrophi[sz]\w*/i, /\bruminat\w*/i,
+  /\bfortune.telling\b/i, /\bmind.reading\b/i, /\b(?:all.or.nothing|black.and.white) thinking\b/i,
+  /\bthinking traps?\b/i,
+  /\b(?:thoughts?|feelings?) (?:are|is)(?:n'?t| not) (?:a |the )?(?:facts?|reality|truth)\b/i,
+  /\byou(?: are|'re) not your (?:thoughts|feelings|mind)\b/i, /\bjust a thought\b/i,
+  /\b(?:the|your|our) (?:brain|mind)s? (?:is|are) (?:wired|built|designed|programmed|hardwired)\b/i,
+  /\b(?:your|the) (?:brain|mind|nervous system) (?:is )?(?:just )?(?:trying|tries) to (?:protect|keep) you\b/i,
+  /\b(?:notice|observe|watch|step back from) your (?:thoughts|feelings)\b/i,
 ];
 
 /** The sentence a match landed in, so "same sentence" means what it says. */
@@ -667,6 +709,29 @@ export function gradeReply(
       const sentence = sentenceAround(reply, hit.index ?? 0);
       if (unpacked(sentence, hit[0])) continue;
       add("jargon", "major", `a word that explains nothing: "${hit[0]}"`);
+      break;
+    }
+  }
+
+  /*
+    ── did it teach the concept instead of creating the condition ──────────
+
+    Inside the `said` block for `jargon`'s reason: their own word handed back
+    is not a lesson. If they wrote "I know I'm catastrophising", the room may
+    say it again; it may not be the one who introduced it.
+
+    Major and in `RETRY_ONLY`, with `jargon`'s argument: a reply that lectures
+    in one sentence is often made of their words in the other two, and the
+    authored hold is made of nobody's — so it buys a second call and never the
+    line. Named rather than silently absent: check 104 makes every grader say
+    which tier it is.
+  */
+  if (meta.said) {
+    const taughtSource = meta.said.toLowerCase();
+    for (const term of TEACHES) {
+      const hit = reply.match(term);
+      if (!hit || term.test(taughtSource)) continue;
+      add("teaches", "major", `explained how minds work: "${hit[0]}"`);
       break;
     }
   }

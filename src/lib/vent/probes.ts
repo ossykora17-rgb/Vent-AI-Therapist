@@ -1,4 +1,4 @@
-import { fusedVerdict, inTheLoop, seesWhileIn } from "./tactics";
+import { forecasting, fusedVerdict, inTheLoop, seesWhileIn } from "./tactics";
 
 /**
  * Fifty questions, and not one of them is in the system prompt.
@@ -185,6 +185,21 @@ const MI: Probe[] = [
     ask: "What are you actually willing to do — not should, willing?",
     opens: "commitment language, which is the only kind that predicts anything",
     fits: on(/\b(should|need to|have to|ought|must)\b/i) },
+  /*
+    An ending they are already sure of (`forecasting`). MI's ruler and its
+    querying of extremes, turned on the ending rather than on a change: a
+    number they choose is a number that is not ten, and a second ending they
+    find is one nobody handed them. Content, so never `process` — asked of
+    somebody in the loop, "how sure?" is one more lap.
+  */
+  { id: "mi_how_sure_it_ends", school: "mi", weight: 86,
+    ask: "How sure is that ending, right now — out of ten?",
+    opens: "the ending as a number they chose, which makes it theirs rather than the future's",
+    fits: (m) => forecasting(m) },
+  { id: "mi_only_way_it_goes", school: "mi", weight: 84,
+    ask: "Is that the only way it can go, or the only way you can see it right now?",
+    opens: "a second ending, found by them rather than offered",
+    fits: (m) => forecasting(m) },
 ];
 
 /**
@@ -368,6 +383,11 @@ const ROGERS: Probe[] = [
     ask: "What's it like to feel it and watch it at the same time?",
     opens: "the split itself, made noticeable so it can be found again",
     fits: (m) => seesWhileIn(m) },
+  // Three with the two MI rulers above, so the block never asks one twice.
+  { id: "rogers_carrying_the_ending", school: "rogers", weight: 85,
+    ask: "What is it like, carrying an ending that hasn't happened yet?",
+    opens: "the expected ending as something carried now — the experiencing, not the odds",
+    fits: (m) => forecasting(m) },
 ];
 
 /**

@@ -167,7 +167,22 @@ export const REJECT = new Set([
   reinventing it, which is rare and worth one more call. Not worth the hold,
   for `presumed`'s reason: the reply is still made of their words.
 */
-export const RETRY_ONLY = new Set(["language", "jargon", "presumed", "about_me"]);
+/*
+  `teaches` joins them on the founder's own words — "never teach the concepts,
+  only create the conditions" — and on its own argument rather than
+  `jargon`'s, although it lands in the same place. A lesson about how minds
+  work is true of everybody, so it fails the one test this room has for a
+  sentence: delete their message and it still stands. Worth a second call,
+  because asking again usually gets the question that lets them see it for
+  themselves. Not worth the hold: the lesson is typically one sentence of three,
+  and the other two are made of their words.
+
+  NOT measured before it was tiered, and said so rather than implied: the
+  production store could not be reached from the session that wrote it. The
+  nightly audit re-grades stored replies with every current grader, so its
+  first run after this merges is the number — read it before anything moves.
+*/
+export const RETRY_ONLY = new Set(["language", "jargon", "presumed", "about_me", "teaches"]);
 
 /**
  * Computed here, deliberately not acted on. Named rather than merely absent,
@@ -377,6 +392,24 @@ function correctionFor(graders: string[], wroteIn: GoldenCase["language"], asked
       something the person actually said.
     */
     lines.push("- You named a condition they never used. This room does not diagnose. Use the word they used, or ask what they would call it.");
+  }
+  /*
+    Four graders bought a retry and told it nothing — `verdict`, `jargon`,
+    `presumed`, `teaches` — so the attempt "told what was wrong" was told only
+    the header, and `chooseReply` ranked it first on a promise nobody kept.
+    Same rule as the lines above: name the rule, never the words that broke it.
+  */
+  if (seen.has("verdict")) {
+    lines.push("- You said their verdict on themselves back as a fact. Hand it back as a sentence they are hearing — never agreed with, never argued with.");
+  }
+  if (seen.has("jargon")) {
+    lines.push("- You used a word from a textbook. Say the thing itself, in words they would use.");
+  }
+  if (seen.has("presumed")) {
+    lines.push("- You told them what they feel. Say what you noticed in their own words, or ask.");
+  }
+  if (seen.has("teaches")) {
+    lines.push("- You explained how minds work. No lessons: ask the question that lets them see it for themselves.");
   }
   if (seen.has("language")) {
     /*
