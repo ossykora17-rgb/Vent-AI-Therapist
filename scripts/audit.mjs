@@ -149,11 +149,23 @@ for (const f of known.slice(0, 8)) {
   the model to obey a rule it was already given is how a prompt doubles in
   size while nothing improves.
 */
+/*
+  The anchor record that lasts. The live path logs each reply's score to a
+  stdout kept for an hour; this is the one that survives, in the artifact:
+  how many replies held every anchor, and which broke how often. Names and
+  counts — the same rule as the lines above.
+*/
+const scored = rows.filter((r) => r.ai_reply && r.intent_type === "vent").length;
+const broken = {};
+for (const f of known) for (const a of f.anchors) broken[a] = (broken[a] ?? 0) + 1;
+const whole = scored - known.filter((f) => f.anchors.length > 0).length;
+console.log(`anchors    ${whole} of ${scored} held every anchor${Object.keys(broken).length ? " · " + Object.entries(broken).sort((x, y) => y[1] - x[1]).map(([a, n]) => `${a} ${n}`).join(" · ") : ""}`);
+
 const flat = flatReplies(rows, known, 10);
 console.log(`flat, unbroken ${flat.length}  (the only ones worth a call)`);
 
 fs.mkdirSync(OUT, { recursive: true });
-const report = { date: today, read: rows.length, known, flat: flat.map((r) => r.id) };
+const report = { date: today, read: rows.length, anchors: { scored, whole, broken }, known, flat: flat.map((r) => r.id) };
 
 if (flat.length === 0) {
   fs.writeFileSync(path.join(OUT, `${today}.json`), JSON.stringify({ ...report, proposals: [] }, null, 2));
@@ -439,7 +451,8 @@ for (const candidate of accepted) {
     kept.push({ ...candidate, fitness });
     console.log(`  KEEP    ${candidate.id} — ${fitness.cases} cases · ${moved}`);
   } else {
-    console.log(`  REFUSE  ${candidate.id} — ${fitness.cases} cases · ${moved || "nothing moved"}`);
+    const broke = fitness.critical ? ` · ${fitness.critical} broke a critical anchor` : "";
+    console.log(`  REFUSE  ${candidate.id} — ${fitness.cases} cases · ${moved || "nothing moved"}${broke}`);
   }
 }
 console.log(`fitness calls ${fitnessCalls} (budget ${FITNESS_MAX_CALLS})`);

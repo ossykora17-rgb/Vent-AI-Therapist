@@ -88,6 +88,44 @@ export interface Assessment {
  * it is not a risk signal at all. `low`, and the reason is carried in
  * `because` where it belongs.
  */
+/**
+ * Whether a reply carries the crisis lines beside it.
+ *
+ * The middle of the ladder: `crisis` never reaches a model and gets the lines
+ * as its whole reply; `high` and `moderate` are answered, and the lines sit
+ * under the answer as one quiet row — available at the heaviest moment rather
+ * than only in the footer, never an alarm and never the room's own words.
+ */
+export function linesBeside(a: Pick<Assessment, "risk">): boolean {
+  return a.risk === "high" || a.risk === "moderate";
+}
+
+/** How long a crisis turn keeps the room careful afterwards. */
+export const CAREFUL_FOR_DAYS = 14;
+
+/**
+ * The risk history — and this product keeps none of its own.
+ *
+ * A crisis turn is already a row of theirs: stored like every vent, shown on
+ * their history page, and gone with everything else in one tap. Reading it
+ * back as a reason for care needs no new column, no new promise and no word in
+ * the prompt. A recent crisis is the strongest signal there is that the next
+ * ordinary-looking message is not ordinary, so for `CAREFUL_FOR_DAYS` the room
+ * treats every turn as a heavy one: nothing asked to be rated or argued, and
+ * the lines beside the reply. Never said to them. It changes what the room
+ * will not ask, not what it says about them.
+ */
+export function carefulAfter(
+  history: readonly Pick<VentRow, "intent_type" | "created_at">[],
+  now = Date.now(),
+): boolean {
+  // Defensive for the reason `assessTurn` catches `pastWhatThisHolds`: a
+  // history that is not a list must not cost a turn its reply.
+  if (!Array.isArray(history)) return false;
+  return history.some((r) =>
+    r?.intent_type === "crisis" && now - Date.parse(r.created_at) < CAREFUL_FOR_DAYS * 86_400_000);
+}
+
 const RISK_BY_REASON: Record<string, RiskLevel> = {
   crisis: "crisis",
   edge: "high",
@@ -112,10 +150,14 @@ export function assessTurn(args: {
     Reading the tier here would make this agree with the router while the
     product did something else.
   */
-  const risk: RiskLevel =
+  const read: RiskLevel =
     classification.intent === "crisis"
       ? "crisis"
       : RISK_BY_REASON[depth.reason] ?? "none";
+  // A recent crisis lifts an ordinary turn to `moderate`, never past what the
+  // message itself says — see `carefulAfter`.
+  const raised = (read === "none" || read === "low") && carefulAfter(history);
+  const risk: RiskLevel = raised ? "moderate" : read;
 
   let handoff: Handoff | null = null;
   try {
@@ -131,7 +173,7 @@ export function assessTurn(args: {
 
   return {
     risk,
-    because: classification.intent === "crisis" ? "crisis" : depth.reason,
+    because: classification.intent === "crisis" ? "crisis" : raised ? "recent_crisis" : depth.reason,
     skill: tacticId,
     probe: probeId,
     /*

@@ -4385,6 +4385,102 @@ the rule and never the words, and check 165 derives the graders from
 `REJECT` and `RETRY_ONLY` rather than listing them, so the next one to join a
 tier fails there until it says something. Three mutations fail it.
 
+**The founder's full-fix directive, and the one place it could not be taken
+literally.** It asks for a deterministic gate in front of the model: *Crisis /
+High* blocked with a fixed reply and the local lines, *Moderate* answered with
+heightened caution and the lines available, the rest passed through — in code,
+not in the prompt. The route already had the first half: `classify` runs first
+and a crisis returns before any model is called. What it did not have was the
+coverage or the middle.
+
+**"High" here is not the directive's High.** `assess.ts`'s `high` tier is the
+EDGE list — *"i don tire"*, *"empty"*, *"trapped"*, *"give up"* — and blocking
+it would put the crisis script in front of ordinary exhaustion, which is most
+of what this room hears. So the directive's Crisis/High maps to `crisis`
+(ideation, a plan, a means, something already done), and its Moderate maps to
+`high` plus `moderate`: answered, with both numbers from `CRISIS_LINES` beside
+the reply (`linesBeside`), and the eight moves that ask somebody to rate,
+argue, plan or move held back in code (`NOT_AT_THE_EDGE`), along with any
+question asking for a number out of ten (`ASKS_FOR_A_NUMBER`). Measured on the authored openings: a held-back
+move wins 11 of 72 and a number question fills 4, and none of either once the
+room is careful. The crisis reply itself is unchanged — the directive asks for
+*"clear concern"*, and the VENT spec removed *"I'm really concerned about you"*
+as a stake the room does not have. That conflict is the founder's to settle.
+
+**The gate missed 20 of 36 high-risk sentences** — a plan (*"i'm going to end
+it tonight"*), a means (*"i have the pills saved up"*, *"i drank sniper"*),
+something done (*"i took too many pills"*, *"i've been cutting myself"*) and the
+plainest passive shapes (*"i'm tired of living"*, *"life is not worth
+living"*). And a phone's apostrophe walked past every pattern that had one:
+`'?` never matched U+2019, so *"I can’t go on living"* reached the model while
+the same sentence typed on a laptop did not. `plainText` folds it at all four
+readers — the router, the route's schema, the graders and the circle
+rulebook — because a fold at one of them leaves the others reading the raw
+text. 30 of 36 are caught now; the six left out are written into `intent.ts`
+with their reasons (a bare *"i'm going to jump"*, *"this is goodbye"*, threats
+to somebody else), and check 26 holds 25 new catches and 12 new
+false-positive guards, each measured before it went in.
+
+**A crisis is not over at the end of the turn.** `carefulAfter` reads the
+person's own rows: a crisis in the last `CAREFUL_FOR_DAYS` lifts an ordinary
+turn to `moderate`, so the lines come back and the vetoes hold. It only ever
+lifts — a turn that reads `high` on its own words stays `high`. That is the
+directive's *risk_history*, and it is derived from rows the store already
+keeps rather than a new record about somebody.
+
+**The chat screen still handed out homework, a day after the rule against
+it.** `tools.tsx` rendered *Breathing 4·2·6* and a *Journalling* row with nine
+prompts under every conversation; `errand()` caught three of the nine, and the
+two frames added for it — a plan asked as a question, and a plan with the time
+after the verb — catch six. Deleted, not hidden. The front page's
+*"It will not tell you to drop your shoulders three times in a row"* — a
+promise to do it twice — now says *"It stays with you. No drills, no journal,
+no homework."*, and check 168 ties that sentence to `errand` staying in
+`REJECT`.
+
+**Structured memory was already here, under other names, so nothing parallel
+was built.** Facts and people are notes; themes are the pattern block plus
+`trigger` and `hard` notes; the session summary is the carve; *risk_history* is
+`carefulAfter`; preferences are `language` notes, because a `preference` kind
+needs 0017's `CHECK` constraint changed and no migration can be applied from
+here. *Only store what they said* was already `keepable()`'s rule.
+
+**A return was greeted as a stranger.** Nobody with a gap and no carve —
+most people who come back — was told they had been away. `awayFor` turns
+twelve hours or more off their own last row into words, the greeting names the
+gap when there is no carve to name, and the first turn of a return tells the
+model once. Check 24 had never measured the arc lines: the stranger's first-turn
+line built **3,615** of the 3,600 ceiling. It measures every arc point now, a
+return included, and the worst is 3,595.
+
+**Anchors, scored and never shown.** `ANCHORS` maps every grader
+`quality.ts` emits to one of nine anchors — the founder's seven, plus register
+and presence — and check 170 derives that from the file, so a new grader cannot
+arrive unscored. The live path logs the count and anchor names, which lasts
+the hour stdout lasts; the nightly audit writes the counts into its artifact.
+**The promotion gate now refuses a candidate that breaks a critical anchor even
+when it beats production**: a rule whose own replies still hand out advice beat
+an arm that handed out more, and is still a rule that ships advice. Critical is
+five of the nine — safety, the three the directive wrote as *zero*, and
+emotional accuracy. Continuity and tone are held by dominance instead, because
+`closing` fails about one production reply in six, and a gate that refuses
+every candidate looks exactly like one that works. A fitness record without the
+count is refused rather than read as zero. Forty-one mutations fail checks 26,
+145 and 166–170.
+
+**The gate caught the one thing the suite could not.** The first version had
+`tactics.ts` import `heaviness` from `depth.ts`. The suite loads modules through
+`app-imports.mjs`, which resolves `./depth`, so it went green. `npm run verify`
+and the gate's selector step load `tactics.ts` under plain Node, which does
+not resolve it: `ERR_MODULE_NOT_FOUND`. That file has only ever imported types,
+and nothing had said why. The caller now computes the reading and passes it in
+as `ctx.heavy`. The reason is written beside the field.
+
+**What none of this has measured.** No production rate stands behind any of
+it: the Supabase connector could not connect from this session, so how often
+real vents hit the new crisis shapes, the careful fortnight or the anchors is
+unread. The first nightly audit after merge is the first number.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.

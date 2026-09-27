@@ -1,4 +1,4 @@
-import { gradeReply, type Finding, type GoldenCase } from "./quality";
+import { anchorScore, CRITICAL_ANCHORS, gradeReply, type Finding, type GoldenCase } from "./quality";
 import { classify } from "./intent";
 import type { Fitness } from "./learned";
 
@@ -130,16 +130,19 @@ export function fitnessOf(pairs: readonly ScoredPair[]): Fitness {
     delta[grader] = (delta[grader] ?? 0) + by;
   };
 
+  let critical = 0;
   for (const p of pairs) {
     const meta = { tokensSpent: true, said: p.said };
-    for (const g of fired(gradeReply(p.case, p.with, meta))) move(g, 1);
+    const withRule = gradeReply(p.case, p.with, meta);
+    for (const g of fired(withRule)) move(g, 1);
     for (const g of fired(gradeReply(p.case, p.without, meta))) move(g, -1);
+    if (anchorScore(withRule).failed.some((a) => CRITICAL_ANCHORS.has(a))) critical++;
   }
 
   for (const [grader, d] of Object.entries(delta)) {
     if (d === 0) delete delta[grader];
   }
-  return { cases: pairs.length, delta };
+  return { cases: pairs.length, delta, critical };
 }
 
 /**

@@ -1,4 +1,5 @@
 import { forecasting, fusedVerdict, inTheLoop, seesWhileIn } from "./tactics";
+import { heaviness } from "./depth";
 
 /**
  * Fifty questions, and not one of them is in the system prompt.
@@ -509,7 +510,10 @@ export function isBroad(p: Probe): boolean {
  * `recent` is the ids already asked, most recent last. Null means "ask your
  * own", which the caller renders as no line at all rather than as a blank.
  */
-export function selectProbe(message: string, recent: readonly string[] = []): Probe | null {
+/** A question that asks for a rating. */
+export const ASKS_FOR_A_NUMBER = /\b(?:zero|one|0|1) to (?:ten|10)\b|\bout of (?:ten|10)\b/i;
+
+export function selectProbe(message: string, recent: readonly string[] = [], careful = false): Probe | null {
   const blocked = new Set(recent.slice(-3));
   const rank = (p: Probe) => (isBroad(p) ? 0 : 1000) + p.weight;
 
@@ -532,7 +536,14 @@ export function selectProbe(message: string, recent: readonly string[] = []): Pr
     probe library existed. This is the same veto, applied to the half of the
     reply that was added afterwards and inherited none of it.
   */
-  const pool = inTheLoop(message) ? PROBES.filter((p) => p.process) : PROBES;
+  const looping = inTheLoop(message) ? PROBES.filter((p) => p.process) : PROBES;
+  /*
+    And on a heavy turn, no question asks for a number. "Zero to ten" asked of
+    somebody who has just written "no way out" is a rating asked of despair —
+    `NOT_AT_THE_EDGE` in `tactics.ts`, applied to the other half of the reply.
+    Read off the question itself, so a new ruler is covered without a list.
+  */
+  const pool = heaviness(message) || careful ? looping.filter((p) => !ASKS_FOR_A_NUMBER.test(p.ask)) : looping;
 
   const eligible = pool
     .filter((p) => p.fits(message))

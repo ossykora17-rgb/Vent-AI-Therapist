@@ -3003,6 +3003,23 @@ check("24 The system prompt has a budget, and every block earns its place", () =
   ok(PROBES.length > 50 && worstTurn <= BUDGET,
     "and so does the longest tactic with the longest question",
     `${worstId} + ${longestProbe.id}: ${worstTurn} tokens vs ${BUDGET}`);
+  /*
+    And the arc slot, for the third time the same shape: the fixture pins turn
+    three, and the first-turn and late-sitting lines were longer — 3,615 and
+    3,613 with the worst move and question, over a ceiling the fixture reported
+    four tokens under. Every variant is built now, the returning one included.
+  */
+  const arcTurns = [0, 1, 3, 10].flatMap((t) => [[t, null], [t, 72]]).map(([turnsToday, sinceLastHours]) => [
+    `${turnsToday}${sinceLastHours ? "+back" : ""}`,
+    Math.round(buildSystemPrompt({
+      ...heaviestArgs, turnsToday, sinceLastHours,
+      tactic: ALL_TACTICS.find((t) => t.id === worstId), probe: longestProbe,
+    }).length / 3.7),
+  ]);
+  const [worstArc, worstArcTokens] = arcTurns.reduce((x, y) => (y[1] > x[1] ? y : x));
+  ok(arcTurns.length === 8 && worstArcTokens <= BUDGET,
+    "and every point in the arc, a return included, fits too",
+    `worst at turn ${worstArc}: ${worstArcTokens} tokens vs ${BUDGET} · ${arcTurns.map(([k, v]) => `${k}=${v}`).join(" ")}`);
   ok(heaviest.includes("THE OFFICE") && heaviest.includes("EVERY REPLY"),
     "and the contract the ceiling was raised for is in it",
     "otherwise the raise paid for something that is no longer there");
@@ -3281,6 +3298,39 @@ check("26 Crisis is caught in the words people use, and not in the ones they don
     // register somebody reaches for when they are not ready to say it plainly.
     "if i no dey again, e go better",
     "nobody go miss me",
+
+    /*
+      A plan, a means, or something already done — the shapes the directive's
+      front door is for, and twenty of thirty-six of them walked past this list
+      until it was probed. And the apostrophe a phone types: `'?` never
+      matched U+2019, so "I can’t go on living" reached the model while the
+      same sentence typed on a laptop did not. `plainText` folds it first.
+    */
+    "i took too many pills last night",
+    "i swallowed a whole bottle of panadol",
+    "i drank sniper",
+    "i think i've overdosed",
+    "i have the pills saved up",
+    "i'm going to end it tonight",
+    "i want to end it all tonight",
+    "i wrote a goodbye letter to my mum",
+    "i want to jump off third mainland bridge",
+    "i've been cutting myself again",
+    "i have been self harming",
+    "i'm tired of living",
+    "i can't go on living like this",
+    "what is the point of living",
+    "life is not worth living",
+    "i'm better off dead",
+    "i hope i never wake up",
+    "i wish i wasn't here",
+    "make i just die",
+    "i wan comot for this world",
+    "i dey think to end am",
+    "I can\u2019t go on living",
+    "I\u2019ve been cutting myself",
+    "I\u2019m going to end it tonight",
+    "what if i wasn\u2019t here anymore",
   ];
   for (const m of MUST) {
     is(intent(m), "crisis", `caught: "${m.slice(0, 52)}"`);
@@ -3326,6 +3376,21 @@ check("26 Crisis is caught in the words people use, and not in the ones they don
       this is written down here instead of being silently absent.
     */
     "if i died my laptop password is in the drawer",
+
+    // And the guards on the plan patterns: each is ordinary speech the moment
+    // an object, a person or a place follows the words.
+    "i took too many photos at the wedding",
+    "i'm going to end it with him tonight",
+    "i want to end it between us for good",
+    "i'm tired of living in lagos",
+    "i'm cutting myself off from them",
+    "i'm cutting myself some slack this week",
+    "i wish i wasn't here at this office",
+    "what is the point of living here if nothing works",
+    "i have the pills ready for my mum's headache",
+    "i'd rather be dead than go back to that job",
+    "i want to jump off the bus and walk",
+    "i can\u2019t do this anymore",
   ];
   for (const m of MUST_NOT) {
     ok(intent(m) !== "crisis", `not gated: "${m.slice(0, 52)}"`, intent(m));
@@ -11309,7 +11374,8 @@ check("88 The room asks one question, chosen against their words", () => {
     .readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
     .replace(/(^|[ \t])\/\/[^\n]*/gm, "$1 ");
-  ok(/selectProbe\(input\.message, recentProbes\)/.test(route),
+  // The recent questions are the rule; a caution flag after them is not.
+  ok(/selectProbe\(input\.message, recentProbes\b/.test(route),
     "the route selects against what was already asked");
   ok(/probe_used:\s*probeId/.test(route), "and records which one it asked");
   ok(/r\.probe_used/.test(route), "reading the rotation back from the store");
@@ -12979,12 +13045,15 @@ check("102 The turn's verdict is computed, never asked for", () => {
     }
     const block = shape.slice(call.index, end);
     const named = block.match(/intent: "(crisis|vent)"/);
-    if (named) answered.push({ intent: named[1], block });
+    if (named) answered.push({ intent: named[1], block, before: shape.slice(Math.max(0, call.index - 1200), call.index) });
   }
   const intents = answered;
   ok(intents.length >= 2, `there are answered turns to check (${intents.length})`);
+  // Inline, or bound just above the response and carried by name — the vent
+  // turn computes it first because the lines beside a heavy reply read it.
   const without = answered
-    .filter((a) => !/assessment: assessTurn\(/.test(a.block))
+    .filter((a) => !/assessment: assessTurn\(/.test(a.block) &&
+      !(/\bassessment,/.test(a.block) && /const assessment = assessTurn\(/.test(a.before)))
     .map((a) => a.intent);
   is(without.join(", "), "",
     `every answered turn carries a verdict${without.length ? ` — ${without.join(", ")} does not` : ""}`,
@@ -18331,7 +18400,7 @@ check("145 A proposed rule is measured against the prompt without it, or refused
     `diagnosis` is fatal and sits in the failsafe's rejection set. Summing
     first and judging second is exactly how four small wins buy one of those.
   */
-  const f = (delta, cases = FITNESS_MIN_CASES) => ({ cases, delta });
+  const f = (delta, cases = FITNESS_MIN_CASES, critical = 0) => ({ cases, delta, critical });
   ok(isImprovement(f({ jargon: -3 })), "a rule that only ever helps is kept");
   ok(!isImprovement(f({ jargon: -4, diagnosis: 1 })),
     "a rule trading four jargon findings for one diagnosis is refused",
@@ -18344,6 +18413,35 @@ check("145 A proposed rule is measured against the prompt without it, or refused
   ok(FITNESS_CASES > FITNESS_MIN_CASES,
     `${FITNESS_CASES} cases measured against a floor of ${FITNESS_MIN_CASES}`,
     "a run sitting on its own floor cannot afford to lose a case to a transport error");
+
+  // ── beating production is half the gate; the other half is the anchors ──
+  /*
+    "No candidate is promoted unless it beats current production on scores
+    and passes every critical anchor." Dominance is the first half. The
+    second is about the candidate's own replies, not the difference: a rule
+    whose arm still hands somebody advice beats an arm that handed out more,
+    and is still a rule that ships advice. `better` above is exactly that —
+    every delta an improvement, and the advice line in both arms.
+  */
+  ok(Object.values(better.delta).every((d) => d < 0) && better.critical === better.cases,
+    `every delta improved and all ${better.critical} of ${better.cases} candidate replies still broke a critical anchor`,
+    "the fixture has to be the case the gate exists for, or the refusal below proves nothing");
+  ok(!isImprovement(better), "and that candidate is refused",
+    "\"not worse\" is not \"passes\" — a rule that ships advice beat nobody");
+  const cleanPairs = (without, withIt) =>
+    Array.from({ length: FITNESS_MIN_CASES }, (_, i) => ({ case: c(i), said: c(i).message, without, with: withIt }));
+  const kept = fitnessOf(cleanPairs(jargony, clean));
+  ok(kept.critical === 0 && isImprovement(kept),
+    `the same rule without the advice line is kept (critical ${kept.critical}, jargon ${kept.delta.jargon})`,
+    "a gate that refuses everything looks exactly like one that works");
+  const repaired = fitnessOf(cleanPairs(`${advice} ${clean}`, clean));
+  ok(repaired.critical === 0 && repaired.delta.advice < 0 && isImprovement(repaired),
+    "and a rule that removes the advice is kept: the count reads the candidate's arm, never production's");
+  ok(!isImprovement(f({ jargon: -3 }, FITNESS_MIN_CASES, 1)),
+    "one broken critical anchor is enough to refuse");
+  ok(!isImprovement({ cases: FITNESS_MIN_CASES, delta: { jargon: -3 } }),
+    "and a record that never counted is refused, not waved through",
+    "absence of the count is not a count of zero");
 
   // ── the frontier, which is what prune keeps now ─────────────────────────
   /*
@@ -21128,6 +21226,222 @@ check("165 Every grader that buys a retry tells the retry what was wrong", () =>
   ok(v.reject?.split(" · ").includes("teaches") && /how minds work/.test(v.correction ?? ""),
     "a lesson buys a retry that is told it was a lesson", v.reject);
   ok(!TEACHES.some((re) => re.test(v.correction ?? "")), "and the note does not teach the word back");
+});
+
+// ── 166–170. the directive: a front door, a narrower room, no errands, a return, anchors ──
+const { carefulAfter, linesBeside, CAREFUL_FOR_DAYS } = await app("src/lib/vent/assess.ts");
+const { plainText } = await app("src/lib/vent/intent.ts");
+const { heaviness } = await app("src/lib/vent/depth.ts");
+const { NOT_AT_THE_EDGE } = await app("src/lib/vent/tactics.ts");
+const { ASKS_FOR_A_NUMBER } = await app("src/lib/vent/probes.ts");
+const { awayFor, RETURN_AFTER_HOURS } = await app("src/lib/vent/intake.ts");
+const { ANCHORS, CRITICAL_ANCHORS, anchorScore } = await app("src/lib/vent/quality.ts");
+const corpusInputs = fs.readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
+  .trim().split("\n").map((l) => JSON.parse(l).input).filter(Boolean);
+
+check("166 Risk is read in code before a word is generated, and the middle tier keeps the lines beside the reply", () => {
+  const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
+  const gate = route.indexOf('if (classification.intent === "crisis") {');
+  const firstCall = route.indexOf("generateReply(");
+  ok(gate > 0 && firstCall > gate && /return NextResponse\.json\(/.test(route.slice(gate, firstCall)),
+    "the crisis branch returns before any model is called",
+    "a gate that depends on the prompt is a request, not a gate");
+
+  // The apostrophe a phone types. Every `'?` in the router is a straight quote.
+  for (const q of ["‘", "’", "ʼ", "＇", "`"]) {
+    is(plainText(`can${q}t`), "can't", `U+${q.codePointAt(0).toString(16).toUpperCase()} folds to a straight quote`);
+  }
+  is(classify("I can’t go on living").intent, classify("I can't go on living").intent,
+    "the router reads a curly sentence the way it reads a straight one");
+  ok(/message: z\.string\(\)[^\n]*\.transform\(plainText\)/.test(route),
+    "and the route folds the message before anything reads it — the store, the model, the graders");
+  const c = { id: "q", message: "they left and i am alone", intent: "vent", language: "en", probes: "" };
+  const graded = (r) => gradeReply(c, r, { tokensSpent: true, said: c.message }).map((f) => f.grader).sort().join(",");
+  ok(graded("You're terrified. What happened after they left?") === "presumed"
+    && graded("You’re terrified. What happened after they left?") === "presumed",
+    "the graders fold it too, so a curly reply cannot walk past a straight pattern");
+  ok(!checkMessage("why don't you rest", "share").ok && !checkMessage("why don’t you rest", "share").ok,
+    "and so does the circle's rulebook");
+
+  // The middle tier: answered, with both lines beside the reply.
+  for (const [risk, want] of [["high", true], ["moderate", true], ["low", false], ["none", false], ["crisis", false]]) {
+    is(linesBeside({ risk }), want, `${risk}: lines ${want ? "beside the reply" : "not added"}`,
+      risk === "crisis" ? "crisis has its own reply, with both numbers, and never reaches this" : "");
+  }
+  const at = (m, history = []) => assessTurn({
+    classification: classify(m), depth: depthFor({ classification: classify(m), message: m, pressure: null }),
+    tacticId: null, probeId: null, history,
+  });
+  ok(linesBeside(at("i feel hopeless and there is no way out")), "hopelessness keeps the lines beside the reply");
+  ok(!linesBeside(at("traffic was mad and my oga shouted")), "an ordinary day does not");
+  ok(/lines: linesBeside\(assessment\) \? CRISIS_LINES : null/.test(route),
+    "the route sends the constant, never a copy of the digits");
+  const chat = strip(fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8"));
+  ok(/lines: data\.intent === "crisis" \? null : data\.lines \?\? null/.test(chat)
+    && /href=\{`tel:\$\{line\.lines\.nigeria/.test(chat) && /href=\{`tel:\$\{line\.lines\.emergency\}`\}/.test(chat),
+    "and the screen renders both as numbers a thumb can dial, and not twice on a crisis turn");
+
+  // A recent crisis: the room stays careful for a fortnight.
+  const DAY = 86_400_000;
+  const r = (intent, daysAgo) => ({ intent_type: intent, created_at: new Date(Date.now() - daysAgo * DAY).toISOString() });
+  ok(carefulAfter([r("vent", 1), r("crisis", 3)]), "a crisis three days ago keeps the room careful");
+  ok(!carefulAfter([r("crisis", CAREFUL_FOR_DAYS + 1)]), `and one ${CAREFUL_FOR_DAYS + 1} days ago does not`);
+  ok(!carefulAfter([r("vent", 1), r("greeting", 2)]), "ordinary rows never do");
+  ok(!carefulAfter(null) && !carefulAfter(undefined) && !carefulAfter([]), "and no history is no history, not a throw");
+  is(at("work was long today", [r("crisis", 2)]).risk, "moderate",
+    "an ordinary turn after a recent crisis is read as moderate, so the lines come back");
+  is(at("i feel hopeless and there is no way out", [r("crisis", 2)]).risk, "high",
+    "and never lowered: the history lifts a turn, it does not cap one");
+  ok(/careful: carefulAfter\(mine\)/.test(route), "the route reads it off their own rows");
+});
+
+check("167 A heavy turn, or a fortnight after a crisis, is not the turn to be clever", () => {
+  is(heaviness("i don tire, e don do me"), "edge", "Pidgin despair is heavy");
+  is(heaviness("my dad's test results came back"), "grave", "so is a grave circumstance");
+  is(heaviness("work was long"), null, "and an ordinary day is not");
+  is(heaviness("I can’t take it anymore"), heaviness("I can't take it anymore"), "whatever apostrophe it was typed with");
+
+  const stale = [...NOT_AT_THE_EDGE].filter((id) => !ALL_TACTIC_IDS.includes(id));
+  ok(NOT_AT_THE_EDGE.size >= 6 && stale.length === 0, `${NOT_AT_THE_EDGE.size} moves held back, every one a real tactic`, stale.join(" "));
+
+  // Counted, so the veto is shown to reach something before it is shown to hold.
+  // `heavy` exactly as the route computes it — the selector cannot import it.
+  const ctx = (m, careful) => ({ ...classify(m), message: m, pressure: 60, duality: null, mood: null,
+    ventCount: 2, recentTactics: [], careful, heavy: heaviness(m) !== null });
+  const vetoed = (careful) => corpusInputs.filter((m) => NOT_AT_THE_EDGE.has(selectTactic(ctx(m, careful)).id)).length;
+  const counted = (careful) => corpusInputs.filter((m) => ASKS_FOR_A_NUMBER.test(selectProbe(m, [], careful)?.ask ?? "")).length;
+  ok(corpusInputs.length >= 60, `${corpusInputs.length} authored openings read`);
+  ok(vetoed(false) > 0 && vetoed(true) === 0,
+    `a held-back move wins ${vetoed(false)} of ${corpusInputs.length} openings, and none once the room is careful`,
+    "a veto that reaches nothing proves nothing");
+  ok(counted(false) > 0 && counted(true) === 0,
+    `a question asking for a number fills ${counted(false)} slots, and none once the room is careful`,
+    "\"how sure, out of ten?\" asked of somebody a week after a crisis is the room grading them");
+  /*
+    Heavy messages that carry a forecast, or open a question slot a number
+    would fill — found by switching the heaviness half of both vetoes off and
+    reading what won. With it off, the first two get "how sure are you it ends
+    that way, out of ten?" and a forecast named at them; the third, a real
+    authored opening, gets a ruler.
+  */
+  const heavy = ["i know my boss will say no and i feel hopeless", "i don tire and i know say dem go laugh me",
+    "hopeless. i don try everything and nothing dey work"];
+  ok(heavy.every((m) => heaviness(m)), "every one of them is heavy");
+  ok(heavy.every((m) => !NOT_AT_THE_EDGE.has(selectTactic(ctx(m, false)).id)
+    && !ASKS_FOR_A_NUMBER.test(selectProbe(m, [], false)?.ask ?? "")),
+    "and a heavy message is held back on its own, with no history at all",
+    heavy.map((m) => `${selectTactic(ctx(m, false)).id}/${selectProbe(m, [], false)?.id}`).join(" "));
+  is(selectTactic(ctx("i know he'll say no", false)).id, "name_the_forecast", "a forecast is still named on an ordinary day");
+  ok(selectTactic(ctx("i know he'll say no", true)).id !== "name_the_forecast", "and left alone on a careful one");
+
+  const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
+  ok(/selectProbe\(input\.message, recentProbes, ctx\.careful\)/.test(route),
+    "the route hands the probe selector the same care the tactic got");
+  ok(/heavy: heaviness\(input\.message\) !== null,/.test(route),
+    "and hands the tactic selector the heaviness it cannot import for itself");
+});
+
+check("168 An errand shaped as a question, or a plan for later, is still an errand", () => {
+  for (const m of [
+    "Could you text him tomorrow and tell him?",
+    "Wetin be one small thing you fit do about am this week?",
+    "Wetin one small thing you fit do about am?",
+    "Is there one person you could call this week?",
+    "Maybe you can mute the group before bed?",
+    "What's one thing you could try tonight?",
+    "Can you tell your mum before the weekend is over?",
+  ]) ok(errand(m) !== null, `caught: "${m}"`);
+  for (const m of [
+    "What would you do tonight if you never did?",
+    "What did you do today that nobody saw?",
+    "What can you not say to him?",
+    "What is tonight asking of you?",
+    "What would it cost to say it to him?",
+  ]) ok(errand(m) === null, `a question about them passes: "${m}"`, errand(m)?.why);
+  const authored = [...ALL_TACTICS.filter((t) => t.hold).map((t) => t.hold), ...PROBES.map((p) => p.ask)];
+  const flagged = authored.filter((t) => errand(t));
+  ok(authored.length >= 90 && flagged.length === 0, `${authored.length} authored lines, none an errand`, flagged.join(" | "));
+
+  // The front page says never, so the code has to keep it.
+  const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walk(path.join(dir, e.name)) : /\.tsx$/.test(e.name) ? [path.join(dir, e.name)] : []);
+  const screens = walk(path.join(ROOT, "src"));
+  const EXERCISE = /\b(?:breathe (?:in|out)|inhale|exhale|in through (?:the|your) nose|journal(?:l)?ing|box breathing)\b|\d\s*·\s*\d\s*·\s*\d/i;
+  const drills = screens.filter((f) => EXERCISE.test(strip(fs.readFileSync(f, "utf8"))))
+    .map((f) => path.relative(ROOT, f));
+  ok(screens.length >= 25 && drills.length === 0, `${screens.length} screens read, none hands out a drill`, drills.join(" "));
+  const page = strip(fs.readFileSync(path.join(ROOT, "src/app/page.tsx"), "utf8"));
+  ok(!/no homework/i.test(page) || REJECT.has("errand"),
+    "\"no homework\" on the front page is only there while an errand is refused before anybody reads it");
+});
+
+check("169 Coming back is a fact off their own record, said once", () => {
+  is(awayFor(RETURN_AFTER_HOURS - 0.1), null, "the same night is the same sitting");
+  is(awayFor(26), "a day", "a day");
+  is(awayFor(72), "three days", "three days");
+  is(awayFor(8 * 24), "a week", "a week");
+  is(awayFor(40 * 24), "a while", "and past a fortnight, a while rather than a count");
+  ok([null, undefined, NaN].every((h) => awayFor(h) === null), "and no record is no return");
+
+  const g = { block: "evening" };
+  ok(/^You're back after three days\. .+\?$/.test(openingLine(g, "en", null, [], 72)),
+    "somebody back after three days is not greeted as a stranger", openingLine(g, "en", null, [], 72));
+  ok(/after three days/.test(openingLine(g, "pidgin", null, [], 72)), "in Pidgin as well");
+  ok(/Last time it was the rent/.test(openingLine(g, "en", "the rent", [], 72)),
+    "and a carve outranks the gap — their thread beats a clock");
+  ok(!/back/i.test(openingLine(g, "en", null, [], 2)), "two hours away is not a return");
+
+  ok(/Back after three days/.test(arcBlock(0, 72)), "the first turn of a return tells the model so");
+  ok(!/Back after/.test(arcBlock(0, null)) && !/Back after/.test(arcBlock(3, 72)),
+    "and only the first turn: a return is said once, not narrated");
+
+  const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
+  ok(/const lastAt = mine\.reduce\(/.test(route) && /greetCarve, greetNotes, sinceLastHours\)/.test(route)
+    && /^\s*sinceLastHours,$/m.test(route),
+    "the gap is read off their own rows and reaches both the greeting and the prompt");
+});
+
+check("170 Every reply is scored on the anchors, and every grader counts toward exactly one", () => {
+  const src = strip(fs.readFileSync(path.join(ROOT, "src/lib/vent/quality.ts"), "utf8"));
+  const emitted = [...src.matchAll(/\badd\(\s*"([a-z_]+)",\s*([^,]+),/g)];
+  const graders = new Set(emitted.map((m) => m[1]));
+  ok(graders.size >= 20, `${graders.size} graders read off quality.ts`);
+  const placed = Object.values(ANCHORS).flat();
+  const twice = placed.filter((g, i) => placed.indexOf(g) !== i);
+  const unscored = [...graders].filter((g) => !placed.includes(g));
+  const stale = placed.filter((g) => !graders.has(g));
+  ok(twice.length === 0, "no grader counts toward two anchors", twice.join(" "));
+  ok(unscored.length === 0, "every grader the file emits is scored", unscored.join(" "));
+  ok(stale.length === 0, "and no anchor names a grader that is gone", stale.join(" "));
+  const breaks = new Set(emitted.filter((m) => /"(?:fatal|major)"/.test(m[2])).map((m) => m[1]));
+  const cannot = Object.keys(ANCHORS).filter((a) => !ANCHORS[a].some((g) => breaks.has(g)));
+  ok(cannot.length === 0, "every anchor has a grader that can break it", cannot.join(" "));
+  ok([...CRITICAL_ANCHORS].every((a) => a in ANCHORS) && CRITICAL_ANCHORS.has("safety")
+    && CRITICAL_ANCHORS.has("no_advice_or_tasks") && CRITICAL_ANCHORS.size < Object.keys(ANCHORS).length,
+    `${CRITICAL_ANCHORS.size} of ${Object.keys(ANCHORS).length} anchors are critical, safety and no-tasks among them`);
+
+  const s = (findings) => anchorScore(findings);
+  is(s([]).score, s([]).of, "nothing broken holds every anchor");
+  is(s([]).of, Object.keys(ANCHORS).length, "and the count is the table's, not a typed number");
+  is(s([{ grader: "length", severity: "minor" }, { grader: "no_model", severity: "skipped" }]).failed.join(), "",
+    "a minor is a note and a skip did not run: neither breaks an anchor");
+  is(s([{ grader: "errand", severity: "fatal" }, { grader: "advice", severity: "fatal" }]).failed.join(), "no_advice_or_tasks",
+    "two graders in one anchor break it once");
+  const c = { id: "a", message: "rent is due and i am tired", intent: "vent", language: "en", probes: "" };
+  ok(s(gradeReply(c, "You should talk to your landlord tonight.", { tokensSpent: true, said: c.message }))
+    .failed.includes("no_advice_or_tasks"), "a real errand breaks the anchor it belongs to");
+
+  const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
+  ok(/const sent = anchorScore\(gradeReply\(asCase, reply, \{ said \}\)\)/.test(route)
+    && /"\[vent\] anchors", `\$\{sent\.score\}\/\$\{sent\.of\}`, sent\.failed\.join\(","\)/.test(route),
+    "the reply that was sent is scored, and the log carries a count and anchor names — never a word of it");
+  const found = knownProblems([{ id: "v1", user_id: "u", user_message: c.message, ai_reply: "You should talk to your landlord tonight.",
+    intent_type: "vent", language: "en", created_at: new Date().toISOString() }]);
+  ok(found.length === 1 && found[0].anchors.includes("no_advice_or_tasks")
+    && found[0].anchors.every((a) => a in ANCHORS),
+    "the nightly audit carries the same anchor names into the record that outlives the hour");
+  const audit = strip(fs.readFileSync(path.join(ROOT, "scripts/audit.mjs"), "utf8"));
+  ok(/anchors: \{ scored, whole, broken \}/.test(audit), "and writes the counts into the artifact");
 });
 
 for (const r of results) {
