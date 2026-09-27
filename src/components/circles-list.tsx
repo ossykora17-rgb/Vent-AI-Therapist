@@ -319,8 +319,12 @@ export function CirclesList() {
               ))}
               .
             </p>
+            {/* This said "Nothing anybody said is kept, here or anywhere" —
+                over a count of private vents, which the store does keep (that
+                is what the delete-everything button is for). What is true of
+                this panel is what it shows: numbers, and nobody's words. */}
             <p className="mt-2 max-w-[44ch] text-body leading-[1.6] text-ash">
-              Counts only. Nothing anybody said is kept, here or anywhere.
+              Counts only — no names, and not a word anybody said.
             </p>
           </div>
         )}
