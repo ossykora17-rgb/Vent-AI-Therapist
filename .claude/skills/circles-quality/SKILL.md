@@ -33,10 +33,12 @@ Both lines are **selected, not generated**. No model call, no tokens.
   cannot be company, which is false in a room of people. Adding a tenth
   real-world pressure means adding its `hold` in the same commit, and reading
   it aloud as the Keeper before anybody has spoken.
-- **Reflection** — `keeperReflection(shares)` counts `PATTERN_WORDS` across
-  what the room actually said and reports any appearing twice or more. It
-  cannot name a pattern nobody voiced. With no repeated word it says how many
-  people spoke, which is still true.
+- **Reflection** — `keeperReflection(shares)` counts `PATTERN_WORDS` and the
+  tag's theme words across what the room actually said, and reports a word
+  only when **two different people** said it, because the sentence after it is
+  "same word, different lives". One person repeating a word is not a pattern
+  the room shares. It cannot name a pattern nobody voiced. With no shared word
+  it says how many people spoke, which is still true.
 
 Two guards, keyed by author (`keeper:open`, `keeper:reflect`), each checked
 separately. **Do not merge them.** Guarding both on `kind === "keeper_prompt"`

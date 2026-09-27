@@ -218,10 +218,10 @@ const OPENING: Record<string, string> = {
  */
 export function weatherFact(feelsC: number, rainMm: number): string | null {
   if (rainMm > 0) {
-    return `Rain dey fall outside, and it feels like ${feelsC}° out there. That is the day you are having, not a mood.`;
+    return `Rain dey fall for Lagos, and it feels like ${feelsC}° there. That is the weather, not a mood.`;
   }
   if (feelsC >= 34) {
-    return `It feels like ${feelsC}° out there. Heat makes everything louder than it is — that is the number, not a mood.`;
+    return `It feels like ${feelsC}° in Lagos. Heat makes everything louder than it is — that is the number, not a mood.`;
   }
   // Nothing to say. Silence beats filler.
   return null;
@@ -374,7 +374,6 @@ export interface Share {
 export function keeperReflection(shares: Share[], tag?: string | null): string | null {
   if (shares.length === 0) return null;
 
-  const text = shares.map((s) => s.content).join(" \n ").toLowerCase();
 
   /*
     Two vocabularies, and the second one is why this move was dead.
@@ -392,21 +391,35 @@ export function keeperReflection(shares: Share[], tag?: string | null): string |
     and a tenth pressure arrives here without anybody remembering to come.
     Same measurement afterwards: 42%.
   */
+  /*
+    Counted per person, and reported only when two people said it.
+
+    This counted occurrences across the room and reported any word said twice,
+    so one person saying "chest" twice made the Keeper announce "Same room,
+    same word, different lives … you are not the only one carrying it" — one
+    life. The count branch below was repaired for exactly this, under the
+    words "you are not the only one is the whole promise", and this branch
+    makes that promise in so many words. The number stays the occurrences,
+    which is true either way; what two speakers buys is the sentence after it.
+  */
   const counts = new Map<string, number>();
-  for (const w of PATTERN_WORDS) {
-    const n = (text.match(new RegExp(`\\b${w}\\b`, "g")) ?? []).length;
-    if (n > 0) counts.set(w, n);
-  }
+  const speakers = new Map<string, Set<string>>();
+  const heard = (w: string, who: string, n = 1) => {
+    if (n === 0) return;
+    counts.set(w, (counts.get(w) ?? 0) + n);
+    speakers.set(w, (speakers.get(w) ?? new Set<string>()).add(who));
+  };
   const theme = themePattern(tag);
-  if (theme) {
-    for (const m of text.matchAll(theme)) {
-      const w = m[0].toLowerCase();
-      counts.set(w, (counts.get(w) ?? 0) + 1);
+  for (const s of shares) {
+    const said = s.content.toLowerCase();
+    for (const w of PATTERN_WORDS) {
+      heard(w, s.anonId, (said.match(new RegExp(`\\b${w}\\b`, "g")) ?? []).length);
     }
+    if (theme) for (const m of said.matchAll(theme)) heard(m[0].toLowerCase(), s.anonId);
   }
 
   const top = [...counts.entries()]
-    .filter(([, n]) => n >= 2)
+    .filter(([w]) => (speakers.get(w)?.size ?? 0) >= 2)
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, 3);
 
@@ -428,6 +441,6 @@ export function keeperReflection(shares: Share[], tag?: string | null): string |
     return `${people} ${people === 1 ? "person" : "people"} spoke. Nobody fixed anybody. That is the whole job — sit with what you heard.`;
   }
 
-  const heard = top.map(([w, n]) => `${w} ${n} times`).join(", ");
-  return `I heard ${heard}. Same room, same word, different lives. Nothing to fix — just notice you are not the only one carrying it.`;
+  const words = top.map(([w, n]) => `${w} ${n} times`).join(", ");
+  return `I heard ${words}. Same room, same word, different lives. Nothing to fix — just notice you are not the only one carrying it.`;
 }

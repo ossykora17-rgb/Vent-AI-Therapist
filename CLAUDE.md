@@ -4191,6 +4191,20 @@ comment fails, because adding a name to that list is otherwise a tool quietly
 lost. Five mutations fail checks 9 and 32. Found by printing the opening of
 every topic, which nothing had done since the holds were rewritten.
 
+**Printing the rest of what the Keeper says found two more.** The minute-38
+reflection counted a word's *occurrences* and reported any said twice, then
+said *"Same room, same word, different lives … you are not the only one
+carrying it"* — so one person saying "chest" twice was announced as a room
+sharing it. The count branch beneath it was repaired for exactly this, under
+*"'you are not the only one' is the whole promise"*, and the branch that makes
+the promise in words was not: the third mechanism, inside one function. It
+counts speakers now and needs two; the number stays the occurrences, which was
+never the false half. And the climate room's weather is Lagos's, hardcoded so
+the browser is never asked where anybody is — then read out as *"Rain dey fall
+outside … That is the day you are having"*, a claim about a window nobody
+measured, to a pressure circle that includes the people who left. It names
+Lagos now. Six mutations fail checks 9 and 40.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.

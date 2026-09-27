@@ -561,6 +561,31 @@ check("9  Circle governance protects people without breaking a promise", () => {
     `${oneVoice} — "you are not the only one" is the promise; overstating the room invents evidence for it`);
 
   /*
+    AND THE SENTENCE ABOVE THE COUNT MADE THE SAME CLAIM, LOUDER
+
+    The pattern branch counted occurrences across the room, so one person
+    saying "chest" twice made the Keeper say "Same room, same word, different
+    lives … you are not the only one carrying it" about one life. The count
+    branch was repaired for this and the branch that says it in words was not.
+    Every assertion above has each word said once by two different people,
+    where occurrences and people agree — the shape its author was standing in.
+  */
+  const oneLife = keeperReflection([
+    share("a", "my chest, my chest is tight"),
+    share("b", "today was long"),
+  ]);
+  ok(!/I heard/.test(oneLife) && /\b2 people spoke/.test(oneLife),
+    "one person saying a word twice is not 'same word, different lives'", oneLife);
+  const twoLives = keeperReflection([
+    share("a", "my chest, my chest"),
+    share("b", "chest again"),
+  ]);
+  ok(/I heard chest 3 times\./.test(twoLives),
+    "two people saying it is, and the number is still every time it was said", twoLives);
+  ok(/people spoke/.test(keeperReflection([share("a", "price, price, price"), share("b", "long day")], "economy")),
+    "and a theme word one person repeats is not the room's word either");
+
+  /*
     AND THE MOVE ITSELF WAS DEAD
 
     `PATTERN_WORDS` is eighteen words of body and affect and contains nothing
@@ -4625,6 +4650,10 @@ check("40 Weather is measured, and the rest of the news is not invented", () => 
       "the sentence says it is a number and not a feeling", line);
     ok(!/\b(sorry|unfortunately|sadly|hope|spoil|ruin)\b/i.test(line),
       "and never decides how somebody feels about their own weather", line);
+    // The browser is never asked where somebody is, so "outside" is a claim
+    // about a window nobody measured — true in Lagos and nowhere else.
+    ok(/\bLagos\b/.test(line) && !/\boutside\b|\bout there\b/i.test(line),
+      "and says whose weather it is rather than claiming theirs", line);
   }
 
   /*
