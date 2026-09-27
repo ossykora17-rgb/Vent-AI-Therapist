@@ -4124,6 +4124,27 @@ only on `deleted: true`: the rows are the evidence, which is the shape
 `savePush` was once wrong about. Seven mutations fail check 157, and live 157b
 does both removals over the wire.
 
+**The seal said the words were gone while they were still on the screen.** It
+opens only in the close phase — the last two minutes — and its handler deletes
+nothing; the words go when the room ends. So *"Sealed. The words here are
+gone."* was read under a header saying *"2m left"*, with every word still
+visible above it: a deletion announced before it happened, found in a
+screenshot of the end of a room that no check had ever rendered. It says
+*"The words here go when the room ends"* now, and check 140 ties the sentence
+to the handler — the seal deletes nothing, so what it says afterwards may not
+say they have gone.
+
+The same screenshot found the second one. Every drop chip sealed again, and
+`addHeld` prepends: two taps put the carried word on the Memory page twice,
+measured on the wire, and the carried word could be changed after the room had
+recorded the first. One seal per seat, held in a ref checked and set before the
+request, because two taps arrive before React renders the first; a seal that
+did not land reopens. Guarded in the room rather than the route, and that is a
+judgement stated rather than hidden: a second seal sent by hand duplicates a
+word on the sender's own page and nobody else's, and a server-side guard needs
+a column. Five mutations fail check 140, and a browser proof sent two drop taps
+back to back: one `PATCH`, one word on the page, both rows of chips locked.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
