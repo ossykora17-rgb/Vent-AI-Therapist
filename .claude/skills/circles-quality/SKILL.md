@@ -86,6 +86,11 @@ as a private session. Choosing the dropped word seals it: the number, the drop
 and the two words go to `.data/rlhf.jsonl` via `PATCH /api/circles/[id]`, and
 **nothing else does** — not one line of what anybody said.
 
+Once per seat: the chips lock when a seal lands and reopen only if it failed,
+because every extra seal writes the carried word to the Memory page again. And
+the seal deletes nothing — the words go when the room ends — so the sentence
+after it says when they go, never that they have (check 140).
+
 ## The Guardian
 
 `checkMessage` catches the phrasings we wrote down. Perspective catches the
