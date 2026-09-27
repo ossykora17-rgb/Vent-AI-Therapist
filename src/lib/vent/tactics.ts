@@ -70,6 +70,14 @@ export interface TacticContext extends Classification {
    * was anything to learn from, which is also what a cold start looks like.
    */
   efficacy?: ReadonlyMap<string, number>;
+  /** A crisis turn of theirs in the last fortnight — see `carefulAfter` in assess.ts. */
+  careful?: boolean;
+  /**
+   * This message reads heavy — `heaviness` in depth.ts, computed by the caller.
+   * Not imported here: this file loads under plain Node for `npm run verify`,
+   * which resolves no extensionless import, so it keeps type imports only.
+   */
+  heavy?: boolean;
 }
 
 const words = (s: string) => s.trim().split(/\s+/).length;
@@ -1230,6 +1238,12 @@ export function selectTactic(ctx: TacticContext): Tactic {
     pool = pool.filter((t) => !FEEDS_THE_LOOP.has(t.id));
   }
 
+  // Heightened caution is a filter here, not a sentence in the prompt: see
+  // `NOT_AT_THE_EDGE`.
+  if (ctx.heavy || ctx.careful) {
+    pool = pool.filter((t) => !NOT_AT_THE_EDGE.has(t.id));
+  }
+
   const rank = (t: Tactic) => {
     const base = t.weight(ctx);
     const band = base >= PRIORITY_BAND ? 1 : 0;
@@ -1257,6 +1271,28 @@ export function selectTactic(ctx: TacticContext): Tactic {
  * ten?" is exactly the evaluation a person caught in their own analysis cannot
  * stop running, and asked of them it is one more lap.
  */
+/**
+ * Moves never asked of somebody on a heavy turn — the `high` and `moderate`
+ * risk tiers, read by `heaviness` and handed in as `ctx.heavy`.
+ *
+ * Each asks a person to rate, argue, plan or move: put a number on the worst
+ * case (`decatastrophize`), on how sure the ending is (`name_the_forecast`),
+ * audit the evidence (`thought_record`), defend against a critic
+ * (`socratic`), weigh payoffs (`iterated_game`), imagine the miracle
+ * (`miracle_question`), consult a clearer self (`future_self`) or talk change
+ * (`change_talk`). Good moves on an ordinary night. To somebody who has just
+ * written "no way out", or "he beat me", or "the funeral was today", each is a
+ * demand — `future_self`'s own comment already says it: asking a person in
+ * freefall to move is a demand dressed as a question.
+ *
+ * A filter and not a weight, for `FEEDS_THE_LOOP`'s reason: a weight wins one
+ * contest and the three-turn block hands the next turn to the runner-up.
+ */
+export const NOT_AT_THE_EDGE: ReadonlySet<string> = new Set([
+  "decatastrophize", "name_the_forecast", "thought_record", "socratic",
+  "iterated_game", "miracle_question", "future_self", "change_talk",
+]);
+
 export const FEEDS_THE_LOOP: ReadonlySet<string> = new Set([
   "socratic", "thought_record", "double_standard", "name_the_forecast",
 ]);

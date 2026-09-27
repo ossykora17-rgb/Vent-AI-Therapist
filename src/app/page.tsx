@@ -151,12 +151,19 @@ export default async function LandingPage() {
           So: no boxes. Three lines with air around them, in the display face,
           each one a thing the app does *to* them rather than a capability it
           has. Set as a litany, because that is the register the room is in.
+
+          The third line was "It will not tell you to drop your shoulders three
+          times in a row" — true of the three-turn block, and a promise to do it
+          twice. The room hands out nothing now: the breathing and journal tools
+          are deleted, `errand` is in the failsafe's rejection set, and every
+          authored hold passes it. So the line says never, and names the three
+          things somebody here has been handed by every other app.
         */}
         <ul className="mt-12 space-y-5 border-l border-gold/25 pl-5">
           {[
             "It knows what day it is, and what that costs here.",
             "It gives your own words back to you, exactly as you said them.",
-            "It will not tell you to drop your shoulders three times in a row.",
+            "It stays with you. No drills, no journal, no homework.",
           ].map((line) => (
             <li
               key={line}

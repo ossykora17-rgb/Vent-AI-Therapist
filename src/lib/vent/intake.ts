@@ -28,11 +28,31 @@ import type { Note } from "./notes";
  * line rather than saying "welcome back" to a stranger — which is the
  * failure that makes every other product in this category feel fake.
  */
+/** A gap shorter than this is the same sitting, not a return. */
+export const RETURN_AFTER_HOURS = 12;
+
+/**
+ * How long they were away, said the way a person says it — or null when there
+ * is no gap worth naming. Twelve hours: the same night is still the same
+ * sitting, and a gap measured in minutes is not a return. Shared by the
+ * greeting below and the first-turn line in `arcBlock`, so the two cannot
+ * disagree about whether somebody came back.
+ */
+export function awayFor(hours: number | null | undefined): string | null {
+  if (hours === null || hours === undefined || !(hours >= RETURN_AFTER_HOURS)) return null;
+  const days = Math.round(hours / 24);
+  if (days <= 1) return "a day";
+  if (days < 7) return `${["", "", "two", "three", "four", "five", "six"][days]} days`;
+  if (days < 14) return "a week";
+  return "a while";
+}
+
 export function openingLine(
   g: Grounding,
   language: "en" | "pidgin",
   carve: string | null,
   notes: readonly Note[] = [],
+  sinceLastHours: number | null = null,
 ): string {
   const pidgin = language === "pidgin";
   const specific = carve?.trim() || notes.find((n) => n.kind !== "loss")?.detail?.trim() || null;
@@ -45,9 +65,26 @@ export function openingLine(
       file being recited rather than a person remembering.
     */
     const thing = specific.length > 48 ? `${specific.slice(0, 45)}…` : specific;
+    /*
+      The question points back at the thread. It was "What's new?" — a catch-up
+      that drops the thing the line had just named, which is the generic
+      check-in this opening exists not to be.
+    */
     return pidgin
-      ? `You don come back. Last time na ${thing}. Wetin dey happen now?`
-      : `Welcome back. Last time it was ${thing}. What's new?`;
+      ? `You don come back. Last time na ${thing}. Where e dey sit now?`
+      : `Welcome back. Last time it was ${thing}. Where is that sitting now?`;
+  }
+
+  /*
+    Back, with nothing specific to name — most people who return, since a carve
+    needs a sitting that landed. They were answered as strangers. The gap is the
+    only thing this names: a fact off their own record, never a word of theirs.
+  */
+  const away = awayFor(sinceLastHours);
+  if (away) {
+    return pidgin
+      ? `You don come back after ${away}. Where e dey sit for you now?`
+      : `You're back after ${away}. Where is it sitting now?`;
   }
 
   return pidgin

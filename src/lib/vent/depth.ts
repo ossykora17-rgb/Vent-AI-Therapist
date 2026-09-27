@@ -1,4 +1,4 @@
-import type { Classification } from "./intent";
+import { plainText, type Classification } from "./intent";
 
 /**
  * How much brain this message gets, decided for free.
@@ -99,6 +99,20 @@ export interface DepthVerdict {
 }
 
 /**
+ * The heavy turns: one layer under the crisis list (`edge`), or loss and harm
+ * (`grave`). `assess.ts` reads them as the `high` and `moderate` risk tiers, the
+ * depth router spends the best model on them, and the tactic and question
+ * selectors hold back what a person there should not be asked for. One reading,
+ * three consumers, so they cannot disagree about who is at the edge.
+ */
+export function heaviness(message: string): "edge" | "grave" | null {
+  const text = plainText(message).toLowerCase();
+  if (EDGE.some((r) => r.test(text))) return "edge";
+  if (GRAVE.some((r) => r.test(text))) return "grave";
+  return null;
+}
+
+/**
  * Decide. Free paths never reach here — they have already been answered.
  */
 export function depthFor(ctx: DepthContext): DepthVerdict {
@@ -111,8 +125,8 @@ export function depthFor(ctx: DepthContext): DepthVerdict {
     return { depth: "deep", reason: "crisis" };
   }
 
-  if (EDGE.some((r) => r.test(text))) return { depth: "deep", reason: "edge" };
-  if (GRAVE.some((r) => r.test(text))) return { depth: "deep", reason: "grave" };
+  const heavy = heaviness(ctx.message);
+  if (heavy) return { depth: "deep", reason: heavy };
   if (IRREVERSIBLE.some((r) => r.test(text))) {
     return { depth: "deep", reason: "irreversible" };
   }

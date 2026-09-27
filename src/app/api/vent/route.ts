@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getStore, type Store, type VentRow } from "@/lib/store";
 import { isModelConfigured } from "@/lib/env";
 import { answerFactual, groundNow } from "@/lib/vent/grounding";
-import { classify, CRISIS_LINES, crisisReply } from "@/lib/vent/intent";
+import { classify, CRISIS_LINES, crisisReply, plainText } from "@/lib/vent/intent";
 import { tensionNow } from "@/lib/vent/chairs";
 import { selectTactic, type TacticContext } from "@/lib/vent/tactics";
 import { selectProbe } from "@/lib/vent/probes";
@@ -15,14 +15,15 @@ import { coverage, COVERAGE_FLOOR } from "@/lib/vent/scan";
 import { STABLE_PREFIX, buildSystemPrompt, localReply, type MemoryRow } from "@/lib/vent/prompt";
 import { research } from "@/lib/vent/research";
 import { chooseReply, inspectReply } from "@/lib/vent/failsafe";
+import { anchorScore, gradeReply } from "@/lib/vent/quality";
 import { allianceLine, openingLine, shouldSayAlliance } from "@/lib/vent/intake";
 import { MEMORY_TURNS, memoryFetchSize, selectMemory } from "@/lib/vent/memory";
 import { noModelKeyReply } from "@/lib/vent/fallback";
 import { MAX_TOKENS, classifyModelError, modelFailureReply } from "@/lib/vent/model";
 import { generateReply } from "@/lib/vent/providers";
 import { allowModelCall, callsInWindow } from "@/lib/vent/ceiling";
-import { depthFor, depthBadge } from "@/lib/vent/depth";
-import { assessTurn } from "@/lib/vent/assess";
+import { depthFor, depthBadge, heaviness } from "@/lib/vent/depth";
+import { assessTurn, carefulAfter, linesBeside } from "@/lib/vent/assess";
 import { circleInvite, soundsAlone } from "@/lib/community/invite";
 import { BREAKING_LINES, nextQuestion, type Question } from "@/lib/vent/breaking";
 import { buildFlavour } from "@/lib/flavour/profile";
@@ -136,7 +137,9 @@ const bodySchema = z.object({
     server does not yet know. It only ever suppresses an ask.
   */
   heavyOpen: z.boolean().optional(),
-  message: z.string().trim().min(1).max(4000),
+  // Flattened once here, so every reading downstream — the verdict, the
+  // forecast, the depth router — sees the apostrophe its pattern was written for.
+  message: z.string().trim().min(1).max(4000).transform(plainText),
   chairPicked: z.enum(["tight_edge", "sunk", "half_off"]).nullish(),
   bodyTapped: z.enum(["head", "throat", "chest"]).nullish(),
   pressure: z.number().min(0).max(100).nullish(),
@@ -389,6 +392,8 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
     mood: input.mood ?? null,
     ventCount: history.length,
     recentTactics,
+    careful: carefulAfter(mine),
+    heavy: heaviness(input.message) !== null,
   };
 
   /*
@@ -424,7 +429,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
     closingWords: saysClosing(input.message),
     heavy: input.heavyOpen === true,
   });
-  const probe = arcProbe(landing, selectProbe(input.message, recentProbes));
+  const probe = arcProbe(landing, selectProbe(input.message, recentProbes, ctx.careful));
 
   /*
     Read once, used twice: the greeting names one of these, and the prompt
@@ -444,6 +449,14 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
     opening at all.
   */
   const heldWords = store && userId ? await store.getHeld(userId).catch(() => []) : [];
+
+  /*
+    How long since their last vent, off the rows already read — this turn is not
+    stored yet, so the newest row is the one before it. Null with no store or no
+    history: a gap nobody measured is not named.
+  */
+  const lastAt = mine.reduce((t, r) => Math.max(t, Date.parse(r.created_at) || 0), 0);
+  const sinceLastHours = lastAt > 0 ? (Date.now() - lastAt) / 3_600_000 : null;
 
   // ── 3. Free paths. No model call — this is the credit policy in code. ───
   const factual =
@@ -466,7 +479,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
   const local =
     factual ??
     (classification.intent === "greeting"
-      ? openingLine(grounding, classification.language === "pidgin" ? "pidgin" : "en", greetCarve, greetNotes)
+      ? openingLine(grounding, classification.language === "pidgin" ? "pidgin" : "en", greetCarve, greetNotes, sinceLastHours)
       : localReply(classification.intent, grounding, classification.language, input.message));
 
   if (local) {
@@ -523,6 +536,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
     memory: history,
     flavour,
     turnsToday,
+    sinceLastHours,
     pattern,
     message: input.message,
     /*
@@ -753,6 +767,14 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
           // keep what we have rather than leave somebody with nothing.
         }
       }
+      /*
+        The nine-point score of the reply that is actually sent, after any
+        retry — free, deterministic, silent. Anchor names and a number, never a
+        word of the reply: the stdout rule. It lives an hour on this plan; the
+        nightly audit re-scores every stored reply for the record that lasts.
+      */
+      const sent = anchorScore(gradeReply(asCase, reply, { said }));
+      console.log("[vent] anchors", `${sent.score}/${sent.of}`, sent.failed.join(",") || "-");
       if (answered.fellThrough.length) {
         console.warn("[vent] fell through", JSON.stringify(answered.fellThrough));
       }
@@ -882,6 +904,14 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
   // returned, not what the deployment looked capable of.
   if (keyless) reply = noModelKeyReply(saved, tactic.hold);
 
+  const assessment = assessTurn({
+    classification,
+    depth: verdict,
+    tacticId: tactic.id,
+    probeId: probe?.id ?? null,
+    history: mine,
+  });
+
   return NextResponse.json(
     {
       intent: "vent" as const,
@@ -944,13 +974,13 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
         screen at 2am, and let the message being assessed argue with its own
         assessment. See assess.ts.
       */
-      assessment: assessTurn({
-        classification,
-        depth: verdict,
-        tacticId: tactic.id,
-        probeId: probe?.id ?? null,
-        history: mine,
-      }),
+      assessment,
+      /**
+       * The lines, beside this reply, on a heavy turn — decided here rather
+       * than by the screen, so what a person is offered cannot depend on which
+       * client they are holding. Null otherwise; the footer still carries them.
+       */
+      lines: linesBeside(assessment) ? CRISIS_LINES : null,
       /** A real open room, or null. Never prose — the UI renders a link. */
       circleInvite: invite,
       /**

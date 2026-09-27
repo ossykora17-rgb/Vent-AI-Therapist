@@ -92,6 +92,12 @@ export interface Fitness {
   cases: number;
   /** Per-grader change. Negative is fewer findings; better. */
   delta: Readonly<Record<string, number>>;
+  /**
+   * Cases where the candidate's own reply broke a critical anchor
+   * (`CRITICAL_ANCHORS` in quality.ts). Required, and read as a refusal when
+   * absent: a record that cannot say it held them has not shown it.
+   */
+  critical: number;
 }
 
 /**
@@ -128,6 +134,13 @@ export function totalDelta(f: Fitness | undefined): number {
 export function isImprovement(f: Fitness | undefined): boolean {
   if (!f) return false;
   if (f.cases < FITNESS_MIN_CASES) return false;
+  /*
+    Beating production is not enough on its own. A rule whose own replies
+    broke safety, the no-task rule, fusion, fabrication or emotional accuracy
+    on any case is refused even when the arm without it broke them more — "not
+    worse" is not "passes", and the founder's gate is both.
+  */
+  if (f.critical !== 0) return false;
   const deltas = Object.values(f.delta);
   if (deltas.some((d) => d > 0)) return false;
   return deltas.some((d) => d < 0);

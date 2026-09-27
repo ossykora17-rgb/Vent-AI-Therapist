@@ -1,5 +1,5 @@
 import { REAL_WORLD_TACTIC } from "@/lib/vent/tactics";
-import { themePattern } from "@/lib/vent/intent";
+import { plainText, themePattern } from "@/lib/vent/intent";
 
 /**
  * Circle governance, enforced on the server.
@@ -123,7 +123,8 @@ export interface RuleVerdict {
  * seat was the one making a promise it could not keep.
  */
 export function checkMessage(content: string, kind: MessageKind): RuleVerdict {
-  const text = content.trim();
+  // "you shouldn’t" from a phone is still advice; see `plainText`.
+  const text = plainText(content).trim();
 
   if (text.length === 0) return { ok: false, reason: "Nothing to say yet." };
 

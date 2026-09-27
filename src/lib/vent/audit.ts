@@ -1,4 +1,4 @@
-import { gradeReply, worstOf, type Finding as Note, type GoldenCase } from "./quality";
+import { anchorScore, gradeReply, worstOf, type Finding as Note, type GoldenCase } from "./quality";
 import { acceptable, MAX_RULE_CHARS, type LearnedRule } from "./learned";
 import { wasAuthored } from "./tactics";
 import { isFailureReply } from "./model";
@@ -86,6 +86,8 @@ export interface Finding {
   /** Every grader label that fired, worst first. Names only, never details. */
   problems: string[];
   severity: "fatal" | "major" | "minor";
+  /** The anchors this reply broke, out of `ANCHORS`. Names only. */
+  anchors: string[];
 }
 
 /**
@@ -170,6 +172,7 @@ export function knownProblems(
       id: r.id,
       problems: notes.filter((n) => n.severity !== "skipped").map((n) => n.grader),
       severity: worst,
+      anchors: anchorScore(notes).failed,
     });
   }
   return out;

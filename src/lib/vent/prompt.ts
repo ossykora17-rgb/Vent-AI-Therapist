@@ -7,6 +7,7 @@ import { probeBlock, type Probe } from "./probes";
 import type { Pattern } from "./pattern";
 import { scan, scanBlock } from "./scan";
 import { aimedAtTheMachine, askedWhatIAm, type Classification } from "./intent";
+import { awayFor } from "./intake";
 import { isFailureReply } from "./model";
 import type { Tactic, TacticContext } from "./tactics";
 import { OCCUPATION_PRESSURE } from "@/lib/flavour/profile";
@@ -332,16 +333,33 @@ telling someone to drop their shoulders is the reason people quit.`;
  * Guessing "you have been here a while" at somebody on their first sentence is
  * exactly the kind of confident invention this codebase keeps having to remove.
  */
-export function arcBlock(turnsToday: number | null): string | null {
+export function arcBlock(turnsToday: number | null, sinceLastHours: number | null = null): string | null {
   if (turnsToday === null || turnsToday < 0) return null;
   const turn = turnsToday + 1;
 
+  /*
+    Coming back is not arriving. The first-turn line told the model "nothing
+    is established yet" about somebody whose last three sittings are in the
+    memory block beneath it, so a returning person met the stranger's opening.
+    Continuity here is carried, never narrated: where it lives now, not a
+    recap of where it stopped — `memoryBlock` already forbids reciting.
+
+    Both first-turn lines were cut to pay for this, and they had to be: with
+    the longest move and the longest question, the stranger's line built 3,615
+    of a 3,600 ceiling that check 24 had only ever measured on turn three.
+  */
+  const away = turnsToday === 0 ? awayFor(sinceLastHours) : null;
+  if (away)
+    return `WHERE YOU ARE
+Back after ${away}; first thing today. Pick the thread up where it lives now,
+not where it stopped. Be believed first: mirror them closely, and carry the
+move lightly.`;
+
   if (turnsToday === 0)
     return `WHERE YOU ARE
-First thing they have said today. Nothing is established yet, including whether
-you are safe to talk to. The work of this reply is to be believed: mirror them
-closely enough that they know they were heard, and carry the move lightly. A
-tool offered before somebody feels heard is a door closing.`;
+First thing they have said today, and nothing is established yet — including
+whether you are safe to talk to. Be believed first: mirror them closely enough
+that they know they were heard, and carry the move lightly.`;
 
   if (turnsToday <= 2)
     return `WHERE YOU ARE
@@ -356,10 +374,9 @@ enough that you can point at something specific instead of something general.
 Be more precise now than you were at the start — not warmer, more precise.`;
 
   return `WHERE YOU ARE
-Turn ${turn} today. They have been here a while. Do not open anything that
-cannot be finished in this exchange. Go back to a phrase they used earlier and
-give it back to them with what it has cost. If they are circling the same
-ground, say so plainly — circling is information, not failure.`;
+Turn ${turn} today. Do not open anything that cannot be finished in this
+exchange. Go back to a phrase they used earlier and give it back to them with
+what it has cost. If they are circling the same ground, say so plainly.`;
 }
 
 /**
@@ -621,6 +638,8 @@ export interface BuildPromptArgs {
   flavour?: FlavourProfile | null;
   /** Vents in the last 24h, from the rate limiter. Null when there is no store. */
   turnsToday?: number | null;
+  /** Hours since their last vent before this one; null when unknown. */
+  sinceLastHours?: number | null;
   /** What recurs, counted from rows already fetched. Null below the floor. */
   pattern?: Pattern | null;
   /** Their message, so the scan can be built from it. */
@@ -744,6 +763,7 @@ export function buildSystemPrompt({
   memory,
   flavour = null,
   turnsToday = null,
+  sinceLastHours = null,
   pattern = null,
   message,
   carve = null,
@@ -805,7 +825,7 @@ export function buildSystemPrompt({
     // written once in voice.ts so the grader and the build check read the
     // same words this prompt is assembled from.
     OFFICE_RULES,
-    arcBlock(turnsToday),
+    arcBlock(turnsToday, sinceLastHours),
     // The clause list goes in *before* the tactic. The move is what to do
     // once you have read them; this is the reading, and putting it after
     // would be handing over an instruction about a message the model has not

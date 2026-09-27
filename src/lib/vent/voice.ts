@@ -429,6 +429,19 @@ const ERRAND_FRAMES: ReadonlyArray<readonly [string, RegExp]> = [
   ["somebody to contact", new RegExp(`${CLAUSE}(?:(?:reach out to|talk to|text|call|message|ring) (?:someone|somebody|a friend|a person|anybody|anyone)|say (?:it|that|this) to (?:her|him|them|your \\w+))\\b`, "i")],
   ["a Pidgin instruction", new RegExp(`\\babeg (?:go|try|drink|rest|call|text|sleep|waka|write)\\b|${CLAUSE}make you (?:go|try|call|text|drink|rest|sleep|write|waka)\\b`, "i")],
   /*
+    The same plan, asked in Pidgin or with the time after the verb — and a
+    reply contract that ends every turn on a question makes a question the
+    likeliest shape an errand arrives in. Found in the chat's own tool row,
+    which shipped "Which one account you go mute today?" and "Wetin one thing
+    you fit do for danfo tomorrow?" as journal prompts: `errand()` caught three
+    of its nine lines. "Tell me" and "talk to me" stay out — this box is the
+    one place the room may ask them to go — and so does "would": "what would
+    you do tonight if you never did?" is a hypothetical about insight, which
+    `a plan` above already leaves out for the same reason.
+  */
+  ["a Pidgin plan", /\bwetin (?:be )?(?:one |the one )?(?:small |tiny )?(?:thing|step)\b[^?]{0,30}\b(?:you|u) (?:fit|go|wan|go fit) (?:do|try|take|control|change|start|stop)\b/i],
+  ["a plan for later", /\b(?:(?:you|u) (?:could|can|will|might|should|fit|go|wan|go fit)|(?:could|can|will|might) you) (?:do|try|take|call|text|message|write|start|mute|block|unfollow|delete|post|reach out|send|go|tell (?:him|her|them|your \w+))\b[^.?!]{0,40}\b(?:tonight|today|tomorrow|this week|this month|next week|before (?:you )?(?:bed|sleep)|in the morning|(?:over|this|at|before) the weekend|this weekend)\b/i],
+  /*
     Two tasks with no verb in front of them, which is why the frames above
     could not see either. "Four in, six out, drop the shoulder — do it now" is
     a breathing exercise whose instruction is a pair of numbers, and "One

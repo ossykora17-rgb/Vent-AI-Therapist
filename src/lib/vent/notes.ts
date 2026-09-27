@@ -256,7 +256,8 @@ export const NOTES_ASKED = 4;
 export const NOTES_INSTRUCTION = `Also return "notes": an array of at most ${NOTES_ASKED}
 things worth remembering about this person for next time. Each is
 {"kind": one of ${NOTE_KINDS.join("|")}, "subject": 2-4 words, "detail": their
-words where possible}.
+words where possible}. How they asked to be met — "just listen", "be straight
+with me", "talk Pidgin" — is a "language" note.
 
 Only what they actually said. Never a condition, never a diagnosis, never your
 reading of why they feel something — "said he is afraid of failing his father"

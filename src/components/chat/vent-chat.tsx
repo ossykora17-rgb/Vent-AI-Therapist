@@ -7,7 +7,6 @@ import Link from "next/link";
 import { RoomHeader } from "@/components/room-header";
 import { useToast } from "@/components/ui/toast";
 import { FeedbackFab } from "@/components/feedback-fab";
-import { Breathing, Journaling, ToolRow, shouldOfferBreathing } from "@/components/tools";
 import { anonId, queueVent } from "@/lib/anon";
 
 import { FORGET_FAILED } from "@/lib/vent/voice";
@@ -53,6 +52,8 @@ interface Line {
   speaker: "you" | "vent";
   text: string;
   crisis?: boolean;
+  /** The crisis lines, when the server put them beside this reply. */
+  lines?: { nigeria: string; emergency: string } | null;
 }
 
 interface VentResponse {
@@ -71,6 +72,8 @@ interface VentResponse {
   realWorldTag?: string | null;
   grounding?: { date: string; time: string };
   crisis?: { nigeria: string; emergency: string };
+  /** The crisis lines, beside a reply on a heavy turn (`linesBeside`); null otherwise. */
+  lines?: { nigeria: string; emergency: string } | null;
   memoryUsed?: number;
   tokensSpent?: boolean;
   persisted?: boolean;
@@ -277,8 +280,6 @@ export function VentChat() {
   const [gated, setGated] = React.useState(false);
   const [memoryCount, setMemoryCount] = React.useState(0);
   const [persisted, setPersisted] = React.useState<boolean | null>(null);
-  const [tag, setTag] = React.useState<string | null>(null);
-  const [tool, setTool] = React.useState<"breathing" | "journaling" | null>(null);
   const [invite, setInvite] = React.useState<VentResponse["circleInvite"]>(null);
   /* Thanksgiving: asked on the way out, every seventh anchored sitting. */
   const [askHeld, setAskHeld] = React.useState(false);
@@ -583,6 +584,7 @@ export function VentChat() {
           speaker: "vent",
           text: data.reply + why,
           crisis: data.intent === "crisis",
+          lines: data.intent === "crisis" ? null : data.lines ?? null,
         },
         // Its own line, after the answer. A disclosure folded into a reply is
         // a disclosure somebody reads past.
@@ -616,7 +618,6 @@ export function VentChat() {
         setIdleMs(0);
       }
 
-      setTag(data.realWorldTag ?? null);
       // Null clears it. A room that has filled or closed since the last turn
       // must stop being offered — an invitation to a full circle is the
       // "your turn comes" bug wearing a doorway.
@@ -1324,6 +1325,24 @@ export function VentChat() {
                   >
                     {line.text}
                   </p>
+                  {/*
+                    On a heavy turn the server sends the lines with the reply:
+                    one quiet row under the room's own words, the same weight as
+                    the footer, never a card and never an alarm. See
+                    `linesBeside` for which turns.
+                  */}
+                  {line.lines && (
+                    <p className="mt-4 text-label leading-snug text-ash">
+                      If it gets heavier than a screen can hold:{" "}
+                      <a href={`tel:${line.lines.nigeria.replace(/\s/g, "")}`} className="tabular underline underline-offset-2">
+                        {line.lines.nigeria}
+                      </a>
+                      {" · "}
+                      <a href={`tel:${line.lines.emergency}`} className="tabular underline underline-offset-2">
+                        {line.lines.emergency}
+                      </a>
+                    </p>
+                  )}
                 </div>
               </li>
             ),
@@ -1557,49 +1576,16 @@ export function VentChat() {
         )}
 
         {/*
-          Tools appear when the moment calls for them — which is not the same
-          as "after they have spoken", and that is what this said.
-
-          `lines.length > 0` meant somebody could arrive, drag the pressure
-          slider to ninety, tap "chest", and be offered nothing at all until
-          they managed a sentence. The person who cannot find words yet is
-          precisely the person the 4·2·6 is for. Sixty seconds of breathing is
-          often what makes the first sentence possible.
-
-          The condition is gone rather than widened: `ToolRow` already returns
-          null when there is neither a breathing reason nor a journal prompt,
-          so it was the second opinion on a question it was better placed to
-          answer. Fresh load at pressure 50 with no body named still shows
-          nothing, because nothing has been signalled.
+          There was a tool row here: "Breathing 4·2·6" and a "Journalling
+          prompt", offered under the conversation whenever the pressure was
+          high or a tag fired. Every prompt behind it was an errand — "which
+          one account you go mute today?", "step outside 30 seconds", "cold
+          water on face, ten seconds", "the one call you dey avoid" — the same
+          lines the tactic library had already retired, still shipping as
+          buttons one component over. The founder's rule is no exercises, no
+          breathing counts, no journaling prompts, of any kind; the room's
+          answer to high pressure is to stay with it. Deleted, not hidden.
         */}
-        {/* And not beside a heavy question. "Breathing 4·2·6" and
-            "Journalling prompt" under "I fit ask you something heavy?" is
-            three offers in one card's height — the menu this room exists not
-            to be. Seen in a screenshot, not in the source. */}
-        {!thinking && !gated && tool === null && !offer && !answering && (
-          <ToolRow
-            // No tapped body any more: the tray that collected it was read by
-            // 2 of 108 vents and cost a permanent caption. Pressure and the
-            // tag still decide this, which is 98% of what it ever did.
-            showBreathing={shouldOfferBreathing(tag, pressure, null)}
-            tag={tag}
-            onBreathe={() => setTool("breathing")}
-            onJournal={() => setTool("journaling")}
-          />
-        )}
-
-        {tool === "breathing" && <Breathing onClose={() => setTool(null)} />}
-
-        {tool === "journaling" && tag && (
-          <Journaling
-            tag={tag}
-            onClose={() => setTool(null)}
-            onSubmit={(text) => {
-              setTool(null);
-              void send(text);
-            }}
-          />
-        )}
 
         {/*
           The one moment in this product that has earned an arrival.

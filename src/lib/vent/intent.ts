@@ -73,7 +73,53 @@ const CRISIS = [
   /\bharm myself\b/,
   /\btake my (own )?life\b/,
 
+  /*
+    ── a plan, a means, or something already done ───────────────────────────
+
+    Everything above is about wanting not to exist. Nothing was about the
+    minutes after deciding: "i took too many pills", "i have the pills ready",
+    "i'm going to end it tonight", "i wrote a goodbye letter" and "i've been
+    cutting myself again" all routed to `vent` and were answered by the model.
+    They are the most urgent sentences this product can receive. `sniper` is
+    the insecticide Nigerian reporting names most often in these deaths, which
+    is why it is a means here and not a brand.
+
+    Left out on purpose, each ordinary on its own: bare "i'm going to jump"
+    (a call, a queue), "this is goodbye" (a job, a group), "i have a rope",
+    "i'm standing on the bridge". And threats to somebody else — "i go kill
+    am" is everyday hyperbole here, and the reply this path sends is written
+    for somebody in danger from themselves, so it would answer the wrong
+    question.
+  */
+  /\b(?:took|taken|swallowed|drank|drunk)\s+(?:too many|all (?:of )?(?:the|my)|a (?:whole )?(?:bottle|pack|packet|strip|handful)(?: of)?|an overdose(?: of)?)\b[^.!?]{0,24}\b(?:pills?|tablets?|panadol|paracetamol|sleeping|meds|medication|drugs|sniper|poison|bleach)\b/,
+  /\b(?:i (?:just )?|i'?ve |i have |going to |want to |wan )overdos(?:e|ed)\b/,
+  /\b(?:drink|drank|drunk)\s+sniper\b/,
+  /\b(?:i have|i'?ve got|i got|i'?ve|my)\b[^.!?]{0,12}\b(?:pills?|tablets?|sniper|poison|rope)\b[^.!?]{0,20}\b(?:ready|saved up|stockpiled|in my hand)\b(?!\s+(?:for|at|to|when)\b)/,
+  // "with him" anywhere after it is a relationship ending, not a life; a
+  // means named after it is caught by the line below whatever else follows.
+  /\b(?:going to|gonna|about to|ready to)\s+end it\b(?![^.!?]{0,24}\b(?:with|between)\b)/,
+  /\bend it (?:all )?(?:tonight|today|now|soon|for good)\b(?![^.!?]{0,24}\b(?:with|between)\b)/,
+  /\bend (?:it|am|my life)\b[^.!?]{0,30}\b(?:pills?|tablets?|sniper|poison|rope|bridge)\b/,
+  /\b(?:goodbye|farewell) (?:letter|note)\b/,
+  /\bjump (?:off|from) (?:the |a |this |that |my )?(?:bridge|roof|building|balcony|top floor|third mainland)\b/,
+  /\b(?:been|keep|kept|started|still) cutting myself\b|\bcutting myself\b(?!\s+(?:off|out|some|a |short|slack)\b)/,
+  /\b(?:i|i'?ve|i have|i'?m|i am|been|started|keep)\b[^.!?]{0,12}\bself[- ]?harm/,
+
   // ── passive: not wanting to exist ────────────────────────────────────────
+  /*
+    The ones that name living itself, found by probing rather than by a
+    screenshot: "tired of living", "can't go on living", "what's the point of
+    living", "life isn't worth it", "better off dead", "sleep and never wake
+    up". Each guard is the ordinary sentence it keeps out — "tired of life in
+    Lagos", "the point of living in Lagos", "i'd rather be dead than work
+    there", which is hyperbole about a job.
+  */
+  /\btired of (?:living|being alive|existing|this life|life)\b(?!\s+(?:in|here|as)\b)/,
+  /\bcan'?t (?:go on|keep|carry on) living\b/,
+  /\bpoint (?:of|in) (?:living|life|being alive|existing|going on)\b(?!\s+(?:in|here)\b)/,
+  /\blife (?:is not|isn'?t|is no longer|no|no dey) worth (?:living|it|am)\b/,
+  /\bbetter off dead\b|\brather be dead\b(?!\s+than\b)|\bwant to be dead\b/,
+  /\b(?:hope|want|wish|pray)\b[^.!?]{0,20}\b(?:never|not) wake up\b|\bsleep and (?:never|not) wake\b/,
   /\bdon'?t want to (be here|live|be alive|exist|wake up)\b/,
   /\bdo not want to (be here|live|be alive|exist|wake up)\b/,
   /\bnot want to be here\b/,
@@ -81,6 +127,9 @@ const CRISIS = [
   /\bbetter (if i (was|were) (dead|gone)|off without me)\b/,
   /\b(everyone|everybody|they'?d all) (would be |be |)better off without me\b/,
   /\bwish i (was|were) (dead|gone|not here)\b/,
+  // The contraction the line above never had, with the guard that keeps "i
+  // wish i wasn't here at this wedding" a sentence about a wedding.
+  /\bwish i (?:wasn'?t|weren'?t) here\b(?!\s+(?:at|in|for|with|today|tonight)\b)/,
   // Bare only. "I want to disappear" is passive ideation; "I want to
   // disappear from that group chat" is a Tuesday, and the first draft of this
   // line gated it — caught by the false-positive probes, which exist because
@@ -139,11 +188,13 @@ const CRISIS = [
   //
   // "i wan die" is the sentence this list existed for and did not have.
   /\bi (wan|won) die\b/,
-  /\bmake i die\b/,
+  /\bmake i (?:just |jus )?die\b/,
   /\bi no wan (dey alive|live|dey this world)\b/,
   /\bno wan dey alive\b/,
   /\bmake e end\b/,
-  /\bi wan comot for this world\b/,
+  // `commot` is how many people spell it; the list only knew `comot`.
+  /\b(?:comot|commot) for (?:this )?world\b/,
+  /\b(?:think(?:ing)?|dey think|plan(?:ning)?|dey plan|wan|go)\s+(?:to\s+|of\s+)?end am\b(?!\s+(?:with|for)\b)/,
   /\btire for this life\b/,
   /\bi no fit continue this life\b/,
   /*
@@ -515,8 +566,25 @@ export interface Classification {
   body: "head" | "throat" | "chest" | null;
 }
 
+/**
+ * The text a phone sends, with its typography flattened for matching.
+ *
+ * Every pattern in this product writes an apostrophe as `'` — `don'?t`,
+ * `can'?t`, `i'?m` — and iOS types `’` by default. So "i don’t want to live
+ * anymore", typed on an iPhone, routed to `vent` while the same sentence typed
+ * on a laptop routed to `crisis`: the gate tested the keyboard its author was
+ * holding. Curly quotes and a no-break space are folded to their plain forms
+ * and nothing else changes, so a person's words are still their words.
+ */
+export function plainText(text: string): string {
+  return text
+    .replace(/[‘’‚‛′ʼ＇´`]/g, "'")
+    .replace(/[“”„‟″＂]/g, '"')
+    .replace(/ /g, " ");
+}
+
 export function classify(message: string): Classification {
-  const m = message.toLowerCase().trim();
+  const m = plainText(message).toLowerCase().trim();
 
   /*
     A strong marker decides it. An ambiguous one never does — see PIDGIN_STRONG
