@@ -4544,6 +4544,38 @@ Check 15d caught the deletion reason going missing, and it came back compact.
 truthy — so it changed nothing and reported an escape. Thirty-one of thirty-one
 fail once the mutation empties the list for real.
 
+**The laws reached the model and stopped at the model.** Every grader reads what
+a model wrote; `inspectReply` exempts authored lines by design. So the morning
+after the presence directive shipped, a sweep of the product's own strings found
+the room still saying three things it now sends a model back for: the Breaking
+Room invite (*"we go just continue"*), its waiting caption (*"Take your time. I
+dey here."*) and — the sharp one — `NO_MEMORY_LINE`, *"We haven't talked about
+this yet."*, which the prompt tells the model to say **verbatim**. From #261 the
+prompt was requesting a sentence the failsafe would bill a retry to undo.
+
+It was the founder's own wording from an earlier spec, kept verbatim on purpose,
+and a later spec is the one thing allowed to overrule it: *"No 'we'"* is hard
+law. It reads *"This hasn't come up here yet."* now — the nearest sentence
+without the plural, and without blaming them for the gap. `received` stopped
+thanking them for trusting *me* and `declined` stopped holding the question open
+for later. Check 171 sweeps these lines with everything else the room says
+without a model, and a floor asserts they are in the sweep, because clean lines
+left out of a sweep pass exactly like clean lines inside it — that mutation
+escaped first.
+
+**And the preference got a number.** *"Prefer statements"* fires no grader, so
+nothing could say whether it landed: the two production replies after the
+release both ended on a question. The nightly audit now prints `endings N of M
+ended on a question` and writes it to the artifact, through `endsOnQuestion` in
+`voice.ts`, one detector. Production's baseline, counted over every stored
+reply (120, counts only — the two after the release among them): **109 ended on
+a question**, 8 asked two or more, 8 used a first-person plural (an upper bound
+on `fused`, which excuses Pidgin's `make we`), 1 handed the thread back, and
+**none** rescued, clung, listed or named a framework, each counted with a
+pattern wider than the grader's — so the two new `REJECT` graders cost nothing
+on the replies this room has actually written, and `fused` and `closing` are
+the retries to watch.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.

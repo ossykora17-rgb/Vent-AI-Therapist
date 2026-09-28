@@ -263,13 +263,22 @@ export function nextQuestion(ctx: BreakingContext): Question | null {
  * Asked with an exit in it. "You fit say no" is not politeness — it is the
  * difference between an invitation and a demand, and somebody who cannot
  * decline has not consented.
+ *
+ * Four of these were rewritten under the presence directive, which governs
+ * every line the room says and not only the ones a model writes. The invite
+ * said "we go just continue" — the one plural the hard law names. `waiting`
+ * was "Take your time. I dey here.", the exact hand-back the failsafe now sends
+ * a model's reply back for. `received` thanked them for trusting *me*, which
+ * makes the room the subject of the moment they just gave away; and `declined`
+ * held the question open for later, a hook. None of them was graded, because
+ * authored lines never are — which is why check 171 now sweeps them.
  */
 export const BREAKING_LINES = {
   invite:
-    "I fit ask you something heavy? You fit say no, and we go just continue.",
-  waiting: "Take your time. I dey here.",
-  received: "I see you. Thank you for trusting me with that one.",
-  declined: "No wahala. E dey there when you ready.",
+    "I fit ask you something heavy? You fit say no — nothing go change.",
+  waiting: "As much or as little as you want.",
+  received: "I see you. It's said now, and it's still yours.",
+  declined: "No wahala. Na you dey lead this one.",
   /*
     When the answer did not land.
 

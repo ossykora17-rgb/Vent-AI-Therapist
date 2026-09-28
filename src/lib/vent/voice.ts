@@ -591,6 +591,16 @@ export function closingProblem(text: string): "hands it back" | "more than one q
   return null;
 }
 
+/**
+ * Whether a reply ends on its question mark. Not a finding — the presence
+ * directive allows one precise question — but the shape it asks to be the
+ * exception, so the nightly audit counts it. A preference nothing prints is a
+ * preference nobody can see move.
+ */
+export function endsOnQuestion(text: string): boolean {
+  return text.trim().replace(/["'”’)\]\s]+$/, "").endsWith("?");
+}
+
 /** Endings that could close any conversation, and so leave this one to them. */
 /*
   Anchored to the end of the reply, or to the start of its last sentence,
@@ -675,8 +685,16 @@ export function aboutTheRoom(text: string): { match: string } | null {
   This read "I don't have that from before yet." — close, and not the same
   sentence. The spec has now named the exact line twice, and a constant that
   approximates a specified string is the drift this file exists to stop.
+
+  And then a later spec overruled it, which is the one thing allowed to. It
+  was "We haven't talked about this yet." — the founder's words — until the
+  presence directive's hard law, "No 'we'", made `fused` buy a retry: from
+  that release the prompt was telling the model to say, verbatim, a sentence
+  the failsafe would send back. Two rules that cannot both be true, and the
+  newer one wins. The nearest sentence without the plural, and without
+  blaming them for the gap either.
 */
-export const NO_MEMORY_LINE = "We haven't talked about this yet.";
+export const NO_MEMORY_LINE = "This hasn't come up here yet.";
 
 /**
  * What this product says it is, in one place.

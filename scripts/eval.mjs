@@ -21488,7 +21488,7 @@ check("170 Every reply is scored on the anchors, and every grader counts toward 
 
 // ── 171. the presence directive: the thread kept alive, and nobody held ─────
 const { RESCUES, STICKY } = await app("src/lib/vent/quality.ts");
-const { HAND_BACK } = await app("src/lib/vent/voice.ts");
+const { HAND_BACK, endsOnQuestion } = await app("src/lib/vent/voice.ts");
 const { LANDING_PROBE: LANDING } = await app("src/lib/vent/arc.ts");
 
 check("171 The room keeps the thread alive, and never rescues, holds on, lectures or says we", () => {
@@ -21553,7 +21553,16 @@ check("171 The room keeps the thread alive, and never rescues, holds on, lecture
     openingLine(g, lang, null), openingLine(g, lang, "the rent"), openingLine(g, lang, null, [], 72), openingLine(g, lang, null, [], 2),
     allianceLine(true, lang), allianceLine(false, lang),
     ...["meta", "greeting"].map((i) => localReply(i, g, lang, "are you real?")).filter(Boolean),
-  ]);
+  ]).concat(
+    /*
+      Every other line the room says without a model, found by sweeping the
+      product's strings rather than by remembering them: the Breaking Room said
+      "we go just continue" and "Take your time. I dey here.", and the memory
+      fallback the prompt tells the model to say verbatim was "We haven't talked
+      about this yet." — a sentence the failsafe would then send back.
+    */
+    Object.values(BREAKING_LINES), [NO_MEMORY_LINE],
+  );
   const authored = [
     ...ALL_TACTICS.filter((t) => t.hold).map((t) => t.hold),
     ...PROBES.map((p) => p.ask),
@@ -21562,6 +21571,9 @@ check("171 The room keeps the thread alive, and never rescues, holds on, lecture
   ];
   ok(authored.length >= 180 && local.length >= 12, `${authored.length} authored lines read, ${local.length} of them the room's own`,
     "a sweep over nothing passes loudest");
+  ok([...Object.values(BREAKING_LINES), NO_MEMORY_LINE].every((l) => authored.includes(l)),
+    "and it reads every line the room says without a model, not only the ones a hold or probe carries",
+    "clean lines left out of a sweep pass exactly like clean lines inside it");
   const offenders = authored
     .map((t) => [t, gradeReply(c, t, { tokensSpent: true, said: c.message })
       .filter((f) => ["rescues", "sticky", "fused", "closing", "teaches"].includes(f.grader)).map((f) => f.grader)])
@@ -21579,6 +21591,15 @@ check("171 The room keeps the thread alive, and never rescues, holds on, lecture
   ok(ANCHORS.no_advice_or_tasks.includes("rescues") && ANCHORS.continuity.includes("sticky"),
     "rescuing is fixing, and a hook is the flow turned extractive",
     "the directive's internal gate, asked after the fact");
+
+  // ── the preference, counted where it can be read ────────────────────────
+  ok(endsOnQuestion("Whose yes were they?") && endsOnQuestion("Is that the word — the one they used?”")
+    && !endsOnQuestion("None of them were yours.") && !endsOnQuestion("Was it yours? None of them were."),
+    "a reply ends on a question only when its last mark is one");
+  const auditSrc = strip(fs.readFileSync(path.join(ROOT, "scripts/audit.mjs"), "utf8"));
+  ok(/endsOnQuestion\(r\.ai_reply\)/.test(auditSrc) && /endings: \{ question: endedOnQuestion, of: scored \}/.test(auditSrc),
+    "and the nightly audit counts it into the record that outlives the hour",
+    "\"prefer statements\" fires no grader, so without a count nobody can see whether it landed");
 
   // ── the slot the reply ends on ──────────────────────────────────────────
   ok(/^WHAT TO GO AFTER\n/.test(probeBlock(PROBES[0])) && !/QUESTION/.test(probeBlock(PROBES[0])),

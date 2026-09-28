@@ -44,6 +44,7 @@ const LIMIT = Number(process.argv.find((a) => a.startsWith("--limit="))?.split("
 const { knownProblems, flatReplies, parseProposals, auditPrompt } =
   await app("src/lib/vent/audit.ts");
 const { prune, MAX_LEARNED, LEARNED_RULES } = await app("src/lib/vent/learned.ts");
+const { endsOnQuestion } = await app("src/lib/vent/voice.ts");
 
 const OUT = path.join(ROOT, "data", "audit");
 const today = new Date().toISOString().slice(0, 10);
@@ -165,7 +166,16 @@ const flat = flatReplies(rows, known, 10);
 console.log(`flat, unbroken ${flat.length}  (the only ones worth a call)`);
 
 fs.mkdirSync(OUT, { recursive: true });
-const report = { date: today, read: rows.length, anchors: { scored, whole, broken }, known, flat: flat.map((r) => r.id) };
+/*
+  "Prefer statements that open awareness. One precise question is allowed when
+  it serves flow." A preference fires no grader, so it gets a count instead —
+  how many of tonight's replies ended on a question — and a prompt change that
+  was meant to move it can be seen moving it, or not.
+*/
+const endedOnQuestion = rows.filter((r) => r.ai_reply && r.intent_type === "vent" && endsOnQuestion(r.ai_reply)).length;
+console.log(`endings    ${endedOnQuestion} of ${scored} ended on a question — the directive prefers a statement`);
+
+const report = { date: today, read: rows.length, anchors: { scored, whole, broken }, endings: { question: endedOnQuestion, of: scored }, known, flat: flat.map((r) => r.id) };
 
 if (flat.length === 0) {
   fs.writeFileSync(path.join(OUT, `${today}.json`), JSON.stringify({ ...report, proposals: [] }, null, 2));
