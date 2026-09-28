@@ -824,7 +824,7 @@ const TACTICS: Tactic[] = [
     id: "future_self",
     family: "cognitive",
     instruction:
-      "Ask what the version of them that already has clarity on this can see that they cannot yet. Not 'it will be fine' — they can smell that. Ask what that one sees, never what that one would do: a plan is homework, and this room hands out none.",
+      "Ask what the version of them that already has clarity on this can see that they cannot yet. Never a reassurance — they can smell that. Ask what that one sees, never what that one would do: a plan is homework, and this room hands out none.",
     hold: "The version of you that already has clarity on this — what does that one see that you cannot yet?",
     // Stuck, not distraught. This asks somebody to move, and asking a person
     // in freefall to move is a demand dressed as a question.
