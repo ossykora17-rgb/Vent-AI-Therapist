@@ -66,21 +66,35 @@ above, in one or two sentences. Do not reframe it as feeling. Do not say
 "that sounds heavy". Say the date.`;
 }
 
-/** Answers a factual question locally — no model call, no tokens spent. */
-export function answerFactual(message: string, g: Grounding): string | null {
+/**
+ * Answers a bare factual question locally — no model call, no tokens spent.
+ *
+ * In the register they asked in. Every line here used to end in Pidgin
+ * whoever asked — "anything about today wey dey tight?" to somebody who wrote
+ * "what's the time" — which is the direction this product counts as worse: a
+ * Pidgin speaker can read English, and somebody who wrote in English may not
+ * read Pidgin at all. The Pidgin lines are the old ones, unchanged.
+ *
+ * "Who are you" is not answered here any more. It is the question the spec
+ * answers, and `localReply` answers it in both registers, without the clock.
+ */
+export function answerFactual(message: string, g: Grounding, pidgin = false): string | null {
   const m = message.toLowerCase();
 
-  if (/\b(who are you|wetin you be|what are you)\b/.test(m)) {
-    return `I'm VENT — an AI, not a person and not a licensed therapist. It's ${g.time} on ${g.date}. What's tight today?`;
-  }
   if (/\b(where am i|which place|where are we)\b/.test(m)) {
-    return `You're in VENT, and by the clock I'm reading you're on Nigeria time — ${g.time} WAT. Anything about today wey dey tight?`;
+    return pidgin
+      ? `You're in VENT, and by the clock I'm reading you're on Nigeria time — ${g.time} WAT. Anything about today wey dey tight?`
+      : `You're in VENT, on Nigeria time — ${g.time} WAT. Anything about today pressing on you?`;
   }
   if (/\b(time|clock)\b/.test(m) && !/\b(long time|time and again|every time)\b/.test(m)) {
-    return `${g.time} WAT, on ${g.date}. You keeping track — anything about today wey dey press you?`;
+    return pidgin
+      ? `${g.time} WAT, on ${g.date}. You keeping track — anything about today wey dey press you?`
+      : `${g.time} WAT, on ${g.date}. Anything about today pressing on you?`;
   }
   if (/\b(date|day|today|what day)\b/.test(m)) {
-    return `Today is ${g.date}. ${g.time} WAT. You keeping track — anything about today wey dey tight?`;
+    return pidgin
+      ? `Today is ${g.date}. ${g.time} WAT. You keeping track — anything about today wey dey tight?`
+      : `Today is ${g.date}, ${g.time} WAT. Anything about today pressing on you?`;
   }
   return null;
 }

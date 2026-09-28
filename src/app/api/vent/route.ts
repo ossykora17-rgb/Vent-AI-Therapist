@@ -464,7 +464,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
   // ── 3. Free paths. No model call — this is the credit policy in code. ───
   const factual =
     classification.intent === "factual"
-      ? answerFactual(input.message, grounding)
+      ? answerFactual(input.message, grounding, classification.language === "pidgin")
       : null;
   /*
     The first thing the room says, and it branches on whether it knows them.
