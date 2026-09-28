@@ -210,16 +210,41 @@ const CRISIS = [
   /\bnobody go miss me\b/,
 ];
 
+/*
+  A fact only counts when it is the whole message — the greeting's rule, for
+  the greeting's reason.
+
+  These were unanchored with no length rule, and they run second, before
+  everything but crisis, so a vent that happened to contain one never reached
+  the model: "where am i going with my life" was told it is in VENT on Nigeria
+  time, "today's date is my father's death anniversary and nobody remembered"
+  was told the date, and "my boss asked me who are you to question me" was told
+  what the room is. A question missed here costs one model call, which is given
+  the date and time and told to answer them directly; a vent caught here is
+  answered with a clock.
+
+  "who are you" and "wetin you be" are not facts to look up. They are the
+  question the spec answers, and they live in ASKED_WHAT_I_AM so it has one
+  answer rather than two.
+*/
 const FACTUAL = [
-  /what('?s| is)? (today('?s)? )?(the )?date/,
-  /what day (is it|be today)/,
-  /what('?s| is)? the time/,
-  /what time (is it|be am)/,
-  /\bwho are you\b/,
-  /\bwetin you be\b/,
-  /\bwhere am i\b/,
-  /\btoday('?s)? date\b/,
+  /^what(?:'?s| is)? (?:today(?:'?s)? )?(?:the )?date(?: is it)?(?: today)?$/,
+  /^what day (?:is it|is today|be today)(?: today)?$/,
+  /^what(?:'?s| is)? the time(?: now)?$/,
+  /^what time (?:is it|be am)(?: now)?$/,
+  /^where am i(?: now)?$/,
+  /^today(?:'?s)? date$/,
 ];
+
+/** The question alone: its punctuation, and a hello or a please around it, off. */
+function bareQuestion(m: string): string {
+  return m
+    .replace(/[?!.,]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^(?:(?:hi|hey|hello|abeg|please|pls|biko|sorry|oya)\s+)+/, "")
+    .replace(/(?:\s+(?:please|pls|abeg|biko|o|sef))+$/, "");
+}
 
 const GREETING = [
   /^(hi|hey|hello|yo|howdy)\b/,
@@ -319,6 +344,10 @@ const AIMED_AT_MACHINE = [
 const ASKED_WHAT_I_AM = [
   /\bare you (?:even |actually |really )?(?:real|a bot|a robot|a person|human|an ai|a machine)\b/,
   /\byou be (?:real|robot|bot|human|machine|ai)\b/,
+  // From FACTUAL, where they were answered with the clock. Whole message only,
+  // so "who are you to question me" stays somebody else's sentence.
+  /^(?:(?:hi|hey|hello|abeg|so|but)[,\s]+)*(?:who|what) (?:exactly |even |really )?are you(?: really| exactly| sef)?[?!.\s]*$/,
+  /^(?:(?:abeg|so|but)[,\s]+)*(?:na )?wetin you be(?: sef)?[?!.\s]*$/,
 ];
 
 /** The bare question only — the greeting's rule, for the greeting's reason. */
@@ -596,7 +625,7 @@ export function classify(message: string): Classification {
 
   // Crisis wins over everything, always.
   if (any(CRISIS, m)) return { intent: "crisis", realWorldTag, language, body };
-  if (any(FACTUAL, m)) return { intent: "factual", realWorldTag, language, body };
+  if (any(FACTUAL, bareQuestion(m))) return { intent: "factual", realWorldTag, language, body };
   /*
     Before META, because an injection that also says "you keep saying the same
     thing" must not be answered with an apology for repeating ourselves.

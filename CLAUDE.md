@@ -4576,6 +4576,32 @@ pattern wider than the grader's — so the two new `REJECT` graders cost nothing
 on the replies this room has actually written, and `fused` and `closing` are
 the retries to watch.
 
+**A vent that mentioned the time was answered with the clock.** The fact path
+runs second — after crisis, before everything else — and answers without a
+model. Its patterns were unanchored with no length rule, so *"where am i going
+with my life"* was told it is in VENT on Nigeria time, *"today's date is my
+father's death anniversary and nobody remembered"* was told the date, and *"my
+boss asked me who are you to question me"* was told what the room is. The
+greeting learned *"only when it is the whole message"* long ago and
+`askedWhatIAm` copied it; the list that runs before both never did. No stored
+row took that path — all 129 production turns are vents or greetings — so it
+was found by probing the router rather than by somebody meeting it.
+
+A fact counts now only when it is the whole message, a hello or a please around
+it allowed. A bare question it misses goes to the model, which is handed the
+date and time and told to answer them directly: one call, against a death
+anniversary answered with a timestamp.
+
+Two more on the same path. *"who are you"* and *"wetin you be"* were facts, so
+the question the VENT spec answers had two answers — the spec's for *"are you
+real?"*, and the clock read back, in English whoever asked. They are the spec's
+question now, whole-message only, and *"wetin you be?"* is answered in Pidgin.
+And every fact line ended in Pidgin whoever asked — *"anything about today wey
+dey tight?"* to *"what's the time"* — the direction this file counts as worse.
+English is answered in English; the Pidgin lines are the old ones, unchanged.
+Check 172 holds all three, check 171's sweep reads the fact lines, and nine
+mutations fail them.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.

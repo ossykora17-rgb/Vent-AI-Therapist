@@ -20,7 +20,7 @@ import path from "node:path";
 import { app, ROOT, stubbed } from "./app-imports.mjs";
 
 const { classify } = await app("src/lib/vent/intent.ts");
-const { groundNow } = await app("src/lib/vent/grounding.ts");
+const { groundNow, answerFactual } = await app("src/lib/vent/grounding.ts");
 const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS, ALL_TACTICS, nothingCanMove, caughtWatchingSelf } =
   await app("src/lib/vent/tactics.ts");
 const { buildFlavour } = await app("src/lib/flavour/profile.ts");
@@ -21549,6 +21549,9 @@ check("171 The room keeps the thread alive, and never rescues, holds on, lecture
 
   // ── the authored lines: every one passes all of it ──────────────────────
   const g = { block: "evening" };
+  const clock = { ...g, time: "21:40", date: "Sunday, 27 September 2026" };
+  const facts = ["en", "pidgin"].flatMap((lang) =>
+    ["where am i", "what's the time", "what's the date"].map((q) => answerFactual(q, clock, lang === "pidgin")));
   const local = ["en", "pidgin"].flatMap((lang) => [
     openingLine(g, lang, null), openingLine(g, lang, "the rent"), openingLine(g, lang, null, [], 72), openingLine(g, lang, null, [], 2),
     allianceLine(true, lang), allianceLine(false, lang),
@@ -21562,6 +21565,8 @@ check("171 The room keeps the thread alive, and never rescues, holds on, lecture
       about this yet." — a sentence the failsafe would then send back.
     */
     Object.values(BREAKING_LINES), [NO_MEMORY_LINE],
+    // And the fact path's lines, which the first sweep of the strings missed.
+    facts,
   );
   const authored = [
     ...ALL_TACTICS.filter((t) => t.hold).map((t) => t.hold),
@@ -21571,7 +21576,7 @@ check("171 The room keeps the thread alive, and never rescues, holds on, lecture
   ];
   ok(authored.length >= 180 && local.length >= 12, `${authored.length} authored lines read, ${local.length} of them the room's own`,
     "a sweep over nothing passes loudest");
-  ok([...Object.values(BREAKING_LINES), NO_MEMORY_LINE].every((l) => authored.includes(l)),
+  ok(facts.length === 6 && facts.every(Boolean) && [...Object.values(BREAKING_LINES), NO_MEMORY_LINE, ...facts].every((l) => authored.includes(l)),
     "and it reads every line the room says without a model, not only the ones a hold or probe carries",
     "clean lines left out of a sweep pass exactly like clean lines inside it");
   const offenders = authored
@@ -21616,6 +21621,58 @@ check("171 The room keeps the thread alive, and never rescues, holds on, lecture
   ok(!/Weight over warmth/.test(said) && /Warm, steady, alive, precise/.test(said),
     "and its tone is the directive's, not the one it replaced",
     "\"weight over warmth\" under a directive whose tone opens \"warm\" is a prompt holding both");
+});
+
+check("172 A fact is answered only when it is the whole message, and in their register", () => {
+  /*
+    The fact path runs second, before everything but crisis, and answers
+    without a model. Its patterns were unanchored with no length rule, so a vent
+    carrying one of them was answered with a clock: "where am i going with my
+    life" was told it is in VENT on Nigeria time, a death anniversary was told
+    the date, and "who are you to question me" was told what the room is. The
+    greeting learned "only when it is the whole message" long ago; this is the
+    same rule, one pattern list over. And every line it said ended in Pidgin
+    whoever asked, while "wetin you be?" was answered in English.
+  */
+  const vents = [
+    "where am i going with my life",
+    "i don't even know where am i anymore, everything is blurry",
+    "today's date is my father's death anniversary and nobody remembered",
+    "my boss asked me who are you to question me and i felt so small",
+    "i can't sleep, i don't even know what time is it anymore",
+    "who are you to judge me",
+    "what day is it going to stop hurting",
+  ];
+  for (const v of vents) is(classify(v).intent, "vent", `a vent carrying a fact is a vent: "${v.slice(0, 40)}"`,
+    "answered locally it gets the clock, and the model never reads it");
+  const bare = ["whats today's date?", "what's the time?", "what time is it", "what day is it today", "where am i?",
+    "Hi, what's the date?", "today's date", "what is the time now please", "what date is it"];
+  for (const q of bare) is(classify(q).intent, "factual", `the bare question is still free: "${q}"`);
+  ok(vents.length + bare.length >= 15, `${vents.length + bare.length} probes`, "a check with nothing to probe passes by not looking");
+  is(classify("today's date is the day i end my life").intent, "crisis", "crisis still runs first");
+
+  // One answer to what the room is, in the register it was asked in.
+  const g = { time: "10:05", date: "Monday, 28 September 2026", block: "morning" };
+  const spec = localReply("meta", g, "en", "are you real?");
+  for (const q of ["who are you?", "what are you?", "Hi, who are you", "who exactly are you?"]) {
+    is(classify(q).intent, "meta", `"${q}" is the question the spec answers`);
+    is(localReply("meta", g, "en", q), spec, `and "${q}" gets the spec's answer, not the clock`);
+  }
+  const w = classify("wetin you be?");
+  is(`${w.intent} ${w.language}`, "meta pidgin", "\"wetin you be?\" asks it in Pidgin");
+  is(localReply("meta", g, w.language, "wetin you be?"), localReply("meta", g, "pidgin", "are you real?"),
+    "and is answered in Pidgin");
+  is(answerFactual("who are you", g), null, "the fact path no longer answers who the room is — one answer, not two");
+
+  for (const q of ["what's the time", "what's the date", "where am i"]) {
+    const en = answerFactual(q, g, false), pid = answerFactual(q, g, true);
+    ok(Boolean(en) && !PIDGIN_GRAMMAR.some((re) => re.test(en)), `asked in English, answered in English: "${q}"`, en);
+    ok(Boolean(pid) && PIDGIN_GRAMMAR.some((re) => re.test(pid)), `asked in Pidgin, answered in Pidgin: "${q}"`, pid);
+  }
+  const route = fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8");
+  ok(/answerFactual\(input\.message, grounding, classification\.language === "pidgin"\)/.test(route),
+    "and the route hands it the register the router read",
+    "a function that can answer in Pidgin and is never told to is English-only");
 });
 
 for (const r of results) {
