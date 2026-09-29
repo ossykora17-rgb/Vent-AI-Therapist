@@ -163,7 +163,60 @@ export interface RecallSources {
   rows?: readonly MemoryRow[];
   /** Their own recent rows of any intent, for the risk history. */
   crises?: readonly { intent_type: string | null; created_at: string }[];
+  /**
+   * What they just wrote, and the pressure the router read in it. With these,
+   * Layer 2 carries only what this turn touches — see `relevant`. Without them
+   * it carries everything, which is what every caller that has no message
+   * wants: the audit, the pipelines and the budget's worst case.
+   */
+  message?: string;
+  tag?: string | null;
   now?: Date;
+}
+
+/*
+  "INJECT ONLY THE RELEVANT SUBSET EACH TURN. NEVER INVENT CONTINUITY."
+
+  The presence spec's memory rule, and it has two halves that pull against each
+  other. A return is when memory matters most — somebody comes back and the room
+  already knows what this is about — so the first turn of a sitting carries all
+  of it, capped. Inside a sitting the conversation itself is in the context, and
+  a fact about a sister riding every turn is the room steering towards a sister
+  nobody mentioned today: invented continuity, paid for in tokens. So mid-sitting
+  an item rides only when this turn's words touch it, and how they asked to be
+  met rides always, because it governs every reply rather than one subject.
+
+  Touch is read on stems — four letters of any content word — because "calls"
+  must find "calling" and a Pidgin sentence must find its English note. It
+  misses a synonym ("pops" for "father"); the return turn carries everything,
+  so a miss costs one mid-sitting mention, never the memory.
+*/
+const STOP = new Set(("the and you your for but not are was were with that this they them what when have has had " +
+  "about from just like feel felt know want been being will would could should there their then than into very " +
+  "really still also some more much only even over because today again dey wey don una abeg sha sef make abi " +
+  "wetin how who why where which said says tell told thing things time day now all out get got can cant dont " +
+  "didnt doesnt isnt wasnt its it's i'm im ive me my mine our").split(" "));
+
+function stems(text: string): Set<string> {
+  return new Set((text.toLowerCase().match(/[a-z]+/g) ?? [])
+    .filter((w) => w.length >= 3 && !STOP.has(w))
+    .map((w) => w.slice(0, 4)));
+}
+
+/** Whether this turn's words touch an item: one shared stem is enough. */
+export function touches(item: string, message: string): boolean {
+  const said = stems(message);
+  for (const s of stems(item)) if (said.has(s)) return true;
+  return false;
+}
+
+/**
+ * The first turn of a sitting: nothing of theirs in the last `SESSION_GAP_MS`.
+ * Layer 1 rows are vents only, so a "hi" before it does not end the return.
+ */
+export function returning(rows: readonly MemoryRow[], now: Date = new Date()): boolean {
+  const newest = rows.reduce((t, r) => Math.max(t, Date.parse(r.created_at) || 0), 0);
+  return newest === 0 || now.getTime() - newest >= SESSION_GAP_MS;
 }
 
 /**
@@ -215,12 +268,25 @@ export function recall(s: RecallSources = {}): SemanticMemory {
     session_summaries.push({ kind: "held", text: h });
   }
 
-  return {
+  const memory: SemanticMemory = {
     core_themes,
     important_facts,
     risk_history: recentCrises(s.crises ?? [], now.getTime()).map((r) => r.created_at.slice(0, 10)),
     preferences,
     session_summaries,
+  };
+  return s.message === undefined || returning(s.rows ?? [], now) ? memory : relevant(memory, s.message, s.tag ?? null);
+}
+
+/** Mid-sitting: only what this turn touches, and how they asked to be met. */
+function relevant(m: SemanticMemory, message: string, tag: string | null): SemanticMemory {
+  return {
+    ...m,
+    // A counted theme is live when today carries its pressure or names it; its
+    // detail is our arithmetic, not their words, so it never decides.
+    core_themes: m.core_themes.filter((t) => (t.counted ? t.name === tag || touches(t.name, message) : touches(`${t.name} ${t.detail}`, message))),
+    important_facts: m.important_facts.filter((f) => touches(`${f.subject} ${f.detail}`, message)),
+    session_summaries: m.session_summaries.filter((x) => touches(x.text, message)),
   };
 }
 

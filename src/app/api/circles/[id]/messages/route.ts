@@ -131,7 +131,7 @@ async function handlePOST(request: Request, { params }: Params) {
     return NextResponse.json(
       {
         error: "crisis",
-        reply: crisisReply(said.language),
+        reply: crisisReply(said.language, said.harm),
         crisis: { ...CRISIS_LINES, gated: true },
         exitTo: "/chat",
       },
