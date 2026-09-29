@@ -1083,9 +1083,7 @@ export function VentChat() {
       */}
       {lines.filter((l) => l.speaker === "vent").length >= 2 && <FeedbackFab />}
 
-      <RoomHeader />
-
-      <div className="sticky top-[68px] z-20 bg-paper/95 backdrop-blur-glass">
+      <RoomHeader>
         {/*
           Two separate facts, and they were one line.
 
@@ -1143,7 +1141,7 @@ export function VentChat() {
             )}
           </div>
         )}
-      </div>
+      </RoomHeader>
 
       {/* pb, not py: the feedback pill floats 12px above the composer and is
           44px tall, so the last 56px of any transcript sits under it at full

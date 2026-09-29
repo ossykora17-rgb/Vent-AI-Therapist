@@ -21722,6 +21722,52 @@ check("172 A fact is answered only when it is the whole message, and in their re
     "a function that can answer in Pidgin and is never told to is English-only");
 });
 
+check("173 Nothing hides under the masthead, and the code runs beside the database", () => {
+  /*
+    Two things a browser at 390px and a response header found, neither of which
+    any check could see.
+
+    The chat's "Remembers · N earlier vents" — the one line that says what the
+    room holds about somebody — was a second sticky bar pinned at a hand-typed
+    `top-[68px]` under a masthead that measures 78px. Ten pixels of a sixteen-
+    pixel line sat under the header at 360, 390 and 1280 alike. It renders as
+    the masthead's own children now, so there is no offset to go stale.
+  */
+  const header = fs.readFileSync(path.join(ROOT, "src/components/room-header.tsx"), "utf8");
+  const chat = fs.readFileSync(path.join(ROOT, "src/components/chat/vent-chat.tsx"), "utf8");
+  ok(/<header[\s\S]*\{children\}[\s\S]*<\/header>/.test(strip(header)), "the masthead renders what it is given inside itself");
+  const inside = /<RoomHeader>([\s\S]*?)<\/RoomHeader>/.exec(strip(chat))?.[1] ?? "";
+  ok(/Remembers ·/.test(inside) && /Not saved — this session only/.test(inside),
+    "the line that says what the room holds sits inside the masthead, not under it");
+  const walk = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const q = path.join(dir, e.name);
+      if (e.isDirectory()) walk(q, out); else if (/\.tsx$/.test(q)) out.push(q);
+    }
+    return out;
+  };
+  const screens = walk(path.join(ROOT, "src"));
+  const pinned = screens.filter((f) => /\bsticky\b[^"]*\btop-\[\d+px\]/.test(strip(fs.readFileSync(f, "utf8"))))
+    .map((f) => path.relative(ROOT, f));
+  ok(screens.length >= 20, `${screens.length} screens read`, "a sweep over no files passes loudest");
+  is(pinned.join(", "), "", "no sticky bar is pinned under another by a hand-typed pixel offset",
+    "a number written beside a header goes stale the day the header grows");
+
+  /*
+    Every response carried `x-vercel-id: iad1:iad1::iad1::…` — the functions ran
+    in Washington — while Supabase answered from eu-central-1. A vent makes
+    about eight sequential store calls before and after the model, so each one
+    crossed the Atlantic twice, for people in Lagos, who are nearer Frankfurt
+    than either. `regions` pins the functions beside the database; left out,
+    the platform's default decides, and nothing here would say so.
+  */
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, "vercel.json"), "utf8"));
+  ok(Array.isArray(cfg.regions) && cfg.regions.length === 1,
+    `the functions run in one pinned region (${JSON.stringify(cfg.regions)})`,
+    "left to the default, the code runs an ocean away from its database");
+  is(cfg.regions?.[0], "fra1", "and that region is Frankfurt, beside Supabase's eu-central-1");
+});
+
 for (const r of results) {
   const good = r.failed.length === 0;
   if (good) passed++;
