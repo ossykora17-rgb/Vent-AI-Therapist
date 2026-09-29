@@ -24,6 +24,23 @@ name: backup
 #      not turned this on should not have a red cross every morning; the
 #      health endpoint is where "backups are off" belongs, because that is the
 #      surface somebody reads on purpose.
+#   4. The copy is encrypted before it is uploaded, and the plaintext never is.
+#      This repository is public, and a public repository's artifacts can be
+#      downloaded by anybody signed in to GitHub. For ten nights (runs 28-37)
+#      this job uploaded every vent, every note and every anon id — which here
+#      is the whole credential — in plain JSON, under a comment saying
+#      artifacts were private. Point 2 guarded the log; nothing guarded the
+#      file. The key is VENT_BACKUP_TOKEN: whoever holds it can already pull
+#      the plaintext from /api/export, so it adds no reach, and it needs no new
+#      secret. A token under 32 characters is refused, because the copy is
+#      only as strong as it. To open one:
+#
+#        unzip vent-backup-<run>.zip
+#        VENT_BACKUP_TOKEN='<the token>' openssl enc -d -aes-256-cbc -pbkdf2 \
+#          -iter 600000 -in backup.json.enc -out backup.json -pass env:VENT_BACKUP_TOKEN
+#
+#      Rotating the token does not re-key old copies; keep the old token with
+#      them for as long as they are kept.
 
 on:
   schedule:
@@ -73,6 +90,22 @@ jobs:
             exit 0
           fi
 
+          # The token is the encryption key below, so a short one would make the
+          # copy guessable offline by anybody who downloads it.
+          if [ "${#TOKEN}" -lt 32 ]; then
+            echo "VENT_BACKUP_TOKEN is shorter than 32 characters — no copy was taken."
+            {
+              echo "### No backup was kept"
+              echo
+              echo "\`VENT_BACKUP_TOKEN\` is shorter than 32 characters. It is the key the copy is"
+              echo "encrypted with, and this repository's artifacts are public, so a short one"
+              echo "would make everybody's history guessable. Generate one with"
+              echo "\`openssl rand -hex 32\` and set it in both places (this repository's Actions"
+              echo "secrets, and the Vercel project's environment variables)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
           BASE="${VENT_URL:-https://vent-ai-therapist.vercel.app}"
           CODE=$(curl -sS --max-time 90 \
             -H "authorization: Bearer $TOKEN" \
@@ -87,6 +120,12 @@ jobs:
             exit 1
           fi
 
+          # Encrypted before anything else can fail, and the plaintext removed
+          # whatever the count below decides — only backup.json.enc is uploaded.
+          openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt \
+            -in backup.json -out backup.json.enc -pass env:TOKEN
+
+          status=0
           node -e '
             const b = require("./backup.json");
             const counts = Object.entries(b.tables || {})
@@ -104,18 +143,23 @@ jobs:
               // than nothing.
               process.exitCode = 1;
             }
-          '
+          ' || status=$?
+          rm -f backup.json
           echo "skipped=false" >> "$GITHUB_OUTPUT"
+          echo "Encrypted with VENT_BACKUP_TOKEN (AES-256-CBC, PBKDF2 600000). The header of this file says how to open it." >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
       # Kept even when the step above failed, for the same reason it fails:
       # a partial copy is still the only copy.
+      # `!cancelled()` is what makes that true: without it a step's `if` implies
+      # success(), and the copy was skipped on exactly the runs this describes.
       - name: Keep it
-        if: steps.take.outputs.skipped != 'true' && hashFiles('backup.json') != ''
+        if: ${{ !cancelled() && steps.take.outputs.skipped != 'true' && hashFiles('backup.json.enc') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: vent-backup-${{ github.run_id }}
-          path: backup.json
+          path: backup.json.enc
           retention-days: 90
-          # Artifacts are private to the repository. This is somebody's
-          # history; it never becomes a release asset and never leaves here.
+          # This repository is public, so its artifacts are readable by anybody
+          # signed in to GitHub. Only the encrypted file is ever named here.
           if-no-files-found: error
