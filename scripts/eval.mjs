@@ -24,7 +24,12 @@ const { groundNow, answerFactual } = await app("src/lib/vent/grounding.ts");
 const { selectTactic, REAL_WORLD_TACTIC, ALL_TACTIC_IDS, ALL_TACTICS, nothingCanMove, caughtWatchingSelf } =
   await app("src/lib/vent/tactics.ts");
 const { buildFlavour } = await app("src/lib/flavour/profile.ts");
-const { flavourBlock, carveBlock, memoryBlock, heldBlock, HELD_IN_PROMPT } = await app("src/lib/vent/prompt.ts");
+const { flavourBlock, memoryBlock } = await app("src/lib/vent/prompt.ts");
+// Layer 2 — what the room holds across sessions, one object and one block.
+const { recall, semanticBlock, openThread, RECALL_HEADER, HELD_IN_PROMPT, PREFERENCES_IN_PROMPT } =
+  await app("src/lib/vent/recall.ts");
+/** The one block, from whichever sources a check hands it. */
+const recalled = (sources) => semanticBlock(recall(sources));
 const { CONFIDENCE_FLOOR } = await app("src/lib/flavour/types.ts");
 const { tensionDrop, tensionForChair, tensionNow, CHAIRS } = await app("src/lib/vent/chairs.ts");
 const { selectMemory, MEMORY_TURNS } = await app("src/lib/vent/memory.ts");
@@ -46,7 +51,6 @@ const { MIN_AGE, AGE_KEY, ageSnapshot, ageServerSnapshot, confirmAge, forgetAge,
 const { BANNED_PHRASES, FILE_LANGUAGE, bannedPhrase, REPLY_SENTENCE_CAP, NO_MEMORY_LINE, OFFICE_RULES, PRODUCT_LINE,
         GENERIC_TASKS, genericTask, askedForSkill, errand, closingProblem, aboutTheRoom, sentenceCount } =
   await app("src/lib/vent/voice.ts");
-const { openThread, threadBlock } = await app("src/lib/vent/prompt.ts");
 const { aimedAtTheMachine, PIDGIN_GRAMMAR, PIDGIN_LEXICAL, REAL_WORLD_TAGS, themePattern } = await app("src/lib/vent/intent.ts");
 
 /**
@@ -75,7 +79,7 @@ const { openingLine, allianceLine, shouldSayAlliance, ALLIANCE_AT } =
   await app("src/lib/vent/intake.ts");
 const { withoutExample, recentOpenings } = await app("src/lib/vent/prompt.ts");
 const { PROBES, selectProbe, probeBlock, isBroad } = await app("src/lib/vent/probes.ts");
-const { parseNotes, keepable, notesBlock, NOTE_KINDS, MAX_IN_PROMPT, MAX_SUBJECT, MAX_DETAIL, CONDITIONS,
+const { parseNotes, keepable, noteLine, NOTE_KINDS, MAX_IN_PROMPT, MAX_SUBJECT, MAX_DETAIL, CONDITIONS,
         NOTES_ASKED, NOTES_INSTRUCTION } =
   await app("src/lib/vent/notes.ts");
 const {
@@ -1153,7 +1157,6 @@ check("15b The reply knows where in the session it is, or says nothing", () => {
 });
 
 // ── 15c. what recurs reaches the reply, without being read out ────────────
-const { patternBlock } = await app("src/lib/vent/prompt.ts");
 const { findPattern, PATTERN_FLOOR } = await app("src/lib/vent/pattern.ts");
 
 check("15c The pattern reaches the prompt, and is forbidden from being announced", () => {
@@ -1170,7 +1173,7 @@ check("15c The pattern reaches the prompt, and is forbidden from being announced
     created_at: new Date(Date.now() - i * 86_400_000).toISOString(),
   });
 
-  is(patternBlock(null), null, "no pattern means no block at all");
+  is(recalled({ pattern: null }), null, "no pattern means no block at all");
   is(
     findPattern(Array.from({ length: PATTERN_FLOOR - 1 }, (_, i) => row("economy", i))),
     null,
@@ -1186,14 +1189,17 @@ check("15c The pattern reaches the prompt, and is forbidden from being announced
   ok(p !== null, "ten tagged sessions with a clear leader is a pattern");
   is(p.tag, "economy", "and it is the one that recurs most");
 
-  const block = patternBlock(p);
-  ok(block.includes("WHAT KEEPS BRINGING THEM BACK"), "the block is labelled for the model");
-  ok(/never goes in front of them/i.test(block),
+  /*
+    Layer 2 now: one block, and the pattern is its first line. The rules that
+    govern it travel inside the same block, so the line cannot arrive without
+    the ban on reading the count out — the property the old heading's own
+    "never goes in front of them" sentence used to carry alone.
+  */
+  const block = recalled({ pattern: p });
+  ok(block.startsWith(RECALL_HEADER) && /Keeps coming back — economy/.test(block),
+    "the block is labelled for the model, and carries what recurs");
+  ok(/brought\s*\n?\s*this up four times/.test(block),
     "and the count in particular is kept away from them");
-  ok(
-    /most\s+valuable thing they will ever type/i.test(block),
-    "and if they name it themselves, that is theirs",
-  );
 
   // It has to actually reach the prompt the model is sent. This was computed
   // and rendered on /history for weeks and never once got into a reply.
@@ -1205,7 +1211,11 @@ check("15c The pattern reaches the prompt, and is forbidden from being announced
     memory: [],
     pattern: p,
   });
-  ok(built.includes("WHAT KEEPS BRINGING THEM BACK"), "and buildSystemPrompt carries it");
+  ok(built.includes(RECALL_HEADER) && /Keeps coming back — economy/.test(built),
+    "and buildSystemPrompt carries it");
+  // If they name it themselves, that sentence is theirs — said once, in VOICE,
+  // rather than a second time under the pattern.
+  ok(/A pattern they name is worth ten you name/.test(built), "and if they name it themselves, that is theirs");
   // The do-not-recite ban lives in CONTEXT_RULES now — one statement covering
   // the pattern, the carve and the opening. Asserted where it has to be true:
   // in the prompt the model is actually sent.
@@ -1228,7 +1238,7 @@ check("15c The pattern reaches the prompt, and is forbidden from being announced
       tactic: ALL_TACTICS[0],
       ctx: { ...base },
       memory: [],
-    }).includes("WHAT KEEPS BRINGING THEM BACK"),
+    }).includes(RECALL_HEADER),
     "absent when there is nothing to say, rather than present and empty",
   );
 });
@@ -1840,7 +1850,7 @@ check("15k The Carver refuses a summary, and the campfire says its own words", (
 
   // The parser is the guard. A model that returns a paragraph must not get a
   // paragraph into somebody's memory.
-  is(parseCarve("not json at all"), null, "prose is refused");
+  is(parseCarve("not json at all", ""), null, "prose is refused");
   /*
     The rule is that no line ships, not that the object is null. Notes are
     parsed before the carve is judged now, so a refused line returns
@@ -1848,16 +1858,16 @@ check("15k The Carver refuses a summary, and the campfire says its own words", (
     coupling that left production with 0 notes across 59 vents. Asserted on
     the field, which still fails if a nine-word summary is ever written.
   */
-  is(parseCarve('{"carve":"","remembers":true}')?.carve ?? null, null,
+  is(parseCarve('{"carve":"","remembers":true}', "")?.carve ?? null, null,
     "an empty carve is refused");
-  is(parseCarve('{"carve":"something","remembers":false}'), null, "remembers:false is refused");
+  is(parseCarve('{"carve":"something","remembers":false}', ""), null, "remembers:false is refused");
   is(
-    parseCarve('{"carve":"the user discussed his father diagnosis and family communication issues","remembers":true}')?.carve ?? null,
+    parseCarve('{"carve":"the user discussed his father diagnosis and family communication issues","remembers":true}', "")?.carve ?? null,
     null,
     "and a summary over the word limit is refused rather than shipped",
   );
 
-  const good = parseCarve('Here you go:\n```json\n{"carve":"pops sick / fear of being useless son","remembers":true}\n```');
+  const good = parseCarve('Here you go:\n```json\n{"carve":"pops sick / fear of being useless son","remembers":true}\n```', "");
   ok(good !== null, "a real carve survives fences and preamble");
   is(good.carve, "pops sick / fear of being useless son", "verbatim, including the slash");
   ok(
@@ -2592,18 +2602,18 @@ await checkAsync("22 The carve is kept, read back, and erased with them", async 
   ok(!worthCarving(20, true), "and a crisis anywhere in the session stops it outright");
 
   // ── the contract on what comes back ─────────────────────────────────────
-  is(parseCarve("not json at all"), null, "prose is not a carve");
-  is(parseCarve('{"carve":"x","remembers":false}'), null,
+  is(parseCarve("not json at all", ""), null, "prose is not a carve");
+  is(parseCarve('{"carve":"x","remembers":false}', ""), null,
     "and a model that says it has nothing is believed");
-  is(parseCarve('{"carve":"","remembers":true}')?.carve ?? null, null,
+  is(parseCarve('{"carve":"","remembers":true}', "")?.carve ?? null, null,
     "an empty carve is no carve");
   is(
-    parseCarve('{"carve":"one two three four five six seven eight nine","remembers":true}')?.carve ?? null,
+    parseCarve('{"carve":"one two three four five six seven eight nine","remembers":true}', "")?.carve ?? null,
     null,
     "nine words is a summary that got through, and it is refused",
   );
   const good = parseCarve(
-    'Here you go:\n```json\n{"carve":"pops sick / fear of being useless son","remembers":true}\n```',
+    'Here you go:\n```json\n{"carve":"pops sick / fear of being useless son","remembers":true}\n```', ""
   );
   ok(good && good.carve === "pops sick / fear of being useless son",
     "a real carve survives fences and preamble");
@@ -2611,13 +2621,12 @@ await checkAsync("22 The carve is kept, read back, and erased with them", async 
     "and the slash is not counted as one of the eight words");
 
   // ── read back as aim, never as a receipt ────────────────────────────────
-  is(carveBlock(null), null, "no carve means no block");
-  is(carveBlock("   "), null, "and neither does whitespace");
-  const block = carveBlock("pops sick / fear of being useless son");
-  ok(/Never tell them you remember/.test(block),
-    "the model is forbidden from claiming to remember");
-  ok(/never tell them you remember/i.test(block),
-    "and forbidden from claiming to remember — the house rule outranks warmth");
+  is(recalled({ carve: null }), null, "no carve means no block");
+  is(recalled({ carve: "   " }), null, "and neither does whitespace");
+  const block = recalled({ carve: "pops sick / fear of being useless son" });
+  ok(block.includes('"pops sick / fear of being useless son"'), "the line reaches the block, quoted");
+  ok(/no "I remember"/.test(block),
+    "the model is forbidden from claiming to remember — the house rule outranks warmth");
   const withCarve = buildSystemPrompt({
     grounding: { date: "8 August 2026", time: "05:30", iso: "2026-08-08", lines: [] },
     classification: { intent: "vent", realWorldTag: null, language: "en", body: null },
@@ -2893,12 +2902,24 @@ check("24 The system prompt has a budget, and every block earns its place", () =
       first session, so a ceiling measured without them would rise on its own
       the first time somebody came back.
     */
-    notes: Array.from({ length: MAX_IN_PROMPT }, (_, i) => ({
-      kind: "fact",
-      subject: "s".repeat(MAX_SUBJECT),
-      detail: "d".repeat(MAX_DETAIL),
-      id: `n${i}`,
-    })),
+    notes: [
+      ...Array.from({ length: MAX_IN_PROMPT }, (_, i) => ({
+        kind: "fact",
+        subject: "s".repeat(MAX_SUBJECT),
+        detail: "d".repeat(MAX_DETAIL),
+        id: `n${i}`,
+      })),
+      /*
+        How they asked to be met has a seat of its own on top of the three —
+        so it counts on top of them here, or the ceiling is not the ceiling.
+      */
+      ...Array.from({ length: PREFERENCES_IN_PROMPT }, (_, i) => ({
+        kind: "language",
+        subject: "p".repeat(MAX_SUBJECT),
+        detail: "q".repeat(MAX_DETAIL),
+        id: `p${i}`,
+      })),
+    ],
     learned: Array.from({ length: MAX_LEARNED }, (_, i) => ({
       id: `r${i}`,
       rule: "x".repeat(MAX_RULE_CHARS),
@@ -3023,12 +3044,12 @@ check("24 The system prompt has a budget, and every block earns its place", () =
   ok(heaviest.includes("THE OFFICE") && heaviest.includes("EVERY REPLY"),
     "and the contract the ceiling was raised for is in it",
     "otherwise the raise paid for something that is no longer there");
-  ok(heaviest.includes("OPEN THREAD"), "as is the thread it also bought");
+  ok(/Left open on \d{4}-\d\d-\d\d/.test(heaviest), "as is the thread it also bought");
   ok(heaviest.includes("ONE MOVE FROM OUTSIDE"), "and the move looked up for it");
   ok(heaviest.includes("WHAT THIS ROOM GOT WRONG BEFORE"),
     "and the rules the audit earned a place for");
-  ok(heaviest.includes("WHAT YOU ALREADY KNOW ABOUT THEM"),
-    "and the office it keeps across sessions");
+  ok(heaviest.includes(RECALL_HEADER) && heaviest.includes("How they asked to be met"),
+    "and the office it keeps across sessions, a preference included");
 
   // A floor as well as a ceiling. If this collapses, a block stopped
   // rendering and every reply quietly got worse with nothing failing.
@@ -3068,9 +3089,10 @@ check("24 The system prompt has a budget, and every block earns its place", () =
     not reinforcement: one rule in three phrasings reads as three rules of
     unclear priority, and it spends attention the person's message needs.
   */
-  const src = fs.readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8");
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[ \t])\/\/.*$/gm, "$1");
-  ok(/const CONTEXT_RULES = /.test(code), "the shared rules exist");
+  // Layer 2's rules live with Layer 2 now, so both files are the prompt's source.
+  const code = ["src/lib/vent/prompt.ts", "src/lib/vent/recall.ts"]
+    .map((f) => strip(fs.readFileSync(path.join(ROOT, f), "utf8"))).join("\n");
+  ok(/const RULES = /.test(code), "the shared rules exist");
   is((code.match(/Do not say it back|Never say it back|NEVER THE FILE/g) ?? []).length, 1,
     "and the do-not-recite rule is stated exactly once in the whole prompt");
 
@@ -3084,7 +3106,7 @@ check("24 The system prompt has a budget, and every block earns its place", () =
   const bare = buildSystemPrompt({
     grounding, classification, tactic, ctx, memory: [], message,
   });
-  ok(!/WHAT THE ROOM HANDS YOU/.test(bare),
+  ok(!bare.includes(RECALL_HEADER) && !/NEVER THE FILE/.test(bare),
     "a turn with no carve, pattern or opening is not charged for their rules");
   ok(Math.round(bare.length / 3.7) < tokens,
     "a first-ever message costs less than a sixth session",
@@ -9742,11 +9764,11 @@ check("76 The office has one voice, and nothing we wrote breaks it", () => {
   }
   /*
     The other two rules of the spec live where they belong rather than in a
-    third copy: MEMORY FIRST is CONTEXT_RULES rule 1, because it governs every
-    assembled block and not only the reply, and the honest fallback is in
+    third copy: MEMORY FIRST is Layer 2's rule 1, because it governs every
+    assembled line and not only the reply, and the honest fallback is in
     `memoryBlock` because that is the only place that knows there is nothing.
   */
-  const promptSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8");
+  const promptSrc = fs.readFileSync(path.join(ROOT, "src/lib/vent/recall.ts"), "utf8");
   ok(/Name the concrete detail/.test(promptSrc),
     "MEMORY FIRST is stated where the context rules are",
     "naming the specific thing is the whole of the spec's first rule");
@@ -9804,11 +9826,15 @@ check("77 A thread nobody closed comes back once", () => {
   is(thread?.at, "2026-08-21", "dated from their turn, not from today");
 
   // Their words, quoted, and never our summary of them.
-  const block = threadBlock(thread);
+  const threadRows = [row("my brother still has not called since the burial", 30),
+    row("work is work", 26), row("just tired today", 0.1)];
+  const block = semanticBlock(recall({ rows: threadRows, now }));
   ok(block?.includes('"work is work"'), "the block quotes them exactly");
+  ok(/Raise it once/.test(block ?? ""), "raised once, early",
+    "a thread raised every turn is an interrogation");
   ok(/drop it/.test(block ?? ""), "and says to drop it if today is a different subject",
     "a thread raised against what they actually came in with is an interrogation");
-  is(threadBlock(null), null, "and with no thread it says nothing at all");
+  is(semanticBlock(recall({ rows: [], now })), null, "and with no thread it says nothing at all");
 
   /*
     Long enough to be a thread. A three-word turn quoted back a day later as
@@ -9825,7 +9851,7 @@ check("77 A thread nobody closed comes back once", () => {
     ctx: { body: null, pressure: null, duality: null, mood: null, recentTactics: [] },
     memory: [row("my brother still has not called since the burial", 30)],
   });
-  ok(built.includes("OPEN THREAD"), "and the built prompt carries it");
+  ok(/Left open on \d{4}-\d\d-\d\d/.test(built), "and the built prompt carries it");
   ok(built.includes("my brother still has not called since the burial"),
     "in their own words");
 });
@@ -10596,14 +10622,14 @@ check("83 The office keeps what they said, and never a diagnosis", () => {
     makes possible — and it is kept only so the audit can see whether the room
     is working.
   */
-  const block = notesBlock([
+  const block = recalled({ notes: [
     { kind: "loss", subject: "quitting", detail: "said he would and did not" },
     { kind: "fact", subject: "rent", detail: "landlord raised it in March" },
-  ]);
+  ] });
   ok(!block?.includes("quitting"), "a loss never reaches the prompt",
     "kept for the audit, never read back at somebody");
   ok(block?.includes("rent"), "everything else does");
-  is(notesBlock([]), null, "and a first session carries not a token for this");
+  is(recalled({ notes: [] }), null, "and a first session carries not a token for this");
   ok(!/TRIGGERS|GOALS:/.test(block ?? ""),
     "the block is lines about a person, not a form",
     "a block with headings is a file being read aloud");
@@ -11874,7 +11900,7 @@ check("93 What it worked out about you is on the page, with a button", () => {
   /*
     The notes were the only thing this product kept that nobody could see.
 
-    The Carver writes them, `notesBlock` reads them into every prompt, and
+    The Carver writes them, Layer 2 reads them into every prompt, and
     there was no surface anywhere that listed them and no way to take one back.
     The carve had both from the day it existed — and `kept-list.tsx` explains
     why in its own docstring, "long-term memory without a delete button is not
@@ -11952,7 +11978,13 @@ check("93 What it worked out about you is on the page, with a button", () => {
   const ui = fs.readFileSync(path.join(ROOT, "src/components/kept-list.tsx"), "utf8");
   ok(/\/api\/notes\?anonId=/.test(ui), "the page asks for them");
   ok(/notes\.map\(/.test(ui), "renders each one");
-  ok(/\{n\.detail\}/.test(ui),
+  /*
+    The line the page shows is the line the prompt reads, from one function.
+    It showed the detail alone while the prompt read "subject: detail" — a
+    second version of the note, which is the thing this assertion forbids.
+  */
+  const probeNote = { kind: "person", subject: "sister", detail: "calls every sunday, never picks" };
+  ok(/\{noteLine\(n\)\}/.test(ui) && (recalled({ notes: [probeNote] }) ?? "").includes(noteLine(probeNote)),
     "showing the sentence the room actually holds",
     "a tidied summary is a second version, and the unchecked one stays in the prompt");
   ok(/forgetNote\(n\.id\)/.test(ui), "with a button on each");
@@ -13769,7 +13801,7 @@ check("107 The Carver can return a note without destroying the carve", () => {
     carve: "pops sick / fear of useless son", remembers: true, notes: [note],
   });
 
-  const got = parseCarve(full);
+  const got = parseCarve(full, "");
   ok(got !== null, "a response carrying a note still parses",
     "the non-greedy match stopped at the brace that opens the note");
   is(got?.carve, "pops sick / fear of useless son",
@@ -13785,15 +13817,15 @@ check("107 The Carver can return a note without destroying the carve", () => {
   const braced = parseCarve(JSON.stringify({
     carve: "work heavy / no way out", remembers: true,
     notes: [{ kind: "hard", subject: "the message", detail: "he typed } at me" }],
-  }));
+  }), "");
   is(braced?.notes[0]?.detail, "he typed } at me",
     "a brace inside their words is their words",
     "a string-blind scanner is the same bug wearing a smaller hat");
 
   // Still refuses what it always refused.
-  is(parseCarve("no json here at all"), null, "prose alone is still nothing");
-  is(parseCarve('{"carve": "x", "remembers": false}'), null, "remembers false is still nothing");
-  is(parseCarve('{"carve": "one two three four five six seven eight nine", "remembers": true}')?.carve ?? null,
+  is(parseCarve("no json here at all", ""), null, "prose alone is still nothing");
+  is(parseCarve('{"carve": "x", "remembers": false}', ""), null, "remembers false is still nothing");
+  is(parseCarve('{"carve": "one two three four five six seven eight nine", "remembers": true}', "")?.carve ?? null,
     null,
     `over ${CARVE_MAX_WORDS} words is still a summary`);
 
@@ -13816,7 +13848,7 @@ check("107 The Carver can return a note without destroying the carve", () => {
     carve: "one two three four five six seven eight nine",
     remembers: true,
     notes: [{ kind: "fact", subject: "brother", detail: "moved to Kano in May" }],
-  }));
+  }), "my brother moved to kano in may");
   is(overCap?.carve ?? null, null, "a nine-word line is still refused");
   is(overCap?.notes?.length, 1,
     "and the note beside it survives the refusal",
@@ -13828,7 +13860,7 @@ check("107 The Carver can return a note without destroying the carve", () => {
     carve: "",
     remembers: true,
     notes: [{ kind: "fact", subject: "rent", detail: "due on the 30th" }],
-  }));
+  }), "");
   is(emptyLine?.carve ?? null, null, "an empty line is no line");
   is(emptyLine?.notes?.length, 1, "and it does not take the notes with it");
 
@@ -13848,7 +13880,7 @@ check("107 The Carver can return a note without destroying the carve", () => {
   ok(/const kept = carve \? await store\.setCarve/.test(carveRoute),
     "the carve write is conditional, not the gate",
     "so a refused line no longer decides whether notes are kept");
-  is(parseCarve('{"carve": "a b", "remembers": true, "notes": [{"kind": "hard",'), null,
+  is(parseCarve('{"carve": "a b", "remembers": true, "notes": [{"kind": "hard",', ""), null,
     "a truncated object is null rather than a guess",
     "which is what an undersized ceiling produces, and half a carve is worse than none");
 
@@ -14075,7 +14107,7 @@ check("109 The front door collects nothing, and the room opens on the box", () =
     "circles still ask it on two screens; this is a column, not a prompt block");
 
   // And the earned replacement is wired, which check 149 grades in full.
-  ok(/heldBlock/.test(prompt), "what the room carries across sessions is what they earned");
+  ok(/recall\(\{[^}]*\bheld\b/.test(prompt), "what the room carries across sessions is what they earned");
 });
 
 check("110 The road from production to training carries what is on it", () => {
@@ -19020,46 +19052,52 @@ check("149 The return leg reaches the prompt, not only the Memory page", () => {
     push that never rang, with the part missing being the only one that
     changes what a person reads.
   */
-  ok(typeof heldBlock === "function", "the block exists");
-  is(heldBlock([]), null, "nobody who has closed no circle carries a block at all",
+  ok(typeof semanticBlock === "function", "the block exists");
+  is(recalled({ held: [] }), null, "nobody who has closed no circle carries a block at all",
     "a heading over an empty list is weight for nothing, on a 3,600-token ceiling");
-  is(heldBlock(), null, "and neither does a caller that passes nothing");
-  is(heldBlock([{ text: "   " }]), null, "whitespace is not a word somebody said");
+  is(recalled({}), null, "and neither does a caller that passes nothing");
+  is(recalled({ held: [{ text: "   " }] }), null, "whitespace is not a word somebody said");
 
-  const one = heldBlock([{ text: "guilt" }]);
+  const one = recalled({ held: [{ text: "guilt" }] });
   ok(one && /guilt/.test(one), "their word reaches the prompt");
   /*
-    The silence rule is `carveBlock`'s, verbatim and for its reason: they can
+    The silence rule is the shared one the carve always carried, for its reason: they can
     clear it in one tap, so a room that leans on it out loud is promising
     something the delete button can take away mid-sentence.
   */
   ok(one && /one tap/.test(one), "under the same silence rule the carve carries",
     "never name it out loud — they can clear it, and the room must not have leaned on it");
+  ok(one && /Carried out of a circle: guilt\. Never say it first\./.test(one),
+    "and never said first — their word today is theirs, the room's is not",
+    "the silence line is the held word's own, not only the shared rule above it");
 
   /*
     Capped, and derived from the constant rather than counted by hand. Five are
     stored; a room that opens by listing five things somebody once said about
     themselves is reciting a file back at them.
   */
-  const many = heldBlock(Array.from({ length: HELD_IN_PROMPT + 3 }, (_, i) => ({ text: `w${i}` })));
-  is((many.match(/^- /gm) ?? []).length, HELD_IN_PROMPT,
+  const many = recalled({ held: Array.from({ length: HELD_IN_PROMPT + 3 }, (_, i) => ({ text: `w${i}` })) });
+  is((many.match(/\bw\d\b/g) ?? []).length, HELD_IN_PROMPT,
     `at most ${HELD_IN_PROMPT} reach the prompt`,
     "HELD_CAP is 5 and a prompt that lists all of them is reading a file back");
 
   /*
-    BOTH SITES, AND THE SECOND ONE IS THE EASY MISS
+    BOTH SITES WAS THE EASY MISS, AND LAYER 2 REMOVED THE SECOND SITE
 
-    `buildSystemPrompt` renders context blocks twice: once inside a
-    `.some(Boolean)` that decides whether CONTEXT_RULES renders at all, and
-    once for real. Wiring only the second hands somebody the block *without*
-    the rules that govern how context is used — and the only person that
-    happens to is somebody whose held word is their sole context, which is
-    exactly who this feature is for.
+    `buildSystemPrompt` used to render context blocks twice: once inside a
+    `.some(Boolean)` that decided whether CONTEXT_RULES rendered at all, and
+    once for real — so wiring only the render handed somebody whose held word
+    was their sole context the word *without* the rules. The rules are inside
+    the one block now, so they cannot be separated from a line; asserted on the
+    output, and the prompt passes `held` to the one call that builds it.
   */
+  ok(one && one.startsWith(RECALL_HEADER) && /NEVER THE FILE/.test(one),
+    "a held word alone still arrives under the rules that govern it",
+    "the person whose only context is this word is exactly who the feature is for");
   const promptSrc = strip(fs.readFileSync(path.join(ROOT, "src/lib/vent/prompt.ts"), "utf8"));
-  is((promptSrc.match(/heldBlock\(held\)/g) ?? []).length, 2,
-    "it is wired into the CONTEXT_RULES guard as well as the render",
-    "the guard decides whether the rules that govern context render at all");
+  is((promptSrc.match(/semanticBlock\(recall\(\{[^}]*\bheld\b[^}]*\}\)\)/g) ?? []).length, 1,
+    "and the prompt hands the held words to the one call that builds Layer 2",
+    "a second render site is how the rules and the lines came apart before");
 
   // And the route actually fetches it, which is the call that did not exist.
   const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
@@ -21767,6 +21805,152 @@ check("173 Nothing hides under the masthead, and the code runs beside the databa
     "left to the default, the code runs an ocean away from its database");
   is(cfg.regions?.[0], "fra1", "and that region is Frankfurt, beside Supabase's eu-central-1");
 });
+
+// ── 174. Layer 2: one object in the spec's shape, one block, only what they said
+const { unsaid } = await app("src/lib/vent/carve.ts");
+const { recentCrises } = await app("src/lib/vent/assess.ts");
+
+check("174 What the room holds is one object in the spec's shape, one capped block, and only what they said", () => {
+  /*
+    THE FOUNDER'S MEMORY SPEC, ASSERTED RATHER THAN DESCRIBED
+
+    Layer 2 is `{ core_themes, important_facts, risk_history, preferences,
+    session_summaries }`, only explicitly stated information, updated after
+    sessions by extraction and review, injected as a clean, limited block every
+    turn. It existed here already under five names in five places — notes three
+    blocks away from the rest, each block carrying its own copy of the silence
+    rule — so the integration is one object built from the same sources and
+    one block that says the rules once. Nothing new is stored.
+  */
+  const DAY = 86_400_000;
+  const now = new Date("2026-09-29T12:00:00Z");
+  const at = (daysAgo) => new Date(now.getTime() - daysAgo * DAY).toISOString();
+
+  // ── the shape is the spec's, exactly ────────────────────────────────────
+  const empty = recall({ now });
+  is(Object.keys(empty).sort().join(","), "core_themes,important_facts,preferences,risk_history,session_summaries",
+    "the object carries exactly the five fields the spec names",
+    "a sixth field is a second memory; a missing one is a promise with nothing behind it");
+  is(semanticBlock(empty), null, "and with nothing held, the prompt carries not a token for it");
+
+  // ── every note kind lands in one field, and `loss` in none ──────────────
+  const note = (kind, subject, detail) => ({ kind, subject, detail });
+  const mem = recall({
+    now,
+    notes: [
+      note("trigger", "sunday calls", "the family call sets it off"),
+      note("person", "sister", "Ada, calls and never picks"),
+      note("loss", "quitting", "said he would and did not"),
+      note("language", "just listen", "asked for no advice, only listening"),
+    ],
+  });
+  ok(mem.core_themes.some((t) => t.name === "sunday calls" && t.counted === false),
+    "a trigger is a theme, and one they named is not yet a counted pattern");
+  ok(mem.important_facts.some((f) => f.subject === "sister"), "a person is a fact");
+  is(mem.preferences["just listen"], "asked for no advice, only listening", "how they asked to be met is a preference");
+  ok(!JSON.stringify(mem).includes("quitting"), "a loss is in no field at all",
+    "kept for the audit, never read back at somebody");
+  const block = semanticBlock(mem);
+  ok(block && !/Keeps coming back — sunday calls/.test(block) && block.includes("- sunday calls: the family call sets it off"),
+    "a named trigger is said plainly, never as something that keeps coming back",
+    "claiming recurrence nobody counted is the room inventing a pattern");
+  ok(block && /Keeps coming back — family: 4 times/.test(
+    semanticBlock(recall({ now, pattern: { tag: "family", times: 4, spanDays: 12, dropHere: null, dropElsewhere: null } })) ?? ""),
+  "and only what was counted is");
+
+  // ── the preference keeps its seat when the facts are many ───────────────
+  const crowded = recall({
+    now,
+    notes: [
+      ...Array.from({ length: MAX_IN_PROMPT + 3 }, (_, i) => note("fact", `thing ${i}`, `something true, number ${i}`)),
+      note("language", "talk pidgin", "said abeg talk pidgin to me"),
+    ],
+  });
+  is(crowded.important_facts.length, MAX_IN_PROMPT, `facts stay capped at ${MAX_IN_PROMPT}`);
+  is(Object.keys(crowded.preferences).length, PREFERENCES_IN_PROMPT,
+    "and the oldest preference still rides, on a seat of its own",
+    "sharing the three slots, the next three facts pushed out the one instruction they gave about the room");
+  ok((semanticBlock(crowded) ?? "").includes("How they asked to be met — talk pidgin: said abeg talk pidgin to me"),
+    "and it reaches the block");
+
+  // ── risk is held, never shown, and agrees with the room's care ──────────
+  const rows = (...spec) => spec.map(([intent, d]) => ({ intent_type: intent, created_at: at(d) }));
+  const histories = [
+    rows(["vent", 1], ["crisis", 3]),
+    rows(["crisis", CAREFUL_FOR_DAYS + 1]),
+    rows(["vent", 1], ["greeting", 2]),
+    rows(),
+  ];
+  for (const h of histories) {
+    is(recall({ now, crises: h }).risk_history.length > 0, carefulAfter(h, now.getTime()),
+      "risk_history and the room's care read the same turns",
+      "two filters for one question is this repository's most-repeated bug");
+  }
+  is(recall({ now, crises: histories[0] }).risk_history[0], at(3).slice(0, 10), "and it records the day");
+  const withRisk = semanticBlock(recall({ now, crises: histories[0], notes: [note("fact", "rent", "due on the 30th")] })) ?? "";
+  ok(withRisk.includes("rent") && !withRisk.includes(at(3).slice(0, 10)) && !/crisis/i.test(withRisk),
+    "and it is never rendered",
+    "a model told they were in crisis last week will say so; it changes what the room will not ask");
+  is(recentCrises(null).length, 0, "and no history is no history, not a throw");
+
+  // ── one block, its rules inside it, once ────────────────────────────────
+  const built = buildSystemPrompt({
+    grounding: groundNow(),
+    classification: classify("everything is heavy again today", null),
+    tactic: ALL_TACTICS[0],
+    ctx: { body: null, pressure: null, duality: null, mood: null, recentTactics: [] },
+    memory: [],
+    carve: "pops sick / fear of useless son",
+    notes: [note("person", "sister", "Ada, calls and never picks")],
+    held: [{ text: "guilt" }],
+    pattern: { tag: "family", times: 4, spanDays: 12, dropHere: null, dropElsewhere: null },
+  });
+  is(built.split(RECALL_HEADER).length - 1, 1, "Layer 2 is one block in the prompt, not five");
+  is((built.match(/NEVER THE FILE/g) ?? []).length, 1, "and its rules are said once");
+  const at2 = built.indexOf(RECALL_HEADER);
+  ok(["sister", "pops sick", "guilt", "family"].every((w) => built.indexOf(w, at2) > at2 && built.indexOf(w, at2) < built.indexOf("THIS TURN")),
+    "every field arrives inside it, above the move",
+    "notes used to render three blocks further down, after the learned rules");
+
+  // ── only what they said, held at the write ──────────────────────────────
+  ok(unsaid({ subject: "sister", detail: "never calls back" }, "i am just tired of everything"),
+    "a note about a sister nobody mentioned is refused");
+  is(unsaid({ subject: "sister", detail: "never calls back" }, "my sister never calls me"), null,
+    "and one they did mention is kept");
+  ok(unsaid({ subject: "rent", detail: "owes ₦250,000 by friday" }, "rent is due friday and i dey owe"),
+    "a figure nobody gave is refused");
+  is(unsaid({ subject: "rent", detail: "owes ₦250,000 by friday" }, "i owe 250,000 for rent by friday"), null,
+    "and one they typed is kept, however it was written");
+  is(unsaid({ subject: "sending money home", detail: "wants to stop sending money home" }, "i no wan dey send money go house again"), null,
+    "a Pidgin sitting noted in English is kept",
+    "a word-identity test is a register test in disguise; the guard reads role nouns and sums, never every word");
+  const why = unsaid({ subject: "sister", detail: "never calls back" }, "nothing");
+  ok(why && !/sister/i.test(why), "the refusal names the class and never the noun, because it is logged");
+
+  const said = "work don finish me, my boss no dey pay";
+  const carved = parseCarve(JSON.stringify({
+    carve: "work heavy / boss no pay", remembers: true,
+    notes: [note("person", "boss", "never pays on time"), note("person", "sister", "calls every day")],
+  }), said);
+  is(carved?.notes.map((n) => n.subject).join(","), "boss", "the Carver's invented sister does not survive the parse",
+    "and the note they did give does");
+  is(carved?.carve, "work heavy / boss no pay", "the line is not held to it — it is the session's summary");
+
+  // ── the route hands the parser what they said ───────────────────────────
+  const carveRoute = strip(fs.readFileSync(path.join(ROOT, "src/app/api/carve/route.ts"), "utf8"));
+  ok(/parseCarve\(answered\.text, \[\.\.\.messages, earlier \?\? ""\]\.join\("\\n"\)\)/.test(carveRoute),
+    "the carve route passes the words the Carver was shown",
+    "a guard fed an empty string refuses every person and proves nothing");
+
+  // ── one list for both graders ───────────────────────────────────────────
+  const carveSrc = strip(fs.readFileSync(path.join(ROOT, "src/lib/vent/carve.ts"), "utf8"));
+  const qualitySrc = strip(fs.readFileSync(path.join(ROOT, "src/lib/vent/quality.ts"), "utf8"));
+  ok(/import \{ INVENTED_SUM, PEOPLE \} from "\.\/quality"/.test(carveSrc) && !/sister\|brother/.test(carveSrc),
+    "the note guard imports the reply grader's people and sums rather than a copy");
+  ok(/INVENTED_PERSON = new RegExp\(`[^`]*\$\{PEOPLE\}/.test(qualitySrc),
+    "and the reply grader builds its own from the same list");
+});
+
 
 for (const r of results) {
   const good = r.failed.length === 0;

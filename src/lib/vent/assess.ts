@@ -119,10 +119,23 @@ export function carefulAfter(
   history: readonly Pick<VentRow, "intent_type" | "created_at">[],
   now = Date.now(),
 ): boolean {
+  return recentCrises(history, now).length > 0;
+}
+
+/**
+ * Their crisis turns inside the careful window — Layer 2's `risk_history`.
+ *
+ * One filter for both readers, so the room's care and the memory's record of
+ * why cannot disagree about which turns count.
+ */
+export function recentCrises<T extends Pick<VentRow, "intent_type" | "created_at">>(
+  history: readonly T[],
+  now = Date.now(),
+): T[] {
   // Defensive for the reason `assessTurn` catches `pastWhatThisHolds`: a
   // history that is not a list must not cost a turn its reply.
-  if (!Array.isArray(history)) return false;
-  return history.some((r) =>
+  if (!Array.isArray(history)) return [];
+  return history.filter((r) =>
     r?.intent_type === "crisis" && now - Date.parse(r.created_at) < CAREFUL_FOR_DAYS * 86_400_000);
 }
 

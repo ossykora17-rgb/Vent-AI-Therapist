@@ -215,26 +215,15 @@ export function parseNotes(raw: unknown): { keep: Note[]; dropped: string[] } {
 }
 
 /**
- * What the model is told, which is a set of facts and not a file.
+ * One note, the way the prompt reads it and the Memory page shows it.
  *
- * Deliberately not grouped by kind with headings. A block that reads
- * "TRIGGERS:" and "GOALS:" is a form, and the rule this product keeps
- * relearning is that a person can hear the difference between being known and
- * being processed. These are lines about a person, in the order they were last
- * true, and `CONTEXT_RULES` already governs what may be done with them.
- *
- * `loss` is filtered out of the prompt entirely. It shapes nothing a model
- * should say — reading somebody their failures back is the cruellest thing
- * this table makes possible — and it is kept only so the audit can see whether
- * the room is working.
+ * One function for both, because the page is where a person reviews what the
+ * room holds, and a page showing a tidier line than the prompt reads is a
+ * review of a second copy. Here rather than in recall.ts so the page imports a
+ * module with no dependencies.
  */
-export function notesBlock(notes: readonly Note[]): string | null {
-  const keep = notes.filter((n) => n.kind !== "loss").slice(0, MAX_IN_PROMPT);
-  if (keep.length === 0) return null;
-  return [
-    "WHAT YOU ALREADY KNOW ABOUT THEM — from what they told you, not inferred:",
-    ...keep.map((n) => `- ${n.subject}: ${n.detail}`),
-  ].join("\n");
+export function noteLine(n: { subject: string; detail: string }): string {
+  return `${n.subject}: ${n.detail}`;
 }
 
 /** Appended to the Carver's job, so one call writes the line and the notes. */

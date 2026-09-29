@@ -1,4 +1,5 @@
 import { MAX_DETAIL, MAX_SUBJECT, NOTES_ASKED, NOTES_INSTRUCTION, parseNotes, type Note } from "./notes";
+import { INVENTED_SUM, PEOPLE } from "./quality";
 /**
  * THE CARVER — eight words for the wound.
  *
@@ -179,6 +180,48 @@ function firstJsonObject(raw: string): string | null {
   return null;
 }
 
+/** A person named bare, the way a note names one. The reply grader's list. */
+const NAMED_PERSON = new RegExp(`\\b(${PEOPLE})\\b`, "gi");
+
+/**
+ * Why a note says something they never did, or null.
+ *
+ * "Only explicitly stated information" is the memory spec's first rule, and
+ * the Carver is told it in so many words — *only what they actually said*. A
+ * prompt is a request; this is the guard. `keepable` already refuses a
+ * condition and an interpretation stated as fact. What it could not see is a
+ * note about a sister nobody mentioned or a sum nobody gave: the two things
+ * the reply grader's `invented` catches in a reply, held to the same list,
+ * because a note is read back weeks later with no sentence around it and a
+ * reply is read once.
+ *
+ * Deliberately not proper nouns and not every word. A name the model wrote is
+ * recall the grader cannot tell from invention, and a "did they say this word"
+ * test over the whole note is a register test in disguise — a Pidgin sitting
+ * noted in English would fail it wholesale. The role nouns are tested the way
+ * the reply grader tests them, by the word, so both share its known edge: a
+ * note saying "father" about somebody who wrote "papa" is refused. That is the
+ * direction to fail in — a refused note costs one line of memory, and an
+ * invented person is read back as fact — and one list means a fix to it fixes
+ * both.
+ *
+ * The reason names the class and never the noun: it is logged, and the noun
+ * is what the note claimed about somebody.
+ */
+export function unsaid(n: Pick<Note, "subject" | "detail">, said: string): string | null {
+  const source = said.toLowerCase();
+  const text = `${n.subject} ${n.detail}`;
+  for (const m of text.matchAll(NAMED_PERSON)) {
+    if (!source.includes(m[1].toLowerCase())) return "names a person they never mentioned";
+  }
+  const sum = text.match(INVENTED_SUM);
+  // Digits only, normalised — the reply grader's rule for the same reason.
+  if (sum && !source.replace(/[,.\s]/g, "").includes(sum[0].replace(/[^\d]/g, ""))) {
+    return "a figure they never gave";
+  }
+  return null;
+}
+
 /**
  * Parse what came back, and refuse anything that is not a carve.
  *
@@ -187,7 +230,7 @@ function firstJsonObject(raw: string): string | null {
  * the word limit is a summary that got through, and shipping it would put a
  * sentence in somebody's memory that reads like a file note about them.
  */
-export function parseCarve(raw: string): Carve | null {
+export function parseCarve(raw: string, said: string): Carve | null {
   const object = firstJsonObject(raw);
   if (!object) return null;
 
@@ -228,6 +271,18 @@ export function parseCarve(raw: string): Carve | null {
     nothing in it, one line above the answer.
   */
   const read = parseNotes(notes);
+  /*
+    Held to what they typed. \`said\` is required rather than optional because
+    an optional guard is one forgotten argument from not running — the
+    \`broke\` lesson in audit.ts, applied here.
+  */
+  const grounded: Note[] = [];
+  for (const n of read.keep) {
+    const why = unsaid(n, said);
+    if (why) read.dropped.push(`${n.kind}: ${why}`);
+    else grounded.push(n);
+  }
+  read.keep = grounded;
   if (read.dropped.length > 0) {
     console.warn(`[carve] notes refused (${read.dropped.length}):`, read.dropped.join(" | "));
   } else if (read.keep.length === 0 && Array.isArray(notes) && notes.length > 0) {
