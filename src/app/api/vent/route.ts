@@ -227,7 +227,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
         });
         if (userId) {
           saved = await tryPersist(
-            store, userId, input, classification, crisisReply(classification.language), null, null, grounding.iso, true,
+            store, userId, input, classification, crisisReply(classification.language, classification.harm), null, null, grounding.iso, true,
           );
         }
       } catch (error) {
@@ -237,7 +237,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
     return NextResponse.json(
       {
         intent: "crisis",
-        reply: crisisReply(classification.language),
+        reply: crisisReply(classification.language, classification.harm),
         crisis: { ...CRISIS_LINES, gated: true },
         /*
           The turn that most needs a risk level was the one without one.

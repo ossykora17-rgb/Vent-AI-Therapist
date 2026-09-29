@@ -69,6 +69,16 @@ const GRAVE = [
     to the two people in this list who most needed the better one.
   */
   /\b(griev(e|es|ed|ing)|diagnos|abus|molest|separat|divorc|trauma|bereave|mourn)/,
+  /*
+    Danger from somebody else, in the tense it is lived in. `beat me` and
+    `hit me` above miss "my husband beats me every night" — the present, which
+    is the tense of somebody still inside it — and a reported threat matched
+    nothing at all. A person comes first, because "it beats me why" is an
+    idiom. This is `grave`, not crisis: answered, with the lines beside it.
+  */
+  /\b(he|she|they|husband|wife|partner|boyfriend|girlfriend|father|dad|papa|mother|mum|mama|uncle|aunt|aunty|brother|boss|oga|landlord|ex)\b[^.!?]{0,20}\b(beats|beating|hits|hitting|slaps?|slapped|slapping|kicks|kicked|punch(es|ed)?|chokes|choked|strangled|dey (beat|hit|slap|flog))\s+me\b/,
+  /\b(threaten(ed|s|ing)?|swore|vowed)\b[^.!?]{0,30}\b(kill|hurt|beat|harm|finish|deal with) me\b/,
+  /\b(he|she|they)\s+(said|says|told me)\b[^.!?]{0,20}\b(kill|hurt|harm) me\b/,
 ];
 
 /** A decision that cannot be walked back. */

@@ -211,6 +211,40 @@ const CRISIS = [
 ];
 
 /*
+  HARM TO SOMEBODY ELSE — the other half of "risk of harm to self or others"
+
+  The presence spec's hard law reads *"any risk of harm to self or others →
+  clear concern + real local resources. Then stop."* The list above left threats
+  to others out on purpose, and that reason still holds for the bare form: "i go
+  kill am" and "i will kill my boss" are everyday hyperbole here, and stopping a
+  vent about a boss with an emergency line would answer a sentence nobody said.
+
+  So this list takes only what hyperbole does not sound like: a method that is
+  not the idiom (stab, shoot, poison, strangle, smother, acid, burn their house),
+  a weapon they say they have for somebody, a time or a plan beside the harm,
+  harm to a child, and the fear of one's own hands ("i'm scared i'll hurt
+  him"), which people do not say for effect. It gets its own reply, because
+  the self-harm line answers the wrong question for it.
+*/
+/** A person the harm is aimed at — never "my plans", "my shot" or "my video". */
+const PERSON = String.raw`(?:him|her|them|am|dem|someone|somebody|(?:my|the) (?:husband|wife|boss|oga|madam|landlord|landlady|brother|sister|mum|mom|mother|dad|father|papa|mama|uncle|aunt|aunty|cousin|neighbou?r|partner|boyfriend|girlfriend|ex|colleague|friend|son|daughter|baby|babies|child|children|kids?|pikin|teacher|pastor))`;
+/** The idioms that share these verbs: a text shot at somebody, feelings hurt, a back stabbed. */
+const NOT_THE_IDIOM = String.raw`(?!'s\b|s'|\s+(?:feelings|a (?:message|text|note|look|line|dm)|an (?:email|e-mail|dm)|in the back)\b|\s+with (?:love|kisses|hugs|attention|questions|gifts)\b)`;
+/** First person, meant: "i'm going to", "i will", "i go", never "i could". */
+const MEANS_TO = String.raw`(?:i'?m (?:going to|gonna|about to|ready to|planning to)|i am (?:going to|about to|ready to|planning to)|i (?:will|'ll|want to|wanna|wan|go|plan to))`;
+const pattern = (source: string) => new RegExp(source);
+const HARM_TO_OTHERS = [
+  pattern(String.raw`\b${MEANS_TO}\s+(?:stab|shoot|poison|strangle|smother)\s+${PERSON}\b${NOT_THE_IDIOM}`),
+  pattern(String.raw`\b(?:i have|i'?ve got|i got|i bought|i don buy|i get)\b[^.!?]{0,16}\b(?:knife|gun|cutlass|machete|acid|poison)\b[^.!?]{0,40}\b(?:use (?:it|am|them) on|for when (?:he|she|they) (?:comes?|gets?))\b`),
+  pattern(String.raw`\bpoison\b[^.!?]{0,20}\b(?:in|into|inside|for)\s+(?:his|her|their)\s+(?:food|drink|tea|meal|soup|water)\b`),
+  pattern(String.raw`\b${MEANS_TO}\s+(?:burn|set fire to)\s+(?:his|her|their|dem) (?:house|room|car|shop)\b`),
+  pattern(String.raw`\b(?:i'?ve|i have) (?:planned|a plan) (?:how )?to (?:kill|hurt|harm)\s+${PERSON}\b${NOT_THE_IDIOM}`),
+  // A modal is required: "i hurt my son's feelings" is regret, not a risk.
+  pattern(String.raw`\bi(?:'ll| will| go| wan| want to| wanna| might| could| almost| keep wanting to|'m going to|'m gonna| am going to| feel like i(?:'ll| will| could| might)?)\s+(?:hurt|harm|smother|drown)\s+(?:my|the) (?:baby|babies|child|children|kids?|son|daughter|pikin)\b${NOT_THE_IDIOM}`),
+  pattern(String.raw`\b(?:scared|afraid|worried|terrified|fear say)\s+(?:that )?i(?:'ll| will| might| could| go| would)\s+(?:hurt|harm|kill|wound)\s+${PERSON}\b${NOT_THE_IDIOM}`),
+];
+
+/*
   A fact only counts when it is the whole message — the greeting's rule, for
   the greeting's reason.
 
@@ -593,6 +627,8 @@ export interface Classification {
   language: Language;
   /** Where they said it sits, if they said. Drives somatic-vs-cognitive choice. */
   body: "head" | "throat" | "chest" | null;
+  /** On a crisis, whose safety it is about. Absent everywhere else. */
+  harm?: "self" | "others";
 }
 
 /**
@@ -624,7 +660,8 @@ export function classify(message: string): Classification {
   const realWorldTag = REAL_WORLD.find(([, re]) => re.test(m))?.[0] ?? null;
 
   // Crisis wins over everything, always.
-  if (any(CRISIS, m)) return { intent: "crisis", realWorldTag, language, body };
+  if (any(CRISIS, m)) return { intent: "crisis", realWorldTag, language, body, harm: "self" };
+  if (any(HARM_TO_OTHERS, m)) return { intent: "crisis", realWorldTag, language, body, harm: "others" };
   if (any(FACTUAL, bareQuestion(m))) return { intent: "factual", realWorldTag, language, body };
   /*
     Before META, because an injection that also says "you keep saying the same
@@ -713,9 +750,22 @@ export const CRISIS_RESPONSE_PIDGIN =
  * already sent it — a second copy of the most important sentence here, and the
  * copy the screen actually read.
  */
-export function crisisReply(language: Classification["language"]): string {
+export function crisisReply(language: Classification["language"], harm: Classification["harm"] = "self"): string {
+  if (harm === "others") return language === "pidgin" ? HARM_RESPONSE_PIDGIN : HARM_RESPONSE;
   return language === "pidgin" ? CRISIS_RESPONSE_PIDGIN : CRISIS_RESPONSE;
 }
+
+/*
+  When the danger is to somebody else, the self-harm line answers the wrong
+  question — "you are not alone" to somebody afraid of their own hands. Same
+  opener, because the room is still not a person and this is still more than a
+  screen can hold; then the concern as a fact, the emergency line the card
+  under it shows, and a real person. No digits: `CRISIS_LINES` renders them.
+*/
+export const HARM_RESPONSE =
+  "I'm not a person, and this is more than a screen can hold. What you wrote is serious: if anyone could get hurt, call the emergency line on your screen now. Tell a real person, right now.";
+export const HARM_RESPONSE_PIDGIN =
+  "I no be person, and dis one pass wetin screen fit carry. Wetin you write serious: if anybody fit wound, call the emergency line wey dey your screen now now. Tell real person, right now.";
 
 /**
  * The one place these digits exist.

@@ -4716,6 +4716,53 @@ a retention decision; `memories.user_id` references `auth.users`; check 127.
 
 What no check can answer is whether a model reads one block better than five.
 
+**The final presence spec was mostly law already, so it was read against the
+code clause by clause, and six clauses had nothing behind them.** Differentiation,
+flow, no tasks, no "we", no rescuing, statements over questions, 1–4 sentences,
+the tone and the internal gate were each already a prompt line and a grader.
+What was not:
+
+- **"Any risk of harm to self or others."** Only the self was routed. Threats to
+  others were left out on purpose — *"i go kill am"* is everyday hyperbole — and
+  that still holds for the bare form. `HARM_TO_OTHERS` takes only what hyperbole
+  does not sound like: a method that is not the idiom, a weapon for somebody, a
+  poisoned meal, a burnt house, a plan, harm to a child, and fear of one's own
+  hands. It routes to `crisis` with `harm: "others"` and its own reply — the
+  self-harm line's *"you are not alone"* answers the wrong question — local, no
+  model, the emergency line on the card. 17 of 17 threats caught, 0 of 22
+  idioms ("shoot her a text", "hurt her feelings", "stab him in the back").
+  Danger *from* somebody else is `grave`: answered, lines beside. `beat me`
+  missed "my husband beats me every night", the tense of somebody still in it.
+- **"Inject only the relevant subset."** Layer 2 rode whole every turn. Now a
+  return — nothing of theirs in four hours — carries it all, and mid-sitting an
+  item rides only when this turn's words share a stem with it; how they asked to
+  be met rides always. A counted theme is live on today's pressure, never on its
+  own arithmetic. Check 24 measures the return, the worst case: **3,325 of
+  3,600**, with the pause line; mid-sitting never costs more.
+- **"After any delay or silence, re-enter."** The greeting knew about a pause
+  and the prompt did not: a return inside the day was a turn counter. And a turn
+  of fillers — "…", "hmm", "idk" — gets one line: stay with the last real thing
+  they said. 3 of 120 production vents were four letters or fewer. "No" is an
+  answer, not a silence.
+- **"Anger → do not pacify."** "Calm down." passed every grader. It is a rescue
+  now; zero production replies carried one.
+- **The nine-point standard** is `ANCHORS`, by the standard's own names and
+  order. Critical is the hard law — safety, fabrication, clean reflection
+  (advice, tasks, frameworks, rescuing, jargon), boundary integrity ("we",
+  dependency) and emotional accuracy. Flow, grounding, tone and space are
+  scored without a veto.
+- **"Not a guide", "testing → reflect the test"**, and the pressure line asked
+  for a specific *tool* in a room with no tasks; it asks for a move.
+
+Verified on the wire against a loopback Messages stand-in: the stab threat
+answered locally with the harm reply and no model call, the Pidgin one in
+Pidgin; "my husband beats me" answered with the lines beside; mid-sitting the
+prompt carried only the preference until the landlord was named; "…" carried
+the silence line; five hours later an untouched message carried all of Layer 2
+and the pause line. Nineteen mutations fail checks 170 and 175. The Pidgin harm
+line needs a native speaker's read, and *"he beat me at chess"* is still grave
+through the older `beat me` line.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.

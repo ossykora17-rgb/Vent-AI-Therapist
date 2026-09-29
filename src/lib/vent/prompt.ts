@@ -8,7 +8,7 @@ import { probeBlock, type Probe } from "./probes";
 import type { Pattern } from "./pattern";
 import { scan, scanBlock } from "./scan";
 import { aimedAtTheMachine, askedWhatIAm, type Classification } from "./intent";
-import { awayFor } from "./intake";
+import { awayFor, PAUSE_MINUTES } from "./intake";
 import { isFailureReply } from "./model";
 import type { Tactic, TacticContext } from "./tactics";
 import { OCCUPATION_PRESSURE } from "@/lib/flavour/profile";
@@ -173,7 +173,7 @@ return `MEMORY — their own words, oldest first. Quote a phrase exactly when it
 */
 const VOICE = `WHO YOU ARE
 You are VENT: a mirror that talks back, with a steady heart — pure attention
-that owns the flow. Not a therapist, coach, fixer or cheerleader. Close
+that owns the flow. Not a therapist, coach, fixer, guide or cheerleader. Close
 without fusing, care without carrying, feel without owning. Nigerian-world
 brain.
 
@@ -200,7 +200,8 @@ Short, surgical, literary lines: cerebral, never fluffy.
   Never perform an accent they did not use. Terse gets terse, heat gets
   heat: calm at anger reads as management.
 - If they are performing, say so: "That na TED talk. Who you dey perform for?"
-  If they are dodging: "That na excuse. Talk true."
+  If they are dodging: "That na excuse. Talk true." Testing you? Name the
+  test, and stay.
 
 WHAT YOU ACTUALLY KNOW
 - Shame and guilt are different injuries. Guilt says "I did something bad"
@@ -315,6 +316,18 @@ Back after ${away}; first thing today. Pick the thread up where it lives now,
 not where it stopped. Be believed first: mirror them closely, and carry the
 move lightly.`;
 
+  /*
+    Back inside the same day. The greeting learned this — "you're back" after
+    `PAUSE_MINUTES` — and the prompt never did, so somebody who stepped away
+    for three hours came back to a turn counter as if no time had passed. The
+    presence spec: "after any delay or silence, re-enter with calm continuity."
+    No duration: the gap is theirs, and a number is a counter talking.
+  */
+  const back =
+    turnsToday > 0 && sinceLastHours !== null && sinceLastHours * 60 >= PAUSE_MINUTES
+      ? " They stepped away and came back: re-enter with calm continuity — no recap, no welcome."
+      : "";
+
   if (turnsToday === 0)
     return `WHERE YOU ARE
 First thing they have said today, and nothing is established yet — including
@@ -323,18 +336,18 @@ that they know they were heard, and carry the move lightly.`;
 
   if (turnsToday <= 2)
     return `WHERE YOU ARE
-Turn ${turn} today. Still early. What they have said is what they can afford to
+Turn ${turn} today.${back} Still early. What they have said is what they can afford to
 say so far — the thing under it has not surfaced and you do not know it yet.
 Stay close to their words. Do not name a pattern for them this soon.`;
 
   if (turnsToday <= 6)
     return `WHERE YOU ARE
-Turn ${turn} today. The middle, where a move actually lands: they have said
+Turn ${turn} today.${back} The middle, where a move actually lands: they have said
 enough that you can point at something specific instead of something general.
 Be more precise now than you were at the start — not warmer, more precise.`;
 
   return `WHERE YOU ARE
-Turn ${turn} today. Do not open anything that cannot be finished in this
+Turn ${turn} today.${back} Do not open anything that cannot be finished in this
 exchange. Go back to a phrase they used earlier and give it back to them with
 what it has cost. If they are circling the same ground, say so plainly.`;
 }
@@ -378,6 +391,24 @@ export function recentOpenings(rows: MemoryRow[], take = 2): string[] {
     .slice(-take)
     .map((r) => (r.ai_reply ?? "").trim().split(/\s+/).slice(0, 4).join(" "))
     .filter((o) => o.length > 6);
+}
+
+/*
+  "SILENCE → RE-ENTER GENTLY AND CONTINUE"
+
+  "...", "hmm", "idk", "i'm here": a turn that says almost nothing is still a
+  turn, and the room answering it with "can you say more?" hands the whole
+  thread back — the passivity the presence spec calls failure. Answers are not
+  silence: "no", "yes", "ok" and "fine" said something, and a bare "no" to a
+  question is a boundary, so none of them are here. 3 of 120 production vents
+  were four letters or fewer when this went in.
+*/
+const SILENT_WORDS = new Set(("hmm hm hmmm mm mmm um uh eh ehn k kk idk dunno i don't dont do not know " +
+  "nothing whatever still here i'm im am just so").split(" "));
+
+/** A turn with no word in it that is not a filler — including no words at all. */
+export function nearSilent(message: string): boolean {
+  return (message.toLowerCase().match(/[a-z']+/g) ?? []).every((w) => SILENT_WORDS.has(w));
 }
 
 export interface BuildPromptArgs {
@@ -530,9 +561,11 @@ export function buildSystemPrompt({
     ctx.duality !== null && `Duality reading: ${ctx.duality}/100.`,
     ctx.mood !== null && `Last mood: ${ctx.mood}/10.`,
     classification.realWorldTag &&
-      `Real-world pressure detected: ${classification.realWorldTag}. Make the tool specific to it, not generic.`,
+      `Real-world pressure detected: ${classification.realWorldTag}. Make the move specific to it, not generic.`,
     ctx.recentTactics.length > 0 &&
       `Already used recently — do NOT repeat these moves: ${ctx.recentTactics.slice(-3).join(", ")}.`,
+    message !== undefined && nearSilent(message) &&
+      "They said almost nothing this turn. Do not ask for more or mirror the silence: stay with the last real thing they said, gently, and keep the thread.",
     recentOpenings(memory).length > 0 &&
       `You opened your last replies with: ${recentOpenings(memory)
         .map((o) => `"${o}…"`)
@@ -588,7 +621,7 @@ export function buildSystemPrompt({
       blocks in two places — notes three blocks further down — each with its
       own copy of the silence rule. See recall.ts.
     */
-    semanticBlock(recall({ notes, carve, held, pattern, rows: memory })),
+    semanticBlock(recall({ notes, carve, held, pattern, rows: memory, message, tag: classification.realWorldTag })),
     flavourBlock(flavour),
     // Before the tactic, because it is background the tactic is chosen
     // against — and after the context rules, because "use it only if it fits

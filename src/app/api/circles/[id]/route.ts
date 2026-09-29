@@ -208,7 +208,7 @@ async function handlePOST(request: Request, { params }: Params) {
   const seedIntent = intent ? classify(intent) : null;
   if (seedIntent?.intent === "crisis") {
     return NextResponse.json(
-      { error: "crisis", reply: crisisReply(seedIntent.language), crisis: { ...CRISIS_LINES, gated: true } },
+      { error: "crisis", reply: crisisReply(seedIntent.language, seedIntent.harm), crisis: { ...CRISIS_LINES, gated: true } },
       { status: 409 },
     );
   }
