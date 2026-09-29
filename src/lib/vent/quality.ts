@@ -199,11 +199,17 @@ function firstUnheld(list: readonly RegExp[], reply: string, said?: string): str
  * already uses — while the false-positive cost is a room that cannot say
  * somebody's name back, which is the thing that makes a person feel known.
  */
-const INVENTED_PERSON =
-  /\b(your|their)\s+(mum|mummy|mumcy|mama|mother|dad|daddy|papa|father|wife|husband|partner|boyfriend|girlfriend|fiancé|fiancée|sister|brother|son|daughter|child|children|baby|boss|oga|landlord|pastor|uncle|aunt|aunty|granny|grandma|grandpa|cousin|neighbour|neighbor|colleague|therapist|doctor)\b/gi;
+/*
+  Exported, because the Carver's notes are held to the same list. A note is a
+  claim with no sentence around it, so it names the person bare where a reply
+  says "your"; the people are the same people. See `unsaid` in carve.ts.
+*/
+export const PEOPLE =
+  "mum|mummy|mumcy|mama|mother|dad|daddy|papa|father|wife|husband|partner|boyfriend|girlfriend|fiancé|fiancée|sister|brother|son|daughter|child|children|baby|boss|oga|landlord|pastor|uncle|aunt|aunty|granny|grandma|grandpa|cousin|neighbour|neighbor|colleague|therapist|doctor";
+const INVENTED_PERSON = new RegExp(`\\b(your|their)\\s+(${PEOPLE})\\b`, "gi");
 
 /** A sum of money. The exchange-rate rule, applied inside a reply. */
-const INVENTED_SUM =
+export const INVENTED_SUM =
   /(?:₦|\bNGN\s*)\s?\d[\d,.]*\s*(?:k|m|million|thousand)?\b|\b\d[\d,.]*\s*(?:naira|dollars?|usd|pounds)\b/i;
 
 /**

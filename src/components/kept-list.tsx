@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { FORGET_FAILED } from "@/lib/vent/voice";
+import { noteLine } from "@/lib/vent/notes";
 import Link from "next/link";
 import { anonId } from "@/lib/anon";
 import { useToast } from "@/components/ui/toast";
@@ -233,7 +234,7 @@ export function KeptList() {
             {notes.map((n) => (
               <li key={n.id} className="border-l border-ash/25 pl-4">
                 <p className="label-mono">{n.kind}</p>
-                <p className="said mt-1 max-w-[46ch]">{n.detail}</p>
+                <p className="said mt-1 max-w-[46ch]">{noteLine(n)}</p>
                 <button
                   type="button"
                   onClick={() => void forgetNote(n.id)}

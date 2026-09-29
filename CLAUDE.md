@@ -694,6 +694,7 @@ own copy passes while the product regresses.
 | 38 tactics, 3-turn block, body asked about, never instructed | `src/lib/vent/tactics.ts` |
 | Memory: vents only, six-turn cap | `src/lib/vent/memory.ts` |
 | The office across sessions, and no diagnosis | `src/lib/vent/notes.ts` |
+| What the room holds: the spec's five fields, one block | `src/lib/vent/recall.ts` |
 | What it worked out, shown and deletable | `src/app/api/notes/route.ts` |
 | The first three messages, and the alliance line | `src/lib/vent/intake.ts` |
 | Chair → tension → drop | `src/lib/vent/chairs.ts` |
@@ -4659,6 +4660,61 @@ time?"*, the landing on *"anyway thanks"* after four vents and the carve that
 follows it, the crisis card with both numbers, Memory, History, *Delete
 everything* (rows gone, anon id and age flag cleared), a two-seat circle, and
 the legal pages — no console error and no 5xx anywhere.
+
+**The memory spec described what this product already kept, in five places.**
+The founder's three layers: working memory, then a structured memory —
+`{ core_themes, important_facts, risk_history, preferences, session_summaries }`,
+only what was said, updated after sessions by extraction and review, injected
+as one clean, limited block every turn — then an optional vector and graph
+layer. Layer 2 existed under five names: notes rendered three blocks below the
+carve, the thread, the held words and the pattern, each with its own copy of the
+silence rule, under 243 tokens of `CONTEXT_RULES` governing all five.
+`recall()` builds the spec's object from the same sources and `semanticBlock()`
+renders it once, rules inside. Nothing new is stored, so *one tap deletes
+everything* needed no new line. Measured with check 24's estimator on its
+heaviest fixture: the worst turn went from **3,597 to 3,289** of 3,600, with a
+new line added.
+
+That line is a **preference seat**. Sharing the three note slots newest first,
+*"just listen"* was pushed out by the next three facts the Carver wrote — the
+room forgetting the one instruction a person gave it about itself.
+
+**Only what they said, held at the write.** `keepable` refused a condition and
+an interpretation; nothing refused a sister nobody mentioned or a sum nobody
+gave. `unsaid` holds the Carver's notes to the reply grader's own lists —
+`PEOPLE` and `INVENTED_SUM`, imported — and `said` is a required argument,
+`broke`'s lesson. Not word identity: a Pidgin sitting noted in English would
+fail that wholesale, the `FEELING_FAMILIES` finding. The shared edge is stated:
+a note saying "father" about somebody who wrote "papa" is refused.
+
+`risk_history` is held and never rendered, from `recentCrises` — the one filter
+`carefulAfter` now reads too. Two claims were corrected on the way: a trigger
+they named once rendered as *"keeps coming back"*, which only the counted
+pattern may say, and the carve was labelled *the last sitting* when it is the
+last one that had a carve. And the Memory page showed a note's detail while the
+prompt read `subject: detail` — a second copy, on the page built for reviewing
+the first. `noteLine` is one function for both.
+
+**Verified on the wire**, local build against a loopback Messages stand-in,
+real routes and file store: the Carver answered four notes and two landed, the
+invented sister and the ₦400,000 nobody gave refused with classes logged and no
+nouns. The next turn's system prompt carried one block, its rules once, the
+landlord, the preference and the carve, and none of the five old headings; a
+stranger's carried none. The Memory page showed the same lines at 390px, and
+*Forget this* took the landlord out of the next prompt. Sixteen mutations fail
+checks 174, 93, 83, 107, 15c, 22, 24, 77 and 149. The mutation reasoning also
+deleted a `loss` filter I had written: the kind sets already exclude it, so it
+could never fire.
+
+**Layer 1 stays the last six real vents**, not only the current sitting.
+Production held **1 note and 2 carves against 120 vent turns** on 2026-09-29,
+counted, so Layer 2 cannot yet carry somebody who comes back; narrowing Layer 1
+to the sitting waits for it to. Its size, measured: the six prior turns run
+1,769 characters at the median, 3,097 at p90, 3,469 at most. **Layer 3 is
+later**, and `recall.ts` says why: one carve per person, so a list to index is
+a retention decision; `memories.user_id` references `auth.users`; check 127.
+
+What no check can answer is whether a model reads one block better than five.
 
 # This is NOT the Next.js you know
 

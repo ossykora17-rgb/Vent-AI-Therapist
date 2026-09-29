@@ -150,7 +150,11 @@ async function handlePOST(req: Request) {
       deadlineMs: CARVE_DEADLINE_MS,
       messages: [{ role: "user", content: carvePrompt(messages, earlier) }],
     });
-      const read = parseCarve(answered.text);
+      /*
+        Everything the Carver was shown that they wrote — the window and the
+        earlier carve — so a note may name only what is in it. See `unsaid`.
+      */
+      const read = parseCarve(answered.text, [...messages, earlier ?? ""].join("\n"));
     carve = read?.carve ?? null;
     notes = read?.notes ?? [];
   } catch (error) {

@@ -2,7 +2,8 @@ import { groundingBlock, type Grounding } from "./grounding";
 import { NO_MEMORY_LINE, OFFICE_RULES, REPLY_SENTENCE_CAP } from "./voice";
 import { researchBlock, type Technique } from "./research";
 import { learnedBlock, type LearnedRule } from "./learned";
-import { notesBlock, type Note } from "./notes";
+import type { Note } from "./notes";
+import { recall, semanticBlock } from "./recall";
 import { probeBlock, type Probe } from "./probes";
 import type { Pattern } from "./pattern";
 import { scan, scanBlock } from "./scan";
@@ -60,48 +61,6 @@ export function flavourBlock(f: FlavourProfile | null): string | null {
     .filter(Boolean)
     .join("\n");
 }
-
-/**
- * The three rules that govern every assembled thing in this prompt.
- *
- * Measured before it was written: the whole system prompt is ~3,100 tokens on
- * a real vent, and three separate blocks — what they tapped on the way in,
- * what recurs across sessions, the line carried from last time — were each
- * carrying their own long-form copy of the *same* three instructions. About
- * 280 tokens of near-duplicate prose, and `HOW THEY WALKED IN` had grown into
- * the second-largest block in the entire prompt while carrying three words
- * somebody tapped off a list of six.
- *
- * Repetition is not reinforcement here. The same rule in three different
- * wordings reads as three rules of unclear priority, and it spends attention
- * that the person's actual message needs. Said once, in one place, it is
- * shorter *and* sharper.
- *
- * Nothing was dropped. Every prohibition that was in those three blocks is in
- * these three rules; only the essays are gone. Included solely when at least
- * one of the blocks it governs is present, because a rule about context that
- * was not assembled is pure weight.
- */
-const CONTEXT_RULES = `WHAT THE ROOM HANDS YOU, AND WHAT YOU DO WITH IT
-Some of what follows is context assembled about this person rather than said
-by them. Three rules cover all of it and never change.
-
-1. SAY THE THING, NEVER THE FILE. Name the concrete detail — their phrase,
-   the name they used, the number they gave you. That is what tells somebody
-   they were heard, and holding it back to seem tactful reads as having
-   forgotten. What you never do is narrate where it came from: "you've
-   brought this up four times", "based on our previous sessions", "I see from
-   your history". Those are a counter and a database talking. Their sentence,
-   said back, is a person listening.
-
-2. LET IT AIM THE ONE QUESTION YOU ASK. That is the entire use of it. The
-   ground has been covered, so start one layer under where you otherwise
-   would.
-
-3. THEIR SENTENCE OUTRANKS ALL OF IT. Every line was inferred, tapped off a
-   list, or written about them rather than by them, so any of it may simply
-   be wrong. The moment what they type points elsewhere, drop it on the spot
-   — no comment, and never ask them to reconcile the two.`;
 
 export interface MemoryRow {
   user_message: string;
@@ -381,215 +340,6 @@ what it has cost. If they are circling the same ground, say so plainly.`;
 }
 
 /**
- * The thing that keeps bringing them back — given to the model, not to them.
- *
- * `findPattern` has been computed and rendered on `/history` for a while and
- * has never once reached the prompt. So the reply has been written by
- * something that did not know this was the seventh time in three weeks, while
- * a page two clicks away did. That is the most expensive kind of gap: the
- * knowledge exists, is free, is already in memory, and was not used.
- *
- * It costs nothing. The rows come from the fetch the memory block already
- * makes — twenty-four of them, where a pattern needs five tagged — so this is
- * one more read of an array that is already in hand.
- *
- * The instruction matters more than the number. `VOICE` says a pattern named
- * by them is worth ten named by us, and handing a model a count is the surest
- * way to get "you've mentioned this seven times" — which is a chart talking.
- * So the block gives the knowledge and forbids the announcement.
- */
-export function patternBlock(p: Pattern | null): string | null {
-  if (!p || !p.tag) return null;
-
-  const span = p.spanDays === 1 ? "today" : `across ${p.spanDays} days`;
-  const moving =
-    p.dropHere !== null && p.dropElsewhere !== null
-      ? p.dropHere < p.dropElsewhere
-        ? " It shifts less than everything else they bring here."
-        : " It shifts about as much as anything else they bring here."
-      : "";
-
-  return `WHAT KEEPS BRINGING THEM BACK
-${p.times} of their recent sessions have been about ${p.tag}, ${span}.${moving}
-You know this. They may never have said it out loud, and the number in
-particular never goes in front of them.
-
-If they name the pattern themselves, that sentence is theirs and it is the
-most valuable thing they will ever type here. Hold still and let it land.`;
-}
-
-/**
- * What they answered on the way in, thirty seconds ago.
- *
- * Every field optional and every field skippable, because the door out of
- * onboarding is always open and a person who pressed Escape has told you
- * something too.
- */
-/*
-  THE OPENING BLOCK IS GONE, AND THE RETURN LEG IS WHAT REPLACED IT
-
-  `Opening` and `openingBlock` rendered what the front-door form collected:
-  which chair, which object, what you were carrying, what you came to put down.
-  The form was deleted at `chair_picked` **2 of 108**, and the route kept
-  accepting the fields "for the day a reading feeds it". Nothing ever did.
-
-  Fifty-eight tokens of a **3,600-token hard ceiling** were reserved for a
-  block no request can populate — a price nobody pays, in the most expensive
-  real estate this product has. The budget check measured the heaviest turn at
-  3,599 of 3,600 once `heldBlock` was counted, which is one token of headroom
-  and not a state to ship; CLAUDE.md's rule is that whoever raises that number
-  should have deleted something.
-
-  This is the deletion, and it is the same trade stated as a product argument:
-  the **guessed** version of "what are you carrying" was three taps off a list
-  before anybody had spoken, and the **earned** version is one word somebody
-  chose after an hour in a circle. `heldBlock` is that word. The vocabulary
-  itself stays in `chairs.ts` — `voice.ts` reads `OBJECTS` and `CARRY_WORDS`
-  for the ban on *"you chose the tight knot"*, and circles still ask the chair
-  question on two screens.
-*/
-
-/**
- * How many held words the prompt carries.
- *
- * Two, against `HELD_CAP`'s five. These are single words — "guilt",
- * "tiredness" — so the gap is not about cost: a room that opens by listing
- * five things somebody once said about themselves is reciting a file back at
- * them, which is the failure `MAX_IN_PROMPT` caps notes at three for. The
- * newest two are the ones a person would still recognise.
- */
-export const HELD_IN_PROMPT = 2;
-
-/**
- * The word they took out of a circle, handed back to the room they return to.
- *
- * THE RETURN LEG WAS BUILT AND THE PROMPT NEVER READ IT
- *
- * The circle's seal writes `carry` into `vent_users.held`. That shipped with a
- * migration, a store method whose answer is read, a route, the Memory page, a
- * delete button, a destruction path in `deleteAll`, three branches of honest
- * closing copy, four mutations, and a live seam in check 20 proving the row
- * actually arrives. `getHeld` had exactly two callers: `/api/held`, which
- * draws the Memory page, and the store implementations.
- *
- * So the word was stored, and shown to them, and the room they came back to
- * had no idea. CLAUDE.md calls that commit *"the return leg, which was the
- * last cold component"* and *"why the product read as two products: the bridge
- * was one-way by construction"* — and the bridge stayed one-way, one function
- * call short, with every part working. **Eighth time in this file.**
- *
- * WHY THIS IS THE SAFEST THING IN THE PROMPT
- *
- * It needs no new promise, which is the same reason the seal could write it at
- * all: the column exists, renders on `/memory`, has a button, and dies in
- * `deleteAll`. And it is the one thing a circle produces that is safe to move —
- * not the transcript, not anybody else's words, not a model's summary, but one
- * word the person chose about themselves. The contract's own sentence:
- * *"written only by the person and never by a model."*
- *
- * Handing somebody their own word back is also the most useful move available
- * here — the asymmetry check 105 asserts about `CONDITIONS`, where a reply may
- * return a word they chose and a note may not write one.
- *
- * The silence rule is `carveBlock`'s, verbatim and for its reason: they can
- * clear it in one tap, so it is not something to lean on out loud.
- */
-export function heldBlock(held: readonly { text: string }[] = []): string | null {
-  const keep = held
-    .map((h) => h.text?.trim())
-    .filter((t): t is string => Boolean(t))
-    .slice(0, HELD_IN_PROMPT);
-  if (keep.length === 0) return null;
-  return [
-    "WHAT THEY SAID HELD — their own words, closing a circle:",
-    ...keep.map((t) => `- ${t}`),
-    "Never name it out loud. They can clear it in one tap.",
-  ].join("\n");
-}
-
-export function carveBlock(carve?: string | null): string | null {
-  if (!carve?.trim()) return null;
-
-  return `WHAT YOU ALREADY KNEW
-"${carve.trim()}"
-
-Carried from the last session that had one — it is why you do not start from
-zero. Never tell them you remember: they can clear it in one tap, so it is
-not something to lean on out loud.`;
-}
-
-/**
- * How long a gap makes it a different sitting.
- *
- * Four hours, not a calendar day. Somebody who writes at 2am and again at
- * 9am has had a night in between, and the second one is a new sitting by any
- * measure that matters to them. A day boundary would have called those the
- * same conversation and a week's silence and a lunch break different by the
- * same amount.
- */
-const SESSION_GAP_MS = 4 * 60 * 60 * 1000;
-
-export interface OpenThread {
-  said: string;
-  at: string;
-}
-
-/**
- * The last thing they left here, from a sitting that has ended.
- *
- * TRACK THREADS, and it is the one rule in the office spec this product had
- * no machinery for at all. The carve is a line the model wrote about them;
- * the pattern is a count; memory is a window of turns with no notion of which
- * ones are *finished*. None of them can answer "we didn't finish talking
- * about X".
- *
- * No new column and no migration: a thread is derivable from rows already
- * fetched. The newest vent older than the session gap is, by construction,
- * the last thing said in a sitting that is over.
- *
- * Silence beats a guess. A first visit, or a second message ten minutes after
- * the first, returns null and nothing is said — rather than reaching back to
- * a turn from the same sitting and announcing it as unfinished business.
- */
-export function openThread(rows: MemoryRow[], now: Date = new Date()): OpenThread | null {
-  const cutoff = now.getTime() - SESSION_GAP_MS;
-  // Rows arrive oldest-first from `selectMemory`; the last one under the
-  // cutoff is the newest thing said in a previous sitting.
-  let found: MemoryRow | null = null;
-  for (const r of rows) {
-    const t = new Date(r.created_at).getTime();
-    if (Number.isFinite(t) && t < cutoff) found = r;
-  }
-  if (!found) return null;
-
-  const said = found.user_message.trim();
-  if (said.length < 12) return null;
-
-  return {
-    said: said.length > 160 ? `${said.slice(0, 157)}…` : said,
-    at: new Date(found.created_at).toISOString().slice(0, 10),
-  };
-}
-
-/**
- * Bring it back once, in their words.
- *
- * Deliberately not "ask them about it every turn". A thread raised twice is
- * an interrogation, and the person may have come in today about something
- * else entirely — in which case the rule that governs every assembled block
- * applies and this one is dropped without comment.
- */
-export function threadBlock(thread: OpenThread | null): string | null {
-  if (!thread) return null;
-  return [
-    `OPEN THREAD — never closed, left here on ${thread.at}:`,
-    `"${thread.said}"`,
-    "Raise it once, early, in their phrasing, and ask where it landed. If today",
-    "is plainly a different subject, drop it without comment.",
-  ].join("\n");
-}
-
-/**
  * The tactic, without the worked example.
  *
  * Eleven of the thirty-five instructions end in `e.g. "Choke. And it sits in
@@ -665,7 +415,7 @@ export interface BuildPromptArgs {
   learned?: readonly LearnedRule[];
   /**
    * What the room knows about them across sessions — the office, not the
-   * transcript. Capped in `notesBlock`, and `loss` never reaches the model.
+   * transcript. Capped in `recall`, and `loss` never reaches the model.
    */
   notes?: readonly Note[];
   /**
@@ -832,29 +582,13 @@ export function buildSystemPrompt({
     // would be handing over an instruction about a message the model has not
     // been made to look at yet.
     message ? scanBlock(scan(message)) : null,
-    // The three rules, then the three things they govern — and only when at
-    // least one of them was actually assembled. A rule about context that is
-    // not present is pure weight, and this prompt is already ~3,100 tokens.
-    //
-    // Order is oldest to newest: what was carried across sessions, then what
-    // recurs across weeks, then what they tapped a minute ago.
-    [
-      notesBlock(notes),
-      threadBlock(openThread(memory)),
-      carveBlock(carve),
-      heldBlock(held),
-      patternBlock(pattern),
-    ].some(Boolean)
-      ? CONTEXT_RULES
-      : null,
-    // The thread first: it is the only block that is a live question rather
-    // than a description, and rule 2 says the context aims the one question.
-    threadBlock(openThread(memory)),
-    carveBlock(carve),
-    // Beside the carve because it is the same kind of thing: one line of
-    // theirs, from a sitting that has ended, under the same silence rule.
-    heldBlock(held),
-    patternBlock(pattern),
+    /*
+      Layer 2, in one place: what the room holds about them across sessions,
+      under the three rules that govern it, or nothing at all. It was five
+      blocks in two places — notes three blocks further down — each with its
+      own copy of the silence rule. See recall.ts.
+    */
+    semanticBlock(recall({ notes, carve, held, pattern, rows: memory })),
     flavourBlock(flavour),
     // Before the tactic, because it is background the tactic is chosen
     // against — and after the context rules, because "use it only if it fits
@@ -864,10 +598,6 @@ export function buildSystemPrompt({
     // proposed something and the gate has accepted it, so a deployment that
     // has never run one carries not a token for this.
     learnedBlock(learned),
-    // Before the tactic, with the other assembled context, and governed by the
-    // same three rules — name the thing, never the file, and their sentence
-    // outranks all of it.
-    notesBlock(notes),
     `THIS TURN — the move to make (your own voice, never quoted):\n${withoutExample(tactic.instruction)}`,
     /*
       The two halves of the contract, each with a source at last.
