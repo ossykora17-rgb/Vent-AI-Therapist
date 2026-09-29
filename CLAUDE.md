@@ -4637,6 +4637,29 @@ has can delete an artifact. The ten copies have to be deleted by hand, and
 whether anybody downloaded one is not something GitHub shows the owner of a
 personal repository.
 
+**The line that says what the room holds was half under the masthead.** A
+browser pass at 390px before the first testing week found it: *"Remembers · 1
+earlier vent"* was a second sticky bar at a hand-typed `top-[68px]`, and the
+masthead is 78px, so ten pixels of a sixteen-pixel line sat under it at 360,
+390 and 1280 alike. It renders as the masthead's own children now — no offset
+to go stale — and check 173 fails any sticky bar pinned by a pixel literal.
+
+**And the code ran an ocean from its database.** Every response carried
+`x-vercel-id: iad1:…` while Supabase answers from eu-central-1, and a vent makes
+about eight sequential store calls, so each crossed the Atlantic twice — for
+people in Lagos, who are nearer Frankfurt than Washington. `vercel.json` pins
+`regions: ["fra1"]`; left out, the platform default decides and nothing here
+says so. The model call now crosses once instead of the store crossing eight
+times.
+
+The same pass walked every other door and found them working: the age gate
+both ways, a vent answered through the real SDK against a loopback Messages
+server, the honest answer to *"who are you?"*, the clock to *"what's the
+time?"*, the landing on *"anyway thanks"* after four vents and the carve that
+follows it, the crisis card with both numbers, Memory, History, *Delete
+everything* (rows gone, anon id and age flag cleared), a two-seat circle, and
+the legal pages — no console error and no 5xx anywhere.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.

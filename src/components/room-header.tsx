@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import { RoomNav } from "@/components/room-nav";
 
 /**
@@ -27,7 +29,15 @@ import { RoomNav } from "@/components/room-nav";
  * Say small. Hear plenty." — in the content, where a heading belongs. That is
  * a sentence to a person. This is a signpost.
  */
-export function RoomHeader() {
+/*
+  `children` is a line that has to stay in view with the doors — the chat's
+  "Remembers · N earlier vents". It used to be a second sticky bar pinned at
+  a hand-typed `top-[68px]` beneath this one, which is 78px tall: ten pixels
+  of a sixteen-pixel line sat under the masthead at every width, so the one
+  sentence that says what the room holds about somebody was cut in half.
+  Inside the header it stacks instead, and there is no number to go stale.
+*/
+export function RoomHeader({ children }: { children?: ReactNode }) {
   return (
     <header className="sticky top-0 z-30 border-b border-line/10 bg-paper/95 backdrop-blur-glass">
       <div className="mx-auto max-w-[640px] px-4 pb-2 pt-3">
@@ -35,6 +45,7 @@ export function RoomHeader() {
         <p className="label-mono whitespace-nowrap leading-none">Mind Weave</p>
         <RoomNav className="-ml-0.5 mt-0.5" />
       </div>
+      {children}
     </header>
   );
 }
