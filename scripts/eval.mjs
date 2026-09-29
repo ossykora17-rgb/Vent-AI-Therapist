@@ -8524,6 +8524,53 @@ check("65 The backup copies what can be lost and nothing that was promised destr
   ok(/if \[ -z "\$TOKEN" \]/.test(wf),
     "a repository without a token is skipped, not failed",
     "a red cross every morning is how a real failure stops being read");
+
+  /*
+    The log was guarded and the file was not. This repository is public, and a
+    public repository's artifacts can be downloaded by anybody signed in to
+    GitHub — so for ten nights the "never printed" copy was uploaded instead,
+    every vent and every anon id in plain JSON, under a comment calling
+    artifacts private. What is uploaded must be the encrypted file and nothing
+    else, and the commands that make and open it are run here rather than read:
+    a backup nobody can decrypt is the green-tick bug in another coat.
+  */
+  // Comments stripped for everything structural: the header explains the
+  // commands, and a comment naming `!cancelled()` satisfied the check for it
+  // while the step itself had lost it. The opening instructions are read from
+  // the raw file below, because they only exist as a comment.
+  const wfCode = wf.replace(/^\s*#.*$/gm, "");
+  const uploads = [...wfCode.matchAll(/^\s*path:\s*(\S+)\s*$/gm)].map((m) => m[1]);
+  ok(uploads.length >= 1 && uploads.every((p) => /\.enc$/.test(p)),
+    `every artifact the backup uploads is the encrypted file (${uploads.join(", ") || "none"})`,
+    "a plaintext copy on a public repository is everybody's history handed to anybody");
+  ok(/if \[ "\$\{#TOKEN\}" -lt 32 \]/.test(wfCode), "a short token is refused before anything is fetched",
+    "the token is the key, so the copy is only as strong as it");
+  const encAt = wfCode.search(/openssl enc -aes-256-cbc/);
+  const rmAt = wfCode.search(/rm -f backup\.json\n/);
+  ok(encAt > 0 && rmAt > encAt && rmAt < wfCode.search(/exit \$status/),
+    "the plaintext is encrypted, then removed, before the step can end either way");
+  ok(/^\s*if: \$\{\{ !cancelled\(\) && steps\.take\.outputs\.skipped != 'true' && hashFiles\('backup\.json\.enc'\) != '' \}\}\s*$/m.test(wfCode),
+    "a partial copy is still kept, encrypted — what the comment above the upload always promised");
+
+  const enc = wf.match(/openssl enc (-aes-256-cbc -pbkdf2 -iter (\d+) -salt) \\\n\s*-in backup\.json -out backup\.json\.enc -pass env:TOKEN/);
+  const dec = wf.match(/openssl enc (-d -aes-256-cbc -pbkdf2) \\\n#\s*(-iter \d+) -in backup\.json\.enc -out backup\.json -pass env:VENT_BACKUP_TOKEN/);
+  ok(enc && Number(enc[2]) >= 100_000, "the key is stretched", enc ? `-iter ${enc[2]}` : "no encrypt command found");
+  ok(Boolean(dec), "and the workflow says how to open it", "a copy only its author can open is not a backup");
+  if (enc && dec) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mw-backup-"));
+    const plain = JSON.stringify({ rows: { vents: [{ user_message: "SENTINEL-NOT-FOR-UPLOAD" }] } });
+    fs.writeFileSync(path.join(dir, "backup.json"), plain);
+    const key = "k".repeat(24) + "0123456789abcdef";
+    execFileSync("openssl", ["enc", ...enc[1].split(" "), "-in", "backup.json", "-out", "backup.json.enc", "-pass", "env:TOKEN"],
+      { cwd: dir, env: { ...process.env, TOKEN: key } });
+    fs.rmSync(path.join(dir, "backup.json"));
+    const sealed = fs.readFileSync(path.join(dir, "backup.json.enc"));
+    ok(!sealed.includes("SENTINEL-NOT-FOR-UPLOAD"), "what is uploaded does not carry the words in it");
+    execFileSync("openssl", ["enc", ...dec[1].split(" "), ...dec[2].split(" "), "-in", "backup.json.enc", "-out", "backup.json", "-pass", "env:VENT_BACKUP_TOKEN"],
+      { cwd: dir, env: { ...process.env, VENT_BACKUP_TOKEN: key } });
+    is(fs.readFileSync(path.join(dir, "backup.json"), "utf8"), plain, "and the documented command opens it byte for byte");
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 check("66 A fix that stops the damage still has to answer for the damage done", () => {

@@ -4602,6 +4602,41 @@ English is answered in English; the Pidgin lines are the old ones, unchanged.
 Check 172 holds all three, check 171's sweep reads the fact lines, and nine
 mutations fail them.
 
+**The nightly backup published everybody's history.** `backup.yml` pulls
+`/api/export` — `select("*")` of every table the circles do not own: every
+vent and reply, every note, every carve, every anon id, which in this product
+is the whole credential — and uploaded it as `backup.json`, 90-day retention,
+under a comment reading *"Artifacts are private to the repository."* This
+repository is **public** (`"visibility": "public"`, read off the API), and a
+public repository's artifacts can be downloaded by anybody signed in to GitHub.
+Runs 28–37, 19–28 September: ten plaintext copies, every one still live when it
+was found.
+
+Check 65 held *"the job never prints the copy"* because *"a run log is readable
+by anybody with repo access"* — true, and the same sentence was true of the
+file it guarded one step down. **The third mechanism, inside one workflow:** the
+fix reached the log and not the artifact, and the comment above the artifact
+said the problem did not exist. `.env`, `data/` and the audit's `Finding` all
+learned this rule; the one file carrying all of it at once never did.
+
+The copy is encrypted before upload now, AES-256 with PBKDF2 at 600,000
+iterations, keyed by `VENT_BACKUP_TOKEN` — whoever holds that can already pull
+the plaintext from `/api/export`, so it adds no reach and needs no new secret —
+and the plaintext is removed before the step can end either way. A token under
+32 characters is refused, because the copy is only as strong as its key. The
+upload names `backup.json.enc` and nothing else, and it runs on `!cancelled()`,
+which is what the comment above it always claimed: without it a step's `if`
+implies `success()`, so the partial copy it promised to keep was skipped on
+exactly the runs it described. Check 65 runs the workflow's own encrypt command
+and the header's own decrypt command on a fixture, because a backup nobody can
+open is the green-tick bug again; six mutations fail it, and the seventh escaped
+first because the comment explaining `!cancelled()` satisfied the check for it.
+
+**What code cannot do is take back what was uploaded.** No tool this repository
+has can delete an artifact. The ten copies have to be deleted by hand, and
+whether anybody downloaded one is not something GitHub shows the owner of a
+personal repository.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
