@@ -128,6 +128,15 @@ export const REJECT = new Set([
     fire either, so a retry they buy is a retry on what a model wrote.
   */
   "rescues", "sticky",
+  /*
+    `blames` is the founder's dichotomy lens where a person meets it: "Never
+    imply that what was done to them was their responsibility." `verdict`'s
+    reason — somebody who has just written that they were hit cannot un-hear
+    being asked what their part in it was, and the authored line that says
+    less is the better thing to send. Zero of 129 production replies carry the
+    shape; it guards what the prompt now asks the model to hold apart.
+  */
+  "blames",
 ]);
 
 /**
@@ -211,7 +220,12 @@ export const REJECT = new Set([
   Retry, never the hold, for `presumed`'s reason: a reply that says "we", or
   asks twice, is still made of their words.
 */
-export const RETRY_ONLY = new Set(["language", "jargon", "presumed", "about_me", "teaches", "fused", "closing"]);
+/*
+  `technique` joins on the founder's CBT and DBT rule, with `teaches`'s
+  argument: the procedure — a rating, a test of the evidence, another way to
+  see it — is one clause of a reply whose other sentences are usually theirs.
+*/
+export const RETRY_ONLY = new Set(["language", "jargon", "presumed", "about_me", "teaches", "fused", "closing", "technique"]);
 
 /**
  * Computed here, deliberately not acted on. Named rather than merely absent,
@@ -432,8 +446,14 @@ function correctionFor(graders: string[], wroteIn: GoldenCase["language"], asked
   if (seen.has("presumed")) {
     lines.push("- You told them what they feel. Say what you noticed in their own words, or ask.");
   }
+  if (seen.has("technique")) {
+    lines.push("- You ran a technique on their thought: a rating, a test of it, another way to see it, or a friend's view. Say what is running in them, as a process, in their words, and leave it there.");
+  }
+  if (seen.has("blames")) {
+    lines.push("- You put what was done to them on them. Keep what happened, what they made it mean and what is theirs to move apart, and never make what was done to them theirs.");
+  }
   if (seen.has("teaches")) {
-    lines.push("- You explained how minds work, named where an idea comes from, or laid it out as a framework. No lessons, no names, no lists: say what they are doing, in their words, so they see it themselves.");
+    lines.push("- You explained how minds work, named where an idea comes from or what a technique is called, or laid it out as a framework. No lessons, no names, no lists: say what they are doing, in their words, so they see it themselves.");
   }
   if (seen.has("rescues")) {
     lines.push("- You rescued them: a promise it will be okay, a cheer, or a permission to feel. Stay with what is true tonight, and leave the feeling theirs.");

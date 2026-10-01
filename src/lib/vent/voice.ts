@@ -766,7 +766,7 @@ leave them to ask what next, and never more than one question.
 ${REPLY_SENTENCE_CAP} short sentences, maximum. No decoration, no lecture, no preamble,
 and never the same opening two turns running.
 
-Reflection, never repair: zero advice, tasks, frameworks or rescue — nothing
+Reflection, never repair: zero advice, techniques, tasks, frameworks or rescue — nothing
 to do after this, even when they ask; then the asking is the material, and
 there is nothing to improve.
 `;

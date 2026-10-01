@@ -340,32 +340,25 @@ check("2  exact_mirror opens, and nothing repeats inside three turns", () => {
 });
 
 // ── 3. the worksheet that had to go ────────────────────────────────────────
-check("3  thought_record is warm, not a clipboard", () => {
-  // A catastrophe with no self-criticism and no body named: thought_record is
-  // the highest-weighted tactic that fits, so this is a real selection.
-  const t = selectTactic({
-    ...base,
-    message: "i will fail this, everything is ruined, it is always the same",
-    pressure: 40,
-    recentTactics: [],
-  });
-  is(t.id, "thought_record", "catastrophising routes to the thought record");
-
-  ok(!/evidence (for|against)/i.test(t.instruction.replace(/never say[^.]*\./i, "")),
-    "the worksheet phrasing is gone from the instruction itself");
-  ok(/never say 'evidence for and against'/i.test(t.instruction),
-    "and the model is told, in words, not to reach for it");
-  ok(/smaller, truer sentence/i.test(t.instruction),
-    "what replaces it is one smaller true sentence they can carry");
-
-  // The other half of the same fix: put a number on the worst case, plainly.
-  const d = selectTactic({
-    ...base,
-    message: "i will fail this, everything is ruined, it is always the same",
-    pressure: 40,
-    recentTactics: ["thought_record", "socratic", "reframe_power"],
-  });
-  ok(!/exercise|worksheet/i.test(d.instruction), "no exercise language anywhere near it", d.id);
+check("3  A catastrophe is reflected, never put through a thought record", () => {
+  /*
+    This check held "thought_record is warm, not a clipboard" — the CBT thought
+    record with the worksheet words taken out, and a rated worst case beside
+    it. The founder's rule since: "Do not invite thought records,
+    evidence-testing ... If a cognitive pattern is visible, reflect it as
+    process: 'There's a forecast running that this will end the same way.'"
+    Both were retired, and this is the same message, answered the new way.
+  */
+  const msg = "i will fail this, everything is ruined, it is always the same";
+  const t = selectTactic({ ...base, message: msg, pressure: 40, recentTactics: [] });
+  is(t.id, "name_the_forecast", "a failure they are sure of is shown as a forecast running in them");
+  ok(/forecast running/.test(t.instruction) && /never tested or rated/.test(t.instruction),
+    "and the move says it back and leaves it — no rating, no test", t.instruction);
+  for (const id of ["thought_record", "decatastrophize", "double_standard", "exception_finding", "two_chair"]) {
+    ok(!ALL_TACTICS.some((x) => x.id === id), `${id} is retired, not renamed`);
+  }
+  const d = selectTactic({ ...base, message: msg, pressure: 40, recentTactics: ["name_the_forecast", "socratic", "reframe_power"] });
+  ok(!/exercise|worksheet|out of ten|one to ten/i.test(d.instruction), "and the next turn's move asks for nothing to be rated or practised", d.id);
 });
 
 // ── 4. the body gate ───────────────────────────────────────────────────────
@@ -734,8 +727,11 @@ check("10 The pipelines filter, dedup, reweight and score preferences", () => {
     fatal grader rather than the major one. The drop is the rule; the label is
     which rule it broke first.
   */
-  is(num("language") + num("errand"), 5, "a Pidgin vent answered in English never becomes a training pair");
+  is(num("language") + num("errand") + num("technique"), 5, "a Pidgin vent answered in English never becomes a training pair");
   is(num("errand"), 1, "and the one that also handed over a task is counted under that");
+  // And one was a `double_standard` reply — "if your closest friend said that
+  // ... what would you tell them?" — which the CBT rule now names first.
+  is(num("technique"), 1, "and the one that ran the friend technique on them is counted under that");
   is(num("exact duplicate"), 1, "the exact repeat goes");
   is(num("near duplicate"), 1, "and the one-word-different repeat goes");
 
@@ -3160,11 +3156,13 @@ check("25 Five traditions reach the room, and the family move is not imported", 
   // de Shazer, Hayes, Miller & Rollnick. These sit behind an established
   // move on the same trigger, which is correct — the three-turn rotation is
   // what makes them reachable rather than redundant.
-  is(at("no point, nothing go change, why bother, e no go better"), "exception_finding",
-    "hopelessness gets asked for the hour it was less bad");
-  is(at("i am useless, i be failure", ["double_standard"]), "defusion",
-    "and self-attack gets distance from the sentence on the next turn");
-  is(at("i keep saying i go rest but i never rest", ["thought_record"]), "change_talk",
+  // de Shazer stays, by the move that imagines rather than the one that hunts
+  // for a counter-example — `exception_finding` was retired as evidence-testing.
+  is(at("no point, nothing go change, why bother, e no go better"), "miracle_question",
+    "hopelessness gets de Shazer's question that imagines, not the one that tests");
+  is(at("i am useless, i be failure"), "defusion",
+    "and self-attack gets distance from the sentence — the friend technique that came first is retired");
+  is(at("i keep saying i go rest but i never rest"), "change_talk",
     "and stated intent gets asked for their own reason, never given one");
 
   /*
@@ -3226,7 +3224,7 @@ check("25 Five traditions reach the room, and the family move is not imported", 
       try { if (t.fits(ctx)) everFits.add(t.id); } catch { /* not eligible */ }
     }
   }
-  const missing = ["meaning_stance", "ubuntu_frame", "defusion", "exception_finding", "change_talk"]
+  const missing = ["meaning_stance", "ubuntu_frame", "defusion", "miracle_question", "change_talk"]
     .filter((id) => !everFits.has(id));
 
   /*
@@ -6400,7 +6398,10 @@ check("47 The one who is already watching is not handed a mirror", () => {
   */
   // The selector's own set, imported: a suite that checks its copy passes
   // while the product regresses, and this one had drifted a member behind.
-  ok(FEEDS_THE_LOOP.size >= 3, "the veto is read off the selector, not a copy", `${FEEDS_THE_LOOP.size}`);
+  // A member naming a retired tactic is a veto on nothing, so every member must
+  // still be a tactic — the floor was ">= 3" until two members were retired.
+  ok(FEEDS_THE_LOOP.size > 0 && [...FEEDS_THE_LOOP].every((id) => ALL_TACTICS.some((t) => t.id === id)),
+    "the veto is read off the selector, not a copy, and every member is a tactic that exists", `${[...FEEDS_THE_LOOP]}`);
   for (const m of WATCHING) {
     const recent = [];
     for (let turn = 1; turn <= 4; turn++) {
@@ -11364,11 +11365,19 @@ check("88 The room asks one question, chosen against their words", () => {
     "a probe with a school nothing counts is a probe no check covers");
   is(new Set(PROBES.map((p) => p.id)).size, PROBES.length, "every id distinct",
     "a duplicate id makes the three-turn block silently block two questions");
-  for (const school of ["mi", "yalom", "rogers", "wells"]) {
-    const n = PROBES.filter((p) => p.school === school).length;
-    ok(n >= (school === "wells" ? 6 : 15), `${school} carries its share (${n})`,
-      "one school at fifteen and another at three is one school with decoration");
-  }
+  /*
+    Balance, stated as balance. This was "fifteen each", and the founder's CBT
+    rule retired five MI questions — the rulers, the exception hunt and the two
+    forecast tests — leaving fourteen, which is still a school. The rule was
+    never the integer; it was the comment's own: one school at fifteen and
+    another at three is one school with decoration. Wells is the loop's filter
+    set and smaller by design.
+  */
+  const sizes = ["mi", "yalom", "rogers"].map((school) => PROBES.filter((p) => p.school === school).length);
+  ok(Math.min(...sizes) * 2 >= Math.max(...sizes), `mi, yalom and rogers carry comparable shares (${sizes.join(" / ")})`,
+    "one school at fifteen and another at three is one school with decoration");
+  const wells = PROBES.filter((p) => p.school === "wells").length;
+  ok(wells >= 6, `wells carries the loop (${wells})`);
   for (const p of PROBES) {
     ok(/\?/.test(p.ask), `${p.id} is a question`,
       "the deliverable is questions — an imperative here is a task with better manners");
@@ -21163,8 +21172,8 @@ check("163 Split awareness: a verdict gets a step back, a noticing gets named, a
   };
   is(pick("i am useless, i be failure"), "defusion",
     "a fused verdict gets one step back first — before the friend reframe argues with it");
-  is(pick("my oga makes me feel useless"), "double_standard",
-    "a self-critical word without the verdict keeps the old order");
+  is(pick("my oga makes me feel useless"), "defusion",
+    "a self-critical word without the verdict gets distance too, now that the friend technique is retired");
   is(pick("i am useless, i be failure", { ventCount: 0 }), "exact_mirror",
     "turn one still mirrors: showing them their own words is the first act of it");
   is(pick("i am useless and my chest is tight", { body: "chest", pressure: 85 }), "felt_sense",
@@ -21243,7 +21252,9 @@ check("164 An ending they are sure of is seen as theirs, and the room never teac
     "if i tell my mum she will disown me", "i'm sure she won't come back", "everyone will judge me",
     "nobody will believe me", "i know how this ends", "i'm going to lose my job", "people will talk",
     "i know say dem go laugh me", "my oga go sack me", "e no go gree", "i dey fear say i go end up like my papa",
-    "i dey fear say if i rest everything go collapse"];
+    "i dey fear say if i rest everything go collapse",
+    // CATASTROPHE's until a thought record and a rated worst case were retired
+    "i will fail this, everything is ruined, it is always the same", "i go fail this exam"];
   const sureNo = [
     "i know he will be fine", "they'll be happy for me", "she will understand",      // sure, not feared
     "they will laugh at the joke", "they will fire the manager",                      // no object that is them
@@ -21254,7 +21265,6 @@ check("164 An ending they are sure of is seen as theirs, and the room never teac
     "i know it will never get better", "i know say e no go better",                  // despair
     "he said he will leave me",                                                       // his sentence
     "what if i tell him and he'll laugh at me",                                       // the loop turning
-    "i will fail this, everything is ruined, it is always the same",                  // CATASTROPHE's
     "they laughed at me yesterday", "nobody will miss me", "she won't care if i'm late"];
   ok(sureYes.every(forecasting), "a feared ending held as certain is read — English and Pidgin",
     sureYes.filter((m) => !forecasting(m)).join(" | "));
@@ -21291,7 +21301,7 @@ check("164 An ending they are sure of is seen as theirs, and the room never teac
   // ── the question slot ──
   const asks = PROBES.filter((p) => p.fits("they'll laugh at me") && /ending|sure|only way/.test(p.ask));
   ok(asks.length >= 3 && asks.every((p) => !p.process),
-    "three questions, none of them process-safe — asked of a loop, 'how sure?' is one more lap",
+    "three questions, none of them process-safe — the loop gets Wells's questions instead",
     asks.map((p) => p.id).join(" "));
   const seen = [];
   for (let turn = 0; turn < 3; turn++) seen.push(selectProbe("they'll laugh at me", [...seen])?.id);
@@ -21306,8 +21316,9 @@ check("164 An ending they are sure of is seen as theirs, and the room never teac
     probe: selectProbe(said), message: said, memory: [],
     ctx: { ...classify(said), message: said, pressure: 60, duality: null, mood: null, ventCount: 3,
       recentTactics: [] } });
-  ok(/an ending they are sure of/i.test(prompt) && /how sure it is right now, or what else it could\s+be/i.test(prompt)
-    && /answer is theirs/i.test(prompt), "the second engine hands back the ending and asks — it never answers");
+  ok(/an ending they are sure of/i.test(prompt) && /Say what is running and leave it/.test(prompt)
+    && /never test, rate or re-see/.test(prompt) && !/how sure it is|what else it could be/i.test(prompt),
+    "the second engine hands back the ending and leaves it running — never tested, rated or re-seen for them");
 
   // ── never teach the concepts: not on the page the model reads, not in the reply ──
   const authored = [
@@ -21379,7 +21390,7 @@ const { carefulAfter, linesBeside, CAREFUL_FOR_DAYS } = await app("src/lib/vent/
 const { plainText } = await app("src/lib/vent/intent.ts");
 const { heaviness } = await app("src/lib/vent/depth.ts");
 const { NOT_AT_THE_EDGE } = await app("src/lib/vent/tactics.ts");
-const { ASKS_FOR_A_NUMBER } = await app("src/lib/vent/probes.ts");
+const { ASKS_FOR_A_NUMBER } = await app("src/lib/vent/quality.ts");
 const { awayFor, RETURN_AFTER_HOURS } = await app("src/lib/vent/intake.ts");
 const { ANCHORS, CRITICAL_ANCHORS, anchorScore } = await app("src/lib/vent/quality.ts");
 const corpusInputs = fs.readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8")
@@ -21455,14 +21466,20 @@ check("167 A heavy turn, or a fortnight after a crisis, is not the turn to be cl
   const ctx = (m, careful) => ({ ...classify(m), message: m, pressure: 60, duality: null, mood: null,
     ventCount: 2, recentTactics: [], careful, heavy: heaviness(m) !== null });
   const vetoed = (careful) => corpusInputs.filter((m) => NOT_AT_THE_EDGE.has(selectTactic(ctx(m, careful)).id)).length;
-  const counted = (careful) => corpusInputs.filter((m) => ASKS_FOR_A_NUMBER.test(selectProbe(m, [], careful)?.ask ?? "")).length;
+
   ok(corpusInputs.length >= 60, `${corpusInputs.length} authored openings read`);
   ok(vetoed(false) > 0 && vetoed(true) === 0,
     `a held-back move wins ${vetoed(false)} of ${corpusInputs.length} openings, and none once the room is careful`,
     "a veto that reaches nothing proves nothing");
-  ok(counted(false) > 0 && counted(true) === 0,
-    `a question asking for a number fills ${counted(false)} slots, and none once the room is careful`,
-    "\"how sure, out of ten?\" asked of somebody a week after a crisis is the room grading them");
+  /*
+    The rulers were held back here on a heavy turn or a careful fortnight. The
+    founder's CBT rule retired them outright, so the stronger thing is true and
+    asserted instead: no question in the library asks for a number, on any turn.
+  */
+  const rulers = PROBES.filter((p) => ASKS_FOR_A_NUMBER.test(p.ask));
+  ok(PROBES.length > 50 && rulers.length === 0,
+    "no question in the library asks for a number — not on a heavy turn, not on any turn",
+    rulers.map((p) => p.id).join(" "));
   /*
     Heavy messages that carry a forecast, or open a question slot a number
     would fill — found by switching the heaviness half of both vetoes off and
@@ -21474,15 +21491,17 @@ check("167 A heavy turn, or a fortnight after a crisis, is not the turn to be cl
     "hopeless. i don try everything and nothing dey work"];
   ok(heavy.every((m) => heaviness(m)), "every one of them is heavy");
   ok(heavy.every((m) => !NOT_AT_THE_EDGE.has(selectTactic(ctx(m, false)).id)
-    && !ASKS_FOR_A_NUMBER.test(selectProbe(m, [], false)?.ask ?? "")),
+    && !ASKS_FOR_A_NUMBER.test(selectProbe(m, [])?.ask ?? "")),
     "and a heavy message is held back on its own, with no history at all",
-    heavy.map((m) => `${selectTactic(ctx(m, false)).id}/${selectProbe(m, [], false)?.id}`).join(" "));
+    heavy.map((m) => `${selectTactic(ctx(m, false)).id}/${selectProbe(m, [])?.id}`).join(" "));
   is(selectTactic(ctx("i know he'll say no", false)).id, "name_the_forecast", "a forecast is still named on an ordinary day");
   ok(selectTactic(ctx("i know he'll say no", true)).id !== "name_the_forecast", "and left alone on a careful one");
 
   const route = strip(fs.readFileSync(path.join(ROOT, "src/app/api/vent/route.ts"), "utf8"));
-  ok(/selectProbe\(input\.message, recentProbes, ctx\.careful\)/.test(route),
-    "the route hands the probe selector the same care the tactic got");
+  // The care that held the rulers back has nothing left to hold back, so the
+  // route asks the selector with the message and the questions already asked.
+  ok(/selectProbe\(input\.message, recentProbes\)/.test(route),
+    "the route asks the question selector with the message and what was already asked");
   ok(/heavy: heaviness\(input\.message\) !== null,/.test(route),
     "and hands the tactic selector the heaviness it cannot import for itself");
 });
@@ -21737,7 +21756,7 @@ check("171 The room keeps the thread alive, and never rescues, holds on, lecture
   // ── the constitution the model reads ────────────────────────────────────
   const said = STABLE_PREFIX.replace(/\s+/g, " ");
   for (const rule of [/never "we"/, /Never leave them to ask what next/, /Their attention is theirs/,
-    /feel without owning/, /Not a therapist, coach, fixer, guide or cheerleader/, /zero advice, tasks, frameworks or rescue/]) {
+    /feel without owning/, /Not a therapist, coach, fixer, guide or cheerleader/, /zero advice, techniques, tasks, frameworks or rescue/]) {
     ok(rule.test(said), `the prompt carries ${rule}`);
   }
   ok(!/Weight over warmth/.test(said) && /Warm, steady, alive, precise/.test(said),
@@ -22210,6 +22229,138 @@ check("176 The room sees through the lineage and never names it or teaches it", 
   }
   ok(/Never name the method, its author or its school/.test(fs.readFileSync(path.join(ROOT, "src/lib/vent/research.ts"), "utf8")),
     "and the lookup is asked not to send one");
+});
+
+// ── 177. three things held apart, and no technique run on a thought ────────
+const { TECHNIQUE_ASKS, BLAMES } = await app("src/lib/vent/quality.ts");
+const { agencyLive } = await app("src/lib/vent/tactics.ts");
+
+check("177 Three things are held apart, and no technique is run on a thought", () => {
+  /*
+    Three directives, checked against the code before anything was built.
+
+    The DICHOTOMY LENS was mostly in the constitution already, from the
+    lineage: what happened, what it was made to mean, what is theirs to move.
+    What it lacked was the founder's gate — "if the distinction is not live in
+    what they are saying, do not force it" — and the one move that applied it
+    fired on any oga, boss or manager. And two questions in the library broke
+    "never imply that what was done to them was their responsibility" outright.
+
+    CBT and DBT: "Do not use, name, or assign any ... technique ... If a
+    cognitive pattern is visible, reflect it as process." The library held a
+    thought record, a rated worst case, the friend technique, a counter-example
+    hunt, a staged dialogue and five questions that asked for a number or a
+    second way to see it. All retired. The names are graded by `teaches`; the
+    techniques in use, which a list of names cannot see, by `technique`.
+  */
+  const graded = (reply, said = "my oga shouted at me again and i keep replaying it") =>
+    gradeReply({ message: said, language: "en", intent: "vent" }, reply, { said }).map((f) => f.grader);
+
+  // ── the lens, live or left ──
+  ok(/When blame, powerlessness or responsibility is live, keep three things\s+apart: what happened, what they made it mean, what is theirs to move now/.test(STABLE_PREFIX)
+    && /Not live\? Leave it\./.test(STABLE_PREFIX), "the constitution holds the three apart, and only when it is live");
+  ok(/never blame: what was done to them was never\s+theirs/.test(STABLE_PREFIX), "and never makes what was done to them theirs");
+  const LIVE = ["it's all my fault she left", "he made me feel small in front of everyone", "i had no choice, they forced me",
+    "i can't do anything about it", "na my fault say the relationship spoil", "i no fit do anything", "dem do me this thing",
+    "i should have seen it coming", "my oga makes me feel useless"];
+  const NOT_LIVE = ["my oga praised me today and i still feel empty", "my mum makes me laugh", "my husband makes me feel loved",
+    "i cannot do anything right", "the rent is due friday", "i should go to bed"];
+  ok(LIVE.every(agencyLive), "blame, powerlessness and responsibility are read — English and Pidgin", LIVE.filter((m) => !agencyLive(m)).join(" | "));
+  ok(!NOT_LIVE.some(agencyLive), "and not a boss named in passing, a warm sentence, or a verdict on the self", NOT_LIVE.filter(agencyLive).join(" | "));
+  const openings = fs.readFileSync(path.join(ROOT, "src/lib/vent/holisticExamples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l).input);
+  const reach = openings.filter(agencyLive).length;
+  ok(reach >= 1 && reach < openings.length / 6, "the reading reaches real openings and not everybody", `${reach} of ${openings.length}`);
+  const lens = ALL_TACTICS.find((t) => t.id === "reframe_power");
+  const ctxOf = (message) => ({ ...classify(message), message, pressure: 60, duality: null, mood: null, ventCount: 3, recentTactics: [] });
+  ok(lens.fits(ctxOf("na my fault say the relationship spoil")) && !lens.fits(ctxOf("my oga praised me today and i still feel empty")),
+    "the move that applies the lens fires when it is live, and an oga named in passing no longer forces it");
+  ok(/never make what was done to them theirs/.test(lens.instruction), "and it says, in its own words, whose the doing was");
+
+  // ── never theirs, where a person meets it ──
+  for (const reply of ["What was your part in it?", "Why did you let him talk to you like that?", "You let him do it again.",
+    "Part of the blame is yours too.", "You brought this on yourself.", "What did you do to make him angry?"]) {
+    ok(graded(reply).includes("blames"), "putting what was done to them on them is caught", reply);
+  }
+  for (const [reply, why] of [["Some of this belongs to them, and you have been carrying it as yours. Which part was never yours?", "the lens's own hold"],
+    ["You brought it here, and it is heavy.", "brought, not brought on yourself"], ["You let the rent sit for a week.", "a thing, not a person"],
+    ["What part of this is still yours to move?", "the present, never the past fault"]]) {
+    ok(!graded(reply).includes("blames"), `not blame: ${why}`, reply);
+  }
+  ok(REJECT.has("blames") && ANCHORS.emotional_accuracy.includes("blames"), "fatal, and scored where the room decides things about them");
+  for (const id of ["yalom_responsibility", "yalom_freedom"]) ok(!PROBES.some((p) => p.id === id), `${id} is retired`);
+  const yours = PROBES.find((p) => p.id === "yalom_yours_to_move");
+  ok(yours && yours.fits("na my fault say the relationship spoil") && !yours.fits("my husband beats me every night and it's my fault")
+    && !yours.fits("my oga praised me today"), "what is theirs is asked only when it is live, and never of somebody in danger");
+
+  // ── the names: never Stoicism, Epictetus, the dichotomy of control, CBT or DBT ──
+  for (const reply of ["A Stoic would say only your response is yours.", "As Epictetus put it, some things are up to you.",
+    "That is the dichotomy of control.", "Let's try a thought record on that.", "That sounds like a behavioural experiment.",
+    "Try opposite action tonight.", "Use your wise mind here.", "TIPP can bring it down.", "Radical acceptance is the move.",
+    "Can you reframe it?", "Think of it as distress tolerance."]) {
+    ok(graded(reply).includes("teaches"), "a source or a technique by name is caught", reply);
+  }
+  for (const reply of ["You stayed stoic on every call and paid for it after.", "Ah, my dear man, the rent again."]) {
+    ok(!graded(reply).includes("teaches"), "and an ordinary word that shares the spelling is not", reply);
+  }
+
+  // ── the techniques in use ──
+  for (const reply of ["How sure are you, out of ten?", "What's the evidence for that thought?", "Is there another way to see it?",
+    "What would you tell a friend who said that about themselves?", "What's the worst that could happen?",
+    "Try it as a small experiment this week and see what happens if you call him.", "On a scale of one to ten, how bad is it?"]) {
+    ok(graded(reply).includes("technique"), "a procedure run on the thought is caught", reply);
+  }
+  // The founder's own examples of what to say instead, CBT's and DBT's.
+  for (const reply of ["There's a forecast running that this will end the same way.", "The meaning that landed was that you were the problem.",
+    "There's a part that wants to end it and a part that is still trying to stay.", "The intensity is very high right now."]) {
+    const fired = graded(reply).filter((g) => ["technique", "teaches", "blames", "advice", "errand"].includes(g));
+    ok(fired.length === 0, "and the process said plainly passes", `${reply} → ${fired.join(" ")}`);
+  }
+  ok(!graded("Nine out of ten, and you are still typing.", "it's a nine out of ten tonight").includes("technique"),
+    "their own number handed back is not asking for one");
+  const v = inspectReply({ message: "my oga shouted at me again", language: "en", intent: "vent" }, "Your oga shouted again. How sure are you, out of ten, that he meant it?", "my oga shouted at me again");
+  ok(RETRY_ONLY.has("technique") && v.reject?.split(" · ").includes("technique") && /a rating, a test of it/.test(v.correction ?? ""),
+    "a technique buys a retry that is told what it was", v.reject);
+  ok(!TEACHES.some((re) => re.test(v.correction ?? "")), "and the note names no technique back");
+
+  // ── the library runs none of them ──
+  const authored = [...ALL_TACTICS.flatMap((t) => [t.instruction, t.hold ?? ""]), ...PROBES.map((p) => p.ask)];
+  const running = authored.filter((text) => TECHNIQUE_ASKS.some((re) => re.test(text)) || BLAMES.some((re) => re.test(text)));
+  ok(authored.length > 100 && running.length === 0, `no move or question in the library runs a technique or assigns blame (${authored.length} read)`, running.join(" | "));
+  for (const id of ["mi_importance", "mi_confidence", "mi_exception", "mi_how_sure_it_ends", "mi_only_way_it_goes"]) {
+    ok(!PROBES.some((p) => p.id === id), `${id} is retired, not renamed`);
+  }
+  const forecast = ALL_TACTICS.find((t) => t.id === "name_the_forecast");
+  const parts = ALL_TACTICS.find((t) => t.id === "duality_slider");
+  ok(!ASKS_FOR_A_NUMBER.test(forecast.hold) && !ASKS_FOR_A_NUMBER.test(parts.hold) && !/0–100|zero to a hundred/.test(parts.instruction + parts.hold),
+    "the forecast and the two parts are said, never rated");
+  ok(parts.fits(ctxOf("i'm torn between staying and going")), "and the torn reach the two parts now that the staged chair is retired");
+
+  // ── the one dynamic path in, and the page the model reads ──
+  const technique = (move) => parseTechnique(JSON.stringify({ move, source: "https://www.apa.org/topics/stress" }), "economy");
+  ok(technique("Ask them which part of the money is still theirs to move this week.") !== null, "a plain move still arrives");
+  for (const move of ["Ask them to rate the thought out of ten before and after.", "Help them find another way to see the debt.",
+    "Ask them what their part in it was."]) {
+    ok(technique(move) === null, "a looked-up technique, or blame, is refused before it reaches the prompt", move);
+  }
+  /*
+    And the code's own labels never reach the page. The prompt used to list the
+    last three moves by id — "do NOT repeat these moves: socratic, defusion" —
+    which is a technique named to the model by the room itself. Built with
+    every id in the history, because the sweep in check 164 was built with
+    none and never saw the line.
+  */
+  const everyId = ALL_TACTICS.map((t) => t.id);
+  const withHistory = buildSystemPrompt({ grounding: groundNow(), classification: classify("i know he'll say no"),
+    tactic: ALL_TACTICS[0], probe: null, message: "i know he'll say no", memory: [],
+    ctx: { ...classify("i know he'll say no"), message: "i know he'll say no", pressure: 60, duality: null, mood: null,
+      ventCount: 3, recentTactics: everyId } });
+  // A plain string, not a template literal: `\b` inside backticks is a
+  // backspace, and the first version of this line matched nothing because of it.
+  const leaked = everyId.filter((id) => new RegExp("\\b" + id + "\\b").test(withHistory));
+  ok(everyId.length > 20 && leaked.length === 0 && !TEACHES.some((re) => re.test(withHistory)),
+    "no move's id reaches the page the model reads, with every one of them in the history", leaked.join(" "));
+  ok(/zero advice, techniques, tasks, frameworks or rescue/.test(STABLE_PREFIX) && /never test, rate or re-see/.test(STABLE_PREFIX)
+    && /how high it\s+runs/.test(STABLE_PREFIX), "and the constitution says it once: no technique, say what runs, and how high");
 });
 
 

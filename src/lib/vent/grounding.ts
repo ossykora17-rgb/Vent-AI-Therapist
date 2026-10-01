@@ -62,7 +62,7 @@ Location: Nigeria
 
 You know the date and time exactly. If the user asks what day it is, what the
 time is, who you are, or where they are — answer directly from the values
-above, in one or two sentences. Do not reframe it as feeling. Do not say
+above, in one or two sentences. Do not turn it into a feeling. Do not say
 "that sounds heavy". Say the date.`;
 }
 
