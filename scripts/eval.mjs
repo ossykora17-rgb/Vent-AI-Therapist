@@ -15935,9 +15935,14 @@ check("122 A reply that is correct and incomprehensible is a failed reply", () =
     after it satisfy `unpacked()`. Deleting the exemption left the suite green.
     A probe that cannot reach the guard it is named for, one more time.
   */
-  is(jargonOf("That is your inner child.", "it's my inner child stuff").length, 0,
+  /*
+    The probe word was "inner child" until the founder's internal lineage moved
+    it to `TEACHES`, where unpacking excuses nothing (check 176). The rule here
+    is the exemption, not the word, so it rides on a word `JARGON` still holds.
+  */
+  is(jargonOf("That is your core belief.", "it's my core belief stuff").length, 0,
     "a word they used first may be said back to them bare");
-  is(jargonOf("That is your inner child.").length, 1,
+  is(jargonOf("That is your core belief.").length, 1,
     "and the same bare sentence to somebody who never said it does not pass");
 
   /*
@@ -22111,6 +22116,100 @@ check("175 Harm to others is a crisis, memory rides only where it is touched, an
   ok(!/Make the tool specific/.test(quiet + buildSystemPrompt({ grounding, classification: classify("rent is due and salary never enter"),
     tactic: ALL_TACTICS[0], ctx: { body: null, pressure: null, duality: null, mood: null, recentTactics: [] }, memory: [], message: "rent is due" })),
   "the pressure line asks for a specific move, never a tool", "a tool is the last word a room with no tasks should say");
+});
+
+// ── 176. the internal lineage: seen with, never named, never taught ────────
+const { SOURCES } = await app("src/lib/vent/quality.ts");
+
+check("176 The room sees through the lineage and never names it or teaches it", () => {
+  /*
+    "Draw on the functional core of depth psychology, stoic clarity, existential
+    honesty, somatic awareness, attachment patterns, and radical
+    self-responsibility. Never name the sources. Never teach the concepts. Only
+    use them to see more accurately ... The goal is increased freedom through
+    precise awareness, not education or ideology."
+
+    Checked against the code before anything was built. Depth, existential
+    honesty and the body already had lines in the constitution; what had none
+    was the seam between an event and what it was made to mean, how somebody
+    reaches for people, and what is theirs to do next. Those went in, in plain
+    words, inside the cached prefix — and the names went into a grader, because
+    a word on the page the model reads is a word in the reply.
+  */
+  // ── the six lenses are in the constitution, in plain words, every turn ──
+  const LENSES = [
+    ["the frame", /to see with, never to cite or teach/],
+    ["the aim", /their freedom: their own process, seen precisely/],
+    ["depth", /Every defence protected them once/],
+    ["stoic clarity", /what they made it mean, what is theirs to move/],
+    ["existential honesty", /not choosing is choosing/],
+    ["somatic awareness", /The body often knows first/],
+    ["attachment patterns", /How they reach for people is old[\s\S]{0,200}Never call it a type/],
+    ["self-responsibility, never blame", /never blame: what was done to them was\s+never theirs/],
+  ];
+  for (const [lens, re] of LENSES) {
+    ok(re.test(STABLE_PREFIX), `${lens} is in the cached prefix, so every turn carries it`, re.source);
+  }
+  ok(!SOURCES.some((re) => re.test(STABLE_PREFIX)) && !TEACHES.some((re) => re.test(STABLE_PREFIX)),
+    "and the constitution names none of its sources and teaches none of its concepts");
+
+  // ── the names and the concepts are one list, and check 164 sweeps it ──
+  ok(SOURCES.length >= 20 && SOURCES.every((re) => TEACHES.includes(re)),
+    "every source is in TEACHES, so the sweep of what the model reads covers it without a second list",
+    `${SOURCES.length} sources`);
+  for (const word of ["attachment style", "inner child", "defence mechanism", "trauma response", "locus of control",
+    "nervous system response"]) {
+    ok(TEACHES.some((re) => re.test(word)) && !JARGON.some((re) => re.test(word)),
+      `"${word}" is a lineage concept, so it lives where unpacking is no excuse`);
+  }
+  ok(JARGON.some((re) => re.test("core belief")) && !TEACHES.some((re) => re.test("core belief")),
+    "and a textbook word the directive did not name keeps its unpack rule");
+
+  // ── where a person meets it ──
+  const said = "my mum keeps calling and i keep not picking, i don't even know why anymore";
+  const graded = (reply, s = said) => gradeReply({ message: s, language: "en", intent: "vent" }, reply, { said: s });
+  const teaches = (reply, s) => graded(reply, s).find((f) => f.grader === "teaches");
+  for (const reply of [
+    "The Stoics would say only your response is yours. What is yours here?",
+    "Jung called this the shadow. What does it want from your mum?",
+    "That is your inner child — the part of you still waiting to be picked up.",
+    "That's an anxious attachment style: you brace to be left before anybody leaves.",
+    "Your nervous system is on high alert every time the phone rings.",
+    "Radical responsibility means owning your part in the silence.",
+    "There's an existential weight to not picking up.",
+  ]) ok(teaches(reply), "a source named, or a lineage concept taught, is caught — unpacked or not", reply);
+  ok(/named where it comes from/.test(teaches("The Stoics knew this one. What is yours here?")?.detail ?? ""),
+    "and the finding says which offence it was");
+  for (const [reply, why] of [
+    ["You stayed stoic on every call and paid for it after. What did the not-picking buy you?", "the adjective is ordinary English about a person"],
+    ["Your body knew first: the chest goes tight before the phone stops ringing.", "the body in their facts, in plain words"],
+    ["You keep reaching for her and bracing to be left in the same breath.", "the pattern seen, never typed"],
+    ["Some of this is yours to move and some never was. Which part is the phone?", "the seam, without its name"],
+    ["Not picking is also a choice, and it is yours. What does it protect?", "their choice handed back"],
+  ]) ok(!teaches(reply), `seen, not taught: "${reply.slice(0, 40)}…"`, why);
+  ok(!teaches("Marcus Aurelius has been keeping you company at 3am. What is he not answering?",
+    "i've been reading marcus aurelius every night because nothing else works"),
+    "their own source handed back is theirs — the same exemption as every other word they used");
+
+  // ── the retry is told, and the note names nothing ──
+  const v = inspectReply({ message: said, language: "en", intent: "vent" },
+    "The Stoics would say only your response is yours. What is yours in this?", said);
+  ok(v.reject?.split(" · ").includes("teaches") && /named where an idea comes from/.test(v.correction ?? ""),
+    "naming a source buys a retry that is told so", v.reject);
+  ok(!TEACHES.some((re) => re.test(v.correction ?? "")), "and the note carries no name back");
+  ok(RETRY_ONLY.has("teaches"), "a second call, never the authored line: the other sentences are theirs");
+
+  // ── the one dynamic path into the prompt ──
+  const technique = (move) => parseTechnique(JSON.stringify({ move, source: "https://www.apa.org/topics/stress" }), "economy");
+  ok(technique("Ask them which part of the rent is still theirs to move tonight.") !== null,
+    "a move in plain words still arrives — a guard that empties the block looks exactly like caution");
+  for (const move of ["Using the dichotomy of control, ask them which part of the rent is theirs to move.",
+    "Borrow from Stoicism: ask what is within their power tonight.",
+    "Ask what their inner child needs from this rent."]) {
+    ok(technique(move) === null, "a move that carries its own name is refused before it reaches the prompt", move);
+  }
+  ok(/Never name the method, its author or its school/.test(fs.readFileSync(path.join(ROOT, "src/lib/vent/research.ts"), "utf8")),
+    "and the lookup is asked not to send one");
 });
 
 

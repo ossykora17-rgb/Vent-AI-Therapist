@@ -433,7 +433,7 @@ function correctionFor(graders: string[], wroteIn: GoldenCase["language"], asked
     lines.push("- You told them what they feel. Say what you noticed in their own words, or ask.");
   }
   if (seen.has("teaches")) {
-    lines.push("- You explained how minds work, or laid it out as a framework. No lessons and no lists: say what they are doing, in their words, so they see it themselves.");
+    lines.push("- You explained how minds work, named where an idea comes from, or laid it out as a framework. No lessons, no names, no lists: say what they are doing, in their words, so they see it themselves.");
   }
   if (seen.has("rescues")) {
     lines.push("- You rescued them: a promise it will be okay, a cheer, or a permission to feel. Stay with what is true tonight, and leave the feeling theirs.");

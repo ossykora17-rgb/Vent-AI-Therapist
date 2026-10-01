@@ -2,6 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { cached } from "@/lib/external/cache";
 import { MODEL } from "./providers";
+import { TEACHES } from "./quality";
 import { errand } from "./voice";
 
 /** A task handed to the person through the listener: "have them list…". */
@@ -120,6 +121,8 @@ Rules:
   it — the room hands nobody anything to do.
 - Never a finding to report: no statistic, study result, percentage or claim
   about what research shows. It will be used, never quoted.
+- Never name the method, its author or its school, in the move or anywhere
+  else: the room uses it without saying where it came from.
 - If nothing usable came back from the search, return {"move": null}. Do not
   answer from memory. An absent technique is the correct answer and costs
   nothing; an invented one reaches somebody at 2am.
@@ -252,6 +255,17 @@ export function parseTechnique(text: string, tag: string): Technique | null {
     shapes are refused: the reply-shaped task and the one aimed through "them".
   */
   if (errand(move) || THIRD_PERSON_TASK.test(move)) return null;
+
+  /*
+    A move, never its name. `researchBlock` tells the model "Never say where it
+    came from", and a move that arrives as "Using the dichotomy of control, ask
+    them…" hands it the citation anyway — the one dynamic path into the prompt,
+    so the one no static sweep of the prompt can see. Refused rather than
+    trimmed: a move with its label cut out is a sentence nobody checked, and an
+    absent technique costs nothing. `TEACHES` carries the founder's internal
+    lineage, its concepts and its sources, so this is one list and not a copy.
+  */
+  if (TEACHES.some((re) => re.test(move))) return null;
 
   return { move: move.trim(), source: source.trim(), tag };
 }
