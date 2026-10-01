@@ -348,13 +348,72 @@ export const JARGON: readonly RegExp[] = [
   /\binternali[sz]ed?\b/i, /\binternali[sz]ation\b/i, /\binstrumentali[sz]ation\b/i,
   /\bdepersonali[sz]ation\b/i, /\bderealisation\b/i, /\bdysregulat\w+\b/i,
   /\bmaladaptive\b/i, /\bcore belief\b/i,
-  /\bschema\b/i, /\battachment style\b/i, /\binner child\b/i,
+  /\bschema\b/i,
   /\bself.actuali[sz]ation\b/i,
-  /\bemotional labou?r\b/i, /\bnervous system response\b/i, /\btrauma response\b/i,
-  /\bcoping mechanism\b/i, /\bdefen[cs]e mechanism\b/i, /\bsomati[sz]ation\b/i,
-  /\baffect regulation\b/i, /\bself.effica?cy\b/i, /\blocus of control\b/i,
+  /\bemotional labou?r\b/i,
+  /\bcoping mechanism\b/i, /\bsomati[sz]ation\b/i,
+  /\baffect regulation\b/i, /\bself.effica?cy\b/i,
   /\breinforcement loop\b/i, /\bexecutive function\b/i, /\blearned helplessness\b/i,
   /\bcognitive load\b/i,
+];
+
+/**
+ * Where the room's seeing comes from — never said.
+ *
+ * The founder's internal lineage: "Draw on the functional core of depth
+ * psychology, stoic clarity, existential honesty, somatic awareness,
+ * attachment patterns, and radical self-responsibility. Never name the
+ * sources. Never teach the concepts." A reply that names a thinker or a
+ * school has made the person a student of somebody else's map, which is the
+ * "education or ideology" the same directive rules out. The six, plus the
+ * schools this library already draws on by name in its own comments — Rogers,
+ * Gendlin, Frankl, Yalom, motivational interviewing — because those are this
+ * product's sources too.
+ *
+ * Every entry is a proper name or a school's own label. The bare adjective
+ * "stoic" is out on purpose: "you stayed stoic through the whole meeting" is
+ * ordinary English about a person, and only "stoicism" and "the Stoics" name
+ * the school. Measured before going in, with the concepts below: no line the
+ * room authors or the model reads, and none of 129 production replies counted on
+ * 2026-10-01 — so this is a guard for the lineage the prompt now carries, not a
+ * repair of something the room was doing.
+ */
+export const SOURCES: readonly RegExp[] = [
+  /\b(?:carl )?jung(?:ian)?\b/i, /\bfreud(?:ian)?\b/i, /\bpsychoanaly\w*/i, /\bpsychodynamic\b/i,
+  /\bdepth psycholog\w*/i, /\bwinnicott\b/i,
+  /\bstoic(?:ism|s)\b/i, /\bmarcus aurelius\b/i, /\bepictetus\b/i, /\bseneca\b/i,
+  /\bexistential\w*/i, /\bsartre\b/i, /\bcamus\b/i, /\bkierkegaard\b/i, /\bnietzsche\b/i,
+  /\bheidegger\b/i, /\bfrankl\b/i, /\blogotherap\w*/i, /\byalom\b/i,
+  /\bsomatic\w*/i, /\bpolyvagal\b/i, /\bporges\b/i, /\bvan der kolk\b/i, /\bgendlin\b/i,
+  /\battachment theory\b/i, /\bbowlby\b/i,
+  /\bcarl rogers\b/i, /\brogerian\b/i, /\bgestalt\b/i, /\bperls\b/i, /\bbren[eé] brown\b/i,
+  /\bmotivational interviewing\b/i, /\binternal family systems\b/i, /\bacceptance and commitment\b/i,
+];
+
+/**
+ * The lineage's own concepts, which no unpacking excuses.
+ *
+ * Four of these lived in `JARGON` — attachment style, inner child, defence
+ * mechanism, trauma response — where a sentence explaining the word let it
+ * through. That rule is right for a textbook word in general and wrong for
+ * these: "your inner child — the part of you still waiting to be picked up"
+ * is a clear sentence, and it is depth psychology taught to somebody at their
+ * lowest, which the directive forbids in so many words. They moved here, with
+ * `locus of control` and `nervous system response`, because one word lives in
+ * one list. The rest of `JARGON` keeps its unpack rule: it was not named.
+ */
+const LINEAGE_CONCEPTS: readonly RegExp[] = [
+  /\binner child\b/i, /\bdefen[cs]e mechanisms?\b/i, /\bshadow (?:self|side|work)\b/i,
+  /\b(?:the|your) (?:unconscious|subconscious)(?: mind)?\b/i, /\btransference\b/i, /\barchetyp\w*/i,
+  /\bindividuation\b/i,
+  /\bdichotomy of control\b/i, /\bamor fati\b/i, /\bmemento mori\b/i,
+  /\bnervous system\b/i, /\bvag(?:al|us)\b/i, /\btrauma response\b/i, /\bthe body keeps the score\b/i,
+  /\b(?:freeze|fawn) response\b/i,
+  /\battachment (?:style|wound|trauma|issues?|pattern|system)s?\b/i,
+  /\b(?:anxious|avoidant|secure|insecure|disorgani[sz]ed|fearful)(?:ly)?[- ]attach\w*/i,
+  /\babandonment (?:wound|issues?|trauma)\b/i, /\bprotest behaviou?r\b/i,
+  /\bradical (?:self.)?(?:responsibility|acceptance)\b/i, /\bvictim (?:mentality|mindset)\b/i,
+  /\blocus of control\b/i,
 ];
 
 /**
@@ -374,7 +433,7 @@ export const JARGON: readonly RegExp[] = [
  * (`catastrophising`, `cognitive distortion`, `rumination`) because each names
  * the thinking process, and one word lives in one list. `mindfulness` is not
  * here: `GENERIC_TASKS` already refuses it, as the exercise it always is.
- * The rest of `JARGON` — core belief, schema, inner child — is about the
+ * The rest of `JARGON` — core belief, schema, coping mechanism — is about the
  * content of a life rather than the process, and keeps its unpack rule.
  *
  * Every entry is a word or a shape no ordinary sentence needs: "predict" and
@@ -400,11 +459,12 @@ export const TEACHES: readonly RegExp[] = [
   /*
     "No frameworks" — the founder's hard law, and the same offence as a lesson:
     a model of minds handed to somebody instead of their own seeing. Names only
-    where `JARGON` does not already hold them (attachment style, inner child and
-    trauma response live there), because one word lives in one list.
+    where no other list already holds them, because one word lives in one list.
   */
   /\bfight.or.flight\b/i, /\bwindow of tolerance\b/i, /\bdrama triangle\b/i, /\blove languages?\b/i,
   /\bstages of grief\b/i, /\bgrowth mindset\b/i, /\b(?:CBT|DBT|IFS|EMDR)\b/,
+  // The internal lineage: its concepts and its names, never excused by unpacking.
+  ...LINEAGE_CONCEPTS, ...SOURCES,
 ];
 
 /** A reply laid out as a list is a framework, whatever the list says. */
@@ -927,7 +987,7 @@ export function gradeReply(
     for (const term of TEACHES) {
       const hit = reply.match(term);
       if (!hit || term.test(taughtSource)) continue;
-      taught = `explained how minds work: "${hit[0]}"`;
+      taught = SOURCES.includes(term) ? `named where it comes from: "${hit[0]}"` : `explained how minds work: "${hit[0]}"`;
       break;
     }
   }

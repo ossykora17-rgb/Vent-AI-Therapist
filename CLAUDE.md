@@ -4763,6 +4763,61 @@ and the pause line. Nineteen mutations fail checks 170 and 175. The Pidgin harm
 line needs a native speaker's read, and *"he beat me at chess"* is still grave
 through the older `beat me` line.
 
+**The internal lineage was mostly in the constitution already, without its
+names — which is the instruction.** *"Draw on the functional core of depth
+psychology, stoic clarity, existential honesty, somatic awareness, attachment
+patterns, and radical self-responsibility. Never name the sources. Never teach
+the concepts."* Read against `VOICE` before anything was written: depth is the
+defence that charges rent, ambivalence, anger over grief and the inherited
+frame; existential honesty is *"Accuracy over comfort"* and the room with no
+stake; the body has its own rule. Three had nothing behind them — the seam
+between what happened and what it was made to mean, how somebody reaches for
+people, and what is theirs to do next — and they went into WHAT YOU ACTUALLY
+KNOW in plain words, under a header that now says what the section is for:
+*to see with, never to cite or teach.*
+
+**The responsibility lens is the one that can hurt somebody, so it carries its
+own guard.** Written as "their part in it", it is the room asking a person who
+is being beaten what they contributed. It reads *"What they do next is theirs,
+and not choosing is choosing. Hand it back as respect, never blame: what was
+done to them was never theirs."* — and check 176 fails if the second sentence
+goes.
+
+**Never named, at both ends.** The prompt names none of the sources, because a
+word on the page the model reads is a word in the reply — check 164's sweep
+already covers everything in `TEACHES`, and `SOURCES` is spread into it rather
+than kept beside it. The reply is graded for them by `teaches`, whose finding
+now says which offence it was. Four lineage concepts moved out of `JARGON` —
+attachment style, inner child, defence mechanism, trauma response — with locus
+of control and nervous system response, because *"your inner child — the part of
+you still waiting to be picked up"* is a clear sentence and still the concept
+taught. Words the directive did not name keep their unpack rule. Bare *"stoic"*
+is out on purpose: *"you stayed stoic on every call"* is English about a person.
+And the outside lookup is the one dynamic path into the prompt, so
+`parseTechnique` refuses a move that carries its own name — the block already
+said *"never say where it came from"* to a model holding the citation.
+
+**Measured before it went in:** no line the room authors or the model reads,
+and none of 129 production replies (counted 2026-10-01, count only). That zero
+was trusted only after the same Postgres patterns hit three positive controls
+and missed a negative one — `\y`, not `\b`, the backspace lesson in another
+engine. So this guards what the prompt now asks the model to see with; it
+repairs nothing the room was doing.
+
+**Paid partly by removal: +340 characters, about 92 tokens, in the cached
+prefix.** *"Never hand them a theory of themselves"* went (the header says it for
+the whole section), the engines' rationale went (the header again), and
+*"Rupture is not failure"* merged into the attachment line, which keeps *"take
+your half, and stay"*. The worst turn is **3,416 of 3,600**. The text sits in
+`STABLE_PREFIX`, sent with `cache_control`, so a warm turn bills it at the
+cache-read rate. Fifteen mutations fail checks 164, 171, 176 and 78; check 122's
+exemption probe moved from *inner child* to *core belief* because the rule was
+the exemption, not the word.
+
+What no check here can answer is whether the room now *sees* more precisely.
+`teaches` in `rejected_by` and the nightly audit is the number that says
+whether the lineage leaks into the reply; whether it lands is read by a person.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
