@@ -381,13 +381,100 @@ export const JARGON: readonly RegExp[] = [
 export const SOURCES: readonly RegExp[] = [
   /\b(?:carl )?jung(?:ian)?\b/i, /\bfreud(?:ian)?\b/i, /\bpsychoanaly\w*/i, /\bpsychodynamic\b/i,
   /\bdepth psycholog\w*/i, /\bwinnicott\b/i,
-  /\bstoic(?:ism|s)\b/i, /\bmarcus aurelius\b/i, /\bepictetus\b/i, /\bseneca\b/i,
+  /\bstoic(?:ism|s)\b/i, /\b(?:[Aa]|[Tt]he|[Aa]s a) Stoic\b/, /\bstoic (?:philosoph\w*|ideas?|principles?|teachings?|practices?|wisdom|view|tradition)\b/i,
+  /\bmarcus aurelius\b/i, /\bepictetus\b/i, /\bseneca\b/i,
   /\bexistential\w*/i, /\bsartre\b/i, /\bcamus\b/i, /\bkierkegaard\b/i, /\bnietzsche\b/i,
   /\bheidegger\b/i, /\bfrankl\b/i, /\blogotherap\w*/i, /\byalom\b/i,
   /\bsomatic\w*/i, /\bpolyvagal\b/i, /\bporges\b/i, /\bvan der kolk\b/i, /\bgendlin\b/i,
   /\battachment theory\b/i, /\bbowlby\b/i,
   /\bcarl rogers\b/i, /\brogerian\b/i, /\bgestalt\b/i, /\bperls\b/i, /\bbren[eé] brown\b/i,
   /\bmotivational interviewing\b/i, /\binternal family systems\b/i, /\bacceptance and commitment\b/i,
+];
+
+/**
+ * A technique by its name: "Do not use, name, or assign any CBT technique ...
+ * Do not teach, name, or assign any DBT skill or module. Do not suggest TIPP,
+ * Opposite Action, DEAR MAN, Radical Acceptance, or any other named
+ * technique." Radical acceptance already sits in `LINEAGE_CONCEPTS`, and
+ * catastrophising and cognitive distortions in `TEACHES` itself; one word lives
+ * in one list. Acronyms are matched in capitals only, because "tipp" is nobody's
+ * typo and "dear man" can open an ordinary sentence.
+ *
+ * "Reframe" came back. It left `TEACHES` because the prompt used it as a plain
+ * verb — "Do not reframe it as feeling", in the date-and-time block — and that
+ * sentence now reads "Do not turn it into a feeling": the technique's name is
+ * worth more on this list than as one verb on the page the model reads. Check
+ * 164 sweeps the assembled prompt for everything here, and caught it.
+ */
+const TECHNIQUE_NAMES: readonly RegExp[] = [
+  /\bthought (?:records?|diar(?:y|ies)|logs?)\b/i, /\bcognitive (?:restructuring|reframing|behaviou?ral|therapy)\b/i,
+  /\breframe\w*/i, /\bbehaviou?ral (?:experiments?|activation)\b/i, /\bactivity scheduling\b/i,
+  /\b(?:graded |gradual )?exposure (?:therapy|hierarchy|exercises?|work)\b|\bgraded exposure\b/i, /\bsocratic\b/i,
+  /\bautomatic thoughts?\b/i, /\bdecatastrophi\w*/i, /\bworry time\b/i, /\bthinking errors?\b/i,
+  /\bunhelpful thinking\b/i, /\bsafety behaviou?rs?\b/i, /\bdownward arrow\b/i,
+  /\bdialectic\w*/i, /\bopposite action\b/i, /\bwise mind\b/i, /\bdistress tolerance\b/i,
+  /\bemotion(?:al)? regulation\b/i, /\binterpersonal effectiveness\b/i, /\bTIPP\b/, /\bDEAR MAN\b/,
+  /\burge surfing\b/i, /\bchain analysis\b/i, /\bwilling hands\b/i, /\bself.sooth\w*/i,
+  /\bgrounding (?:technique|exercise|skill)s?\b/i,
+];
+
+/**
+ * A technique in use, which is the half a list of names cannot see.
+ *
+ * The founder: "Do not invite thought records, evidence-testing, behavioral
+ * experiments, exposure, activity scheduling, or similar. If a cognitive
+ * pattern is visible, reflect it as process: 'There's a forecast running that
+ * this will end the same way.'" Every shape below runs a procedure on a
+ * thought instead of saying what is running: a rating, a test of the evidence,
+ * another way to see it, the friend's view, the worst case, an experiment. A
+ * reply that says the forecast is running passes; a reply that asks how sure
+ * the forecast is, out of ten, does not.
+ *
+ * The rating shape is the one `probes.ts` used to filter the library by on a
+ * heavy turn, and it lives here now because the rulers it filtered were
+ * retired: no question in the library asks for a number, on any turn.
+ *
+ * Measured before going in: no line the room authors or the model reads, and
+ * five of 129 production replies (counted 2026-10-01) — three ratings and two
+ * "test that". A pattern that collides with ordinary speech is out: "the scale
+ * of it" is magnitude, so only "on a scale" counts; "the evidence" alone is a
+ * noun, so only asking for it counts.
+ */
+export const ASKS_FOR_A_NUMBER = /\b(?:zero|one|0|1) to (?:ten|10)\b|\bout of (?:ten|10)\b|\bon a scale\b/i;
+export const TECHNIQUE_ASKS: readonly RegExp[] = [
+  ASKS_FOR_A_NUMBER,
+  /\bhow (?:sure|certain|confident) (?:are|is|do|does)\b|\bhow much do you (?:believe|buy)\b/i,
+  /\bwhat(?:'s| is) the evidence\b|\bevidence (?:for|against)\b|\bany evidence\b|\bwhat proof\b|\bhow do you know (?:that|it|this|he|she|they)\b/i,
+  /\b(?:another|other|a different) (?:way|angle) (?:to|of) (?:see|look|read|think)\w*|\bwhat else (?:could|might) (?:it|this|that) (?:mean|be)\b|\bwhat else could happen\b|\bthe only way (?:it|this|that) (?:can|could) go\b/i,
+  /\bwhat would you (?:tell|say to)\b[^.?!]{0,30}\b(?:friend|sister|brother|someone|somebody)\b|\bif (?:a|your) (?:closest |best )?friend\b/i,
+  /\bworst (?:that could happen|case)\b|\bif the worst\b|\bmost likely (?:outcome|thing|to happen)\b/i,
+  /\b(?:an|a small|a little) experiment\b|\btest (?:it|that|this)(?: out)?\b|\bsee what happens (?:if|when)\b|\btry it and see\b/i,
+];
+
+/**
+ * What was done to them, made theirs.
+ *
+ * The founder's dichotomy lens: "Never imply that what was done to them was
+ * their responsibility." The prompt says it, and this is where a person meets
+ * it. Each shape puts a share of something on them — their part in it, that
+ * they let him, why they stayed, that they brought it on themselves. Fatal and
+ * in `REJECT`, for `verdict`'s reason: somebody who has just said they were hit
+ * cannot un-hear being asked what their part in it was.
+ *
+ * No exemption for their own words, unlike every list above it. "It's my
+ * fault" handed back as "your fault" is the room agreeing with the blame. And
+ * the exclusions are the work: "you brought it here" is ordinary, so only
+ * "brought it on yourself"; "you deserved it" is as often praise, so it is out.
+ * Zero of 129 production replies, zero authored lines — a guard for the lens
+ * the prompt now carries.
+ */
+export const BLAMES: readonly RegExp[] = [
+  /\byour (?:part|role|share) in (?:it|this|that|what|how)\b/i,
+  /\byou (?:let|allowed) (?:him|her|them)\b/i,
+  /\bwhy did you (?:let|allow|stay with|go back to|provoke)\b/i,
+  /\bbrought (?:it|this|that) on yourself\b/i,
+  /\b(?:partly|partially|also|your own) fault\b|\bpart of the blame\b|\bshare (?:of )?the blame\b/i,
+  /\byou provoked\b|\bwhat did you do to (?:make|cause|deserve|provoke)\b/i,
 ];
 
 /**
@@ -465,6 +552,8 @@ export const TEACHES: readonly RegExp[] = [
   /\bstages of grief\b/i, /\bgrowth mindset\b/i, /\b(?:CBT|DBT|IFS|EMDR)\b/,
   // The internal lineage: its concepts and its names, never excused by unpacking.
   ...LINEAGE_CONCEPTS, ...SOURCES,
+  // And the techniques by name — CBT's and DBT's, which the founder bans outright.
+  ...TECHNIQUE_NAMES,
 ];
 
 /** A reply laid out as a list is a framework, whatever the list says. */
@@ -566,8 +655,8 @@ const sentences = (s: string) =>
  * revise* is the failsafe, which buys the second call.
  */
 export const ANCHORS = {
-  emotional_accuracy: ["presumed", "verdict", "diagnosis"],
-  clean_reflection: ["advice", "errand", "rescues", "teaches", "jargon"],
+  emotional_accuracy: ["presumed", "verdict", "diagnosis", "blames"],
+  clean_reflection: ["advice", "errand", "rescues", "teaches", "jargon", "technique"],
   boundary_integrity: ["fused", "sticky"],
   sustained_flow: ["closing", "about_me"],
   zero_fabrication: ["invented", "promise"],
@@ -987,11 +1076,36 @@ export function gradeReply(
     for (const term of TEACHES) {
       const hit = reply.match(term);
       if (!hit || term.test(taughtSource)) continue;
-      taught = SOURCES.includes(term) ? `named where it comes from: "${hit[0]}"` : `explained how minds work: "${hit[0]}"`;
+      taught = SOURCES.includes(term) ? `named where it comes from: "${hit[0]}"`
+        : TECHNIQUE_NAMES.includes(term) ? `named a technique: "${hit[0]}"`
+        : `explained how minds work: "${hit[0]}"`;
       break;
     }
   }
   if (taught) add("teaches", "major", taught);
+
+  /*
+    ── did it run a technique on the thought ────────────────────────────────
+
+    Major and in `RETRY_ONLY`, with `teaches`'s argument: the procedure is one
+    clause and the rest of the reply is usually theirs. Their own word is
+    exempt, as everywhere: "you said it's a nine out of ten" hands back a
+    number they gave, which is not asking for one.
+  */
+  for (const term of TECHNIQUE_ASKS) {
+    const hit = reply.match(term);
+    if (!hit || (meta.said && term.test(meta.said))) continue;
+    add("technique", "major", `ran a technique on the thought: "${hit[0]}"`);
+    break;
+  }
+
+  // ── did it make what was done to them theirs ────────────────────────────
+  for (const term of BLAMES) {
+    const hit = reply.match(term);
+    if (!hit) continue;
+    add("blames", "fatal", `put what was done to them on them: "${hit[0]}"`);
+    break;
+  }
 
   // ── did it answer what was said ──────────────────────────────────────────
   if (c.intent === "vent") {

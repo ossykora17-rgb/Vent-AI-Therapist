@@ -1,4 +1,4 @@
-import { forecasting, fusedVerdict, inTheLoop, seesWhileIn } from "./tactics";
+import { agencyLive, forecasting, fusedVerdict, inTheLoop, seesWhileIn } from "./tactics";
 import { heaviness } from "./depth";
 
 /**
@@ -118,20 +118,16 @@ const WANT = /\b(want|wish|hope|dream|if only|supposed to|meant to)\b/i;
  * anything. Every one is a way of asking them to say the thing out loud, which
  * is why MI questions read as almost passive and are not.
  *
- * The rulers (`importance`, `confidence`) are the two that look most like a
- * workbook and are the least like one: the move is not the number, it is
- * *"why not lower"* — which forces them to state their own case for change
- * without ever being asked to.
+ * The rulers (`importance`, `confidence`) went with the founder's CBT and DBT
+ * rule, and so did every other question that asked for a number, tested a
+ * belief or hunted for its counter-example — `mi_exception`,
+ * `mi_how_sure_it_ends`, `mi_only_way_it_goes`. A rating is a procedure run on
+ * a feeling; the rule is to reflect what is running and leave it there. The
+ * argument for the rulers was that the move is "why not lower", not the
+ * number, and that is true — and the number is still the thing the person is
+ * handed first. `mi_reasons` and `mi_desire` ask for the case without it.
  */
 const MI: Probe[] = [
-  { id: "mi_importance", school: "mi", weight: 84,
-    ask: "Zero to ten, how much does changing this actually matter to you — and why not lower?",
-    opens: "their own case for change, in their own mouth",
-    fits: on(CHANGE) },
-  { id: "mi_confidence", school: "mi", weight: 80,
-    ask: "Zero to ten, how sure are you that this can change at all — and why is it not lower?",
-    opens: "the gap between wanting and believing",
-    fits: on(CHANGE) },
   { id: "mi_desire", school: "mi", weight: 78,
     ask: "What do you want to be different about it?",
     opens: "desire — the D in change talk, and the cheapest one to get",
@@ -164,10 +160,6 @@ const MI: Probe[] = [
     ask: "Five years on, exactly as it is now — what have you lost by then?",
     opens: "consequence, without a warning attached",
     fits: on(STUCK) },
-  { id: "mi_exception", school: "mi", weight: 88,
-    ask: "When was the last time it didn't happen, and what was different that day?",
-    opens: "the exception, which is data they already own",
-    fits: on(/\b(always|never|every time|constantly|all the time|every day)\b/i) },
   { id: "mi_answer_you_have", school: "mi", weight: 90,
     ask: "What's the answer you already have, and don't like?",
     opens: "the answer they walked in holding — evoked from them, never handed over",
@@ -192,21 +184,6 @@ const MI: Probe[] = [
     ask: "What are you actually willing to do — not should, willing?",
     opens: "commitment language, which is the only kind that predicts anything",
     fits: on(/\b(should|need to|have to|ought|must)\b/i) },
-  /*
-    An ending they are already sure of (`forecasting`). MI's ruler and its
-    querying of extremes, turned on the ending rather than on a change: a
-    number they choose is a number that is not ten, and a second ending they
-    find is one nobody handed them. Content, so never `process` — asked of
-    somebody in the loop, "how sure?" is one more lap.
-  */
-  { id: "mi_how_sure_it_ends", school: "mi", weight: 86,
-    ask: "How sure is that ending, right now — out of ten?",
-    opens: "the ending as a number they chose, which makes it theirs rather than the future's",
-    fits: (m) => forecasting(m) },
-  { id: "mi_only_way_it_goes", school: "mi", weight: 84,
-    ask: "Is that the only way it can go, or the only way you can see it right now?",
-    opens: "a second ending, found by them rather than offered",
-    fits: (m) => forecasting(m) },
 ];
 
 /**
@@ -232,14 +209,21 @@ const YALOM: Probe[] = [
     ask: "There's a part of this you've walked around twice. What is it?",
     opens: "the avoided clause, named without naming it for them",
     fits: on(PERFORM) },
-  { id: "yalom_freedom", school: "yalom", weight: 78,
-    ask: "Where in this did you actually have a choice?",
-    opens: "freedom, which is the given people most want to give back",
-    fits: on(/\b(had to|no choice|forced|stuck with|nothing i could)\b/i) },
-  { id: "yalom_responsibility", school: "yalom", weight: 82,
-    ask: "What's your part in it — not the blame, the part?",
-    opens: "responsibility assumption, split cleanly from guilt",
-    fits: on(OTHERS) },
+  /*
+    Responsibility, held to the founder's dichotomy lens: "Never imply that
+    what was done to them was their responsibility." The two questions that
+    stood here did. `yalom_responsibility` asked "What's your part in it?" on
+    any message naming another person — "my husband beats me every night"
+    included — and `yalom_freedom` asked "Where in this did you actually have
+    a choice?" on "forced" and "no choice". Both retired. What is theirs is
+    the present move, never the past fault, and it is asked only when blame or
+    powerlessness is live and never on a heavy turn, where asking somebody in
+    danger what is theirs to move is a demand.
+  */
+  { id: "yalom_yours_to_move", school: "yalom", weight: 82,
+    ask: "What part of this is still yours to move?",
+    opens: "the present choice, split from what was done to them",
+    fits: (m) => agencyLive(m) && !heaviness(m) },
   { id: "yalom_death", school: "yalom", weight: 88,
     ask: "What does the time you've got have to do with this?",
     opens: "mortality, and only where it is already in the room",
@@ -390,7 +374,20 @@ const ROGERS: Probe[] = [
     ask: "What's it like to feel it and watch it at the same time?",
     opens: "the split itself, made noticeable so it can be found again",
     fits: (m) => seesWhileIn(m) },
-  // Three with the two MI rulers above, so the block never asks one twice.
+  /*
+    Three for a forecast, so the three-turn block never asks one twice — and
+    all three about the forecast as something running, never its odds. The
+    two that stood beside this one asked how sure it was out of ten and
+    whether it was the only way it could go: a rating and an alternative-hunt.
+  */
+  { id: "rogers_ending_costs", school: "rogers", weight: 86,
+    ask: "What is living that ending already costing you tonight?",
+    opens: "the forecast's price, paid now for a future that has not come",
+    fits: (m) => forecasting(m) },
+  { id: "rogers_ending_running", school: "rogers", weight: 84,
+    ask: "How long has that ending been playing in you?",
+    opens: "the forecast as a process with a start, not a fact with odds",
+    fits: (m) => forecasting(m) },
   { id: "rogers_carrying_the_ending", school: "rogers", weight: 85,
     ask: "What is it like, carrying an ending that hasn't happened yet?",
     opens: "the expected ending as something carried now — the experiencing, not the odds",
@@ -519,7 +516,7 @@ export function isBroad(p: Probe): boolean {
 /** A question that asks for a rating. */
 export const ASKS_FOR_A_NUMBER = /\b(?:zero|one|0|1) to (?:ten|10)\b|\bout of (?:ten|10)\b/i;
 
-export function selectProbe(message: string, recent: readonly string[] = [], careful = false): Probe | null {
+export function selectProbe(message: string, recent: readonly string[] = []): Probe | null {
   const blocked = new Set(recent.slice(-3));
   const rank = (p: Probe) => (isBroad(p) ? 0 : 1000) + p.weight;
 
@@ -544,14 +541,14 @@ export function selectProbe(message: string, recent: readonly string[] = [], car
   */
   const looping = inTheLoop(message) ? PROBES.filter((p) => p.process) : PROBES;
   /*
-    And on a heavy turn, no question asks for a number. "Zero to ten" asked of
-    somebody who has just written "no way out" is a rating asked of despair —
-    `NOT_AT_THE_EDGE` in `tactics.ts`, applied to the other half of the reply.
-    Read off the question itself, so a new ruler is covered without a list.
+    No question asks for a number any more, on any turn. This was a filter
+    holding the rulers back on a heavy turn — "zero to ten" asked of "no way
+    out" is a rating asked of despair — and the founder's CBT rule retired the
+    rulers outright, so the filter could never fire. A guard that cannot fire
+    is worse than an absence: the stronger rule is held where it is broken, by
+    `technique` grading every line the library authors (check 177).
   */
-  const pool = heaviness(message) || careful ? looping.filter((p) => !ASKS_FOR_A_NUMBER.test(p.ask)) : looping;
-
-  const eligible = pool
+  const eligible = looping
     .filter((p) => p.fits(message))
     .sort((a, b) => rank(b) - rank(a));
   return eligible.find((p) => !blocked.has(p.id)) ?? eligible[0] ?? null;

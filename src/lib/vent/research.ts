@@ -2,7 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { cached } from "@/lib/external/cache";
 import { MODEL } from "./providers";
-import { TEACHES } from "./quality";
+import { BLAMES, TEACHES, TECHNIQUE_ASKS } from "./quality";
 import { errand } from "./voice";
 
 /** A task handed to the person through the listener: "have them list…". */
@@ -123,6 +123,9 @@ Rules:
   about what research shows. It will be used, never quoted.
 - Never name the method, its author or its school, in the move or anywhere
   else: the room uses it without saying where it came from.
+- Never a technique run on a thought: no rating, testing it against evidence,
+  another way to see it, a friend's view, the worst case or an experiment.
+  Only what is running in them, said or asked about as it is.
 - If nothing usable came back from the search, return {"move": null}. Do not
   answer from memory. An absent technique is the correct answer and costs
   nothing; an invented one reaches somebody at 2am.
@@ -266,6 +269,20 @@ export function parseTechnique(text: string, tag: string): Technique | null {
     lineage, its concepts and its sources, so this is one list and not a copy.
   */
   if (TEACHES.some((re) => re.test(move))) return null;
+
+  /*
+    And never a technique in use, or a share of what was done to them. The
+    queries above ask for "evidence-based techniques", and the evidence base
+    for most of these pressures is cognitive-behavioural: a search returns
+    "ask them to rate the thought" or "help them find another way to see it"
+    as readily as anything. The founder's rule bans both, and this is the one
+    path that would carry them into the prompt from outside.
+  */
+  // Written to the listener about "them", where the shapes are written to
+  // "you": "ask them what their part in it was" is the same blame. Both persons
+  // are read, for the reason `THIRD_PERSON_TASK` sits beside `errand()`.
+  const asYou = move.replace(/\btheir\b/gi, "your").replace(/\bthem\b/gi, "you").replace(/\bthey\b/gi, "you");
+  if ([move, asYou].some((m) => TECHNIQUE_ASKS.some((re) => re.test(m)) || BLAMES.some((re) => re.test(m)))) return null;
 
   return { move: move.trim(), source: source.trim(), tag };
 }

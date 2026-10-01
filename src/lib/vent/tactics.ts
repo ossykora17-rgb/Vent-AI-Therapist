@@ -211,8 +211,8 @@ export function caughtWatchingSelf(message: string): boolean {
   /*
     And the loop said plainly, which this used to miss entirely.
 
-    `FEEDS_THE_LOOP` vetoes `socratic`, `thought_record` and `double_standard`
-    for exactly one reason, written above it: "every one of them is a request
+    `FEEDS_THE_LOOP` vetoed `socratic`, `thought_record` and `double_standard`
+    (the last two retired since) for exactly one reason, written above it: "every one of them is a request
     to think about the thought — which is the activity the person cannot stop".
     Somebody typing "I cannot stop thinking about it" *is* that person, in the
     plainest words available, and this returned false for them — so the veto
@@ -354,13 +354,16 @@ export function seesWhileIn(message: string): boolean {
   - Certainty alone is not enough: "I know he'll be fine" is sure and not
     feared, so a sure clause needs something feared inside it.
   - Hopelessness is not this: "it will never get better" is owned by
-    `exception_finding` and `meaning_stance`, and a rating asked of it is a
-    number asked of despair.
+    `meaning_stance` (`exception_finding` held it until it was retired as
+    evidence-testing), and a rating asked of it is a number asked of despair.
   - Violence and death are never forecasts to rate. "How sure, out of ten?"
     asked of "he will beat me" is the room grading somebody's danger.
   - Heard, not expected: "he said he'll leave" is his sentence, not theirs.
   - "What if" is the loop turning, which `inTheLoop` owns.
-  - Bare "I will fail" stays with `CATASTROPHE`, which named it first.
+  - "I will fail" is a forecast. It stayed with `CATASTROPHE` while a thought
+    record and a rated worst case owned it; both were retired as CBT
+    techniques, and a failure they are sure of is exactly the founder's
+    example of what to reflect instead: a forecast running.
 */
 const WHO = String.raw`(?:he|she|they|e|dem|him|everyone|everybody|people|nobody|my\s+(?:dad|daddy|papa|mum|mom|mummy|mama|mother|father|boss|oga|wife|husband|family|parents|people|friends?|brother|sister|landlord|pastor|in-laws|babe|girlfriend|boyfriend|manager|lecturer)|(?:the\s+)?(?:oga|boss|manager|landlord|lecturer|interviewers?))`;
 const WILL = String.raw`(?:\s*'ll|\s+will|\s+(?:is|are|am)\s+going\s+to|'s\s+going\s+to|'re\s+going\s+to|'m\s+going\s+to|\s+gonna|\s+go)`;
@@ -368,7 +371,7 @@ const WONT = String.raw`(?:\s+won'?t|\s+wont|\s+will\s+not|\s+(?:is|are)\s+not\s
 const JUDGED = String.raw`(?:so\s+|just\s+|too\s+|a\s+)?(?:lazy|weak|stupid|useless|failure|mad|crazy|joke|fraud|nothing|wicked|selfish|ungrateful|proud|bad|not\s+\w+)`;
 const REACTION = String.raw`(?:say\s+no|laugh\s+(?:at\s+)?(?:me|us)|mock\s+(?:me|us)|judge\s+(?:me|us)|reject\s+(?:me|us|it|my)|dump\s+me|disown\s+(?:me|us)|abandon\s+(?:me|us)|leave\s+(?:me|us)|cut\s+me\s+off|hate\s+(?:me|us)|blame\s+(?:me|us)|shout|(?:sack|fire)\s+(?:me|us)|disgrace\s+(?:me|us)|look\s+down\s+on\s+(?:me|us)|talk(?!\s+to\b)(?:\s+about\s+me)?|find\s+out(?=\s*(?:$|[,.!?]|\s+about\s+(?:me|it|this)|\s+and\b))|see\s+(?:right\s+)?through\s+me|ignore\s+(?:me|us|my)|be\s+(?:so\s+|very\s+)?(?:angry|disappointed|ashamed|upset|furious|vexed)|vex|(?:think|say|feel)\s+(?:that\s+)?i'?m\s+${JUDGED}|never\s+(?:forgive|speak\s+to|talk\s+to|look\s+at|trust)\s+(?:me|us))`;
 const REFUSAL = String.raw`(?:understand|believe\s+me|listen|forgive|come\s+back|accept|agree|gree|reply|answer|call|pick|help)`;
-const OWN_LOSS = String.raw`(?:lose\s+(?:my\s+job|the\s+job|everything|am|him|her)|get\s+(?:fired|sacked|rejected)|be\s+(?:rejected|alone|found\s+out)|end\s+up\s+(?:alone|like|with\s+nothing)|mess\s+(?:it|this|everything)\s+up|embarrass\s+myself|never\s+(?:get|find|be\s+able|have|make|pass|marry))`;
+const OWN_LOSS = String.raw`(?:fail(?:\s+(?:this|it|again|the\s+\w+|my\s+\w+))?|lose\s+(?:my\s+job|the\s+job|everything|am|him|her)|get\s+(?:fired|sacked|rejected)|be\s+(?:rejected|alone|found\s+out)|end\s+up\s+(?:alone|like|with\s+nothing)|mess\s+(?:it|this|everything)\s+up|embarrass\s+myself|never\s+(?:get|find|be\s+able|have|make|pass|marry))`;
 const COLLAPSE = String.raw`(?:go\s+wrong|fall\s+apart|end\s+badly|blow\s+up|collapse|scatter|spoil|be\s+a\s+disaster|crash)`;
 const SURE = String.raw`(?:i\s+(?:already\s+|just\s+)?know|i'?m\s+(?:so\s+|very\s+|100%?\s+)?(?:sure|certain)|i\s+am\s+(?:so\s+)?(?:sure|certain)|i\s+(?:know|sabi)\s+say|i\s+(?:dey\s+)?fear\s+say|i'?m\s+(?:so\s+)?(?:scared|afraid|terrified)|i\s+am\s+(?:so\s+)?(?:scared|afraid|terrified))`;
 
@@ -406,9 +409,35 @@ export function forecasting(message: string): boolean {
   };
   return FORECASTS.some((re) => found(re, false)) || found(SURE_OF_IT, true);
 }
-const CATASTROPHE = /\b(always|never|everything|nothing|ruin|disaster|end of|i will fail|i go fail)\b/;
+/**
+ * Whether blame, powerlessness or responsibility is live in what they said.
+ *
+ * The founder's dichotomy lens: "When the user's material involves agency,
+ * blame, powerlessness, or responsibility, hold three things as distinct —
+ * what actually happened, what they made it mean, what is genuinely theirs to
+ * move ... If the distinction is not live in what they are saying, do not
+ * force it." This is the "live". The one move that applies the lens
+ * (`reframe_power`) used to fire on any mention of an oga, a boss or a
+ * manager, which is forcing it on every work vent; it reads this now, and so
+ * does the one question that asks what is still theirs (`yalom_yours_to_move`).
+ *
+ * "Cannot do anything right" is a verdict on the self, not powerlessness, and
+ * belongs to `defusion` — so the powerlessness shape refuses it.
+ */
+const AGENCY = [
+  /\b(?:(?:all |na )?my fault|(?:his|her|their|dem) fault|blame (?:myself|me|him|her|them)|because of (?:him|her|them))\b/,
+  /\b(?:he|she|they|dem|oga|boss|manager|my (?:mum|mom|dad|husband|wife|boss|oga|family|parents|brother|sister|landlord))\s+(?:made|makes?|forced)\s+me\b(?!\s+(?:laugh|smile|happy|proud|feel\s+(?:good|loved|safe|better|happy|seen|proud)))|\b(?:did|do) (?:this|that|am) to me\b|\bdone to me\b|\bdem do me\b/,
+  /\b(?:no choice|forced to|powerless|helpless|out of my (?:hands|control)|no dey my hand|nothing i (?:can|could) do|my hands are tied)\b|\b(?:can'?t|cannot|couldn'?t|no fit) do (?:anything|nothing|am)\b(?! right)/,
+  /\b(?:my responsibility|(?:it'?s|all) on me|i should (?:have|'?ve)|i let (?:him|her|them|it|myself)|i allowed (?:him|her|them|it)|responsible for)\b/,
+];
+export function agencyLive(message: string): boolean {
+  const m = message.toLowerCase();
+  return AGENCY.some((r) => r.test(m));
+}
+
 const SELF_CRITIC = /\b(useless|stupid|failure|worthless|i'?m bad|i no good|weak)\b/;
 const PARTS = /\b(part of me|one side|half of me|i want to but|i wan but)\b/;
+const TORN = /\b(two minds|can'?t decide|torn|i dey confuse)\b/;
 const AVOIDANT = /\b(i'?m fine|it'?s fine|nothing|idk|i don'?t know|no be anything)\b/;
 const HOPELESS = /\b(no point|hopeless|why bother|nothing go change|e no go better)\b/;
 const ANGER = /\b(angry|vex|furious|mad|pissed|rage)\b/;
@@ -649,18 +678,23 @@ const TACTICS: Tactic[] = [
     family: "observing",
     /*
       The ending they are already living, seen as theirs. Never argued down —
-      odds are a debate and they will win it — and never promised away. The
-      question does the rest: a number they chose is a number that is not ten,
-      and a second ending they found is one nobody handed them.
+      odds are a debate and they will win it — and never promised away.
+
+      It used to end on "how sure, out of ten, or what else could happen". That
+      is a belief rating and an alternative-hunt, two CBT techniques, and the
+      founder's directive bans both: "If a cognitive pattern is visible,
+      reflect it as process: 'There's a forecast running that this will end
+      the same way.'" The move was always the seeing; the tail was a procedure
+      run on the thought, so the tail went and the id stayed.
 
       85: below a fused verdict (86), because a sentence about the whole self
       outweighs one about Tuesday; above `iterated_game` (84), which fits any
-      family word and so loses to the more specific reading; far above
-      `thought_record` (78), which argues with content this one only shows.
+      family word and so loses to the more specific reading. It sat far above
+      `thought_record` (78) until that was retired with the CBT techniques.
     */
     instruction:
-      "They are already living an ending that has not happened. Say it back in their words as the ending they are sure of — never as what will happen, never argued down, never promised away. Then ask how sure it is right now, out of ten, or what else could happen: theirs to find, never yours to offer.",
-    hold: "You are already living an ending that has not happened yet. How sure of it are you, right now, out of ten?",
+      "They are already living an ending that has not happened. Say it back in their words as a forecast running in them — never as what will happen, never argued down, never promised away, never tested or rated. Then leave it in plain view.",
+    hold: "There's a forecast running in you that this ends the way you already know. It hasn't happened yet.",
     fits: (c) => forecasting(c.message),
     weight: () => 85,
   },
@@ -668,50 +702,56 @@ const TACTICS: Tactic[] = [
     id: "socratic",
     family: "cognitive",
     instruction:
-      "One Socratic question aimed at what the critical voice is trying to prove. e.g. \"Wetin that oga voice dey try prove say you no be?\"",
+      "One question aimed at what the critical voice is trying to prove. e.g. \"Wetin that oga voice dey try prove say you no be?\"",
     hold: "That voice is trying to prove something. What is it trying to prove, and to whom?",
     fits: has(ANALYTICAL),
     weight: () => 70,
   },
   {
-    id: "thought_record",
-    family: "cognitive",
-    // Same CBT bones, none of the worksheet. "Evidence for / evidence
-    // against" is a clipboard talking; ask what has actually held up and what
-    // they already survived, then hand them one smaller true sentence.
-    instruction:
-      "Take the exact sentence they just said to themselves and hold it up. Ask what has actually happened so far that backs it, and what they have already survived that says otherwise. Then ask them for the smaller, truer sentence that is still standing — theirs to find, never yours to hand over. Never say 'evidence for and against' — that is a clipboard talking.",
-    hold: "The sentence you said to yourself is bigger than what has actually happened. What is a smaller one that is still true?",
-    fits: has(CATASTROPHE),
-    weight: () => 78,
-  },
-  {
     id: "reframe_power",
     family: "cognitive",
+    /*
+      The dichotomy lens, as a move: what was done, what it was made to mean,
+      and what is theirs to move now — handed back without excusing the other
+      person, and never as fault. Fires only when blame, powerlessness or
+      responsibility is live (`agencyLive`), because the founder's lens says
+      "if the distinction is not live in what they are saying, do not force
+      it", and the old trigger was any oga, boss or manager.
+    */
     instruction:
-      "Hand the power back without excusing the other person. e.g. \"Oga no make you small — e just find the small pikin wey you already hide.\"",
+      "Blame or powerlessness is live. Hand the power back without excusing the other person: keep what was done, what it was made to mean and what is theirs now apart, and never make what was done to them theirs. e.g. \"Oga no make you small — e just find the small pikin wey you already hide.\"",
     hold: "Some of this belongs to them, and you have been carrying it as yours. Which part was never yours?",
-    fits: has(/\b(he made me|she made me|they made me|oga|boss|manager)\b/),
+    fits: (c) => agencyLive(c.message),
     weight: () => 74,
   },
-  {
-    id: "decatastrophize",
-    family: "cognitive",
-    instruction:
-      "Put a number on it: if the worst actually lands, one to ten, how bad — and are they still standing at the end of that sentence? Ask it plainly, not as an exercise.",
-    hold: "If the worst case lands, how bad is it, one to ten — and are you still standing at the end of that sentence?",
-    fits: has(CATASTROPHE),
-    weight: () => 68,
-  },
-  {
-    id: "double_standard",
-    family: "cognitive",
-    instruction:
-      "Turn it outward: if their closest friend said this about themselves, what would they tell them?",
-    hold: "If your closest friend said that about themselves, what would you tell them?",
-    fits: has(SELF_CRITIC),
-    weight: () => 82,
-  },
+  /*
+    ── WHERE THE COGNITIVE TECHNIQUES WENT ────────────────────────────────
+
+    Five tactics retired together, by the founder's rule: "Do not use, name, or
+    assign any CBT technique. Do not invite thought records, evidence-testing,
+    behavioral experiments, exposure, activity scheduling, or similar ... If a
+    cognitive pattern is visible, reflect it as process." And for DBT, "or any
+    other named technique ... Never turn the reflection into a skill the user
+    should practice."
+
+      thought_record     a thought record: what backs it, what says otherwise
+      decatastrophize    the worst case, rated one to ten
+      double_standard    the friend you would say it to
+      exception_finding  the counter-example hour — its own comment called it
+                         "one counter-example ... beats any argument", which
+                         is evidence-testing in so many words
+      two_chair          a dialogue staged for them to perform; the founder's
+                         own example names both parts and stages neither
+
+    Retired rather than rewritten, for the nine's reason below: a process
+    version of a thought record is not a thought record, and keeping the id
+    over a different move would score one tactic under another's name. The
+    turns go to moves that already reflect: `defusion` takes the self-critical
+    word `double_standard` held, `duality_slider` takes the torn and the
+    undecided `two_chair` held, and a catastrophe that is a forecast is
+    `name_the_forecast`'s. Production fired `thought_record` twice and
+    `double_standard` once in 120 vents; the other three never.
+  */
 
   /*
     ── WHERE THE SOMATIC AND BEHAVIORAL FAMILIES WENT ──────────────────────
@@ -746,10 +786,17 @@ const TACTICS: Tactic[] = [
   {
     id: "duality_slider",
     family: "duality",
+    /*
+      The founder's dialectic, as process: "There's a part that wants to end it
+      and a part that is still trying to stay." Both parts named in their words,
+      both true, side by side — never a number for which is louder and never a
+      dialogue staged for them to act out. It takes the torn and the undecided
+      that `two_chair` held.
+    */
     instruction:
-      "Name the two parts and ask which is louder right now, 0–100. e.g. impress the oga vs burn the office down.",
-    hold: "Two parts of you are pulling on this. Which one is louder right now, zero to a hundred?",
-    fits: (c) => PARTS.test(c.message.toLowerCase()) || c.duality !== null,
+      "Two parts are pulling. Name both in their words, side by side and both theirs — never which is louder, never a number, never a winner. e.g. impress the oga and burn the office down.",
+    hold: "There's a part of you that wants out and a part that is still holding on. Both are yours.",
+    fits: (c) => PARTS.test(c.message.toLowerCase()) || TORN.test(c.message.toLowerCase()) || c.duality !== null,
     weight: (c) => (c.duality !== null ? 84 : 70),
   },
   {
@@ -761,16 +808,6 @@ const TACTICS: Tactic[] = [
     fits: has(/\b(prove|earn|not enough|never good enough|since i was)\b|\b(perform)/),
     weight: () => 76,
   },
-  {
-    id: "two_chair",
-    family: "duality",
-    instruction:
-      "Put the fear in the chair opposite. What does it say? Have them answer it here, in their own words.",
-    hold: "If the fear sat across from you and spoke first, what would it say — and what would you say back?",
-    fits: has(/\b(stuck|two minds|can'?t decide|torn|i dey confuse)\b/),
-    weight: () => 72,
-  },
-
   // ── Narrative + real world ──────────────────────────────────────────────
   {
     id: "externalization",
@@ -982,7 +1019,8 @@ const TACTICS: Tactic[] = [
       sentence is a verdict to be litigated. Six words of distance does more.
 
       And first, when the verdict is fused. It used to come second, after
-      `double_standard`, on any self-critical word. The founder's core
+      `double_standard`, on any self-critical word — and since that was
+      retired as a CBT technique, it is the self-critical word's move too. The founder's core
       mechanism makes the order a decision: seeing it while in it is the
       primary condition for change, so when somebody states a verdict on the
       whole self as a fact (`fusedVerdict`), one step back from the sentence
@@ -1039,22 +1077,6 @@ const TACTICS: Tactic[] = [
     hold: "That is a rule you were taught, not a fact about you. You are producing nothing right now, and you are still here. Who taught you the rule?",
     fits: has(/\b(machine|robot|useless|not enough|no be enough|fixing|fix me|broken|failing|lazy|burden|productive|output|earn)\b/),
     weight: () => 76,
-  },
-
-  {
-    id: "exception_finding",
-    family: "narrative",
-    /*
-      de Shazer. `miracle_question` imagines the problem gone; this finds the
-      hour it was already smaller, which is harder to dismiss because it
-      actually happened. The specific move against "nothing ever changes" —
-      one counter-example, in their own history, beats any argument.
-    */
-    instruction:
-      "They said nothing changes. Find the hour it was five per cent less bad — not a good day, just less bad — and make them tell you what was different about it. Who was there, what time, what they had eaten. Specifics only; a vague 'sometimes it's better' is not an exception and does not count.",
-    hold: "Was there one hour this week that was even slightly less heavy — and what was different about it?",
-    fits: has(HOPELESS),
-    weight: () => 80,
   },
 
   {
@@ -1289,12 +1311,12 @@ export function selectTactic(ctx: TacticContext): Tactic {
  * contest and the three-turn block hands the next turn to the runner-up.
  */
 export const NOT_AT_THE_EDGE: ReadonlySet<string> = new Set([
-  "decatastrophize", "name_the_forecast", "thought_record", "socratic",
+  "name_the_forecast", "socratic",
   "iterated_game", "miracle_question", "future_self", "change_talk",
 ]);
 
 export const FEEDS_THE_LOOP: ReadonlySet<string> = new Set([
-  "socratic", "thought_record", "double_standard", "name_the_forecast",
+  "socratic", "name_the_forecast",
 ]);
 
 export const ALL_TACTIC_IDS = [

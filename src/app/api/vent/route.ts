@@ -429,7 +429,7 @@ async function handlePOST(request: Request, sink: Sink | null = null) {
     closingWords: saysClosing(input.message),
     heavy: input.heavyOpen === true,
   });
-  const probe = arcProbe(landing, selectProbe(input.message, recentProbes, ctx.careful));
+  const probe = arcProbe(landing, selectProbe(input.message, recentProbes));
 
   /*
     Read once, used twice: the greeting names one of these, and the prompt

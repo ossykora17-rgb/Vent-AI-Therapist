@@ -684,14 +684,14 @@ own copy passes while the product regresses.
 | Concern | File |
 | --- | --- |
 | The office: banned phrases, unasked-for tasks, reply contract | `src/lib/vent/voice.ts` |
-| 66 extraction questions — MI, Yalom, Rogers, Wells | `src/lib/vent/probes.ts` |
+| 62 extraction questions — MI, Yalom, Rogers, Wells | `src/lib/vent/probes.ts` |
 | Reject and regenerate, before anybody reads it | `src/lib/vent/failsafe.ts` |
 | One move from outside, per pressure, cached | `src/lib/vent/research.ts` |
 | What the audit proposed and the gate kept | `src/lib/vent/learned.ts` |
 | What a proposed rule did to the corpus, measured | `src/lib/vent/fitness.ts` |
 | Intent routing, crisis, meta-vs-vent, injection | `src/lib/vent/intent.ts` |
 | The turn's verdict, computed not asked for | `src/lib/vent/assess.ts` |
-| 38 tactics, 3-turn block, body asked about, never instructed | `src/lib/vent/tactics.ts` |
+| 33 tactics, 3-turn block, body asked about, never instructed | `src/lib/vent/tactics.ts` |
 | Memory: vents only, six-turn cap | `src/lib/vent/memory.ts` |
 | The office across sessions, and no diagnosis | `src/lib/vent/notes.ts` |
 | What the room holds: the spec's five fields, one block | `src/lib/vent/recall.ts` |
@@ -4817,6 +4817,99 @@ the exemption, not the word.
 What no check here can answer is whether the room now *sees* more precisely.
 `teaches` in `rejected_by` and the nightly audit is the number that says
 whether the lineage leaks into the reply; whether it lands is read by a person.
+
+**The dichotomy lens was in the constitution a day before it arrived, and the
+library was breaking it in two places.** *"Hold three things as distinct: what
+actually happened, what they made it mean, what is genuinely theirs to move ...
+Never imply that what was done to them was their responsibility ... If the
+distinction is not live in what they are saying, do not force it."* The lineage
+line already held the three apart. What it lacked was the gate: it read as
+something to do on every turn, and the one move that applies it,
+`reframe_power`, fired on any oga, boss or manager. `agencyLive` is the gate now
+(blame, powerlessness and responsibility, English and Pidgin, never a warm
+"makes me laugh" and never a verdict on the self), the constitution says *"Not
+live? Leave it."*, and the lens costs one line rather than two.
+
+**Two questions said the opposite of the rule they lived beside.**
+`yalom_responsibility` asked *"What's your part in it — not the blame, the
+part?"* on any message naming another person, which includes *"my husband beats
+me every night"*, and `yalom_freedom` asked *"Where in this did you actually
+have a choice?"* on *"forced"*. Both retired. `yalom_yours_to_move` asks what is
+still theirs to move, only when blame or powerlessness is live and never on a
+heavy turn. `blames` holds it where a person meets it: fatal, in `REJECT`,
+zero of 129 production replies, and no exemption for their own words, because
+"it's my fault" handed back as "your fault" is the room agreeing.
+
+**The CBT and DBT rule found techniques in the library, not only in replies.**
+*"Do not invite thought records, evidence-testing, behavioral experiments,
+exposure, activity scheduling, or similar ... Do not suggest TIPP, Opposite
+Action, DEAR MAN, Radical Acceptance, or any other named technique."* The line
+drawn: a move that runs a procedure on a thought or a feeling — tests it, rates
+it, re-sees it, takes a friend's view of it, stages it — is a technique; a move
+that says what is already running is a reflection. Retired: `thought_record`,
+`decatastrophize`, `double_standard`, `exception_finding` (its own comment
+called a counter-example the thing that "beats any argument") and `two_chair`,
+and five questions that asked for a number, a second ending or a counter-example.
+`name_the_forecast` and `duality_slider` kept their ids and lost their tails —
+the move was always the seeing, and the founder's examples are exactly theirs:
+*"There's a forecast running"*, *"a part that wants to end it and a part that is
+still trying to stay"*.
+
+**Kept, and said so rather than left to be found:** `miracle_question`,
+`future_self`, `change_talk` and `externalization` are named techniques from
+other schools, and each asks what they would see or why it matters rather than
+running anything on a thought. And the landing question asks how heavy it sits,
+which is the product's one measurement and not a test of a belief. Both are the
+founder's to overrule.
+
+**Names and use are two graders, for the reason names and concepts were.**
+CBT's and DBT's technique names go into `TEACHES`, never excused by unpacking;
+acronyms in capitals only, so *"my dear man"* is English. The techniques in use
+— a rating, a test of the evidence, another way to see it, the friend's view,
+the worst case, an experiment — are `technique`, a retry and never the hold.
+Production before it went in: **5 of 129 replies**, three ratings out of the
+library's own rulers and two *"test that"*. Their own number handed back passes.
+
+**Three instruments caught three things a reading would not have.** Check 164
+went red on the page the model reads: *"Do not reframe it as feeling"*, in the
+date block, is why `reframe` had left the list; the sentence reads *"Do not
+turn it into a feeling"* now and the name is back. Check 177 caught the lookup's
+guard reading only one person: a move is written about "them", the shapes to
+"you", so *"ask them what their part in it was"* walked through until both
+persons were read. And *"A Stoic would say…"* passed the source list for a
+capital A, found by probing before the check was written.
+
+**"I will fail" is a forecast now.** It belonged to `CATASTROPHE` while a
+thought record and a rated worst case owned it; with both retired the constant
+had no reader, and a failure somebody is sure of is the founder's own example of
+what to reflect instead. Corpus reach is unchanged at 2 of 72.
+
+**Ten checks went red, and each was anchored to a move the founder had just
+banned** — check 3 asserted that catastrophising routes *to* the thought record,
+an assertion defending the bug for the third time in this file. Each now holds
+the rule that replaced it, and two lost integers that a retirement had made
+false: `FEEDS_THE_LOOP >= 3` became "every member is a tactic that exists", and
+"fifteen questions per school" became the balance its own comment argued for.
+
+**And the wire test found the room naming techniques itself.** Every prompt
+with history carried *"Already used recently — do NOT repeat these moves:
+socratic, defusion"* — the code's ids for its moves, which are technique names,
+on the page the model reads. The sweep in check 164 builds its prompt with no
+history, so it had never seen the line. It is deleted rather than reworded:
+`selectTactic` already blocks the last three in code and the model is handed
+only this turn's move, so the line bought nothing but the leak. Check 177
+builds the prompt with every id in the history and requires none to appear —
+and its first version passed by not looking, because `\b` inside a template
+literal is a backspace, the oldest trap in this file. The mutation that put the
+line back is what showed it.
+
+**The cost, measured, and it went down.** +23 characters, about 6 tokens, in
+the cached prefix; the id line was about 21 tokens on every turn with history.
+Worst turn **3,416 → 3,401 of 3,600**. Routing over the 72 openings with the
+three-turn block: 28 distinct moves to 26, the top move 14 to 13. Cold,
+`deepsearch_pattern` went from 22 to 27, where most of the thought record's
+turns landed — the price, stated. Twenty-six mutations fail checks 10, 88, 104,
+132, 164, 165, 167, 171 and 177.
 
 # This is NOT the Next.js you know
 
